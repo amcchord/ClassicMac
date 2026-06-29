@@ -84,12 +84,34 @@ struct VMDetailView: View {
     private var statusBadge: some View {
         HStack(spacing: 6) {
             Circle()
-                .fill(running ? Color.green : Color.secondary)
+                .fill(statusColor)
                 .frame(width: 9, height: 9)
-            Text(running ? "Running" : "Stopped")
+            Text(statusText)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         }
+    }
+
+    private var paused: Bool { manager.isPaused(vmID) }
+
+    private var statusColor: Color {
+        if paused {
+            return .orange
+        }
+        if running {
+            return .green
+        }
+        return .secondary
+    }
+
+    private var statusText: String {
+        if paused {
+            return "Paused"
+        }
+        if running {
+            return "Running"
+        }
+        return "Stopped"
     }
 
     @ViewBuilder
@@ -105,12 +127,36 @@ struct VMDetailView: View {
             }
             .disabled(running)
 
-            Picker("Resolution", selection: resolutionSelection(vm)) {
-                ForEach(ResolutionPreset.all) { preset in
-                    Text(preset.label).tag(preset)
+            Toggle("Custom resolution", isOn: vm.customResolution)
+                .disabled(running || !vm.wrappedValue.useEnhancedFramebuffer)
+
+            if vm.wrappedValue.customResolution {
+                HStack(spacing: 8) {
+                    TextField("Width", value: maxClamped(vm.width, VMConfig.maxWidth), format: .number)
+                        .frame(width: 76)
+                        .multilineTextAlignment(.trailing)
+                    Text("x")
+                        .foregroundStyle(.secondary)
+                    TextField("Height", value: maxClamped(vm.height, VMConfig.maxHeight), format: .number)
+                        .frame(width: 76)
+                        .multilineTextAlignment(.trailing)
+                    Button("Match Display") {
+                        matchMainDisplay(vm)
+                    }
+                    Spacer()
                 }
+                .disabled(running)
+                Text("Up to \(VMConfig.maxWidth) x \(VMConfig.maxHeight). Set inside the Mac too, via Monitors & Sound.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                Picker("Resolution", selection: resolutionSelection(vm)) {
+                    ForEach(ResolutionPreset.all) { preset in
+                        Text(preset.label).tag(preset)
+                    }
+                }
+                .disabled(running)
             }
-            .disabled(running)
 
             Picker("Color depth", selection: depthSelection(vm)) {
                 ForEach(availableDepths(vm.wrappedValue)) { depth in
@@ -118,7 +164,41 @@ struct VMDetailView: View {
                 }
             }
             .disabled(running)
+            Text("This is the deepest color available. Classic Mac OS remembers the depth you pick under Monitors & Sound, per machine.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
+    }
+
+    private func maxClamped(_ source: Binding<Int>, _ maxValue: Int) -> Binding<Int> {
+        Binding(
+            get: { source.wrappedValue },
+            set: { newValue in
+                var value = newValue
+                if value > maxValue {
+                    value = maxValue
+                }
+                if value < 1 {
+                    value = 1
+                }
+                source.wrappedValue = value
+            }
+        )
+    }
+
+    private func matchMainDisplay(_ vm: Binding<VMConfig>) {
+        guard let screen = NSScreen.main else { return }
+        var width = Int(screen.frame.width)
+        var height = Int(screen.frame.height)
+        if width > VMConfig.maxWidth {
+            width = VMConfig.maxWidth
+        }
+        if height > VMConfig.maxHeight {
+            height = VMConfig.maxHeight
+        }
+        vm.wrappedValue.customResolution = true
+        vm.wrappedValue.width = width
+        vm.wrappedValue.height = height
     }
 
     @ViewBuilder
@@ -138,6 +218,16 @@ struct VMDetailView: View {
 
             Toggle("User-mode networking", isOn: vm.networking)
                 .disabled(running)
+
+            Toggle(isOn: vm.sound) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Sound")
+                    Text("Off by default - the emulated Apple Sound Chip hums when idle")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .disabled(running)
         }
     }
 
@@ -173,11 +263,35 @@ struct VMDetailView: View {
     private func toolbar(_ vm: Binding<VMConfig>) -> some ToolbarContent {
         ToolbarItemGroup {
             if running {
+                if paused {
+                    Button {
+                        manager.resume(vmID)
+                    } label: {
+                        Label("Resume", systemImage: "play.fill")
+                    }
+                    .help("Resume the paused machine")
+                } else {
+                    Button {
+                        manager.pause(vmID)
+                    } label: {
+                        Label("Pause", systemImage: "pause.fill")
+                    }
+                    .help("Freeze the machine in place")
+                }
+
                 Button {
+                    manager.reboot(vmID)
+                } label: {
+                    Label("Restart", systemImage: "arrow.clockwise")
+                }
+                .help("Reboot the emulated Macintosh")
+
+                Button(role: .destructive) {
                     manager.stop(vmID)
                 } label: {
-                    Label("Stop", systemImage: "stop.fill")
+                    Label("Power Off", systemImage: "power")
                 }
+                .help("Force the machine to power off")
             } else {
                 Button {
                     manager.start(vm.wrappedValue)

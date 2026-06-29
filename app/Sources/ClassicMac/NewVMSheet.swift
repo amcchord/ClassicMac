@@ -12,6 +12,10 @@ struct NewVMSheet: View {
     @State private var useEnhancedFramebuffer = true
     @State private var resolution = ResolutionPreset.all[2]
     @State private var depth = ColorDepth.thousands
+    @State private var customResolution = false
+    @State private var customWidth = 1024
+    @State private var customHeight = 768
+    @State private var sound = false
 
     @State private var isoURL: URL?
     @State private var copyISOIntoLibrary = true
@@ -70,13 +74,32 @@ struct NewVMSheet: View {
                         Text("\(gb) GB").tag(gb)
                     }
                 }
+                Toggle("Sound", isOn: $sound)
             }
 
             Section("Display") {
                 Toggle("Enhanced framebuffer", isOn: $useEnhancedFramebuffer)
-                Picker("Resolution", selection: $resolution) {
-                    ForEach(ResolutionPreset.all) { preset in
-                        Text(preset.label).tag(preset)
+                Toggle("Custom resolution", isOn: $customResolution)
+                    .disabled(!useEnhancedFramebuffer)
+                if customResolution {
+                    HStack(spacing: 8) {
+                        TextField("Width", value: $customWidth, format: .number)
+                            .frame(width: 76)
+                            .multilineTextAlignment(.trailing)
+                        Text("x")
+                            .foregroundStyle(.secondary)
+                        TextField("Height", value: $customHeight, format: .number)
+                            .frame(width: 76)
+                            .multilineTextAlignment(.trailing)
+                        Button("Match Display") {
+                            matchMainDisplay()
+                        }
+                    }
+                } else {
+                    Picker("Resolution", selection: $resolution) {
+                        ForEach(ResolutionPreset.all) { preset in
+                            Text(preset.label).tag(preset)
+                        }
                     }
                 }
                 Picker("Color depth", selection: $depth) {
@@ -153,10 +176,28 @@ struct NewVMSheet: View {
         if useEnhancedFramebuffer {
             return ColorDepth.allCases
         }
-        if resolution.width >= 1152 {
+        var activeWidth = resolution.width
+        if customResolution {
+            activeWidth = customWidth
+        }
+        if activeWidth >= 1152 {
             return [.greys256]
         }
         return ColorDepth.allCases
+    }
+
+    private func matchMainDisplay() {
+        guard let screen = NSScreen.main else { return }
+        var width = Int(screen.frame.width)
+        var height = Int(screen.frame.height)
+        if width > VMConfig.maxWidth {
+            width = VMConfig.maxWidth
+        }
+        if height > VMConfig.maxHeight {
+            height = VMConfig.maxHeight
+        }
+        customWidth = width
+        customHeight = height
     }
 
     private func clampDepth() {
@@ -181,17 +222,33 @@ struct NewVMSheet: View {
 
     private func create() {
         errorMessage = nil
+
+        var width = resolution.width
+        var height = resolution.height
+        if customResolution {
+            width = customWidth
+            if width > VMConfig.maxWidth {
+                width = VMConfig.maxWidth
+            }
+            height = customHeight
+            if height > VMConfig.maxHeight {
+                height = VMConfig.maxHeight
+            }
+        }
+
         let config = VMConfig(
             name: name.trimmingCharacters(in: .whitespaces),
             ramMB: ramMB,
             diskSizeGB: diskSizeGB,
-            width: resolution.width,
-            height: resolution.height,
+            width: width,
+            height: height,
             depth: depth.rawValue,
             useEnhancedFramebuffer: useEnhancedFramebuffer,
+            customResolution: customResolution,
             cdImagePath: isoURL?.path,
             bootFromCD: isoURL != nil,
-            networking: true
+            networking: true,
+            sound: sound
         )
 
         let needsCopy = isoURL != nil && copyISOIntoLibrary

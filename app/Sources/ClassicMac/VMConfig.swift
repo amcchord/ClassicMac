@@ -14,6 +14,7 @@ struct VMConfig: Codable, Identifiable, Hashable {
     var height: Int
     var depth: Int
     var useEnhancedFramebuffer: Bool
+    var customResolution: Bool
 
     // Media + boot
     var cdImagePath: String?
@@ -21,6 +22,7 @@ struct VMConfig: Codable, Identifiable, Hashable {
 
     // Misc
     var networking: Bool
+    var sound: Bool
 
     init(id: UUID = UUID(),
          name: String,
@@ -30,9 +32,11 @@ struct VMConfig: Codable, Identifiable, Hashable {
          height: Int = 768,
          depth: Int = 16,
          useEnhancedFramebuffer: Bool = true,
+         customResolution: Bool = false,
          cdImagePath: String? = nil,
          bootFromCD: Bool = true,
-         networking: Bool = true) {
+         networking: Bool = true,
+         sound: Bool = false) {
         self.id = id
         self.name = name
         self.ramMB = ramMB
@@ -43,9 +47,37 @@ struct VMConfig: Codable, Identifiable, Hashable {
         self.height = height
         self.depth = depth
         self.useEnhancedFramebuffer = useEnhancedFramebuffer
+        self.customResolution = customResolution
         self.cdImagePath = cdImagePath
         self.bootFromCD = bootFromCD
         self.networking = networking
+        self.sound = sound
+    }
+
+    // Bounds accepted by the enhanced framebuffer.
+    static let maxWidth = 3840
+    static let maxHeight = 2160
+    static let minWidth = 512
+    static let minHeight = 384
+
+    // Tolerant decoding so VMs created by older builds keep loading.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        name = try c.decode(String.self, forKey: .name)
+        ramMB = try c.decodeIfPresent(Int.self, forKey: .ramMB) ?? 128
+        diskImageName = try c.decodeIfPresent(String.self, forKey: .diskImageName) ?? "disk.img"
+        pramImageName = try c.decodeIfPresent(String.self, forKey: .pramImageName) ?? "pram.img"
+        diskSizeGB = try c.decodeIfPresent(Int.self, forKey: .diskSizeGB) ?? 2
+        width = try c.decodeIfPresent(Int.self, forKey: .width) ?? 1024
+        height = try c.decodeIfPresent(Int.self, forKey: .height) ?? 768
+        depth = try c.decodeIfPresent(Int.self, forKey: .depth) ?? 16
+        useEnhancedFramebuffer = try c.decodeIfPresent(Bool.self, forKey: .useEnhancedFramebuffer) ?? true
+        customResolution = try c.decodeIfPresent(Bool.self, forKey: .customResolution) ?? false
+        cdImagePath = try c.decodeIfPresent(String.self, forKey: .cdImagePath)
+        bootFromCD = try c.decodeIfPresent(Bool.self, forKey: .bootFromCD) ?? false
+        networking = try c.decodeIfPresent(Bool.self, forKey: .networking) ?? true
+        sound = try c.decodeIfPresent(Bool.self, forKey: .sound) ?? false
     }
 
     var folder: URL { AppPaths.vmDir(for: id) }

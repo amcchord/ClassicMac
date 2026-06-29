@@ -29,12 +29,21 @@ final class DataBox: @unchecked Sendable {
 @MainActor
 final class QEMUManager: ObservableObject {
     @Published private(set) var runningIDs: Set<UUID> = []
+    @Published private(set) var pausedIDs: Set<UUID> = []
     @Published var lastError: String?
 
     private var processes: [UUID: Process] = [:]
 
     func isRunning(_ id: UUID) -> Bool {
         runningIDs.contains(id)
+    }
+
+    func isPaused(_ id: UUID) -> Bool {
+        pausedIDs.contains(id)
+    }
+
+    static func monitorSocketURL(for id: UUID) -> URL {
+        AppPaths.vmDir(for: id).appendingPathComponent("monitor.sock")
     }
 
     func start(_ config: VMConfig) {
@@ -49,6 +58,9 @@ final class QEMUManager: ObservableObject {
             lastError = "The Quadra 800 ROM is missing from the application bundle."
             return
         }
+
+        // Remove any stale monitor socket so QEMU can bind a fresh one.
+        try? FileManager.default.removeItem(at: QEMUManager.monitorSocketURL(for: config.id))
 
         let process = Process()
         process.executableURL = AppPaths.qemuSystemBinary
@@ -71,6 +83,7 @@ final class QEMUManager: ObservableObject {
             Task { @MainActor in
                 guard let self = self else { return }
                 self.runningIDs.remove(config.id)
+                self.pausedIDs.remove(config.id)
                 self.processes.removeValue(forKey: config.id)
                 if proc.terminationStatus != 0 && proc.terminationReason == .exit {
                     self.lastError = "Emulator exited unexpectedly.\n\n\(message)"
@@ -94,6 +107,31 @@ final class QEMUManager: ObservableObject {
         process.terminate()
     }
 
+    func pause(_ id: UUID) {
+        guard runningIDs.contains(id) else { return }
+        sendMonitor("stop", to: id)
+        pausedIDs.insert(id)
+    }
+
+    func resume(_ id: UUID) {
+        guard runningIDs.contains(id) else { return }
+        sendMonitor("cont", to: id)
+        pausedIDs.remove(id)
+    }
+
+    func reboot(_ id: UUID) {
+        guard runningIDs.contains(id) else { return }
+        sendMonitor("system_reset", to: id)
+        pausedIDs.remove(id)
+    }
+
+    private func sendMonitor(_ command: String, to id: UUID) {
+        let path = QEMUManager.monitorSocketURL(for: id).path
+        DispatchQueue.global(qos: .userInitiated).async {
+            _ = HMPClient.send(command, socketPath: path)
+        }
+    }
+
     // MARK: Argument construction
 
     static func buildArguments(for config: VMConfig) -> [String] {
@@ -103,6 +141,8 @@ final class QEMUManager: ObservableObject {
         if config.useEnhancedFramebuffer {
             machine += ",fb=qemu"
         }
+        // Route the Apple Sound Chip to a named audiodev so we can silence it.
+        machine += ",audiodev=snd0"
         args += ["-M", machine]
 
         args += ["-m", String(config.ramMB)]
@@ -111,6 +151,17 @@ final class QEMUManager: ObservableObject {
         args += ["-display", "cocoa,swap-opt-cmd=on"]
         args += ["-g", "\(config.width)x\(config.height)x\(config.depth)"]
         args += ["-name", config.name]
+
+        // Audio: a real backend hums constantly on the emulated ASC, so default
+        // to a silent (null) backend unless the user opts into sound.
+        if config.sound {
+            args += ["-audiodev", "coreaudio,id=snd0"]
+        } else {
+            args += ["-audiodev", "none,id=snd0"]
+        }
+
+        // HMP monitor on a unix socket so the app can pause/resume/reboot.
+        args += ["-monitor", "unix:\(QEMUManager.monitorSocketURL(for: config.id).path),server=on,wait=off"]
 
         // PRAM (stores screen resolution + boot order across reboots).
         args += ["-drive", "file=\(config.pramImageURL.path),format=raw,if=mtd"]

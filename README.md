@@ -9,7 +9,20 @@ ClassicMac bundles `qemu-system-m68k` together with the enhanced **paravirtualiz
 - Emulates a Quadra 800 (Motorola 68040), the sweet spot for Mac OS 7.1 - 8.1.
 - Enhanced framebuffer (`-M q800,fb=qemu`): arbitrary resolutions up to 3840x2160, all QuickDraw color depths including Thousands (16-bit), gamma correction, and multiple monitors.
 - Simple GUI for creating disk images, choosing RAM and resolution, attaching install CDs, and launching/stopping the machine.
+- VM control bar: Pause / Resume, Restart, and Power Off a running machine (via QEMU's monitor).
+- Custom resolutions, including a "Match Display" button that sizes the Mac to your screen.
 - Fully bundled, self-contained `ClassicMac.app` for Apple Silicon (M1 or later) - no Homebrew or manual QEMU install required by the end user.
+
+## Display & sound notes
+
+- Color depth: the resolution and depth you choose are passed to the enhanced
+  framebuffer as the *deepest available* mode. Classic Mac OS still decides the
+  active depth at startup and, with a fresh system, comes up in black & white
+  until you choose Thousands/Millions once in **Monitors & Sound** (or the
+  Control Strip). That choice is then remembered per machine.
+- Sound is **off by default**: the emulated Apple Sound Chip emits a constant
+  hum when idle, so audio is routed to a silent backend unless you enable
+  "Sound" on a machine.
 
 ## Requirements
 
