@@ -1,0 +1,262 @@
+diff --git a/hw/display/Kconfig b/hw/display/Kconfig
+index 1e95ab2..c1f8a53 100644
+--- a/hw/display/Kconfig
++++ b/hw/display/Kconfig
+@@ -133,6 +133,11 @@ config MACFB
+     select FRAMEBUFFER
+     depends on NUBUS
+ 
++config MAC_QFB
++    bool
++    select FRAMEBUFFER
++    depends on NUBUS
++
+ config XLNX_DISPLAYPORT
+     bool
+     # defaults to "N", enabled by specific boards
+diff --git a/hw/display/macfb.c b/hw/display/macfb.c
+index b8115c2..6d2d645 100644
+--- a/hw/display/macfb.c
++++ b/hw/display/macfb.c
+@@ -98,6 +98,7 @@ static const MacFbSense macfb_sense_table[] = {
+     { MACFB_DISPLAY_PAL2_OVERSCAN, 0x7, 0x6 },
+     { MACFB_DISPLAY_VGA, 0x7, 0x5 },
+     { MACFB_DISPLAY_SVGA, 0x7, 0x5 },
++    { MACFB_DISPLAY_UNPLUGGED, 0x7, 0x7 },
+ };
+ 
+ static const MacFbMode macfb_mode_table[] = {
+@@ -425,6 +426,10 @@ static const MacFbMode *macfb_find_mode(MacfbDisplayType display_type,
+     const MacFbMode *macfb_mode;
+     int i;
+ 
++    if (display_type == MACFB_DISPLAY_UNPLUGGED) {
++        return &macfb_mode_table[0];
++    }
++
+     for (i = 0; i < ARRAY_SIZE(macfb_mode_table); i++) {
+         macfb_mode = &macfb_mode_table[i];
+ 
+@@ -457,7 +462,13 @@ static gchar *macfb_mode_list(void)
+ static void macfb_update_display(void *opaque)
+ {
+     MacfbState *s = opaque;
+-    DisplaySurface *surface = qemu_console_surface(s->con);
++    DisplaySurface *surface;
++
++    if (s->con == NULL) {
++        return;
++    }
++
++    surface = qemu_console_surface(s->con);
+ 
+     qemu_flush_coalesced_mmio_buffer();
+ 
+@@ -645,7 +656,8 @@ static bool macfb_common_realize(DeviceState *dev, MacfbState *s, Error **errp)
+ {
+     DisplaySurface *surface;
+ 
+-    if (s->width == 1152 && s->height == 870) {
++    if (s->type != MACFB_DISPLAY_UNPLUGGED &&
++        s->width == 1152 && s->height == 870) {
+         s->type = MACFB_DISPLAY_APPLE_21_COLOR;
+     }
+ 
+@@ -669,13 +681,17 @@ static bool macfb_common_realize(DeviceState *dev, MacfbState *s, Error **errp)
+     s->regs[DAFB_MODE_CTRL1 >> 2] = s->mode->mode_ctrl1;
+     s->regs[DAFB_MODE_CTRL2 >> 2] = s->mode->mode_ctrl2;
+ 
+-    s->con = graphic_console_init(dev, 0, &macfb_ops, s);
+-    surface = qemu_console_surface(s->con);
++    if (s->type == MACFB_DISPLAY_UNPLUGGED) {
++        s->con = NULL;
++    } else {
++        s->con = graphic_console_init(dev, 0, &macfb_ops, s);
++        surface = qemu_console_surface(s->con);
+ 
+-    if (surface_bits_per_pixel(surface) != 32) {
+-        error_setg(errp, "unknown host depth %d",
+-                   surface_bits_per_pixel(surface));
+-        return false;
++        if (surface_bits_per_pixel(surface) != 32) {
++            error_setg(errp, "unknown host depth %d",
++                       surface_bits_per_pixel(surface));
++            return false;
++        }
+     }
+ 
+     memory_region_init_io(&s->mem_ctrl, OBJECT(dev), &macfb_ctrl_ops, s,
+diff --git a/hw/display/meson.build b/hw/display/meson.build
+index e730c28..e1ea779 100644
+--- a/hw/display/meson.build
++++ b/hw/display/meson.build
+@@ -31,6 +31,7 @@ system_ss.add(when: 'CONFIG_SM501', if_true: files('sm501.c'))
+ system_ss.add(when: 'CONFIG_TCX', if_true: files('tcx.c'))
+ system_ss.add(when: 'CONFIG_CG3', if_true: files('cg3.c'))
+ system_ss.add(when: 'CONFIG_MACFB', if_true: files('macfb.c'))
++system_ss.add(when: 'CONFIG_MAC_QFB', if_true: files('mac_qfb.c'))
+ system_ss.add(when: 'CONFIG_NEXTCUBE', if_true: files('next-fb.c'))
+ 
+ system_ss.add(when: 'CONFIG_VGA', if_true: files('vga.c'))
+diff --git a/hw/m68k/Kconfig b/hw/m68k/Kconfig
+index aff769b..a8c5725 100644
+--- a/hw/m68k/Kconfig
++++ b/hw/m68k/Kconfig
+@@ -27,6 +27,7 @@ config Q800
+     select MAC_VIA
+     select NUBUS
+     select MACFB
++    select MAC_QFB
+     select SWIM
+     select ESCC
+     select ESP
+diff --git a/hw/m68k/q800.c b/hw/m68k/q800.c
+index c0d78eb..c52b3b5 100644
+--- a/hw/m68k/q800.c
++++ b/hw/m68k/q800.c
+@@ -47,6 +47,7 @@
+ #include "hw/audio/asc.h"
+ #include "hw/nubus/mac-nubus-bridge.h"
+ #include "hw/display/macfb.h"
++#include "hw/display/mac_qfb.h"
+ #include "hw/block/swim.h"
+ #include "net/net.h"
+ #include "net/util.h"
+@@ -560,13 +561,27 @@ static void q800_machine_init(MachineState *machine)
+                             TYPE_NUBUS_MACFB);
+     dev = DEVICE(&m->macfb);
+     qdev_prop_set_uint32(dev, "slot", 9);
+-    qdev_prop_set_uint32(dev, "width", graphic_width ?: 800);
+-    qdev_prop_set_uint32(dev, "height", graphic_height ?: 600);
+     qdev_prop_set_uint8(dev, "depth", graphic_depth ?: 8);
++    if (m->unplug_dafb) {
++        qdev_prop_set_uint32(dev, "width", 640);
++        qdev_prop_set_uint32(dev, "height", 480);
++        qdev_prop_set_uint8(dev, "display", MACFB_DISPLAY_UNPLUGGED);
++    } else {
++        qdev_prop_set_uint32(dev, "width", graphic_width ?: 800);
++        qdev_prop_set_uint32(dev, "height", graphic_height ?: 600);
++    }
+     qdev_realize(dev, BUS(nubus), &error_fatal);
+ 
+     macfb_mode = (NUBUS_MACFB(dev)->macfb).mode;
+ 
++    if (m->add_qfb) {
++        dev = qdev_new(TYPE_NUBUS_QFB);
++        qdev_prop_set_uint32(dev, "width", graphic_width ?: 800);
++        qdev_prop_set_uint32(dev, "height", graphic_height ?: 600);
++        qdev_prop_set_uint8(dev, "depth", graphic_depth ?: 8);
++        qdev_realize_and_unref(dev, BUS(nubus), &error_fatal);
++    }
++
+     cs = CPU(&m->cpu);
+     if (linux_boot) {
+         uint64_t high;
+@@ -700,12 +715,69 @@ static void q800_set_easc(Object *obj, bool value, Error **errp)
+     ms->easc = value;
+ }
+ 
++static char *q800_get_fb(Object *obj, Error **errp)
++{
++    Q800MachineState *ms = Q800_MACHINE(obj);
++
++    if (ms->unplug_dafb) {
++        if (ms->add_qfb) {
++            return g_strdup("qemu");
++        } else {
++            return g_strdup("none");
++        }
++    } else {
++        if (ms->add_qfb) {
++            return g_strdup("dual");
++        } else {
++            return g_strdup("mac");
++        }
++    }
++}
++
++static void q800_set_fb(Object *obj, const char *value, Error **errp)
++{
++    Q800MachineState *ms = Q800_MACHINE(obj);
++
++    if (!strcmp(value, "none")) {
++        ms->unplug_dafb = true;
++        ms->add_qfb = false;
++        return;
++    }
++    if (!strcmp(value, "mac")) {
++        ms->unplug_dafb = false;
++        ms->add_qfb = false;
++        return;
++    }
++    if (!strcmp(value, "qemu")) {
++        ms->unplug_dafb = true;
++        ms->add_qfb = true;
++        return;
++    }
++    if (!strcmp(value, "dual")) {
++        ms->unplug_dafb = false;
++        ms->add_qfb = true;
++        return;
++    }
++
++    error_setg(errp, "Invalid fb value");
++    error_append_hint(errp, "Valid values are mac, qemu, none, dual\n");
++}
++
+ static void q800_init(Object *obj)
+ {
+     Q800MachineState *ms = Q800_MACHINE(obj);
+ 
+     /* Default to EASC */
+     ms->easc = true;
++
++    /* Framebuffer configuration */
++    ms->add_qfb = false;
++    ms->unplug_dafb = false;
++    object_property_add_str(obj, "fb", q800_get_fb, q800_set_fb);
++    object_property_set_description(obj, "fb",
++                                    "Framebuffer style: \"mac\" (built-in), "
++                                    "\"qemu\" (enhanced nubus-qfb), \"none\", "
++                                    "or \"dual\".");
+ }
+ 
+ static GlobalProperty hw_compat_q800[] = {
+diff --git a/include/hw/display/macfb.h b/include/hw/display/macfb.h
+index cb7aac7..1481217 100644
+--- a/include/hw/display/macfb.h
++++ b/include/hw/display/macfb.h
+@@ -36,6 +36,7 @@ typedef enum  {
+     MACFB_DISPLAY_PAL2_OVERSCAN = 12,
+     MACFB_DISPLAY_VGA = 13,
+     MACFB_DISPLAY_SVGA = 14,
++    MACFB_DISPLAY_UNPLUGGED = 15,
+ } MacfbDisplayType;
+ 
+ typedef struct MacFbMode {
+diff --git a/include/hw/m68k/q800.h b/include/hw/m68k/q800.h
+index 77551b9..eca8a2f 100644
+--- a/include/hw/m68k/q800.h
++++ b/include/hw/m68k/q800.h
+@@ -70,6 +70,9 @@ struct Q800MachineState {
+     MemoryRegion macio_alias;
+     MemoryRegion machine_id;
+     MemoryRegion escc_alias;
++
++    bool add_qfb; /* Whether to add a paravirtualized video card */
++    bool unplug_dafb; /* Whether to unplug the built-in DAFB video card */
+ };
+ 
+ #define TYPE_Q800_MACHINE MACHINE_TYPE_NAME("q800")
+diff --git a/pc-bios/meson.build b/pc-bios/meson.build
+index 2f470ed..2e90a21 100644
+--- a/pc-bios/meson.build
++++ b/pc-bios/meson.build
+@@ -83,6 +83,7 @@ blobs = [
+   'npcm8xx_bootrom.bin',
+   'vof.bin',
+   'vof-nvram.bin',
++  'mac_qfb.rom',
+ ]
+ 
+ if get_option('install_blobs')

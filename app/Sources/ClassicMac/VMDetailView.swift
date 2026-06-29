@@ -47,6 +47,7 @@ struct VMDetailView: View {
                 displaySection(vm)
                 hardwareSection(vm)
                 mediaSection(vm)
+                sharedFolderSection(vm)
             }
             .padding(24)
             .frame(maxWidth: 640, alignment: .leading)
@@ -256,6 +257,47 @@ struct VMDetailView: View {
                 }
                 .disabled(running)
             }
+        }
+    }
+
+    @ViewBuilder
+    private func sharedFolderSection(_ vm: Binding<VMConfig>) -> some View {
+        SettingsCard(title: "Shared Folder", systemImage: "folder.badge.person.crop") {
+            if vm.wrappedValue.hasSharedFolder {
+                LabeledContent("Host folder") {
+                    Text(URL(fileURLWithPath: vm.wrappedValue.sharedFolderPath!).lastPathComponent)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                Text("Appears on the Mac desktop as the disk \u{201C}\(vm.wrappedValue.sharedVolumeName)\u{201D}.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Button("Stop Sharing", role: .destructive) {
+                    vm.wrappedValue.sharedFolderPath = nil
+                }
+                .disabled(running)
+            } else {
+                Text("Share a folder on your Mac so files appear on the emulated desktop.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Button("Choose Folder to Share...") {
+                    chooseSharedFolder(vm)
+                }
+                .disabled(running)
+            }
+        }
+    }
+
+    private func chooseSharedFolder(_ vm: Binding<VMConfig>) {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.canCreateDirectories = true
+        panel.message = "Choose a folder on your Mac to share with the guest"
+        if panel.runModal() == .OK, let url = panel.url {
+            vm.wrappedValue.sharedFolderPath = url.path
         }
     }
 

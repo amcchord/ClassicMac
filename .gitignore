@@ -6,6 +6,8 @@ context/
 *.img
 *.dmg
 *.qcow2
+# ...but keep the committed PRAM seed template
+!shared/pram-seed.img
 
 # QEMU source checkout + build artifacts
 vendor/

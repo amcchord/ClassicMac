@@ -24,6 +24,9 @@ struct VMConfig: Codable, Identifiable, Hashable {
     var networking: Bool
     var sound: Bool
 
+    // Host folder shared with the guest (appears on the Mac desktop). Optional.
+    var sharedFolderPath: String?
+
     init(id: UUID = UUID(),
          name: String,
          ramMB: Int = 128,
@@ -36,7 +39,8 @@ struct VMConfig: Codable, Identifiable, Hashable {
          cdImagePath: String? = nil,
          bootFromCD: Bool = true,
          networking: Bool = true,
-         sound: Bool = false) {
+         sound: Bool = false,
+         sharedFolderPath: String? = nil) {
         self.id = id
         self.name = name
         self.ramMB = ramMB
@@ -52,6 +56,7 @@ struct VMConfig: Codable, Identifiable, Hashable {
         self.bootFromCD = bootFromCD
         self.networking = networking
         self.sound = sound
+        self.sharedFolderPath = sharedFolderPath
     }
 
     // Bounds accepted by the enhanced framebuffer.
@@ -78,6 +83,7 @@ struct VMConfig: Codable, Identifiable, Hashable {
         bootFromCD = try c.decodeIfPresent(Bool.self, forKey: .bootFromCD) ?? false
         networking = try c.decodeIfPresent(Bool.self, forKey: .networking) ?? true
         sound = try c.decodeIfPresent(Bool.self, forKey: .sound) ?? false
+        sharedFolderPath = try c.decodeIfPresent(String.self, forKey: .sharedFolderPath)
     }
 
     var folder: URL { AppPaths.vmDir(for: id) }
@@ -86,6 +92,27 @@ struct VMConfig: Codable, Identifiable, Hashable {
     var configURL: URL { folder.appendingPathComponent("config.json") }
 
     var resolutionLabel: String { "\(width)x\(height)x\(depth)" }
+
+    var hasSharedFolder: Bool {
+        guard let path = sharedFolderPath else { return false }
+        return !path.isEmpty
+    }
+
+    // Volume name shown on the Mac desktop for the shared folder. Classic Mac
+    // volume names cannot contain ":" and are limited to 27 characters.
+    var sharedVolumeName: String {
+        guard let path = sharedFolderPath, !path.isEmpty else { return "Shared" }
+        let base = URL(fileURLWithPath: path).lastPathComponent
+        var cleaned = base.replacingOccurrences(of: ":", with: "-")
+        cleaned = cleaned.replacingOccurrences(of: ",", with: "-")
+        if cleaned.isEmpty {
+            return "Shared"
+        }
+        if cleaned.count > 27 {
+            return String(cleaned.prefix(27))
+        }
+        return cleaned
+    }
 }
 
 // Color depth presets understood by the framebuffer.

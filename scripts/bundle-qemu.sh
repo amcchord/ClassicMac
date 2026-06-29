@@ -15,6 +15,8 @@ APP_SRC_DIR="$ROOT_DIR/app"
 QEMU_BUILD_DIR="$ROOT_DIR/vendor/qemu/build"
 QEMU_PCBIOS_DIR="$ROOT_DIR/vendor/qemu/pc-bios"
 ROM_SRC="$ROOT_DIR/Resources/Quadra800.rom"
+DECLROM_SRC="$ROOT_DIR/shared/declrom"
+PRAMSEED_SRC="$ROOT_DIR/shared/pram-seed.img"
 ENTITLEMENTS="$ROOT_DIR/scripts/qemu.entitlements"
 
 DIST_DIR="$ROOT_DIR/dist"
@@ -39,6 +41,8 @@ die() { printf '\nERROR: %s\n' "$*" >&2; exit 1; }
 [ -x "$QEMU_BUILD_DIR/qemu-img" ] || die "qemu-img not found. Run scripts/build-qemu.sh first."
 [ -f "$QEMU_PCBIOS_DIR/mac_qfb.rom" ] || die "mac_qfb.rom firmware not found. Run scripts/build-qemu.sh first."
 [ -f "$ROM_SRC" ] || die "Quadra800.rom not found in Resources/."
+[ -f "$DECLROM_SRC" ] || die "shared/declrom (classicvirtio declaration ROM) not found."
+[ -f "$PRAMSEED_SRC" ] || die "shared/pram-seed.img (PRAM seed) not found."
 command -v dylibbundler >/dev/null 2>&1 || die "dylibbundler is required (brew install dylibbundler)."
 
 # ---------------------------------------------------------------------------
@@ -61,6 +65,8 @@ cp "$QEMU_BUILD_DIR/qemu-system-m68k" "$QEMU_DEST/"
 cp "$QEMU_BUILD_DIR/qemu-img" "$QEMU_DEST/"
 cp "$ROM_SRC" "$RES_DIR/Quadra800.rom"
 cp "$QEMU_PCBIOS_DIR/mac_qfb.rom" "$PCBIOS_DEST/"
+cp "$DECLROM_SRC" "$RES_DIR/declrom"
+cp "$PRAMSEED_SRC" "$RES_DIR/pram-seed.img"
 
 # ---------------------------------------------------------------------------
 # 3. Info.plist

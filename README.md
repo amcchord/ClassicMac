@@ -2,7 +2,7 @@
 
 A self-contained macOS (Apple Silicon) application that emulates a **68040 Macintosh Quadra 800** as performantly as possible, built on a custom build of QEMU. It is designed for teaching classic Mac OS (System 7.1 through Mac OS 8.1).
 
-ClassicMac bundles `qemu-system-m68k` together with the enhanced **paravirtualized NuBus framebuffer** (`nubus-qfb`), which unlocks arbitrary screen resolutions and 16-bit ("Thousands") color that the stock QEMU framebuffer cannot provide. A native SwiftUI configurator manages virtual machines (disks, RAM, resolution) and launches QEMU, which renders the emulated Mac in its own fast native Cocoa window.
+ClassicMac bundles `qemu-system-m68k` (built from mainline QEMU 11.0.2 with a ported-in enhanced **paravirtualized NuBus framebuffer**, `nubus-qfb`), which unlocks arbitrary screen resolutions and 16-bit ("Thousands") color that the stock QEMU framebuffer cannot provide. It also supports **host folder sharing** via the NuBus virtio transport. A native SwiftUI configurator manages virtual machines (disks, RAM, resolution, shared folder) and launches QEMU, which renders the emulated Mac in its own fast native Cocoa window.
 
 ## Features
 
@@ -11,7 +11,20 @@ ClassicMac bundles `qemu-system-m68k` together with the enhanced **paravirtualiz
 - Simple GUI for creating disk images, choosing RAM and resolution, attaching install CDs, and launching/stopping the machine.
 - VM control bar: Pause / Resume, Restart, and Power Off a running machine (via QEMU's monitor).
 - Custom resolutions, including a "Match Display" button that sizes the Mac to your screen.
+- Host folder sharing: a folder on your Mac appears as a disk on the emulated desktop (read/write), via the classicvirtio driver ROM and virtio-9p.
 - Fully bundled, self-contained `ClassicMac.app` for Apple Silicon (M1 or later) - no Homebrew or manual QEMU install required by the end user.
+
+## Shared folders
+
+Pick a folder when creating a machine (or in its settings) and it mounts on the
+Mac desktop as a disk. Notes:
+
+- New machines start from a pre-seeded PRAM; the virtio declaration ROM hangs the
+  boot on a blank PRAM, so sharing works reliably on machines created with this
+  version of ClassicMac.
+- Classic Mac resource forks and type/creator codes are stored beside each file as
+  `.rdump` / `.idump` sidecars, so data files transfer perfectly and Mac files
+  round-trip (leaving those sidecar files in the shared folder).
 
 ## Display & sound notes
 
@@ -34,8 +47,10 @@ ClassicMac bundles `qemu-system-m68k` together with the enhanced **paravirtualiz
 ```
 ClassicMac/
   Resources/Quadra800.rom   # bundled Quadra 800 ROM (checksum F1ACAD13)
+  qfb/                      # nubus-qfb device sources + integration patch + firmware
+  shared/                   # classicvirtio declrom + PRAM seed for folder sharing
   scripts/
-    build-qemu.sh           # build qemu-system-m68k + qemu-img from the SolraBizna fork
+    build-qemu.sh           # clone mainline QEMU 11.0.2 + apply the qfb port, then build
     bundle-qemu.sh          # collect dylibs + firmware and code-sign into the .app
   app/                      # SwiftUI configurator / launcher (SwiftPM package)
 ```
@@ -45,7 +60,7 @@ ClassicMac/
 ## Building
 
 ```bash
-# 1. Build the emulator (clones and compiles QEMU from the SolraBizna fork)
+# 1. Build the emulator (clones mainline QEMU, applies the qfb port, compiles)
 ./scripts/build-qemu.sh
 
 # 2. Build the SwiftUI app and bundle QEMU + dependencies into ClassicMac.app
@@ -64,5 +79,6 @@ Both scripts are idempotent and can be re-run safely.
 
 ## Credits
 
-- [QEMU](https://www.qemu.org/) and the m68k / q800 maintainers.
-- [SolraBizna/qemu](https://github.com/SolraBizna/qemu) for the `nubus-qfb` paravirtualized framebuffer.
+- [QEMU](https://www.qemu.org/) and the m68k / q800 maintainers (incl. the `nubus-virtio-mmio` transport).
+- [SolraBizna/qemu](https://github.com/SolraBizna/qemu) for the `nubus-qfb` paravirtualized framebuffer (ported here onto QEMU 11.0.2).
+- [elliotnunn/classicvirtio](https://github.com/elliotnunn/classicvirtio) for the classic Mac OS virtio driver ROM used for folder sharing.

@@ -55,6 +55,26 @@ enum AppPaths {
         return developmentRepoRoot.appendingPathComponent("Resources/Quadra800.rom")
     }
 
+    // classicvirtio NuBus declaration ROM that enables host folder sharing.
+    static var declROM: URL {
+        let bundled = resourcesDir.appendingPathComponent("declrom")
+        if FileManager.default.fileExists(atPath: bundled.path) {
+            return bundled
+        }
+        return developmentRepoRoot.appendingPathComponent("shared/declrom")
+    }
+
+    // A PRAM image that has been through one normal boot, so its signature is
+    // valid. New VMs start from this so the virtio declaration ROM does not hang
+    // the boot (a fresh, all-zero PRAM does).
+    static var pramSeed: URL {
+        let bundled = resourcesDir.appendingPathComponent("pram-seed.img")
+        if FileManager.default.fileExists(atPath: bundled.path) {
+            return bundled
+        }
+        return developmentRepoRoot.appendingPathComponent("shared/pram-seed.img")
+    }
+
     // MARK: Development fallbacks
 
     // When run via `swift run` from app/, the working directory is app/, so the

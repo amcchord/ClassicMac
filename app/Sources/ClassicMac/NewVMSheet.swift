@@ -19,6 +19,7 @@ struct NewVMSheet: View {
 
     @State private var isoURL: URL?
     @State private var copyISOIntoLibrary = true
+    @State private var sharedFolderURL: URL?
 
     @State private var working = false
     @State private var workingMessage = ""
@@ -130,6 +131,27 @@ struct NewVMSheet: View {
                         .foregroundStyle(.secondary)
                 }
             }
+
+            Section("Shared Folder") {
+                if let sharedFolderURL = sharedFolderURL {
+                    LabeledContent("Folder") {
+                        Text(sharedFolderURL.lastPathComponent)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+                    Button("Remove") {
+                        self.sharedFolderURL = nil
+                    }
+                } else {
+                    Button("Share a Folder from My Mac...") {
+                        chooseSharedFolder()
+                    }
+                    Text("Optional. The folder appears as a disk on the Mac desktop.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
         }
         .formStyle(.grouped)
         .onChange(of: useEnhancedFramebuffer) { _ in clampDepth() }
@@ -184,6 +206,18 @@ struct NewVMSheet: View {
             return [.greys256]
         }
         return ColorDepth.allCases
+    }
+
+    private func chooseSharedFolder() {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.canCreateDirectories = true
+        panel.message = "Choose a folder on your Mac to share with the guest"
+        if panel.runModal() == .OK {
+            sharedFolderURL = panel.url
+        }
     }
 
     private func matchMainDisplay() {
@@ -248,7 +282,8 @@ struct NewVMSheet: View {
             cdImagePath: isoURL?.path,
             bootFromCD: isoURL != nil,
             networking: true,
-            sound: sound
+            sound: sound,
+            sharedFolderPath: sharedFolderURL?.path
         )
 
         let needsCopy = isoURL != nil && copyISOIntoLibrary

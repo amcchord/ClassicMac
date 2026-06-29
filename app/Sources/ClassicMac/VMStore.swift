@@ -66,10 +66,26 @@ final class VMStore: ObservableObject {
             return nil
         }
 
-        let pramResult = QEMUManager.createRawImage(at: config.pramImageURL, sizeArgument: "256b")
-        if case let .failure(message) = pramResult {
-            lastError = "Could not create PRAM image: \(message)"
-            return nil
+        // Seed PRAM from the known-good template (valid signature) so the virtio
+        // declaration ROM used for folder sharing does not hang the boot. Fall
+        // back to a blank PRAM if the template is unavailable (dev without bundle).
+        let fm = FileManager.default
+        if fm.fileExists(atPath: AppPaths.pramSeed.path) {
+            do {
+                if fm.fileExists(atPath: config.pramImageURL.path) {
+                    try fm.removeItem(at: config.pramImageURL)
+                }
+                try fm.copyItem(at: AppPaths.pramSeed, to: config.pramImageURL)
+            } catch {
+                lastError = "Could not create PRAM image: \(error.localizedDescription)"
+                return nil
+            }
+        } else {
+            let pramResult = QEMUManager.createRawImage(at: config.pramImageURL, sizeArgument: "256b")
+            if case let .failure(message) = pramResult {
+                lastError = "Could not create PRAM image: \(message)"
+                return nil
+            }
         }
 
         save(config)

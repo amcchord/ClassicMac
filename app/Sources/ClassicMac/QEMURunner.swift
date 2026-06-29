@@ -137,9 +137,22 @@ final class QEMUManager: ObservableObject {
     static func buildArguments(for config: VMConfig) -> [String] {
         var args: [String] = []
 
+        let sharing = config.hasSharedFolder
+
+        // Framebuffer selection.
+        // - No sharing + enhanced: machine creates the qfb (fb=qemu) and -g applies.
+        // - Sharing + enhanced: the virtio card must precede the framebuffer card,
+        //   so the machine creates no framebuffer (fb=none) and we add nubus-qfb as
+        //   a -device after nubus-virtio-mmio (its size comes from device options).
+        // - Not enhanced: leave the built-in macfb (fb=mac default) and -g applies.
         var machine = "q800"
+        let qfbAsDevice = sharing && config.useEnhancedFramebuffer
         if config.useEnhancedFramebuffer {
-            machine += ",fb=qemu"
+            if sharing {
+                machine += ",fb=none"
+            } else {
+                machine += ",fb=qemu"
+            }
         }
         // Route the Apple Sound Chip to a named audiodev so we can silence it.
         machine += ",audiodev=snd0"
@@ -149,7 +162,11 @@ final class QEMUManager: ObservableObject {
         args += ["-bios", AppPaths.quadraROM.path]
         args += ["-L", AppPaths.pcBiosDir.path]
         args += ["-display", "cocoa,swap-opt-cmd=on"]
-        args += ["-g", "\(config.width)x\(config.height)x\(config.depth)"]
+        // -g only applies to machine-created framebuffers; when the qfb is added as
+        // a device its size is set via device options instead.
+        if !qfbAsDevice {
+            args += ["-g", "\(config.width)x\(config.height)x\(config.depth)"]
+        }
         args += ["-name", config.name]
 
         // Audio: a real backend hums constantly on the emulated ASC, so default
@@ -184,6 +201,19 @@ final class QEMUManager: ObservableObject {
         // so networking is configured with -nic (not a separate -device).
         if config.networking {
             args += ["-nic", "user,model=dp83932"]
+        }
+
+        // Shared folder via the classicvirtio NuBus virtio transport. The
+        // nubus-virtio-mmio card must be created before the nubus-qfb framebuffer
+        // so it lands in the earlier NuBus slot.
+        if sharing {
+            args += ["-device", "nubus-virtio-mmio,romfile=\(AppPaths.declROM.path)"]
+            if qfbAsDevice {
+                args += ["-device", "nubus-qfb,width=\(config.width),height=\(config.height),depth=\(config.depth)"]
+            }
+            args += ["-device", "virtio-9p-device,fsdev=share0,mount_tag=\(config.sharedVolumeName)"]
+            let escapedPath = config.sharedFolderPath!.replacingOccurrences(of: ",", with: ",,")
+            args += ["-fsdev", "local,id=share0,security_model=none,path=\(escapedPath)"]
         }
 
         return args
