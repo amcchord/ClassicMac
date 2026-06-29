@@ -1,0 +1,29 @@
+# Reference material (large copyrighted ROM set + OS install media)
+context/
+
+# Disk images and optical media
+*.iso
+*.img
+*.dmg
+*.qcow2
+
+# QEMU source checkout + build artifacts
+vendor/
+build/
+
+# Built application bundle
+*.app/
+dist/
+
+# Xcode / SwiftPM
+DerivedData/
+.build/
+*.xcodeproj/xcuserdata/
+*.xcworkspace/xcuserdata/
+.swiftpm/
+
+# macOS
+.DS_Store
+
+# Editor
+*.swp
