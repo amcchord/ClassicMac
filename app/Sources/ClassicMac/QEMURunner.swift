@@ -43,7 +43,11 @@ final class QEMUManager: ObservableObject {
     }
 
     static func monitorSocketURL(for id: UUID) -> URL {
-        AppPaths.vmDir(for: id).appendingPathComponent("monitor.sock")
+        // Unix domain socket paths must fit in sockaddr_un (< 104 bytes on macOS),
+        // so the long Application Support path cannot be used. Keep it short.
+        let dir = URL(fileURLWithPath: "/tmp/ClassicMac", isDirectory: true)
+        AppPaths.ensureDirectory(dir)
+        return dir.appendingPathComponent("\(id.uuidString).sock")
     }
 
     func start(_ config: VMConfig) {
