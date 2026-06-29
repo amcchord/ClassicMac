@@ -1,0 +1,33 @@
+diff --git a/ui/cocoa.m b/ui/cocoa.m
+index 9093d1e..93c5201 100644
+--- a/ui/cocoa.m
++++ b/ui/cocoa.m
+@@ -627,8 +627,26 @@ - (void) resizeWindow
+     [[self window] setContentAspectRatio:NSMakeSize(screen.width, screen.height)];
+ 
+     if (!([[self window] styleMask] & NSWindowStyleMaskResizable)) {
+-        CGFloat width = screen.width / [[self window] backingScaleFactor];
+-        CGFloat height = screen.height / [[self window] backingScaleFactor];
++        /*
++         * Size the window in points equal to the guest's pixel dimensions so it
++         * appears at "visual resolution" rather than native device pixels. On a
++         * Retina display this scales the window up (pixel-doubled) instead of
++         * rendering it physically half-size; on a 1x display it is unchanged.
++         * Cap to the screen's safe area (preserving aspect) so a large guest
++         * resolution never produces an oversized window.
++         */
++        CGFloat width = screen.width;
++        CGFloat height = screen.height;
++        NSSize maxSize = [self screenSafeAreaSize];
++        CGFloat scale = 1.0;
++        if (width > 0.0 && maxSize.width / width < scale) {
++            scale = maxSize.width / width;
++        }
++        if (height > 0.0 && maxSize.height / height < scale) {
++            scale = maxSize.height / height;
++        }
++        width = width * scale;
++        height = height * scale;
+ 
+         [[self window] setContentSize:NSMakeSize(width, height)];
+         [[self window] center];

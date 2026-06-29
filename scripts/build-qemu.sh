@@ -31,6 +31,7 @@ PATCHED_FILES=(
   hw/m68k/Kconfig
   hw/display/meson.build
   pc-bios/meson.build
+  ui/cocoa.m
 )
 
 log() { printf '\n==> %s\n' "$*"; }
@@ -92,6 +93,8 @@ cp "$QFB_DIR/mac_qfb.c" "$QEMU_DIR/hw/display/mac_qfb.c"
 cp "$QFB_DIR/mac_qfb.h" "$QEMU_DIR/include/hw/display/mac_qfb.h"
 cp "$QFB_DIR/mac_qfb.rom" "$QEMU_DIR/pc-bios/mac_qfb.rom"
 git -C "$QEMU_DIR" apply "$QFB_DIR/integration.patch" || die "Failed to apply qfb integration patch"
+# Retina/HiDPI: size the Cocoa window at visual resolution rather than native pixels.
+git -C "$QEMU_DIR" apply "$QFB_DIR/cocoa-retina.patch" || die "Failed to apply cocoa retina patch"
 
 # ---------------------------------------------------------------------------
 # 4. Configure (out-of-tree) if not already configured
