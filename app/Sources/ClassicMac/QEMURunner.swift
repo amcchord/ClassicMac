@@ -165,7 +165,10 @@ final class QEMUManager: ObservableObject {
         args += ["-m", String(config.ramMB)]
         args += ["-bios", AppPaths.quadraROM.path]
         args += ["-L", AppPaths.pcBiosDir.path]
-        args += ["-display", "cocoa,swap-opt-cmd=on"]
+        // Map the host Command key to the guest Command key (not Option), so
+        // shortcuts like Cmd-W reach classic Mac OS. The left Command key still
+        // only passes through once the window has grabbed the mouse (click in it).
+        args += ["-display", "cocoa,swap-opt-cmd=off"]
         // -g only applies to machine-created framebuffers; when the qfb is added as
         // a device its size is set via device options instead.
         if !qfbAsDevice {
