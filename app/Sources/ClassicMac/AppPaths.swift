@@ -99,22 +99,34 @@ enum AppPaths {
         return dir
     }
 
-    static var vmsDir: URL {
-        let dir = supportDir.appendingPathComponent("VMs", isDirectory: true)
-        ensureDirectory(dir)
-        return dir
-    }
-
     static var mediaDir: URL {
         let dir = supportDir.appendingPathComponent("Media", isDirectory: true)
         ensureDirectory(dir)
         return dir
     }
 
-    static func vmDir(for id: UUID) -> URL {
-        let dir = vmsDir.appendingPathComponent(id.uuidString, isDirectory: true)
+    // JSON index of known .classic VM packages (their file paths). The packages
+    // themselves live wherever the user chose; this just records the library.
+    static var libraryIndexURL: URL {
+        supportDir.appendingPathComponent("library.json")
+    }
+
+    // Default place new VM packages are created and legacy VMs are migrated to.
+    static var defaultLibraryDir: URL {
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+        let dir = docs.appendingPathComponent("ClassicMac", isDirectory: true)
         ensureDirectory(dir)
         return dir
+    }
+
+    // MARK: Legacy (pre-.classic) storage, kept only for one-time migration.
+
+    static var legacyVMsDir: URL {
+        supportDir.appendingPathComponent("VMs", isDirectory: true)
+    }
+
+    static func legacyVMDir(for id: UUID) -> URL {
+        legacyVMsDir.appendingPathComponent(id.uuidString, isDirectory: true)
     }
 
     static func ensureDirectory(_ url: URL) {

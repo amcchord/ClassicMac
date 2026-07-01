@@ -1,0 +1,39 @@
+diff --git a/hw/audio/asc.c b/hw/audio/asc.c
+index ea59bdd..1ce92d6 100644
+--- a/hw/audio/asc.c
++++ b/hw/audio/asc.c
+@@ -342,21 +342,19 @@ static void asc_out_cb(void *opaque, int free_b)
+     }
+ 
+     if (!generated) {
+-        /* Workaround for audio underflow bug on Windows dsound backend */
+-        int64_t now = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
+-        int silent_samples = muldiv64(now - s->fifo_empty_ns,
+-                                      NANOSECONDS_PER_SECOND, ASC_FREQ);
+-
+-        if (silent_samples > ASC_FIFO_CYCLE_TIME / 2) {
+-            /*
+-             * No new FIFO data within half a cycle time (~23ms) so fill the
+-             * entire available buffer with silence. This prevents an issue
+-             * with the Windows dsound backend whereby the sound appears to
+-             * loop because the FIFO has run out of data, and the driver
+-             * reuses the stale content in its circular audio buffer.
+-             */
+-            audio_be_write(s->audio_be, s->voice, s->silentbuf, samples << s->shift);
+-        }
++        /*
++         * No samples were produced: either the ASC is off, or MacOS left the
++         * FIFO engine running with an empty FIFO. Always feed the backend
++         * silence for the whole free region rather than leaving it unwritten.
++         *
++         * The original code only wrote silence after half a FIFO cycle had
++         * elapsed (a workaround aimed at the Windows dsound backend). On a
++         * live backend such as CoreAudio, leaving the buffer unwritten makes
++         * the mixer replay stale ring-buffer contents, which is heard as a
++         * constant hum/buzz whenever the emulated Mac is not actively playing
++         * a sound. Writing silence unconditionally keeps the output clean.
++         */
++        audio_be_write(s->audio_be, s->voice, s->silentbuf, samples << s->shift);
+         return;
+     }
+ 

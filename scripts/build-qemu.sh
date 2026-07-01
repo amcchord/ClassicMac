@@ -32,6 +32,7 @@ PATCHED_FILES=(
   hw/display/meson.build
   pc-bios/meson.build
   ui/cocoa.m
+  hw/audio/asc.c
 )
 
 log() { printf '\n==> %s\n' "$*"; }
@@ -86,6 +87,17 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# 2b. Optionally rebuild the enhanced framebuffer ROM/driver from source
+# ---------------------------------------------------------------------------
+# Off by default so routine QEMU builds stay fast and don't require the Retro68
+# cross toolchain. Set QFB_BUILD_ROM=1 to regenerate qfb/mac_qfb.rom from the
+# driver sources in qfb/driver before bundling it into the QEMU tree.
+if [ -n "${QFB_BUILD_ROM:-}" ]; then
+  log "QFB_BUILD_ROM set: rebuilding qfb/mac_qfb.rom from qfb/driver"
+  "$ROOT_DIR/scripts/build-qfb-rom.sh"
+fi
+
+# ---------------------------------------------------------------------------
 # 3. Apply the nubus-qfb framebuffer port
 # ---------------------------------------------------------------------------
 log "Installing nubus-qfb framebuffer (device files + firmware + integration patch)"
@@ -95,6 +107,12 @@ cp "$QFB_DIR/mac_qfb.rom" "$QEMU_DIR/pc-bios/mac_qfb.rom"
 git -C "$QEMU_DIR" apply "$QFB_DIR/integration.patch" || die "Failed to apply qfb integration patch"
 # Retina/HiDPI: size the Cocoa window at visual resolution rather than native pixels.
 git -C "$QEMU_DIR" apply "$QFB_DIR/cocoa-retina.patch" || die "Failed to apply cocoa retina patch"
+# Host-window-driven live resizing: make the Cocoa window resizable and feed
+# window-size changes to the guest through the qfb device's ui_info hook.
+git -C "$QEMU_DIR" apply "$QFB_DIR/cocoa-resize.patch" || die "Failed to apply cocoa resize patch"
+# Apple Sound Chip: always feed the audio backend silence when idle so a live
+# backend (CoreAudio) never replays stale ring-buffer content as a hum/buzz.
+git -C "$QEMU_DIR" apply "$QFB_DIR/asc-silence.patch" || die "Failed to apply asc silence patch"
 
 # ---------------------------------------------------------------------------
 # 4. Configure (out-of-tree) if not already configured

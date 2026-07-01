@@ -8,11 +8,30 @@ ClassicMac bundles `qemu-system-m68k` (built from mainline QEMU 11.0.2 with a po
 
 - Emulates a Quadra 800 (Motorola 68040), the sweet spot for Mac OS 7.1 - 8.1.
 - Enhanced framebuffer (`-M q800,fb=qemu`): arbitrary resolutions up to 3840x2160, all QuickDraw color depths including Thousands (16-bit), gamma correction, and multiple monitors.
+- Live resolution switching: the guest's **Monitors & Sound** control panel offers a list of standard resolutions you can switch between without rebooting, and the QEMU window follows. On Mac OS 7.6-8.1 you can also just **drag the QEMU window** to any size and the guest switches to that exact pixel resolution when you release the mouse (the Display Manager does the switch).
+- Self-contained **`.classic` machine files**: each VM is a single document (a package holding its config, disk, and PRAM) that you can keep anywhere - Documents, Desktop, an external drive - and open or boot by double-clicking in Finder.
 - Simple GUI for creating disk images, choosing RAM and resolution, attaching install CDs, and launching/stopping the machine.
 - VM control bar: Pause / Resume, Restart, and Power Off a running machine (via QEMU's monitor).
 - Custom resolutions, including a "Match Display" button that sizes the Mac to your screen.
 - Host folder sharing: a folder on your Mac appears as a disk on the emulated desktop (read/write), via the classicvirtio driver ROM and virtio-9p.
 - Fully bundled, self-contained `ClassicMac.app` for Apple Silicon (M1 or later) - no Homebrew or manual QEMU install required by the end user.
+
+## Virtual machine files (`.classic`)
+
+Each machine is a self-contained **`.classic` package** - a folder that Finder
+treats as a single document - holding its `config.json`, hard-disk image, and
+PRAM. You can store these anywhere and move or copy them like any other file.
+
+- **New machines** are created wherever you choose (default
+  `~/Documents/ClassicMac/`).
+- **Double-click** a `.classic` file in Finder to open it in ClassicMac and boot
+  it; **File > Open** and **File > Open Recent** work too.
+- Removing a machine offers **Move to Trash** (deletes the file) or **Remove
+  from Library** (keeps the file on disk, just forgets it).
+- Machines created by earlier versions (stored under
+  `~/Library/Application Support/ClassicMac/VMs/`) are **migrated automatically**
+  to `.classic` files in `~/Documents/ClassicMac/` the first time you launch this
+  version.
 
 ## Shared folders
 
@@ -33,9 +52,19 @@ Mac desktop as a disk. Notes:
   active depth at startup and, with a fresh system, comes up in black & white
   until you choose Thousands/Millions once in **Monitors & Sound** (or the
   Control Strip). That choice is then remembered per machine.
-- Sound is **off by default**: the emulated Apple Sound Chip emits a constant
-  hum when idle, so audio is routed to a silent backend unless you enable
-  "Sound" on a machine.
+- Resolution: the value you pick is the *boot* resolution. Once booted, the
+  enhanced framebuffer driver advertises a list of standard resolutions, so you
+  can switch resolution live from **Monitors & Sound** and the window resizes to
+  match. The QEMU window is also freely resizable: drag it to any size and, when
+  you release the mouse, the guest driver switches to that exact pixel
+  resolution (the framebuffer scales to fill the window while you drag). Live
+  switching relies on the Display Manager, so it needs Mac OS ~7.6 or newer;
+  older systems (and A/UX) still boot fine at the configured resolution and just
+  scale to the window.
+- Sound is **on by default** and clean. QEMU's Apple Sound Chip emulation is
+  patched (`qfb/asc-silence.patch`) to feed the audio backend silence whenever
+  the Mac isn't playing anything, so the old constant idle hum/buzz is gone. You
+  can still turn "Sound" off per machine to route audio to a silent backend.
 
 ## Requirements
 
@@ -47,9 +76,11 @@ Mac desktop as a disk. Notes:
 ```
 ClassicMac/
   Resources/Quadra800.rom   # bundled Quadra 800 ROM (checksum F1ACAD13)
-  qfb/                      # nubus-qfb device sources + integration patch + firmware
+  qfb/                      # nubus-qfb device sources + integration/cocoa patches + firmware
+    driver/                 # 68k declaration ROM + driver source (built with Retro68)
   shared/                   # classicvirtio declrom + PRAM seed for folder sharing
   scripts/
+    build-qfb-rom.sh        # build the qfb declaration ROM/driver -> qfb/mac_qfb.rom
     build-qemu.sh           # clone mainline QEMU 11.0.2 + apply the qfb port, then build
     bundle-qemu.sh          # collect dylibs + firmware and code-sign into the .app
   app/                      # SwiftUI configurator / launcher (SwiftPM package)
@@ -68,6 +99,19 @@ ClassicMac/
 ```
 
 Both scripts are idempotent and can be re-run safely.
+
+The enhanced framebuffer firmware (`qfb/mac_qfb.rom`) is committed, so a normal
+build does not need the 68k cross toolchain. If you change the driver sources in
+`qfb/driver/`, rebuild the ROM with:
+
+```bash
+# Builds the Retro68 m68k-apple-macos toolchain on first run (slow, into
+# vendor/), then compiles qfb/driver into qfb/mac_qfb.rom.
+./scripts/build-qfb-rom.sh
+
+# Or fold it into the QEMU build:
+QFB_BUILD_ROM=1 ./scripts/build-qemu.sh
+```
 
 ## Emulation notes
 

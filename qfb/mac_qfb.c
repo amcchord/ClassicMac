@@ -49,6 +49,20 @@
 #define QFB_CUSTOM_HEIGHT   0x38 /* r/o: user-specified height, if any */
 #define QFB_CUSTOM_DEPTH    0x3C /* user-specified depth, write = stderr */
 
+/* Host -> guest channel for window-driven live resizing. These are written by
+   the UI through the ui_info callback and are strictly read-only to the guest:
+   the guest's driver polls SERIAL and, when it changes, switches to the mode
+   nearest the requested WIDTH x HEIGHT. */
+#define QFB_HOST_REQ_WIDTH  0x40 /* host-requested width in pixels */
+#define QFB_HOST_REQ_HEIGHT 0x44 /* host-requested height in pixels */
+#define QFB_HOST_REQ_SERIAL 0x48 /* incremented whenever the request changes */
+
+/* Writing here makes QEMU re-patch the declaration ROM's video parameter blocks
+   to the current width/height/depth (and fix the ROM checksum), so that after a
+   resolution change the guest's Slot Manager / Display Manager rebuilds the
+   screen GDevice with the new geometry. The guest must call SUpdateSRT after. */
+#define QFB_REPATCH_ROM     0x4C
+
 #define QFB_IRQ_VBL         0x1
 
 /* QuickDraw gets very cranky if your rowbytes is >= 16382 */
@@ -60,6 +74,8 @@
 
 typedef void qfb_draw_line_func(QfbState *s, uint8_t *d, uint32_t addr,
                                 int width);
+
+static void qfb_try_patch_decl_rom(MemoryRegion *rom, QfbState *ms);
 
 static inline uint8_t qfb_read_byte(QfbState *s, uint32_t addr)
 {
@@ -508,6 +524,14 @@ static void qfb_ctrl_write(void *opaque,
         if (val <= 255)
             fputc(val, stderr);
         break;
+    case QFB_REPATCH_ROM:
+        /* Re-patch the declaration ROM's video parameters to the current mode
+           so the guest can rebuild its screen GDevice after a resolution
+           change (mirrors the boot-time patch). */
+        if (s->decl_rom != NULL) {
+            qfb_try_patch_decl_rom(s->decl_rom, s);
+        }
+        break;
     default:
         /* ignore all other writes */
         break;
@@ -552,9 +576,38 @@ static const VMStateDescription vmstate_qfb = {
     }
 };
 
+/* Called by the UI (under the BQL) when the display window is resized. We do
+   not change the mode here - the guest owns its resolution - we only publish
+   the requested geometry into the host-request registers and bump the serial
+   so the guest's driver notices and performs a Display Manager mode switch. */
+static void qfb_ui_info(void *opaque, uint32_t head, QemuUIInfo *info)
+{
+    QfbState *s = opaque;
+    uint32_t w = info->width;
+    uint32_t h = info->height;
+
+    if (w == 0 || h == 0) {
+        return; /* no usable geometry (e.g. during teardown) */
+    }
+    if (w > QFB_MAX_WIDTH) {
+        w = QFB_MAX_WIDTH;
+    }
+    if (h > QFB_MAX_HEIGHT) {
+        h = QFB_MAX_HEIGHT;
+    }
+    if (s->regs[QFB_HOST_REQ_WIDTH >> 2] == w &&
+        s->regs[QFB_HOST_REQ_HEIGHT >> 2] == h) {
+        return; /* unchanged: don't nudge the guest */
+    }
+    s->regs[QFB_HOST_REQ_WIDTH >> 2] = w;
+    s->regs[QFB_HOST_REQ_HEIGHT >> 2] = h;
+    s->regs[QFB_HOST_REQ_SERIAL >> 2]++;
+}
+
 static const GraphicHwOps qfb_ops = {
     .invalidate = qfb_invalidate_display,
     .gfx_update = qfb_update_display,
+    .ui_info = qfb_ui_info,
 };
 
 static uint32_t qfb_calc_nubus_checksum(uint8_t* p, Int128 size)
@@ -737,6 +790,13 @@ static bool qfb_common_realize(DeviceState *dev, QfbState *s, Error **errp)
     }
     s->regs[QFB_CUSTOM_DEPTH >> 2] = s->depth;
 
+    /* Seed the host-request channel with the boot geometry and serial 0 so the
+       guest driver's first poll matches the current mode and changes nothing
+       until the user actually resizes the window. */
+    s->regs[QFB_HOST_REQ_WIDTH >> 2] = s->width;
+    s->regs[QFB_HOST_REQ_HEIGHT >> 2] = s->height;
+    s->regs[QFB_HOST_REQ_SERIAL >> 2] = 0;
+
     s->con = graphic_console_init(dev, 0, &qfb_ops, s);
     surface = qemu_console_surface(s->con);
 
@@ -784,6 +844,7 @@ static bool qfb_common_realize(DeviceState *dev, QfbState *s, Error **errp)
                                                     NUBUS_SLOT_SIZE - size,
                                                     &nd->decl_rom,
                                                     1);
+                s->decl_rom = &nd->decl_rom;
                 qfb_try_patch_decl_rom(&nd->decl_rom, s);
             }
             close(fd);

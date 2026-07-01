@@ -55,12 +55,16 @@ struct VMDetailView: View {
         }
         .navigationTitle(vm.wrappedValue.name)
         .toolbar { toolbar(vm) }
-        .confirmationDialog("Delete \(vm.wrappedValue.name)?", isPresented: $showingDeleteConfirm, titleVisibility: .visible) {
-            Button("Delete Machine and Disk", role: .destructive) {
-                store.delete(vm.wrappedValue)
+        .confirmationDialog("Remove \(vm.wrappedValue.name)?", isPresented: $showingDeleteConfirm, titleVisibility: .visible) {
+            Button("Move to Trash", role: .destructive) {
+                store.moveToTrash(vm.wrappedValue)
             }
+            Button("Remove from Library") {
+                store.removeFromLibrary(vm.wrappedValue)
+            }
+            Button("Cancel", role: .cancel) {}
         } message: {
-            Text("This permanently deletes the virtual machine and its hard disk image.")
+            Text("Move to Trash deletes the machine file, including its disk and settings. Remove from Library keeps the .classic file on disk but takes it out of ClassicMac.")
         }
     }
 
@@ -223,7 +227,7 @@ struct VMDetailView: View {
             Toggle(isOn: vm.sound) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Sound")
-                    Text("Off by default - the emulated Apple Sound Chip hums when idle")
+                    Text("Play the emulated Apple Sound Chip through your Mac's speakers")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -344,11 +348,11 @@ struct VMDetailView: View {
             }
 
             Menu {
-                Button("Reveal Files in Finder") {
+                Button("Reveal in Finder") {
                     NSWorkspace.shared.activateFileViewerSelecting([vm.wrappedValue.folder])
                 }
                 Divider()
-                Button("Delete Machine...", role: .destructive) {
+                Button("Remove Machine...", role: .destructive) {
                     showingDeleteConfirm = true
                 }
                 .disabled(running)

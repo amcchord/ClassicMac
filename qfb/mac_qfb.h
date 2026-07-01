@@ -22,13 +22,16 @@
 #include "qemu/timer.h"
 #include "qom/object.h"
 
-#define QFB_CTRL_TOPADDR  0x40
+/* The control register window. Registers 0x00-0x3C are the original qfb
+   registers; 0x40-0x48 are the host->guest resize-request channel. */
+#define QFB_CTRL_TOPADDR  0x80
 #define QFB_NUM_REGS      (QFB_CTRL_TOPADDR / sizeof(uint32_t))
 
 typedef struct QfbState {
     MemoryRegion mem_vram;
     MemoryRegion mem_vram_minor_alias;
     MemoryRegion mem_ctrl;
+    MemoryRegion *decl_rom; /* NuBus declaration ROM, for runtime re-patching */
     QemuConsole *con;
 
     uint8_t *vram;

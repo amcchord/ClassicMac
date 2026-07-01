@@ -28,6 +28,8 @@ final class DataBox: @unchecked Sendable {
 // command lines from a VMConfig.
 @MainActor
 final class QEMUManager: ObservableObject {
+    static let shared = QEMUManager()
+
     @Published private(set) var runningIDs: Set<UUID> = []
     @Published private(set) var pausedIDs: Set<UUID> = []
     @Published var lastError: String?
@@ -176,10 +178,14 @@ final class QEMUManager: ObservableObject {
         }
         args += ["-name", config.name]
 
-        // Audio: a real backend hums constantly on the emulated ASC, so default
-        // to a silent (null) backend unless the user opts into sound.
+        // Audio. The Apple Sound Chip is patched (see qfb/asc-silence.patch) to
+        // always feed the backend silence when idle, so a live CoreAudio backend
+        // no longer hums/buzzes when the Mac is quiet. A generous output buffer
+        // guards against underrun crackle at the ASC's low 22 kHz sample rate.
+        // When sound is off we route to the null backend so nothing touches the
+        // host audio device at all.
         if config.sound {
-            args += ["-audiodev", "coreaudio,id=snd0"]
+            args += ["-audiodev", "coreaudio,id=snd0,out.buffer-length=50000"]
         } else {
             args += ["-audiodev", "none,id=snd0"]
         }

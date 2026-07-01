@@ -4,19 +4,16 @@ struct ContentView: View {
     @EnvironmentObject var store: VMStore
     @EnvironmentObject var manager: QEMUManager
 
-    @State private var selection: UUID?
-    @State private var showingNewVM = false
-
     var body: some View {
         NavigationSplitView {
             sidebar
         } detail: {
             detail
         }
-        .sheet(isPresented: $showingNewVM) {
+        .sheet(isPresented: $store.isPresentingNewVM) {
             NewVMSheet { newConfig in
                 if let created = store.createVM(newConfig) {
-                    selection = created.id
+                    store.selectedID = created.id
                 }
             }
         }
@@ -31,7 +28,7 @@ struct ContentView: View {
     }
 
     private var sidebar: some View {
-        List(selection: $selection) {
+        List(selection: $store.selectedID) {
             Section("Virtual Machines") {
                 ForEach(store.vms) { vm in
                     VMRow(vm: vm, running: manager.isRunning(vm.id))
@@ -47,12 +44,23 @@ struct ContentView: View {
         .navigationTitle("ClassicMac")
         .toolbar {
             ToolbarItem {
-                Button {
-                    showingNewVM = true
+                Menu {
+                    Button {
+                        store.isPresentingNewVM = true
+                    } label: {
+                        Label("New Machine...", systemImage: "plus")
+                    }
+                    Button {
+                        store.presentOpenPanel()
+                    } label: {
+                        Label("Open Machine...", systemImage: "folder")
+                    }
                 } label: {
-                    Label("New Machine", systemImage: "plus")
+                    Label("Add Machine", systemImage: "plus")
+                } primaryAction: {
+                    store.isPresentingNewVM = true
                 }
-                .help("Create a new Quadra 800 virtual machine")
+                .help("Create a new Quadra 800, or open an existing .classic machine")
             }
         }
     }
@@ -80,11 +88,11 @@ struct ContentView: View {
 
     @ViewBuilder
     private var detail: some View {
-        if let id = selection, store.vms.contains(where: { $0.id == id }) {
+        if let id = store.selectedID, store.vms.contains(where: { $0.id == id }) {
             VMDetailView(vmID: id)
                 .id(id)
         } else {
-            EmptyStateView(showingNewVM: $showingNewVM)
+            EmptyStateView(showingNewVM: $store.isPresentingNewVM)
         }
     }
 

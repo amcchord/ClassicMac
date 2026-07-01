@@ -15,7 +15,9 @@ struct NewVMSheet: View {
     @State private var customResolution = false
     @State private var customWidth = 1024
     @State private var customHeight = 768
-    @State private var sound = false
+    @State private var sound = true
+
+    @State private var saveFolder: URL = AppPaths.defaultLibraryDir
 
     @State private var isoURL: URL?
     @State private var copyISOIntoLibrary = true
@@ -62,6 +64,21 @@ struct NewVMSheet: View {
         Form {
             Section {
                 TextField("Name", text: $name)
+            }
+
+            Section("Location") {
+                LabeledContent("Save in") {
+                    Text(saveFolder.path)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                Button("Choose Folder...") {
+                    chooseSaveFolder()
+                }
+                Text("Creates \u{201C}\(bundleFileName)\u{201D}, a self-contained machine file you can move anywhere.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Section("Hardware") {
@@ -208,6 +225,26 @@ struct NewVMSheet: View {
         return ColorDepth.allCases
     }
 
+    private var bundleFileName: String {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let base = trimmed.isEmpty ? "Machine" : trimmed
+        return "\(base).\(VMConfig.packageExtension)"
+    }
+
+    private func chooseSaveFolder() {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.canCreateDirectories = true
+        panel.directoryURL = saveFolder
+        panel.message = "Choose where to save this machine"
+        panel.prompt = "Choose"
+        if panel.runModal() == .OK, let url = panel.url {
+            saveFolder = url
+        }
+    }
+
     private func chooseSharedFolder() {
         let panel = NSOpenPanel()
         panel.allowsMultipleSelection = false
@@ -270,8 +307,11 @@ struct NewVMSheet: View {
             }
         }
 
+        let trimmedName = name.trimmingCharacters(in: .whitespaces)
+        let bundleURL = VMStore.shared.uniqueBundleURL(in: saveFolder, name: trimmedName)
+
         let config = VMConfig(
-            name: name.trimmingCharacters(in: .whitespaces),
+            name: trimmedName,
             ramMB: ramMB,
             diskSizeGB: diskSizeGB,
             width: width,
@@ -283,7 +323,8 @@ struct NewVMSheet: View {
             bootFromCD: isoURL != nil,
             networking: true,
             sound: sound,
-            sharedFolderPath: sharedFolderURL?.path
+            sharedFolderPath: sharedFolderURL?.path,
+            bundleURL: bundleURL
         )
 
         let needsCopy = isoURL != nil && copyISOIntoLibrary

@@ -1,0 +1,113 @@
+diff --git a/ui/cocoa.m b/ui/cocoa.m
+--- a/ui/cocoa.m
++++ b/ui/cocoa.m
+@@ -624,17 +624,21 @@
+ 
+ - (void) resizeWindow
+ {
+-    [[self window] setContentAspectRatio:NSMakeSize(screen.width, screen.height)];
+-
+-    if (!([[self window] styleMask] & NSWindowStyleMaskResizable)) {
+-        /*
+-         * Size the window in points equal to the guest's pixel dimensions so it
+-         * appears at "visual resolution" rather than native device pixels. On a
+-         * Retina display this scales the window up (pixel-doubled) instead of
+-         * rendering it physically half-size; on a 1x display it is unchanged.
+-         * Cap to the screen's safe area (preserving aspect) so a large guest
+-         * resolution never produces an oversized window.
+-         */
++    /*
++     * This is called when the *guest* changes resolution (cocoa_switch). The
++     * window is user-resizable so the guest resolution can follow it, but on a
++     * guest-driven switch we snap the window back to the guest's pixel
++     * dimensions (treated as points -> "visual resolution"): on a Retina
++     * display the framebuffer is pixel-doubled rather than rendered physically
++     * half-size; on a 1x display it is unchanged. The size is capped to the
++     * screen's safe area (preserving aspect) so a large guest resolution never
++     * produces an oversized window. We deliberately do NOT lock the window's
++     * aspect ratio, so the user can freely drag it toward any resolution.
++     */
++    if ([[self window] styleMask] & NSWindowStyleMaskFullScreen) {
++        [[self window] setContentSize:[self fixAspectRatio:[self screenSafeAreaSize]]];
++        [[self window] center];
++    } else {
+         CGFloat width = screen.width;
+         CGFloat height = screen.height;
+         NSSize maxSize = [self screenSafeAreaSize];
+@@ -650,11 +654,6 @@
+ 
+         [[self window] setContentSize:NSMakeSize(width, height)];
+         [[self window] center];
+-    } else if ([[self window] styleMask] & NSWindowStyleMaskFullScreen) {
+-        [[self window] setContentSize:[self fixAspectRatio:[self screenSafeAreaSize]]];
+-        [[self window] center];
+-    } else {
+-        [[self window] setContentSize:[self fixAspectRatio:[self frame].size]];
+     }
+ }
+ 
+@@ -706,8 +705,15 @@
+ 
+     info.xoff = 0;
+     info.yoff = 0;
+-    info.width = frameSize.width * [[self window] backingScaleFactor];
+-    info.height = frameSize.height * [[self window] backingScaleFactor];
++    /*
++     * Report the window's point size (not backing-store pixels) as the desired
++     * guest resolution. This matches resizeWindow, which sizes the window in
++     * points equal to the guest's pixel dimensions ("visual resolution"), so a
++     * window N points wide asks the guest for an N-pixel-wide mode rather than
++     * 2N on a Retina display.
++     */
++    info.width = frameSize.width;
++    info.height = frameSize.height;
+ 
+     dpy_set_ui_info(dcl.con, &info, TRUE);
+ }
+@@ -1317,12 +1323,20 @@
+ 
+         // create a window
+         window = [[NSWindow alloc] initWithContentRect:[cocoaView frame]
+-            styleMask:NSWindowStyleMaskTitled|NSWindowStyleMaskMiniaturizable|NSWindowStyleMaskClosable
++            styleMask:NSWindowStyleMaskTitled|NSWindowStyleMaskMiniaturizable|NSWindowStyleMaskClosable|NSWindowStyleMaskResizable
+             backing:NSBackingStoreBuffered defer:NO];
+         if(!window) {
+             error_report("(cocoa) can't create window");
+             exit(1);
+         }
++        /*
++         * The window is resizable so the guest's resolution can follow it: a
++         * resize feeds dpy_set_ui_info(), which the nubus-qfb device turns into
++         * a host-request the guest driver applies via the Display Manager. Clamp
++         * the minimum to the smallest standard mode so we never request a
++         * ridiculous resolution.
++         */
++        [window setContentMinSize:NSMakeSize(512.0, 384.0)];
+         [window setAcceptsMouseMovedEvents:YES];
+         [window setCollectionBehavior:NSWindowCollectionBehaviorFullScreenPrimary];
+         [window setTitle:qemu_name ? [NSString stringWithFormat:@"QEMU %s", qemu_name] : @"QEMU"];
+@@ -1411,6 +1425,24 @@
+ - (void)windowDidResize:(NSNotification *)notification
+ {
+     [cocoaView updateBounds];
++    /*
++     * While the user is actively dragging the window edge, just rescale the
++     * existing guest framebuffer to fill the new frame (updateBounds) and do
++     * NOT ask the guest to switch resolution on every intermediate size. We
++     * push a single request when the drag ends (windowDidEndLiveResize), so the
++     * guest performs exactly one Display Manager switch to the final pixel size
++     * rather than churning through dozens of sizes mid-drag. Non-live changes
++     * (zoom, programmatic resizes) still report immediately here.
++     */
++    if (![cocoaView inLiveResize]) {
++        [cocoaView updateUIInfo];
++    }
++}
++
++- (void)windowDidEndLiveResize:(NSNotification *)notification
++{
++    /* The user finished dragging: report the final window size so the guest
++     * switches its resolution to match exactly (see qfb_periodic). */
+     [cocoaView updateUIInfo];
+ }
+ 

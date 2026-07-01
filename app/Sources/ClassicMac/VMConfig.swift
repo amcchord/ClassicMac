@@ -1,6 +1,9 @@
 import Foundation
 
-// A single emulated Quadra 800. Persisted as config.json inside the VM folder.
+// A single emulated Quadra 800. Each VM is a self-contained ".classic" package
+// (a directory Finder shows as a file) whose location is `bundleURL`; the
+// settings below are persisted as config.json inside that package, alongside
+// disk.img and pram.img.
 struct VMConfig: Codable, Identifiable, Hashable {
     var id: UUID
     var name: String
@@ -27,6 +30,18 @@ struct VMConfig: Codable, Identifiable, Hashable {
     // Host folder shared with the guest (appears on the Mac desktop). Optional.
     var sharedFolderPath: String?
 
+    // The .classic package on disk that holds this VM. Runtime only: it is the
+    // file's location, not part of the persisted config, so it is excluded from
+    // Codable (see CodingKeys) and set when the VM is loaded, created, or opened.
+    var bundleURL: URL?
+
+    // Only the persisted fields are encoded; bundleURL is intentionally omitted.
+    private enum CodingKeys: String, CodingKey {
+        case id, name, ramMB, diskImageName, pramImageName, diskSizeGB
+        case width, height, depth, useEnhancedFramebuffer, customResolution
+        case cdImagePath, bootFromCD, networking, sound, sharedFolderPath
+    }
+
     init(id: UUID = UUID(),
          name: String,
          ramMB: Int = 128,
@@ -39,8 +54,9 @@ struct VMConfig: Codable, Identifiable, Hashable {
          cdImagePath: String? = nil,
          bootFromCD: Bool = true,
          networking: Bool = true,
-         sound: Bool = false,
-         sharedFolderPath: String? = nil) {
+         sound: Bool = true,
+         sharedFolderPath: String? = nil,
+         bundleURL: URL? = nil) {
         self.id = id
         self.name = name
         self.ramMB = ramMB
@@ -57,6 +73,7 @@ struct VMConfig: Codable, Identifiable, Hashable {
         self.networking = networking
         self.sound = sound
         self.sharedFolderPath = sharedFolderPath
+        self.bundleURL = bundleURL
     }
 
     // Bounds accepted by the enhanced framebuffer.
@@ -82,11 +99,17 @@ struct VMConfig: Codable, Identifiable, Hashable {
         cdImagePath = try c.decodeIfPresent(String.self, forKey: .cdImagePath)
         bootFromCD = try c.decodeIfPresent(Bool.self, forKey: .bootFromCD) ?? false
         networking = try c.decodeIfPresent(Bool.self, forKey: .networking) ?? true
-        sound = try c.decodeIfPresent(Bool.self, forKey: .sound) ?? false
+        sound = try c.decodeIfPresent(Bool.self, forKey: .sound) ?? true
         sharedFolderPath = try c.decodeIfPresent(String.self, forKey: .sharedFolderPath)
     }
 
-    var folder: URL { AppPaths.vmDir(for: id) }
+    // Filename extension for a VM package.
+    static let packageExtension = "classic"
+
+    // The VM package directory. Falls back to the legacy Application Support
+    // location for a config that has not been given a bundle yet (should not
+    // happen for loaded/created VMs).
+    var folder: URL { bundleURL ?? AppPaths.legacyVMDir(for: id) }
     var diskImageURL: URL { folder.appendingPathComponent(diskImageName) }
     var pramImageURL: URL { folder.appendingPathComponent(pramImageName) }
     var configURL: URL { folder.appendingPathComponent("config.json") }
