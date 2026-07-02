@@ -1,0 +1,172 @@
+diff --git a/audio/coreaudio.m b/audio/coreaudio.m
+index e4ec1df..e8ac775 100644
+--- a/audio/coreaudio.m
++++ b/audio/coreaudio.m
+@@ -47,6 +47,8 @@
+     int frame_size_setting;
+     uint32_t buffer_count;
+     UInt32 device_frame_size;
++    UInt32 device_channels;
++    Float64 device_rate;
+     AudioDeviceIOProcID ioprocid;
+     bool enabled;
+ } CoreaudioVoiceOut;
+@@ -139,6 +141,24 @@ static OSStatus coreaudio_set_out_streamformat(AudioDeviceID id,
+                                       d);
+ }
+ 
++static OSStatus coreaudio_get_out_streamformat(AudioDeviceID id,
++                                               AudioStreamBasicDescription *d)
++{
++    UInt32 size = sizeof(*d);
++    AudioObjectPropertyAddress addr = {
++        kAudioDevicePropertyStreamFormat,
++        kAudioDevicePropertyScopeOutput,
++        kAudioObjectPropertyElementMain
++    };
++
++    return AudioObjectGetPropertyData(id,
++                                      &addr,
++                                      0,
++                                      NULL,
++                                      &size,
++                                      d);
++}
++
+ static OSStatus coreaudio_get_out_isrunning(AudioDeviceID id, UInt32 *result)
+ {
+     UInt32 size = sizeof(*result);
+@@ -309,7 +329,7 @@ static OSStatus out_device_ioproc(
+     const AudioTimeStamp *inOutputTime,
+     void *hwptr)
+ {
+-    UInt32 frame_size, pending_frames;
++    UInt32 frame_size, pending_frames, device_channels, guest_channels;
+     void *out = outOutputData->mBuffers[0].mData;
+     HWVoiceOut *hw = hwptr;
+     CoreaudioVoiceOut *core = hwptr;
+@@ -335,20 +355,59 @@ static OSStatus out_device_ioproc(
+         return 0;
+     }
+ 
+-    len = frame_size * hw->info.bytes_per_frame;
+-    while (len) {
+-        size_t write_len, start;
++    device_channels = core->device_channels;
++    guest_channels = hw->info.nchannels;
+ 
+-        start = audio_ring_posb(hw->pos_emul, hw->pending_emul, hw->size_emul);
+-        assert(start < hw->size_emul);
++    if (device_channels == guest_channels) {
++        len = frame_size * hw->info.bytes_per_frame;
++        while (len) {
++            size_t write_len, start;
+ 
+-        write_len = MIN(MIN(hw->pending_emul, len),
+-                        hw->size_emul - start);
++            start = audio_ring_posb(hw->pos_emul, hw->pending_emul,
++                                    hw->size_emul);
++            assert(start < hw->size_emul);
+ 
+-        memcpy(out, hw->buf_emul + start, write_len);
+-        hw->pending_emul -= write_len;
+-        len -= write_len;
+-        out += write_len;
++            write_len = MIN(MIN(hw->pending_emul, len),
++                            hw->size_emul - start);
++
++            memcpy(out, hw->buf_emul + start, write_len);
++            hw->pending_emul -= write_len;
++            len -= write_len;
++            out += write_len;
++        }
++    } else {
++        /*
++         * The device did not accept the guest channel count (e.g. it is a
++         * multi-channel device such as Studio Display speakers). Both sides
++         * are float32, so copy frame by frame, placing the guest channels
++         * into the first device channels and silencing the rest. Without
++         * this, N guest frames would be misread as one N*2-channel device
++         * frame: audio plays several times too fast (wrong pitch) with
++         * silent gaps in every IO cycle (choppy).
++         */
++        float *dst = out;
++        UInt32 n, c;
++
++        for (n = 0; n < frame_size; n++) {
++            size_t start = audio_ring_posb(hw->pos_emul, hw->pending_emul,
++                                           hw->size_emul);
++            const float *src = (const float *)(hw->buf_emul + start);
++
++            assert(start < hw->size_emul);
++
++            for (c = 0; c < device_channels; c++) {
++                if (c < guest_channels) {
++                    dst[c] = src[c];
++                } else if (c == 1) {
++                    /* mono guest on a multi-channel device: duplicate */
++                    dst[c] = src[0];
++                } else {
++                    dst[c] = 0.0f;
++                }
++            }
++            dst += device_channels;
++            hw->pending_emul -= hw->info.bytes_per_frame;
++        }
+     }
+ 
+     coreaudio_voice_out_buf_unlock(core, "out_device_ioproc");
+@@ -445,6 +504,33 @@ static OSStatus init_out_device(CoreaudioVoiceOut *core)
+         return status;
+     }
+ 
++    /*
++     * The HAL may accept the requested stream format without applying all
++     * of it: a multi-channel device keeps its native channel count and a
++     * rate-locked device keeps its nominal sample rate. Read the format
++     * back and remember what the device actually uses; out_device_ioproc
++     * expands guest frames to the device channel layout and
++     * coreaudio_init_out resamples to the device rate.
++     */
++    status = coreaudio_get_out_streamformat(device_id,
++                                            &stream_basic_description);
++    if (status == kAudioHardwareBadObjectError) {
++        return 0;
++    }
++    if (status != kAudioHardwareNoError) {
++        coreaudio_playback_logerr(status,
++                                  "Could not get stream format");
++        return status;
++    }
++    core->device_channels = stream_basic_description.mChannelsPerFrame;
++    core->device_rate = stream_basic_description.mSampleRate;
++    if (core->device_channels != core->hw.info.nchannels) {
++        warn_report("coreaudio: device uses %u channels, expanding "
++                    "%u-channel guest audio",
++                    (unsigned)core->device_channels,
++                    (unsigned)core->hw.info.nchannels);
++    }
++
+     /*
+      * set Callback.
+      *
+@@ -616,6 +702,19 @@ static int coreaudio_init_out(HWVoiceOut *hw, struct audsettings *as)
+         return -1;
+     }
+ 
++    /*
++     * If the device kept a different nominal sample rate than requested,
++     * take the real rate into hw->info so the mixing engine resamples
++     * guest audio to it. Otherwise everything plays at the wrong pitch.
++     */
++    if (core->device_rate > 0 && (int)core->device_rate != hw->info.freq) {
++        warn_report("coreaudio: device runs at %d Hz, resampling %d Hz "
++                    "guest audio",
++                    (int)core->device_rate, hw->info.freq);
++        as->freq = (int)core->device_rate;
++        audio_pcm_init_info(&hw->info, as);
++    }
++
+     return 0;
+ }
+ 

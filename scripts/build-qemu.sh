@@ -34,6 +34,7 @@ PATCHED_FILES=(
   pc-bios/meson.build
   ui/cocoa.m
   hw/audio/asc.c
+  audio/coreaudio.m
   hw/audio/Kconfig
   hw/audio/meson.build
   hw/ppc/Kconfig
@@ -50,6 +51,7 @@ PATCHED_FILES=(
 )
 SCREAMER_DIR="$ROOT_DIR/screamer"
 PPCVID_DIR="$ROOT_DIR/ppcvid"
+AUDIO_DIR="$ROOT_DIR/audio"
 
 log() { printf '\n==> %s\n' "$*"; }
 die() { printf '\nERROR: %s\n' "$*" >&2; exit 1; }
@@ -140,6 +142,11 @@ git -C "$QEMU_DIR" apply "$ROOT_DIR/cocoaui/classicmac-ui.patch" || die "Failed 
 # Apple Sound Chip: always feed the audio backend silence when idle so a live
 # backend (CoreAudio) never replays stale ring-buffer content as a hum/buzz.
 git -C "$QEMU_DIR" apply "$QFB_DIR/asc-silence.patch" || die "Failed to apply asc silence patch"
+# CoreAudio backend: honor the channel count and sample rate the output
+# device actually uses. Without this, guest stereo written to a multi-channel
+# device (e.g. Studio Display speakers) is misread as N-channel frames and
+# plays several times too fast (wrong pitch) with gaps (choppy).
+git -C "$QEMU_DIR" apply "$AUDIO_DIR/coreaudio-device-format.patch" || die "Failed to apply coreaudio device format patch"
 
 # ---------------------------------------------------------------------------
 # 3b. Apply the screamer (AWACS) PPC Mac audio port
