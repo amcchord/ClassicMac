@@ -76,6 +76,11 @@ struct DriverGlobal {
 	 * debounces it, retargets a dynamic mode and asks the Display Manager
 	 * to re-probe us through the VSL connect interrupt service. */
 	Boolean				hostResizeAvail;	/* QEMU channel detected */
+
+	/* Packed 1/2/4-bpp indexed modes (ClassicMac vga-packed-depths):
+	 * when QEMU advertises the feature we offer the full classic ladder
+	 * of depth modes (B&W through millions) instead of just 8/15/32. */
+	Boolean				lowDepthAvail;
 	UInt32				numBaseModes;		/* modes before the dynamic pair */
 	UInt32				lastReqSerial;		/* last serial we acted upon */
 	UInt32				pendingReqSerial;	/* serial being debounced */

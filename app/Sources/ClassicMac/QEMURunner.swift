@@ -366,7 +366,11 @@ final class QEMUManager: ObservableObject {
         args += ["-M", "mac99,via=pmu,audiodev=snd0"]
         args += ["-m", String(config.ramMB)]
         args += ["-L", AppPaths.pcBiosDir.path]
-        args += ["-display", "cocoa,swap-opt-cmd=off"]
+        // right-click-ctrl: deliver right clicks as Control+click so Mac OS
+        // 8/9 contextual menus open. scroll-keys: turn scroll wheel motion
+        // into arrow-key taps (classic Mac OS has no wheel driver). Both are
+        // ClassicMac additions to the cocoa display (cocoaui/input-remap.patch).
+        args += ["-display", "cocoa,swap-opt-cmd=off,right-click-ctrl=on,scroll-keys=on"]
         // Live window resizing: expose the host-resize request registers on
         // the std VGA device (see ppcvid/vga-host-resize.patch). The bundled
         // qemu_vga.ndrv polls them and switches the guest resolution through
@@ -378,12 +382,19 @@ final class QEMUManager: ObservableObject {
         args += ["-vga", "std"]
         args += ["-global", "VGA.host-resize=on"]
         args += ["-global", "VGA.vgamem_mb=64"]
+        // Packed 1/2/4-bpp modes (ppcvid/vga-packed-depths.patch) let the
+        // bundled qemu_vga.ndrv offer Black & White, 4 and 16 colors in the
+        // Monitors control panel alongside 256/thousands/millions.
+        args += ["-global", "VGA.packed-lowbpp=on"]
         // Route the OpenBIOS firmware console to the (disconnected) serial
-        // port so the yellow firmware text screens never appear; the display
-        // stays blank until the Mac OS boot screen takes over.
+        // port so the firmware text screens never appear. Together with the
+        // bundled OpenBIOS's console background being repainted black (see
+        // scripts/build-qemu.sh), the display stays black until the Mac OS
+        // boot screen takes over.
         args += ["-prom-env", "output-device=ttya"]
-        // OpenBIOS sizes the framebuffer from -g at boot. Depth is fixed at
-        // millions of colors; Mac OS 9 can still switch lower in Monitors.
+        // OpenBIOS sizes the framebuffer from -g at boot. Boot depth is
+        // millions of colors; Monitors can switch anywhere from Black &
+        // White up to millions once Mac OS is running (packed-lowbpp).
         args += ["-g", "\(config.width)x\(config.height)x32"]
         args += ["-name", config.name]
 
@@ -468,7 +479,9 @@ final class QEMUManager: ObservableObject {
         // Map the host Command key to the guest Command key (not Option), so
         // shortcuts like Cmd-W reach classic Mac OS. The left Command key still
         // only passes through once the window has grabbed the mouse (click in it).
-        args += ["-display", "cocoa,swap-opt-cmd=off"]
+        // right-click-ctrl/scroll-keys: same classic-input remapping as the
+        // Power Mac (contextual menus via Control+click, wheel as arrow keys).
+        args += ["-display", "cocoa,swap-opt-cmd=off,right-click-ctrl=on,scroll-keys=on"]
         // -g only applies to machine-created framebuffers; when the qfb is added as
         // a device its size is set via device options instead.
         if !qfbAsDevice {

@@ -33,6 +33,7 @@ PATCHED_FILES=(
   hw/display/meson.build
   pc-bios/meson.build
   ui/cocoa.m
+  qapi/ui.json
   hw/audio/asc.c
   audio/coreaudio.m
   hw/audio/Kconfig
@@ -43,6 +44,7 @@ PATCHED_FILES=(
   hw/misc/macio/macio.c
   include/hw/misc/macio/macio.h
   pc-bios/openbios-ppc
+  hw/display/vga.c
   hw/display/vga-pci.c
   hw/display/vga_int.h
   hw/display/virtio-vga.c
@@ -139,6 +141,11 @@ git -C "$QEMU_DIR" apply "$QFB_DIR/cocoa-resize.patch" || die "Failed to apply c
 # ClassicMac UI skin: machine-named window titles and menus, no QEMU
 # branding/Speed menu, friendly quit dialog, Dock icon from the helper bundle.
 git -C "$QEMU_DIR" apply "$ROOT_DIR/cocoaui/classicmac-ui.patch" || die "Failed to apply ClassicMac cocoa UI patch"
+# Classic Mac input remapping (both opt-in via -display cocoa options):
+# right-click-ctrl delivers right clicks as Control+click (contextual menus)
+# and scroll-keys turns wheel motion into arrow-key taps, since classic Mac
+# OS mouse drivers ignore extra buttons and the wheel.
+git -C "$QEMU_DIR" apply "$ROOT_DIR/cocoaui/input-remap.patch" || die "Failed to apply ClassicMac input remap patch"
 # Apple Sound Chip: always feed the audio backend silence when idle so a live
 # backend (CoreAudio) never replays stale ring-buffer content as a hum/buzz.
 git -C "$QEMU_DIR" apply "$QFB_DIR/asc-silence.patch" || die "Failed to apply asc silence patch"
@@ -161,6 +168,38 @@ cp "$SCREAMER_DIR/screamer.h" "$QEMU_DIR/include/hw/audio/screamer.h"
 cp "$SCREAMER_DIR/openbios-ppc" "$QEMU_DIR/pc-bios/openbios-ppc"
 git -C "$QEMU_DIR" apply "$SCREAMER_DIR/integration.patch" || die "Failed to apply screamer integration patch"
 
+# Repaint the OpenBIOS console background from pale yellow (0xFFFFCC) to
+# black. The firmware fills the whole framebuffer with that palette entry at
+# video init, so even with the console routed to ttya the guest window shows
+# a yellow screen until Mac OS takes over. The color exists exactly once in
+# the binary (the Forth palette literal); with it black - and the firmware
+# text already black - the display stays dark until the Mac OS boot screen.
+# Idempotent: the pristine binary is re-copied from screamer/ above on every
+# run, and the patcher accepts an already-patched file.
+log "Patching OpenBIOS console background to black"
+"$PYTHON_BIN" - "$QEMU_DIR/pc-bios/openbios-ppc" <<'PYEOF' || die "Failed to patch OpenBIOS background color"
+import sys
+
+path = sys.argv[1]
+with open(path, "rb") as f:
+    data = f.read()
+
+yellow = bytes.fromhex("00ffffcc")
+count = data.count(yellow)
+if count == 1:
+    with open(path, "wb") as f:
+        f.write(data.replace(yellow, bytes(4)))
+    print("    OK  OpenBIOS background palette entry set to black")
+elif count == 0:
+    # Nothing to patch: only acceptable if a previous run already did it,
+    # which we cannot distinguish here; treat as an error so an OpenBIOS
+    # update that changes the constant is caught instead of silently
+    # shipping yellow screens again.
+    sys.exit("openbios-ppc: background color constant 0x00FFFFCC not found")
+else:
+    sys.exit(f"openbios-ppc: expected 1 occurrence of 0x00FFFFCC, found {count}")
+PYEOF
+
 # ---------------------------------------------------------------------------
 # 3c. Apply the PPC std-VGA host-resize channel + custom video driver
 # ---------------------------------------------------------------------------
@@ -169,6 +208,11 @@ git -C "$QEMU_DIR" apply "$SCREAMER_DIR/integration.patch" || die "Failed to app
 # build that follows the host window via the Display Manager.
 log "Installing PPC VGA host-resize support (patch + qemu_vga.ndrv)"
 git -C "$QEMU_DIR" apply "$PPCVID_DIR/vga-host-resize.patch" || die "Failed to apply vga host-resize patch"
+# Packed linear 1/2/4-bpp indexed modes (packed-lowbpp=on) so the Mac OS
+# Monitors control panel can offer Black & White, 4 and 16 colors. Applied
+# on top of the host-resize patch (extends its QEXT register block with a
+# feature bitmap the guest driver probes).
+git -C "$QEMU_DIR" apply "$PPCVID_DIR/vga-packed-depths.patch" || die "Failed to apply vga packed-depths patch"
 if [ -f "$PPCVID_DIR/qemu_vga.ndrv" ]; then
   cp "$PPCVID_DIR/qemu_vga.ndrv" "$QEMU_DIR/pc-bios/qemu_vga.ndrv"
 else
@@ -247,6 +291,11 @@ if "$QEMU_PPC_BIN" -device VGA,help 2>&1 | grep -q "host-resize"; then
   printf '    OK  VGA host-resize channel (ppc)\n'
 else
   die "VGA host-resize property missing from the ppc build"
+fi
+if "$QEMU_PPC_BIN" -device VGA,help 2>&1 | grep -q "packed-lowbpp"; then
+  printf '    OK  VGA packed low-bpp modes (ppc)\n'
+else
+  die "VGA packed-lowbpp property missing from the ppc build"
 fi
 if [ -f "$PPCVID_DIR/qemu_vga.ndrv" ] && cmp -s "$PPCVID_DIR/qemu_vga.ndrv" "$QEMU_DIR/pc-bios/qemu_vga.ndrv"; then
   printf '    OK  ClassicMac qemu_vga.ndrv installed\n'

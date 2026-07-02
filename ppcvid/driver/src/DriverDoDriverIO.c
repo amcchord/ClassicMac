@@ -541,17 +541,7 @@ DriverStatusCmd( IOCommandID ioCommandID, IOCommandKind ioCommandKind, CntrlPara
 			if (rec->modeID != 0)
 				GLOBAL.hostPendingMode = rec->modeID;
 		}
-		{
-			/* Same mapping as DriverQDCalls.c: 8 -> kDepthMode1,
-			   15/16 -> kDepthMode2, 24/32 -> kDepthMode3 */
-			UInt32 d = GLOBAL.depth;
-			if (d == 8)
-				rec->depthMode = kDepthMode1;
-			else if (d == 15 || d == 16)
-				rec->depthMode = kDepthMode2;
-			else
-				rec->depthMode = kDepthMode3;
-		}
+		rec->depthMode = DepthToDepthMode(GLOBAL.depth);
 		status = noErr;
 		break;
 	}

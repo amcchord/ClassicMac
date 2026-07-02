@@ -212,7 +212,7 @@ struct VMDetailView: View {
         } header: {
             Label("Display", systemImage: "display")
         } footer: {
-            Text("The Mac starts at this size, in millions of colors. While it's running, drag the window to any size and the Mac follows.")
+            Text("The Mac starts at this size, in millions of colors. While it's running, drag the window to any size and the Mac follows, or pick any depth from Black & White up to millions in the Monitors control panel.")
         }
     }
 

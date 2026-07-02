@@ -156,7 +156,11 @@ UInt32 QemuVga_PrepareHostModeSwitch(UInt32 width, UInt32 height)
 
 	/* Clamp to the hardware envelope: never below the window's minimum
 	 * content size, never larger than the framebuffer BAR can hold at
-	 * 32bpp (so any depth the user picks later still fits). */
+	 * 32bpp (so any depth the user picks later still fits). The width is
+	 * rounded down to a multiple of 8 because the DISPI interface does the
+	 * same; without this the rowbytes we report and the stride QEMU scans
+	 * out would disagree (visibly so at the packed sub-byte depths). */
+	width &= ~(UInt32)7;
 	if (width < HOST_RESIZE_MIN_WIDTH)
 		width = HOST_RESIZE_MIN_WIDTH;
 	if (height < HOST_RESIZE_MIN_HEIGHT)
@@ -289,6 +293,15 @@ OSStatus QemuVga_Init(void)
 	GLOBAL.hostResizeAvail =
 		(GLOBAL.boardRegMappedSize >= 0x600 + QEMU_EXT_SIZE_HOST_RESIZE) &&
 		(ExtReadL(QEMU_EXT_REG_SIZE) >= QEMU_EXT_SIZE_HOST_RESIZE);
+
+	/* Packed 1/2/4-bpp indexed modes: probe the feature bitmap register
+	 * (only read it once the reported region size says it exists). */
+	GLOBAL.lowDepthAvail =
+		(GLOBAL.boardRegMappedSize >= 0x600 + QEMU_EXT_SIZE_FEATURES) &&
+		(ExtReadL(QEMU_EXT_REG_SIZE) >= QEMU_EXT_SIZE_FEATURES) &&
+		((ExtReadL(QEMU_EXT_REG_FEATURES) & QEMU_EXT_FEATURE_PACKED_LOWBPP) != 0);
+	if (GLOBAL.lowDepthAvail)
+		lprintf("QEMU packed low-depth modes detected\n");
 	GLOBAL.numModes = GLOBAL.numBaseModes;
 	if (GLOBAL.hostResizeAvail) {
 		lprintf("QEMU host-resize channel detected\n");
@@ -465,7 +478,8 @@ OSStatus QemuVga_GetModePages(UInt32 index, UInt32 depth,
 		return paramErr;
 	width = getVMode(index)->width;
 	height = getVMode(index)->height;
-	pBytes = width * ((depth + 7) / 8) * height;
+	/* Sub-byte depths (1/2/4) pack several pixels per byte. */
+	pBytes = ((width * depth + 7) / 8) * height;
 	if (pageSize)
 		*pageSize = pBytes;
 	if (pageCount) {

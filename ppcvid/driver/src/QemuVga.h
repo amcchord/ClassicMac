@@ -56,8 +56,14 @@
 #define QEMU_EXT_REG_REQ_WIDTH           0x2
 #define QEMU_EXT_REG_REQ_HEIGHT          0x3
 #define QEMU_EXT_REG_REQ_SERIAL          0x4
+#define QEMU_EXT_REG_FEATURES            0x5
 
 #define QEMU_EXT_SIZE_HOST_RESIZE        (5 * 4)
+#define QEMU_EXT_SIZE_FEATURES           (6 * 4)
+
+/* Feature bits in QEMU_EXT_REG_FEATURES (present when QEMU_EXT_REG_SIZE
+ * reads at least QEMU_EXT_SIZE_FEATURES). */
+#define QEMU_EXT_FEATURE_PACKED_LOWBPP   0x1
 
 /* Smallest resolution we will follow the window down to; matches the QEMU
  * Cocoa window's minimum content size. */

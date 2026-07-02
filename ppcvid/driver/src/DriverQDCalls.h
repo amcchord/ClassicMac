@@ -1,6 +1,12 @@
 #ifndef _DRIVER_QD_CALLS_H__
 #define _DRIVER_QD_CALLS_H__
 
+// ### DEPTH MODE MAPPING ###
+
+UInt8		DepthToDepthMode(UInt8 depth);
+UInt8		DepthModeToDepth(UInt8 mode);
+UInt8		MaxDepthMode(void);
+
 // ###ÊCONTROL ROUTINES ###
 
 OSStatus	GraphicsCoreSetMode(VDPageInfo *pageInfo);

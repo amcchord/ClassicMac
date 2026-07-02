@@ -1,0 +1,201 @@
+diff --git a/hw/display/vga.c b/hw/display/vga.c
+index ee7d97b..26f214c 100644
+--- a/hw/display/vga.c
++++ b/hw/display/vga.c
+@@ -566,6 +566,15 @@ static void vbe_fixup_regs(VGACommonState *s)
+ 
+     /* check depth */
+     switch (r[VBE_DISPI_INDEX_BPP]) {
++    case 1:
++    case 2:
++        /* packed linear sub-byte modes: only with packed-lowbpp=on */
++        if (s->packed_lowbpp) {
++            bits = r[VBE_DISPI_INDEX_BPP];
++        } else {
++            bits = r[VBE_DISPI_INDEX_BPP] = 8;
++        }
++        break;
+     case 4:
+     case 8:
+     case 16:
+@@ -662,7 +671,7 @@ static void vbe_update_vgaregs(VGACommonState *s)
+     s->cr[VGA_CRTC_OVERFLOW] |= 0x10;
+     s->cr[VGA_CRTC_MAX_SCAN] |= 0x40;
+ 
+-    if (s->vbe_regs[VBE_DISPI_INDEX_BPP] == 4) {
++    if (s->vbe_regs[VBE_DISPI_INDEX_BPP] == 4 && !s->packed_lowbpp) {
+         shift_control = 0;
+         s->sr_vbe[VGA_SEQ_CLOCK_MODE] &= ~8; /* no double line */
+     } else {
+@@ -1378,6 +1387,52 @@ static void vga_draw_text(VGACommonState *s, int full_update)
+     }
+ }
+ 
++/*
++ * Packed linear sub-byte indexed modes (packed-lowbpp=on). Bit order is
++ * big-endian within each byte - the leftmost pixel lives in the most
++ * significant bits - matching the classic Mac OS framebuffer layout at
++ * 1, 2 and 4 bits per pixel. Colors come from the DAC palette, so the
++ * guest drives them through the usual 0x3c8/0x3c9 registers.
++ */
++static void *vga_draw_line1_packed(VGACommonState *vga, uint8_t *d,
++                                   uint32_t addr, int width, int hpel)
++{
++    uint32_t *palette = vga->last_palette;
++    int x;
++
++    for (x = 0; x < width; x++) {
++        uint8_t b = vga_read_byte(vga, addr + (x >> 3));
++        ((uint32_t *)d)[x] = palette[(b >> (7 - (x & 7))) & 0x1];
++    }
++    return NULL;
++}
++
++static void *vga_draw_line2_packed(VGACommonState *vga, uint8_t *d,
++                                   uint32_t addr, int width, int hpel)
++{
++    uint32_t *palette = vga->last_palette;
++    int x;
++
++    for (x = 0; x < width; x++) {
++        uint8_t b = vga_read_byte(vga, addr + (x >> 2));
++        ((uint32_t *)d)[x] = palette[(b >> ((3 - (x & 3)) * 2)) & 0x3];
++    }
++    return NULL;
++}
++
++static void *vga_draw_line4_packed(VGACommonState *vga, uint8_t *d,
++                                   uint32_t addr, int width, int hpel)
++{
++    uint32_t *palette = vga->last_palette;
++    int x;
++
++    for (x = 0; x < width; x++) {
++        uint8_t b = vga_read_byte(vga, addr + (x >> 1));
++        ((uint32_t *)d)[x] = palette[(b >> ((1 - (x & 1)) * 4)) & 0xf];
++    }
++    return NULL;
++}
++
+ enum {
+     VGA_DRAW_LINE2,
+     VGA_DRAW_LINE2D2,
+@@ -1385,6 +1440,9 @@ enum {
+     VGA_DRAW_LINE4D2,
+     VGA_DRAW_LINE8D2,
+     VGA_DRAW_LINE8,
++    VGA_DRAW_LINE1_PACKED,
++    VGA_DRAW_LINE2_PACKED,
++    VGA_DRAW_LINE4_PACKED,
+     VGA_DRAW_LINE15_LE,
+     VGA_DRAW_LINE16_LE,
+     VGA_DRAW_LINE24_LE,
+@@ -1403,6 +1461,9 @@ static vga_draw_line_func * const vga_draw_line_table[VGA_DRAW_LINE_NB] = {
+     vga_draw_line4d2,
+     vga_draw_line8d2,
+     vga_draw_line8,
++    vga_draw_line1_packed,
++    vga_draw_line2_packed,
++    vga_draw_line4_packed,
+     vga_draw_line15_le,
+     vga_draw_line16_le,
+     vga_draw_line24_le,
+@@ -1549,6 +1610,23 @@ static void vga_draw_graphic(VGACommonState *s, int full_update)
+             v = VGA_DRAW_LINE8D2;
+             bits = 4;
+             break;
++        case 1:
++            /* only reachable with packed-lowbpp=on (see vbe_fixup_regs) */
++            full_update |= update_palette256(s);
++            v = VGA_DRAW_LINE1_PACKED;
++            bits = 1;
++            break;
++        case 2:
++            full_update |= update_palette256(s);
++            v = VGA_DRAW_LINE2_PACKED;
++            bits = 2;
++            break;
++        case 4:
++            /* shift_control == 2 with bpp 4 implies packed-lowbpp=on */
++            full_update |= update_palette256(s);
++            v = VGA_DRAW_LINE4_PACKED;
++            bits = 4;
++            break;
+         case 8:
+             full_update |= update_palette256(s);
+             v = VGA_DRAW_LINE8;
+diff --git a/hw/display/vga-pci.c b/hw/display/vga-pci.c
+index 2a312e0..c5fc1fd 100644
+--- a/hw/display/vga-pci.c
++++ b/hw/display/vga-pci.c
+@@ -187,13 +187,15 @@ static uint64_t pci_vga_qext_resize_read(void *ptr, hwaddr addr,
+ 
+     switch (addr) {
+     case PCI_VGA_QEXT_REG_SIZE:
+-        return PCI_VGA_QEXT_SIZE_RESIZE;
++        return PCI_VGA_QEXT_SIZE_FEATURES;
+     case PCI_VGA_QEXT_REG_REQ_WIDTH:
+         return d->host_req_width;
+     case PCI_VGA_QEXT_REG_REQ_HEIGHT:
+         return d->host_req_height;
+     case PCI_VGA_QEXT_REG_REQ_SERIAL:
+         return d->host_req_serial;
++    case PCI_VGA_QEXT_REG_FEATURES:
++        return s->packed_lowbpp ? PCI_VGA_QEXT_FEATURE_PACKED_LOWBPP : 0;
+     default:
+         return pci_vga_qext_read(ptr, addr, size);
+     }
+@@ -269,7 +271,7 @@ void pci_std_vga_mmio_region_init(VGACommonState *s,
+         if (host_resize) {
+             memory_region_init_io(&subs[2], owner, &pci_vga_qext_resize_ops,
+                                   s, "qemu extended regs",
+-                                  PCI_VGA_QEXT_SIZE_RESIZE);
++                                  PCI_VGA_QEXT_SIZE_FEATURES);
+         } else {
+             memory_region_init_io(&subs[2], owner, &pci_vga_qext_ops, s,
+                                   "qemu extended regs", PCI_VGA_QEXT_SIZE);
+@@ -455,6 +457,7 @@ static const Property vga_pci_properties[] = {
+     DEFINE_PROP_BIT("edid",
+                     PCIVGAState, flags, PCI_VGA_FLAG_ENABLE_EDID, true),
+     DEFINE_PROP_BOOL("host-resize", PCIVGAState, host_resize, false),
++    DEFINE_PROP_BOOL("packed-lowbpp", PCIVGAState, vga.packed_lowbpp, false),
+     DEFINE_EDID_PROPERTIES(PCIVGAState, edid_info),
+ };
+ 
+diff --git a/hw/display/vga_int.h b/hw/display/vga_int.h
+index d7fe348..0bf5177 100644
+--- a/hw/display/vga_int.h
++++ b/hw/display/vga_int.h
+@@ -136,6 +136,13 @@ typedef struct VGACommonState {
+     bool full_update_gfx;
+     bool big_endian_fb;
+     bool default_endian_fb;
++    /*
++     * packed-lowbpp=on: DISPI bpp values 1/2/4 select packed linear
++     * indexed modes (big-endian bit order within each byte, leftmost
++     * pixel in the most significant bits) as used by classic Mac OS,
++     * instead of being rejected (1/2) or mapped to planar VGA (4).
++     */
++    bool packed_lowbpp;
+     bool global_vmstate;
+     /* hardware mouse cursor support */
+     uint32_t invalidated_y_table[VGA_MAX_HEIGHT / 32];
+diff --git a/include/hw/display/bochs-vbe.h b/include/hw/display/bochs-vbe.h
+index 6b12539..bbaf590 100644
+--- a/include/hw/display/bochs-vbe.h
++++ b/include/hw/display/bochs-vbe.h
+@@ -79,4 +79,14 @@
+ #define PCI_VGA_QEXT_REG_REQ_HEIGHT   (3 * 4)
+ #define PCI_VGA_QEXT_REG_REQ_SERIAL   (4 * 4)
+ 
++/*
++ * Feature bitmap (present when REG_SIZE reads at least
++ * PCI_VGA_QEXT_SIZE_FEATURES). Lets the guest video driver detect
++ * optional device capabilities before relying on them.
++ */
++#define PCI_VGA_QEXT_SIZE_FEATURES    (6 * 4)
++#define PCI_VGA_QEXT_REG_FEATURES     (5 * 4)
++/* packed linear 1/2/4 bpp indexed modes (packed-lowbpp=on) */
++#define  PCI_VGA_QEXT_FEATURE_PACKED_LOWBPP  0x1
++
+ #endif /* HW_DISPLAY_BOCHS_VBE_H */

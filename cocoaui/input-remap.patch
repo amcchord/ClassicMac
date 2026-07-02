@@ -1,0 +1,226 @@
+diff --git a/ui/cocoa.m b/ui/cocoa.m
+index 13d7c3d..3aa354c 100644
+--- a/ui/cocoa.m
++++ b/ui/cocoa.m
+@@ -100,6 +100,8 @@ static void cocoa_switch(DisplayChangeListener *dcl,
+ static int cursor_hide = 1;
+ static int left_command_key_enabled = 1;
+ static bool swap_opt_cmd;
++static bool right_click_ctrl;
++static bool scroll_keys;
+ 
+ static CGInterpolationQuality zoom_interpolation = kCGInterpolationNone;
+ static NSTextField *pauseLabel;
+@@ -336,6 +338,13 @@ @interface QemuCocoaView : NSView
+      */
+     BOOL isMouseGrabbed;
+     BOOL isAbsoluteEnabled;
++    /* right-click-ctrl: a synthesized Control key is held between
++     * rightMouseDown and rightMouseUp so guest contextual-menu tracking
++     * (click, hold, release over an item) works. */
++    BOOL rightClickCtrlHeld;
++    /* scroll-keys: leftover precise (trackpad) scroll distance that has
++     * not yet added up to a whole arrow-key tap. */
++    CGFloat scrollKeysAccum;
+     CFMachPortRef eventsTap;
+     CGColorSpaceRef colorspace;
+     CALayer *cursorLayer;
+@@ -351,6 +360,8 @@ - (void) setFullGrab:(id)sender;
+ - (void) handleMonitorInput:(NSEvent *)event;
+ - (bool) handleEvent:(NSEvent *)event;
+ - (bool) handleEventLocked:(NSEvent *)event;
++- (bool) handleScrollAsArrowKeys:(NSEvent *)event;
++- (void) handleRightClickAsControlClick:(NSEvent *)event down:(bool)down;
+ - (void) notifyMouseModeChange;
+ - (BOOL) isMouseGrabbed;
+ - (QEMUScreen) gscreen;
+@@ -947,7 +958,13 @@ - (bool) handleEventLocked:(NSEvent *)event
+         qkbd_state_key_event(kbd, Q_KEY_CODE_SHIFT_R, false);
+     }
+     if (!(modifiers & NSEventModifierFlagControl)) {
+-        qkbd_state_key_event(kbd, Q_KEY_CODE_CTRL, false);
++        /* Don't lift the Control key we are holding for a synthesized
++         * Control+click (right-click-ctrl) - the physical modifier is
++         * genuinely up, but the guest must keep seeing it down until the
++         * right button is released. */
++        if (!rightClickCtrlHeld) {
++            qkbd_state_key_event(kbd, Q_KEY_CODE_CTRL, false);
++        }
+         qkbd_state_key_event(kbd, Q_KEY_CODE_CTRL_R, false);
+     }
+     if (!(modifiers & NSEventModifierFlagOption)) {
+@@ -1096,6 +1113,13 @@ - (bool) handleEventLocked:(NSEvent *)event
+              * This is in-line with standard Mac OS X UI behaviour.
+              */
+ 
++            /* Classic Mac OS guests have no wheel-aware mouse driver, so
++             * wheel button events would be ignored; translate the motion
++             * into arrow-key taps instead (scroll-keys=on). */
++            if (scroll_keys) {
++                return [self handleScrollAsArrowKeys:event];
++            }
++
+             /* Determine if this is a scroll up or scroll down event */
+             if ([event deltaY] != 0) {
+                 button = ([event deltaY] > 0) ?
+@@ -1158,6 +1182,83 @@ - (void) handleMouseEvent:(NSEvent *)event
+     });
+ }
+ 
++/*
++ * scroll-keys=on: translate wheel motion into arrow-key taps (the same
++ * approach SheepShaver takes), because classic Mac OS mouse drivers ignore
++ * both wheel buttons and the USB HID wheel axis. Called with the BQL held
++ * (from handleEventLocked).
++ */
++- (bool) handleScrollAsArrowKeys:(NSEvent *)event
++{
++    QKeyCode code;
++    int taps = 0;
++    int i;
++
++    if ([event hasPreciseScrollingDeltas]) {
++        /* Trackpad and Magic Mouse: accumulate the point-based deltas and
++         * emit roughly one arrow tap per 20 points of travel, carrying the
++         * remainder so slow scrolling still gets through. */
++        scrollKeysAccum += [event scrollingDeltaY];
++        taps = (int)(scrollKeysAccum / 20);
++        scrollKeysAccum -= taps * 20;
++    } else if ([event deltaY] != 0) {
++        /* Discrete wheel: three lines per notch, like SheepShaver. */
++        if ([event deltaY] > 0) {
++            taps = 3;
++        } else {
++            taps = -3;
++        }
++    }
++
++    if (taps > 0) {
++        code = Q_KEY_CODE_UP;
++    } else {
++        code = Q_KEY_CODE_DOWN;
++        taps = -taps;
++    }
++    if (taps > 9) {
++        taps = 9; /* keep fast flicks from flooding the guest */
++    }
++    for (i = 0; i < taps; i++) {
++        qkbd_state_key_event(kbd, code, true);
++        qkbd_state_key_event(kbd, code, false);
++    }
++    return true;
++}
++
++/*
++ * right-click-ctrl=on: classic Mac OS has no secondary mouse button;
++ * contextual menus open with Control+click. Deliver the right button as a
++ * left click with a synthesized Control key that stays down until the
++ * button is released, so menu tracking (click, hold, release over an item)
++ * works. handleEventLocked's modifier sync knows not to lift it while
++ * rightClickCtrlHeld is set.
++ */
++- (void) handleRightClickAsControlClick:(NSEvent *)event down:(bool)down
++{
++    if (!isMouseGrabbed) {
++        return;
++    }
++
++    with_bql(^{
++        if (down) {
++            self->rightClickCtrlHeld = TRUE;
++            qkbd_state_key_event(kbd, Q_KEY_CODE_CTRL, true);
++        }
++        qemu_input_queue_btn(dcl.con, INPUT_BUTTON_LEFT, down);
++    });
++
++    /* forwards the pointer position and syncs the queued button change */
++    [self handleMouseEvent:event];
++
++    if (!down) {
++        with_bql(^{
++            qkbd_state_key_event(kbd, Q_KEY_CODE_CTRL, false);
++            self->rightClickCtrlHeld = FALSE;
++        });
++    }
++}
++
+ - (void) mouseExited:(NSEvent *)event
+ {
+     if (isAbsoluteEnabled && isMouseGrabbed) {
+@@ -1184,6 +1285,10 @@ - (void) mouseDown:(NSEvent *)event
+ 
+ - (void) rightMouseDown:(NSEvent *)event
+ {
++    if (right_click_ctrl) {
++        [self handleRightClickAsControlClick:event down:true];
++        return;
++    }
+     [self handleMouseEvent:event button:INPUT_BUTTON_RIGHT down:true];
+ }
+ 
+@@ -1218,6 +1323,10 @@ - (void) mouseUp:(NSEvent *)event
+ 
+ - (void) rightMouseUp:(NSEvent *)event
+ {
++    if (right_click_ctrl) {
++        [self handleRightClickAsControlClick:event down:false];
++        return;
++    }
+     [self handleMouseEvent:event button:INPUT_BUTTON_RIGHT down:false];
+ }
+ 
+@@ -1287,6 +1396,11 @@ - (void) raiseAllButtons
+         qemu_input_queue_btn(dcl.con, INPUT_BUTTON_LEFT, false);
+         qemu_input_queue_btn(dcl.con, INPUT_BUTTON_RIGHT, false);
+         qemu_input_queue_btn(dcl.con, INPUT_BUTTON_MIDDLE, false);
++        /* also drop a Control key held for a synthesized Control+click */
++        if (self->rightClickCtrlHeld) {
++            qkbd_state_key_event(kbd, Q_KEY_CODE_CTRL, false);
++            self->rightClickCtrlHeld = FALSE;
++        }
+     });
+ }
+ @end
+@@ -2171,6 +2285,12 @@ static void cocoa_display_init(DisplayState *ds, DisplayOptions *opts)
+     if (opts->u.cocoa.has_swap_opt_cmd) {
+         swap_opt_cmd = opts->u.cocoa.swap_opt_cmd;
+     }
++    if (opts->u.cocoa.has_right_click_ctrl) {
++        right_click_ctrl = opts->u.cocoa.right_click_ctrl;
++    }
++    if (opts->u.cocoa.has_scroll_keys) {
++        scroll_keys = opts->u.cocoa.scroll_keys;
++    }
+ 
+     if (opts->u.cocoa.has_left_command_key && !opts->u.cocoa.left_command_key) {
+         left_command_key_enabled = 0;
+diff --git a/qapi/ui.json b/qapi/ui.json
+index e3da776..19c8568 100644
+--- a/qapi/ui.json
++++ b/qapi/ui.json
+@@ -1444,6 +1444,14 @@
+ # @zoom-interpolation: Apply interpolation to smooth output when
+ #     zoom-to-fit is enabled.  Defaults to "off".  (Since 9.0)
+ #
++# @right-click-ctrl: Deliver right clicks to the guest as
++#     Control+click, opening contextual menus in classic Mac OS
++#     guests, which have no secondary mouse button.  (default: off)
++#
++# @scroll-keys: Translate scroll wheel motion into arrow-key presses
++#     for guests without a wheel-aware mouse driver (classic Mac OS).
++#     (default: off)
++#
+ # Since: 7.0
+ ##
+ { 'struct': 'DisplayCocoa',
+@@ -1452,7 +1460,9 @@
+       '*full-grab': 'bool',
+       '*swap-opt-cmd': 'bool',
+       '*zoom-to-fit': 'bool',
+-      '*zoom-interpolation': 'bool'
++      '*zoom-interpolation': 'bool',
++      '*right-click-ctrl': 'bool',
++      '*scroll-keys': 'bool'
+   } }
+ 
+ ##

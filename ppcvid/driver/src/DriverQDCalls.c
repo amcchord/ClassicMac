@@ -3,10 +3,36 @@
 #include "DriverQDCalls.h"
 #include "QemuVga.h"
 
-#define MAX_DEPTH_MODE	kDepthMode3
+/* Depth mode <-> bits-per-pixel mapping.
+ *
+ * When QEMU advertises the packed low-bpp feature (GLOBAL.lowDepthAvail)
+ * we expose the full classic Mac ladder: B&W, 4, 16, 256, thousands and
+ * millions of colors (kDepthMode1..6). On an older QEMU without the
+ * feature we keep the historical 3-mode mapping (8/15/32) so saved depth
+ * modes keep meaning what they used to. */
 
-static UInt8 DepthToDepthMode(UInt8 depth)
+UInt8 DepthToDepthMode(UInt8 depth)
 {
+	if (GLOBAL.lowDepthAvail) {
+		switch (depth) {
+		case 1:
+			return kDepthMode1;
+		case 2:
+			return kDepthMode2;
+		case 4:
+			return kDepthMode3;
+		case 8:
+			return kDepthMode4;
+		case 15:
+		case 16:
+			return kDepthMode5;
+		case 24:
+		case 32:
+			return kDepthMode6;
+		default:
+			return kDepthMode4;
+		}
+	}
 	switch (depth) {
 	case 8:
 		return kDepthMode1;
@@ -21,8 +47,26 @@ static UInt8 DepthToDepthMode(UInt8 depth)
 	}
 }
 
-static UInt8 DepthModeToDepth(UInt8 mode)
+UInt8 DepthModeToDepth(UInt8 mode)
 {
+	if (GLOBAL.lowDepthAvail) {
+		switch (mode) {
+		case kDepthMode1:
+			return 1;
+		case kDepthMode2:
+			return 2;
+		case kDepthMode3:
+			return 4;
+		case kDepthMode4:
+			return 8;
+		case kDepthMode5:
+			return 15;
+		case kDepthMode6:
+			return 32;
+		default:
+			return 8;
+		}
+	}
 	switch (mode) {
 	case kDepthMode1:
 		return 8;
@@ -35,6 +79,13 @@ static UInt8 DepthModeToDepth(UInt8 mode)
 	}
 }
 
+UInt8 MaxDepthMode(void)
+{
+	if (GLOBAL.lowDepthAvail)
+		return kDepthMode6;
+	return kDepthMode3;
+}
+
 /************************ Color Table Stuff ****************************/
 
 static OSStatus
@@ -43,7 +94,7 @@ GraphicsCoreDoSetEntries(VDSetEntryRecord *entryRecord, Boolean directDevice, UI
 	UInt32 i;
 	
 	CHECK_OPEN( controlErr );
-	if (GLOBAL.depth != 8)
+	if (GLOBAL.depth > 8)
 		return controlErr;
 	if (NULL == entryRecord->csTable)
 		return controlErr;
@@ -91,7 +142,7 @@ GraphicsCoreGetEntries(VDSetEntryRecord *entryRecord)
 	
 	Trace(GraphicsCoreGetEntries);
 
-	if (GLOBAL.depth != 8)
+	if (GLOBAL.depth > 8)
 		return controlErr;
 	for(i=start;i<=stop;i++) {
 		UInt32	colorIndex = useValue ? entryRecord->csTable[i].value : i;
@@ -582,7 +633,7 @@ GraphicsCoreGetNextResolution(VDResolutionInfoRec *resInfo)
 	resInfo->csHorizontalPixels	= width;
 	resInfo->csVerticalLines	= height;
 	resInfo->csRefreshRate		= 60;
-	resInfo->csMaxDepthMode		= MAX_DEPTH_MODE; /* XXX Calculate if it fits ! */
+	resInfo->csMaxDepthMode		= MaxDepthMode(); /* XXX Calculate if it fits ! */
 
 	return noErr;
 }
@@ -600,7 +651,7 @@ GraphicsCoreGetVideoParams(VDVideoParametersInfoRec *videoParams)
  		
 	if (videoParams->csDisplayModeID < 1 || videoParams->csDisplayModeID > GLOBAL.numModes)
 		return paramErr;
-	if (videoParams->csDepthMode > MAX_DEPTH_MODE)
+	if (videoParams->csDepthMode > MaxDepthMode())
 		return paramErr;
 	if (QemuVga_GetModeInfo(videoParams->csDisplayModeID - 1, &width, &height))
 		return paramErr;
@@ -610,7 +661,7 @@ GraphicsCoreGetVideoParams(VDVideoParametersInfoRec *videoParams)
 	videoParams->csPageCount = pageCount;
 	lprintf("Video Params says %d pages\n", pageCount);
 	
-	rowBytes = width * ((depth + 7) / 8);
+	rowBytes = (width * depth + 7) / 8;
 	(videoParams->csVPBlockPtr)->vpBaseOffset 		= 0;			// For us, it's always 0
 	(videoParams->csVPBlockPtr)->vpBounds.top 		= 0;			// Always 0
 	(videoParams->csVPBlockPtr)->vpBounds.left 		= 0;			// Always 0
@@ -625,6 +676,16 @@ GraphicsCoreGetVideoParams(VDVideoParametersInfoRec *videoParams)
 	(videoParams->csVPBlockPtr)->vpRowBytes			= rowBytes;
 
 	switch (depth) {
+	case 1:
+	case 2:
+	case 4:
+		videoParams->csDeviceType 						= clutType;
+		(videoParams->csVPBlockPtr)->vpPixelType 		= 0;
+		(videoParams->csVPBlockPtr)->vpPixelSize 		= depth;
+		(videoParams->csVPBlockPtr)->vpCmpCount 		= 1;
+		(videoParams->csVPBlockPtr)->vpCmpSize 			= depth;
+		(videoParams->csVPBlockPtr)->vpPlaneBytes 		= 0;
+		break;
 	case 8:
 		videoParams->csDeviceType 						= clutType;
 		(videoParams->csVPBlockPtr)->vpPixelType 		= 0;

@@ -143,7 +143,7 @@ struct NewVMSheet: View {
                         }
                     }
                 } else {
-                    Text("The Power Mac display starts at millions of colors. Once Mac OS is running you can drag the window to any size, or pick lower depths via the Monitors control panel.")
+                    Text("The Power Mac display starts at millions of colors. Once Mac OS is running you can drag the window to any size, or pick any depth from Black & White up to millions in the Monitors control panel.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
