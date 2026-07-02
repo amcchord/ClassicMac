@@ -8,6 +8,7 @@ struct VMDetailView: View {
 
     @State private var config: VMConfig?
     @State private var showingDeleteConfirm = false
+    @State private var savedPreview: NSImage?
 
     var body: some View {
         Group {
@@ -23,6 +24,9 @@ struct VMDetailView: View {
 
     private func load() {
         config = store.vms.first(where: { $0.id == vmID })
+        if let config = config {
+            savedPreview = NSImage(contentsOf: config.previewURL)
+        }
     }
 
     private var configBinding: Binding<VMConfig>? {
@@ -37,13 +41,19 @@ struct VMDetailView: View {
     }
 
     private var running: Bool { manager.isRunning(vmID) }
+    private var paused: Bool { manager.isPaused(vmID) }
 
     @ViewBuilder
     private func content(_ vm: Binding<VMConfig>) -> some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                header(vm)
-                Divider()
+        VStack(spacing: 0) {
+            header(vm)
+                .padding(.horizontal, 24)
+                .padding(.top, 20)
+                .padding(.bottom, 12)
+            Form {
+                if previewImage != nil {
+                    screenSection
+                }
                 displaySection(vm)
                 hardwareSection(vm)
                 mediaSection(vm)
@@ -51,9 +61,7 @@ struct VMDetailView: View {
                     sharedFolderSection(vm)
                 }
             }
-            .padding(24)
-            .frame(maxWidth: 640, alignment: .leading)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .formStyle(.grouped)
         }
         .navigationTitle(vm.wrappedValue.name)
         .toolbar { toolbar(vm) }
@@ -66,22 +74,27 @@ struct VMDetailView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Move to Trash deletes the machine file, including its disk and settings. Remove from Library keeps the .classic file on disk but takes it out of ClassicMac.")
+            Text("Move to Trash deletes the machine file, including its disk and settings. Remove from Library keeps the file on disk but takes it out of ClassicMac.")
         }
     }
+
+    // MARK: Header
 
     @ViewBuilder
     private func header(_ vm: Binding<VMConfig>) -> some View {
         HStack(spacing: 16) {
-            Image(systemName: "desktopcomputer")
-                .font(.system(size: 44))
-                .foregroundStyle(.tint)
+            MachineBadgeView(family: vm.wrappedValue.machineFamily, size: 64)
             VStack(alignment: .leading, spacing: 4) {
                 TextField("Name", text: vm.name)
                     .font(.title2.bold())
                     .textFieldStyle(.plain)
                 Text(vm.wrappedValue.machineFamily.hardwareLabel)
                     .foregroundStyle(.secondary)
+                if running {
+                    Text("Settings can be changed after the Mac shuts down.")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
             }
             Spacer()
             statusBadge
@@ -92,14 +105,16 @@ struct VMDetailView: View {
         HStack(spacing: 6) {
             Circle()
                 .fill(statusColor)
-                .frame(width: 9, height: 9)
+                .frame(width: 8, height: 8)
             Text(statusText)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .font(.caption.weight(.semibold))
         }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .foregroundStyle(statusColor)
+        .background(statusColor.opacity(0.14), in: Capsule())
+        .accessibilityLabel("Status: \(statusText)")
     }
-
-    private var paused: Bool { manager.isPaused(vmID) }
 
     private var statusColor: Color {
         if paused {
@@ -118,8 +133,56 @@ struct VMDetailView: View {
         if running {
             return "Running"
         }
-        return "Stopped"
+        return "Shut Down"
     }
+
+    // MARK: Screen
+
+    // The live capture while running; the saved capture from the last run
+    // otherwise.
+    private var previewImage: NSImage? {
+        if let live = manager.previews[vmID] {
+            return live
+        }
+        return savedPreview
+    }
+
+    @ViewBuilder
+    private var screenSection: some View {
+        if let image = previewImage {
+            Section {
+                Button {
+                    if running {
+                        manager.activate(vmID)
+                    }
+                } label: {
+                    Image(nsImage: image)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(maxWidth: .infinity)
+                        .frame(maxHeight: 300)
+                        .saturation(running ? 1 : 0.6)
+                        .opacity(running ? 1 : 0.75)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8)
+                                .strokeBorder(.separator, lineWidth: 1)
+                        )
+                }
+                .buttonStyle(.plain)
+                .disabled(!running)
+                .help(running ? "Click to open the Mac's window" : "The Mac's screen when it last shut down")
+                .listRowBackground(Color.clear)
+                .listRowInsets(EdgeInsets())
+            } footer: {
+                if !running {
+                    Text("The Mac's screen when it last shut down.")
+                }
+            }
+        }
+    }
+
+    // MARK: Display
 
     @ViewBuilder
     private func displaySection(_ vm: Binding<VMConfig>) -> some View {
@@ -132,26 +195,12 @@ struct VMDetailView: View {
 
     @ViewBuilder
     private func powerMacDisplaySection(_ vm: Binding<VMConfig>) -> some View {
-        SettingsCard(title: "Display", systemImage: "display") {
+        Section {
             Toggle("Custom resolution", isOn: vm.customResolution)
                 .disabled(running)
 
             if vm.wrappedValue.customResolution {
-                HStack(spacing: 8) {
-                    TextField("Width", value: maxClamped(vm.width, VMConfig.maxWidth), format: .number)
-                        .frame(width: 76)
-                        .multilineTextAlignment(.trailing)
-                    Text("x")
-                        .foregroundStyle(.secondary)
-                    TextField("Height", value: maxClamped(vm.height, VMConfig.maxHeight), format: .number)
-                        .frame(width: 76)
-                        .multilineTextAlignment(.trailing)
-                    Button("Match Display") {
-                        matchMainDisplay(vm)
-                    }
-                    Spacer()
-                }
-                .disabled(running)
+                customResolutionFields(vm)
             } else {
                 Picker("Resolution", selection: resolutionSelection(vm)) {
                     ForEach(ResolutionPreset.all) { preset in
@@ -160,19 +209,20 @@ struct VMDetailView: View {
                 }
                 .disabled(running)
             }
-            Text("This is the startup resolution, at millions of colors. While Mac OS is running, drag the window to any size and the Mac switches to it; lower resolutions and depths can also be chosen in the Monitors control panel.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+        } header: {
+            Label("Display", systemImage: "display")
+        } footer: {
+            Text("The Mac starts at this size, in millions of colors. While it's running, drag the window to any size and the Mac follows.")
         }
     }
 
     @ViewBuilder
     private func quadraDisplaySection(_ vm: Binding<VMConfig>) -> some View {
-        SettingsCard(title: "Display", systemImage: "display") {
+        Section {
             Toggle(isOn: vm.useEnhancedFramebuffer) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Enhanced framebuffer")
-                    Text("Arbitrary resolutions and Thousands color (nubus-qfb)")
+                    Text("Enhanced video card")
+                    Text("Any resolution, with richer color at every size")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -183,24 +233,7 @@ struct VMDetailView: View {
                 .disabled(running || !vm.wrappedValue.useEnhancedFramebuffer)
 
             if vm.wrappedValue.customResolution {
-                HStack(spacing: 8) {
-                    TextField("Width", value: maxClamped(vm.width, VMConfig.maxWidth), format: .number)
-                        .frame(width: 76)
-                        .multilineTextAlignment(.trailing)
-                    Text("x")
-                        .foregroundStyle(.secondary)
-                    TextField("Height", value: maxClamped(vm.height, VMConfig.maxHeight), format: .number)
-                        .frame(width: 76)
-                        .multilineTextAlignment(.trailing)
-                    Button("Match Display") {
-                        matchMainDisplay(vm)
-                    }
-                    Spacer()
-                }
-                .disabled(running)
-                Text("Up to \(VMConfig.maxWidth) x \(VMConfig.maxHeight). Set inside the Mac too, via Monitors & Sound.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                customResolutionFields(vm)
             } else {
                 Picker("Resolution", selection: resolutionSelection(vm)) {
                     ForEach(ResolutionPreset.all) { preset in
@@ -210,16 +243,37 @@ struct VMDetailView: View {
                 .disabled(running)
             }
 
-            Picker("Color depth", selection: depthSelection(vm)) {
+            Picker("Colors", selection: depthSelection(vm)) {
                 ForEach(availableDepths(vm.wrappedValue)) { depth in
                     Text(depth.label).tag(depth)
                 }
             }
             .disabled(running)
-            Text("This is the deepest color available. Classic Mac OS remembers the depth you pick under Monitors & Sound, per machine.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+        } header: {
+            Label("Display", systemImage: "display")
+        } footer: {
+            Text("The deepest color setting available to the Mac. You can pick lower settings inside the Mac, under Monitors.")
         }
+    }
+
+    @ViewBuilder
+    private func customResolutionFields(_ vm: Binding<VMConfig>) -> some View {
+        LabeledContent("Size") {
+            HStack(spacing: 8) {
+                TextField("Width", value: maxClamped(vm.width, VMConfig.maxWidth), format: .number)
+                    .frame(width: 76)
+                    .multilineTextAlignment(.trailing)
+                Text("\u{00D7}")
+                    .foregroundStyle(.secondary)
+                TextField("Height", value: maxClamped(vm.height, VMConfig.maxHeight), format: .number)
+                    .frame(width: 76)
+                    .multilineTextAlignment(.trailing)
+                Button("Match Display") {
+                    matchMainDisplay(vm)
+                }
+            }
+        }
+        .disabled(running)
     }
 
     private func maxClamped(_ source: Binding<Int>, _ maxValue: Int) -> Binding<Int> {
@@ -253,9 +307,11 @@ struct VMDetailView: View {
         vm.wrappedValue.height = height
     }
 
+    // MARK: Hardware
+
     @ViewBuilder
     private func hardwareSection(_ vm: Binding<VMConfig>) -> some View {
-        SettingsCard(title: "Hardware", systemImage: "memorychip") {
+        Section {
             Picker("Memory", selection: vm.ramMB) {
                 ForEach(memoryChoices(vm.wrappedValue), id: \.self) { mb in
                     Text("\(mb) MB").tag(mb)
@@ -268,27 +324,27 @@ struct VMDetailView: View {
                     .foregroundStyle(.secondary)
             }
 
-            Toggle("User-mode networking", isOn: vm.networking)
-                .disabled(running)
-
-            Toggle(isOn: vm.sound) {
+            Toggle(isOn: vm.networking) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Sound")
-                    Text(soundCaption(vm.wrappedValue))
+                    Text("Networking")
+                    Text("Connect the Mac to the Internet through this Mac")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
             }
             .disabled(running)
-        }
-    }
 
-    private func soundCaption(_ vm: VMConfig) -> String {
-        switch vm.machineFamily {
-        case .quadra800:
-            return "Play the emulated Apple Sound Chip through your Mac's speakers"
-        case .powerMacG4:
-            return "Play the emulated screamer (AWACS) chip through your Mac's speakers"
+            Toggle(isOn: vm.sound) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Sound")
+                    Text("Play the Mac's sound through your speakers")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .disabled(running)
+        } header: {
+            Label("Hardware", systemImage: "memorychip")
         }
     }
 
@@ -303,9 +359,11 @@ struct VMDetailView: View {
         return choices
     }
 
+    // MARK: CD-ROM
+
     @ViewBuilder
     private func mediaSection(_ vm: Binding<VMConfig>) -> some View {
-        SettingsCard(title: "CD-ROM", systemImage: "opticaldiscdrive") {
+        Section {
             if let cd = vm.wrappedValue.cdImagePath, !cd.isEmpty {
                 LabeledContent("Disc") {
                     Text(URL(fileURLWithPath: cd).lastPathComponent)
@@ -313,7 +371,7 @@ struct VMDetailView: View {
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }
-                Toggle("Boot from CD-ROM", isOn: vm.bootFromCD)
+                Toggle("Start up from this disc", isOn: vm.bootFromCD)
                     .disabled(running)
                 Button("Eject Disc", role: .destructive) {
                     vm.wrappedValue.cdImagePath = nil
@@ -321,47 +379,59 @@ struct VMDetailView: View {
                 }
                 .disabled(running)
             } else {
-                Text("No disc inserted.")
-                    .foregroundStyle(.secondary)
-                Button("Insert CD/ISO Image...") {
+                LabeledContent("Disc") {
+                    Text("No disc inserted")
+                        .foregroundStyle(.secondary)
+                }
+                Button("Insert Disc\u{2026}") {
                     chooseISO(vm)
                 }
                 .disabled(running)
             }
+        } header: {
+            Label("CD-ROM", systemImage: "opticaldiscdrive")
         }
     }
 
+    // MARK: Shared folder
+
     @ViewBuilder
     private func sharedFolderSection(_ vm: Binding<VMConfig>) -> some View {
-        SettingsCard(title: "Shared Folder", systemImage: "folder.badge.person.crop") {
+        Section {
             if vm.wrappedValue.hasSharedFolder {
-                LabeledContent("Host folder") {
+                LabeledContent("Folder") {
                     Text(URL(fileURLWithPath: vm.wrappedValue.sharedFolderPath!).lastPathComponent)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                         .truncationMode(.middle)
-                }
-                Text("Appears on the Mac desktop as the disk \u{201C}\(vm.wrappedValue.sharedVolumeName)\u{201D}.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                if vm.wrappedValue.machineFamily == .powerMacG4 && vm.wrappedValue.bootFromCD && vm.wrappedValue.cdImagePath?.isEmpty == false {
-                    Text("Sharing is inactive while the machine boots from CD.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
                 }
                 Button("Stop Sharing", role: .destructive) {
                     vm.wrappedValue.sharedFolderPath = nil
                 }
                 .disabled(running)
             } else {
-                Text("Share a folder on your Mac so files appear on the emulated desktop.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Button("Choose Folder to Share...") {
+                Button("Choose Folder to Share\u{2026}") {
                     chooseSharedFolder(vm)
                 }
                 .disabled(running)
             }
+        } header: {
+            Label("Shared Folder", systemImage: "folder.badge.person.crop")
+        } footer: {
+            sharedFolderFooter(vm.wrappedValue)
+        }
+    }
+
+    @ViewBuilder
+    private func sharedFolderFooter(_ vm: VMConfig) -> some View {
+        if vm.hasSharedFolder {
+            if vm.machineFamily == .powerMacG4 && vm.bootFromCD && vm.cdImagePath?.isEmpty == false {
+                Text("Appears on the Mac desktop as the disk \u{201C}\(vm.sharedVolumeName)\u{201D}. Sharing is off while the Mac starts up from CD.")
+            } else {
+                Text("Appears on the Mac desktop as the disk \u{201C}\(vm.sharedVolumeName)\u{201D}.")
+            }
+        } else {
+            Text("Share a folder from this Mac so its files appear on the emulated Mac's desktop.")
         }
     }
 
@@ -371,30 +441,39 @@ struct VMDetailView: View {
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.canCreateDirectories = true
-        panel.message = "Choose a folder on your Mac to share with the guest"
+        panel.message = "Choose a folder on your Mac to share with the emulated Mac"
         if panel.runModal() == .OK, let url = panel.url {
             vm.wrappedValue.sharedFolderPath = url.path
         }
     }
 
+    // MARK: Toolbar
+
     @ToolbarContentBuilder
     private func toolbar(_ vm: Binding<VMConfig>) -> some ToolbarContent {
-        ToolbarItemGroup {
-            if running {
+        if running {
+            ToolbarItemGroup {
+                Button {
+                    manager.activate(vmID)
+                } label: {
+                    Label("Show Screen", systemImage: "macwindow")
+                }
+                .help("Bring the Mac's window to the front")
+
                 if paused {
                     Button {
                         manager.resume(vmID)
                     } label: {
                         Label("Resume", systemImage: "play.fill")
                     }
-                    .help("Resume the paused machine")
+                    .help("Resume the paused Mac")
                 } else {
                     Button {
                         manager.pause(vmID)
                     } label: {
                         Label("Pause", systemImage: "pause.fill")
                     }
-                    .help("Freeze the machine in place")
+                    .help("Freeze the Mac in place")
                 }
 
                 Button {
@@ -402,29 +481,37 @@ struct VMDetailView: View {
                 } label: {
                     Label("Restart", systemImage: "arrow.clockwise")
                 }
-                .help("Reboot the emulated Macintosh")
+                .help("Restart the Mac")
 
                 Button(role: .destructive) {
                     manager.stop(vmID)
                 } label: {
-                    Label("Power Off", systemImage: "power")
+                    Label("Shut Down", systemImage: "power")
                 }
-                .help("Force the machine to power off")
-            } else {
+                .help("Turn the Mac off immediately")
+            }
+        } else {
+            ToolbarItem {
                 Button {
                     manager.start(vm.wrappedValue)
                 } label: {
                     Label("Start", systemImage: "play.fill")
                 }
+                .buttonStyle(.glassProminent)
                 .disabled(!AppPaths.qemuIsAvailable(for: vm.wrappedValue.machineFamily))
+                .help("Start the Mac")
             }
+        }
 
+        ToolbarSpacer(.fixed)
+
+        ToolbarItem {
             Menu {
                 Button("Reveal in Finder") {
                     NSWorkspace.shared.activateFileViewerSelecting([vm.wrappedValue.folder])
                 }
                 Divider()
-                Button("Remove Machine...", role: .destructive) {
+                Button("Remove Machine\u{2026}", role: .destructive) {
                     showingDeleteConfirm = true
                 }
                 .disabled(running)
@@ -485,7 +572,7 @@ struct VMDetailView: View {
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
         panel.allowedContentTypes = isoContentTypes
-        panel.message = "Choose a Mac OS install CD image (.iso / .toast / .cdr)"
+        panel.message = "Choose a CD image (.iso, .toast, or .cdr)"
         if panel.runModal() == .OK, let url = panel.url {
             vm.wrappedValue.cdImagePath = url.path
             vm.wrappedValue.bootFromCD = true
@@ -504,24 +591,5 @@ struct VMDetailView: View {
             types.append(cdr)
         }
         return types
-    }
-}
-
-struct SettingsCard<Content: View>: View {
-    let title: String
-    let systemImage: String
-    @ViewBuilder var content: Content
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Label(title, systemImage: systemImage)
-                .font(.headline)
-            VStack(alignment: .leading, spacing: 12) {
-                content
-            }
-            .padding(16)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 10))
-        }
     }
 }

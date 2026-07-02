@@ -24,7 +24,7 @@ final class VMStore: ObservableObject {
     @Published var vms: [VMConfig] = []
     @Published var selectedID: UUID?
     @Published var isPresentingNewVM = false
-    @Published var lastError: String?
+    @Published var lastError: AppError?
 
     private let encoder: JSONEncoder = {
         let e = JSONEncoder()
@@ -68,7 +68,10 @@ final class VMStore: ObservableObject {
     @discardableResult
     func save(_ config: VMConfig) -> Bool {
         guard let bundle = config.bundleURL else {
-            lastError = "This machine has no location on disk to save to."
+            lastError = AppError(
+                "Couldn't Save Changes",
+                "This machine has no location on disk to save to."
+            )
             return false
         }
         AppPaths.ensureDirectory(bundle)
@@ -76,7 +79,10 @@ final class VMStore: ObservableObject {
             let data = try encoder.encode(config)
             try data.write(to: config.configURL, options: .atomic)
         } catch {
-            lastError = "Could not save VM: \(error.localizedDescription)"
+            lastError = AppError(
+                "Couldn't Save Changes",
+                "The machine's settings could not be saved. \(error.localizedDescription)"
+            )
             return false
         }
         upsert(config)
@@ -93,8 +99,9 @@ final class VMStore: ObservableObject {
     // file is left behind.
     @discardableResult
     func createVM(_ config: VMConfig) -> VMConfig? {
+        let errorTitle = "Couldn't Create \u{201C}\(config.name)\u{201D}"
         guard let bundle = config.bundleURL else {
-            lastError = "No save location was chosen for the new machine."
+            lastError = AppError(errorTitle, "No save location was chosen for the new machine.")
             return nil
         }
 
@@ -103,13 +110,13 @@ final class VMStore: ObservableObject {
         do {
             try fm.createDirectory(at: bundle, withIntermediateDirectories: true)
         } catch {
-            lastError = "Could not create the machine package: \(error.localizedDescription)"
+            lastError = AppError(errorTitle, "The machine file could not be created. \(error.localizedDescription)")
             return nil
         }
 
         // Remove the package we just created if any later step fails.
         func fail(_ message: String) -> VMConfig? {
-            lastError = message
+            lastError = AppError(errorTitle, message)
             if !bundleExisted {
                 try? fm.removeItem(at: bundle)
             }
@@ -118,7 +125,7 @@ final class VMStore: ObservableObject {
 
         let diskResult = QEMUManager.createRawImage(at: config.diskImageURL, sizeArgument: "\(config.diskSizeGB)G")
         if case let .failure(message) = diskResult {
-            return fail("Could not create disk image: \(message)")
+            return fail("The machine's hard disk could not be created. \(message)")
         }
 
         // The Power Mac (mac99) keeps its NVRAM inside the machine; only the
@@ -134,18 +141,18 @@ final class VMStore: ObservableObject {
                     }
                     try fm.copyItem(at: AppPaths.pramSeed, to: config.pramImageURL)
                 } catch {
-                    return fail("Could not create PRAM image: \(error.localizedDescription)")
+                    return fail("The machine's startup memory could not be created. \(error.localizedDescription)")
                 }
             } else {
                 let pramResult = QEMUManager.createRawImage(at: config.pramImageURL, sizeArgument: "256b")
                 if case let .failure(message) = pramResult {
-                    return fail("Could not create PRAM image: \(message)")
+                    return fail("The machine's startup memory could not be created. \(message)")
                 }
             }
         }
 
         if !save(config) {
-            return fail(lastError ?? "Could not save the machine's settings.")
+            return fail(lastError?.message ?? "The machine's settings could not be saved.")
         }
         NSDocumentController.shared.noteNewRecentDocumentURL(bundle)
         selectedID = config.id
@@ -159,7 +166,10 @@ final class VMStore: ObservableObject {
     // Finder/dock open handler (double-click).
     func openBundle(at url: URL, autostart: Bool) {
         guard let config = loadConfig(from: url) else {
-            lastError = "\u{201C}\(url.lastPathComponent)\u{201D} is not a ClassicMac machine."
+            lastError = AppError(
+                "Couldn't Open \u{201C}\(url.lastPathComponent)\u{201D}",
+                "It doesn't appear to be a ClassicMac machine, or its settings file is damaged."
+            )
             return
         }
         upsert(config)
@@ -201,7 +211,10 @@ final class VMStore: ObservableObject {
             do {
                 try FileManager.default.trashItem(at: bundle, resultingItemURL: nil)
             } catch {
-                lastError = "Could not move the machine to the Trash: \(error.localizedDescription)"
+                lastError = AppError(
+                    "Couldn't Move \u{201C}\(config.name)\u{201D} to the Trash",
+                    error.localizedDescription
+                )
                 return
             }
         }

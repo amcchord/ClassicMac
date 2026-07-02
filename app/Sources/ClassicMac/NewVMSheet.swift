@@ -36,7 +36,7 @@ struct NewVMSheet: View {
             Divider()
             footer
         }
-        .frame(width: 520)
+        .frame(width: 560)
         .overlay {
             if working {
                 workingOverlay
@@ -46,13 +46,10 @@ struct NewVMSheet: View {
 
     private var header: some View {
         HStack(spacing: 12) {
-            Image(systemName: "desktopcomputer")
-                .font(.system(size: 30))
-                .foregroundStyle(.tint)
             VStack(alignment: .leading) {
-                Text("New \(family.label)")
+                Text("New Machine")
                     .font(.headline)
-                Text("Configure a new classic Macintosh.")
+                Text("Set up a classic Macintosh.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
@@ -64,11 +61,15 @@ struct NewVMSheet: View {
     private var form: some View {
         Form {
             Section {
-                Picker("Machine", selection: $family) {
+                HStack(spacing: 12) {
                     ForEach(MachineFamily.allCases) { f in
-                        Text("\(f.label) (\(f.osSupportLabel))").tag(f)
+                        MachineTile(family: f, selected: family == f) {
+                            family = f
+                        }
                     }
                 }
+                .listRowBackground(Color.clear)
+                .listRowInsets(EdgeInsets())
                 TextField("Name", text: $name)
             }
 
@@ -108,7 +109,7 @@ struct NewVMSheet: View {
 
             Section("Display") {
                 if family.supportsEnhancedFramebuffer {
-                    Toggle("Enhanced framebuffer", isOn: $useEnhancedFramebuffer)
+                    Toggle("Enhanced video card", isOn: $useEnhancedFramebuffer)
                     Toggle("Custom resolution", isOn: $customResolution)
                         .disabled(!useEnhancedFramebuffer)
                 } else if family.supportsCustomResolution {
@@ -156,15 +157,15 @@ struct NewVMSheet: View {
                             .lineLimit(1)
                             .truncationMode(.middle)
                     }
-                    Toggle("Copy disc into ClassicMac library", isOn: $copyISOIntoLibrary)
+                    Toggle("Keep a copy of the disc in ClassicMac", isOn: $copyISOIntoLibrary)
                     Button("Choose a different disc...") {
                         chooseISO()
                     }
                 } else {
-                    Button("Choose Install CD (.iso)...") {
+                    Button("Choose Install Disc\u{2026}") {
                         chooseISO()
                     }
-                    Text("Boot from this disc to format the disk and install Mac OS.")
+                    Text("The Mac starts up from this disc so you can install Mac OS.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -194,9 +195,9 @@ struct NewVMSheet: View {
             }
         }
         .formStyle(.grouped)
-        .onChange(of: useEnhancedFramebuffer) { _ in clampDepth() }
-        .onChange(of: resolution) { _ in clampDepth() }
-        .onChange(of: family) { newFamily in applyFamilyDefaults(newFamily) }
+        .onChange(of: useEnhancedFramebuffer) { clampDepth() }
+        .onChange(of: resolution) { clampDepth() }
+        .onChange(of: family) { _, newFamily in applyFamilyDefaults(newFamily) }
     }
 
     // Reset the fields that have per-family defaults, but keep a name the user
@@ -292,7 +293,7 @@ struct NewVMSheet: View {
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.canCreateDirectories = true
-        panel.message = "Choose a folder on your Mac to share with the guest"
+        panel.message = "Choose a folder on your Mac to share with the emulated Mac"
         if panel.runModal() == .OK {
             sharedFolderURL = panel.url
         }
@@ -418,5 +419,40 @@ struct NewVMSheet: View {
                 return error.localizedDescription
             }
         }.value
+    }
+}
+
+// A selectable card for choosing the machine family, showing the machine
+// itself instead of a dropdown of model numbers.
+private struct MachineTile: View {
+    let family: MachineFamily
+    let selected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 8) {
+                MachineBadgeView(family: family, size: 56)
+                Text(family.label)
+                    .font(.headline)
+                Text(family.osSupportLabel)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 14)
+            .padding(.horizontal, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(selected ? Color.accentColor.opacity(0.1) : Color(nsColor: .quaternarySystemFill))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .strokeBorder(selected ? Color.accentColor : Color.clear, lineWidth: 2)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 12))
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }

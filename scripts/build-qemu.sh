@@ -134,6 +134,9 @@ git -C "$QEMU_DIR" apply "$QFB_DIR/cocoa-retina.patch" || die "Failed to apply c
 # Host-window-driven live resizing: make the Cocoa window resizable and feed
 # window-size changes to the guest through the qfb device's ui_info hook.
 git -C "$QEMU_DIR" apply "$QFB_DIR/cocoa-resize.patch" || die "Failed to apply cocoa resize patch"
+# ClassicMac UI skin: machine-named window titles and menus, no QEMU
+# branding/Speed menu, friendly quit dialog, Dock icon from the helper bundle.
+git -C "$QEMU_DIR" apply "$ROOT_DIR/cocoaui/classicmac-ui.patch" || die "Failed to apply ClassicMac cocoa UI patch"
 # Apple Sound Chip: always feed the audio backend silence when idle so a live
 # backend (CoreAudio) never replays stale ring-buffer content as a hum/buzz.
 git -C "$QEMU_DIR" apply "$QFB_DIR/asc-silence.patch" || die "Failed to apply asc silence patch"

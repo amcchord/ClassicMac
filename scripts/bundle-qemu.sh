@@ -29,7 +29,12 @@ MACOS_DIR="$CONTENTS/MacOS"
 RES_DIR="$CONTENTS/Resources"
 QEMU_DEST="$RES_DIR/qemu"
 PCBIOS_DEST="$QEMU_DEST/pc-bios"
-FRAMEWORKS_DIR="$RES_DIR/Frameworks"
+HELPERS_DIR="$CONTENTS/Helpers"
+# The emulator binaries live inside per-family helper app bundles so the
+# running machine appears in the Dock and app switcher as "Quadra 800" /
+# "Power Mac G4" with a proper icon, not as a bare qemu-system executable.
+QUADRA_APP="$HELPERS_DIR/Quadra 800.app"
+PPC_APP="$HELPERS_DIR/Power Mac G4.app"
 
 APP_VERSION="${APP_VERSION:-1.0}"
 BUNDLE_ID="com.classicmac.emulator"
@@ -56,6 +61,7 @@ for fw in "${PCBIOS_FILES[@]}"; do
 done
 [ -f "$ROM_SRC" ] || die "Quadra800.rom not found in Resources/."
 [ -f "$ICON_SRC" ] || die "AppIcon.icns not found in Resources/."
+[ -f "$ROOT_DIR/Resources/MachineIcon.icns" ] || die "MachineIcon.icns not found in Resources/."
 [ -f "$DECLROM_SRC" ] || die "shared/declrom (classicvirtio declaration ROM) not found."
 [ -f "$NDRVLOADER_SRC" ] || die "shared/ndrvloader (classicvirtio PPC driver loader) not found."
 [ -f "$PRAMSEED_SRC" ] || die "shared/pram-seed.img (PRAM seed) not found."
@@ -74,12 +80,16 @@ APP_BIN="$APP_SRC_DIR/.build/release/ClassicMac"
 # ---------------------------------------------------------------------------
 log "Assembling $APP"
 rm -rf "$APP"
-mkdir -p "$MACOS_DIR" "$QEMU_DEST" "$PCBIOS_DEST" "$FRAMEWORKS_DIR"
+mkdir -p "$MACOS_DIR" "$QEMU_DEST" "$PCBIOS_DEST"
+mkdir -p "$QUADRA_APP/Contents/MacOS" "$QUADRA_APP/Contents/Frameworks" "$QUADRA_APP/Contents/Resources"
+mkdir -p "$PPC_APP/Contents/MacOS" "$PPC_APP/Contents/Frameworks" "$PPC_APP/Contents/Resources"
 
 cp "$APP_BIN" "$MACOS_DIR/ClassicMac"
-cp "$QEMU_BUILD_DIR/qemu-system-m68k" "$QEMU_DEST/"
-cp "$QEMU_BUILD_DIR/qemu-system-ppc" "$QEMU_DEST/"
-cp "$QEMU_BUILD_DIR/qemu-img" "$QEMU_DEST/"
+cp "$QEMU_BUILD_DIR/qemu-system-m68k" "$QUADRA_APP/Contents/MacOS/"
+cp "$QEMU_BUILD_DIR/qemu-img" "$QUADRA_APP/Contents/MacOS/"
+cp "$QEMU_BUILD_DIR/qemu-system-ppc" "$PPC_APP/Contents/MacOS/"
+cp "$ROOT_DIR/Resources/MachineIcon.icns" "$QUADRA_APP/Contents/Resources/MachineIcon.icns"
+cp "$ROOT_DIR/Resources/MachineIcon.icns" "$PPC_APP/Contents/Resources/MachineIcon.icns"
 cp "$ROM_SRC" "$RES_DIR/Quadra800.rom"
 cp "$ICON_SRC" "$RES_DIR/AppIcon.icns"
 for fw in "${PCBIOS_FILES[@]}"; do
@@ -114,11 +124,11 @@ cat > "$CONTENTS/Info.plist" <<PLIST
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>LSMinimumSystemVersion</key>
-	<string>13.0</string>
+	<string>26.0</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>LSApplicationCategoryType</key>
-	<string>public.app-category.developer-tools</string>
+	<string>public.app-category.utilities</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
 	<key>CFBundleDocumentTypes</key>
@@ -165,16 +175,64 @@ PLIST
 printf 'APPL????' > "$CONTENTS/PkgInfo"
 
 # ---------------------------------------------------------------------------
-# 4. Relocate dynamic libraries into the bundle
+# 3b. Helper app Info.plists
+# ---------------------------------------------------------------------------
+# Each emulator binary lives in its own minimal .app so macOS shows the
+# running machine with a friendly name and icon in the Dock and app switcher.
+write_helper_plist() {
+  local app="$1" name="$2" bundle_id="$3" executable="$4"
+  cat > "$app/Contents/Info.plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleName</key>
+	<string>$name</string>
+	<key>CFBundleDisplayName</key>
+	<string>$name</string>
+	<key>CFBundleIdentifier</key>
+	<string>$bundle_id</string>
+	<key>CFBundleVersion</key>
+	<string>$APP_VERSION</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$APP_VERSION</string>
+	<key>CFBundleExecutable</key>
+	<string>$executable</string>
+	<key>CFBundleIconFile</key>
+	<string>MachineIcon</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>26.0</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSPrincipalClass</key>
+	<string>NSApplication</string>
+</dict>
+</plist>
+PLIST
+  printf 'APPL????' > "$app/Contents/PkgInfo"
+}
+
+write_helper_plist "$QUADRA_APP" "Quadra 800" "com.classicmac.machine.quadra800" "qemu-system-m68k"
+write_helper_plist "$PPC_APP" "Power Mac G4" "com.classicmac.machine.powermacg4" "qemu-system-ppc"
+
+# ---------------------------------------------------------------------------
+# 4. Relocate dynamic libraries into the helper bundles
 # ---------------------------------------------------------------------------
 log "Bundling dynamic libraries with dylibbundler"
-# @executable_path for the qemu binaries is Contents/Resources/qemu, so
-# ../Frameworks resolves to Contents/Resources/Frameworks.
+# @executable_path for each qemu binary is <helper>.app/Contents/MacOS, so
+# ../Frameworks resolves to that helper's Contents/Frameworks.
 dylibbundler -of -b \
-  -x "$QEMU_DEST/qemu-system-m68k" \
-  -x "$QEMU_DEST/qemu-system-ppc" \
-  -x "$QEMU_DEST/qemu-img" \
-  -d "$FRAMEWORKS_DIR" \
+  -x "$QUADRA_APP/Contents/MacOS/qemu-system-m68k" \
+  -x "$QUADRA_APP/Contents/MacOS/qemu-img" \
+  -d "$QUADRA_APP/Contents/Frameworks" \
+  -p "@executable_path/../Frameworks" \
+  -s "$(brew --prefix)/lib"
+
+dylibbundler -of -b \
+  -x "$PPC_APP/Contents/MacOS/qemu-system-ppc" \
+  -d "$PPC_APP/Contents/Frameworks" \
   -p "@executable_path/../Frameworks" \
   -s "$(brew --prefix)/lib"
 
@@ -192,15 +250,15 @@ dedupe_rpaths() {
 }
 
 log "Collapsing duplicate rpaths"
-dedupe_rpaths "$QEMU_DEST/qemu-system-m68k"
-dedupe_rpaths "$QEMU_DEST/qemu-system-ppc"
-dedupe_rpaths "$QEMU_DEST/qemu-img"
+dedupe_rpaths "$QUADRA_APP/Contents/MacOS/qemu-system-m68k"
+dedupe_rpaths "$QUADRA_APP/Contents/MacOS/qemu-img"
+dedupe_rpaths "$PPC_APP/Contents/MacOS/qemu-system-ppc"
 
 # ---------------------------------------------------------------------------
 # 5. Code signing (ad-hoc). Sign inner items first, then outward.
 # ---------------------------------------------------------------------------
 log "Code signing (ad-hoc)"
-find "$FRAMEWORKS_DIR" -name '*.dylib' -print0 | while IFS= read -r -d '' lib; do
+find "$QUADRA_APP/Contents/Frameworks" "$PPC_APP/Contents/Frameworks" -name '*.dylib' -print0 | while IFS= read -r -d '' lib; do
   codesign --force --sign - --timestamp=none "$lib"
 done
 
@@ -208,11 +266,15 @@ done
 # signing it keeps the bundle valid.
 codesign --force --sign - --timestamp=none \
   --options runtime --entitlements "$ENTITLEMENTS" \
-  "$QEMU_DEST/qemu-system-m68k"
+  "$QUADRA_APP/Contents/MacOS/qemu-system-m68k"
 codesign --force --sign - --timestamp=none \
   --options runtime --entitlements "$ENTITLEMENTS" \
-  "$QEMU_DEST/qemu-system-ppc"
-codesign --force --sign - --timestamp=none "$QEMU_DEST/qemu-img"
+  "$PPC_APP/Contents/MacOS/qemu-system-ppc"
+codesign --force --sign - --timestamp=none "$QUADRA_APP/Contents/MacOS/qemu-img"
+
+# Sign the helper apps as bundles, then the outer app.
+codesign --force --sign - --timestamp=none "$QUADRA_APP"
+codesign --force --sign - --timestamp=none "$PPC_APP"
 
 codesign --force --sign - --timestamp=none "$MACOS_DIR/ClassicMac"
 

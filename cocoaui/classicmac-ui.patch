@@ -1,0 +1,219 @@
+--- a/ui/cocoa.m
++++ b/ui/cocoa.m
+@@ -110,6 +110,28 @@
+ static QemuClipboardInfo *cbinfo;
+ static QemuEvent cbevent;
+ static QemuCocoaPasteboardTypeOwner *cbowner;
++
++/*
++ * ClassicMac: user-facing names for this machine process. The bundle name
++ * comes from the wrapping helper app ("Quadra 800" / "Power Mac G4"); the
++ * machine name is the -name option (the machine's name in the library).
++ */
++static NSString *classicmac_bundle_name(void)
++{
++    NSString *bundleName = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleName"];
++    if (bundleName) {
++        return bundleName;
++    }
++    return @"Classic Macintosh";
++}
++
++static NSString *classicmac_machine_name(void)
++{
++    if (qemu_name) {
++        return [NSString stringWithUTF8String:qemu_name];
++    }
++    return classicmac_bundle_name();
++}
+ 
+ // Utility functions to run specified code block with the BQL held
+ typedef void (^CodeBlock)(void);
+@@ -1208,10 +1230,7 @@
+ {
+     COCOA_DEBUG("QemuCocoaView: grabMouse\n");
+ 
+-    if (qemu_name)
+-        [[self window] setTitle:[NSString stringWithFormat:@"QEMU %s - (Press  " UC_CTRL_KEY " " UC_ALT_KEY " G  to release Mouse)", qemu_name]];
+-    else
+-        [[self window] setTitle:@"QEMU - (Press  " UC_CTRL_KEY " " UC_ALT_KEY " G  to release Mouse)"];
++    [[self window] setTitle:[NSString stringWithFormat:@"%@ \u2014 Press " UC_CTRL_KEY " " UC_ALT_KEY " G to release the mouse", classicmac_machine_name()]];
+     [self hideCursor];
+     CGAssociateMouseAndMouseCursorPosition(isAbsoluteEnabled);
+     isMouseGrabbed = TRUE; // while isMouseGrabbed = TRUE, QemuCocoaApp sends all events to [cocoaView handleEvent:]
+@@ -1221,10 +1240,7 @@
+ {
+     COCOA_DEBUG("QemuCocoaView: ungrabMouse\n");
+ 
+-    if (qemu_name)
+-        [[self window] setTitle:[NSString stringWithFormat:@"QEMU %s", qemu_name]];
+-    else
+-        [[self window] setTitle:@"QEMU"];
++    [[self window] setTitle:classicmac_machine_name()];
+     [self unhideCursor];
+     CGAssociateMouseAndMouseCursorPosition(TRUE);
+     isMouseGrabbed = FALSE;
+@@ -1339,7 +1355,7 @@
+         [window setContentMinSize:NSMakeSize(512.0, 384.0)];
+         [window setAcceptsMouseMovedEvents:YES];
+         [window setCollectionBehavior:NSWindowCollectionBehaviorFullScreenPrimary];
+-        [window setTitle:qemu_name ? [NSString stringWithFormat:@"QEMU %s", qemu_name] : @"QEMU"];
++        [window setTitle:classicmac_machine_name()];
+         [window setContentView:cocoaView];
+         [window makeKeyAndOrderFront:self];
+         [window center];
+@@ -1685,9 +1701,10 @@
+ {
+     NSAlert *alert = [NSAlert new];
+     [alert autorelease];
+-    [alert setMessageText: @"Are you sure you want to quit QEMU?"];
++    [alert setMessageText: [NSString stringWithFormat:@"Are you sure you want to turn off \u201C%@\u201D?", classicmac_machine_name()]];
++    [alert setInformativeText: @"The Mac will turn off immediately, without shutting down. Unsaved work in open programs will be lost."];
+     [alert addButtonWithTitle: @"Cancel"];
+-    [alert addButtonWithTitle: @"Quit"];
++    [alert addButtonWithTitle: @"Turn Off"];
+     if([alert runModal] == NSAlertSecondButtonReturn) {
+         return YES;
+     } else {
+@@ -1699,25 +1716,15 @@
+ - (IBAction) do_about_menu_item: (id) sender
+ {
+     NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+-    char *icon_path_c = get_relocated_path(CONFIG_QEMU_ICONDIR "/hicolor/512x512/apps/qemu.png");
+-    NSString *icon_path = [NSString stringWithUTF8String:icon_path_c];
+-    g_free(icon_path_c);
+-    NSImage *icon = [[NSImage alloc] initWithContentsOfFile:icon_path];
+-    NSString *version = @"QEMU emulator version " QEMU_FULL_VERSION;
+-    NSString *copyright = @QEMU_COPYRIGHT;
+-    NSDictionary *options;
++    NSMutableDictionary *options = [NSMutableDictionary dictionary];
++    [options setObject:classicmac_bundle_name() forKey:NSAboutPanelOptionApplicationName];
++    NSImage *icon = [NSApp applicationIconImage];
+     if (icon) {
+-        options = @{
+-            NSAboutPanelOptionApplicationIcon : icon,
+-            NSAboutPanelOptionApplicationVersion : version,
+-            @"Copyright" : copyright,
+-        };
+-        [icon release];
+-    } else {
+-        options = @{
+-            NSAboutPanelOptionApplicationVersion : version,
+-            @"Copyright" : copyright,
+-        };
++        [options setObject:icon forKey:NSAboutPanelOptionApplicationIcon];
++    }
++    NSString *version = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleShortVersionString"];
++    if (version) {
++        [options setObject:version forKey:NSAboutPanelOptionApplicationVersion];
+     }
+     [NSApp orderFrontStandardAboutPanelWithOptions:options];
+     [pool release];
+@@ -1779,17 +1786,20 @@
+ 
+     // Application menu
+     menu = [[NSMenu alloc] initWithTitle:@""];
+-    [menu addItemWithTitle:@"About QEMU" action:@selector(do_about_menu_item:) keyEquivalent:@""]; // About QEMU
++    [menu addItemWithTitle:[NSString stringWithFormat:@"About %@", classicmac_bundle_name()]
++                    action:@selector(do_about_menu_item:) keyEquivalent:@""];
+     [menu addItem:[NSMenuItem separatorItem]]; //Separator
+     menuItem = [menu addItemWithTitle:@"Services" action:nil keyEquivalent:@""];
+     [menuItem setSubmenu:[NSApp servicesMenu]];
+     [menu addItem:[NSMenuItem separatorItem]];
+-    [menu addItemWithTitle:@"Hide QEMU" action:@selector(hide:) keyEquivalent:@"h"]; //Hide QEMU
++    [menu addItemWithTitle:[NSString stringWithFormat:@"Hide %@", classicmac_bundle_name()]
++                    action:@selector(hide:) keyEquivalent:@"h"];
+     menuItem = (NSMenuItem *)[menu addItemWithTitle:@"Hide Others" action:@selector(hideOtherApplications:) keyEquivalent:@"h"]; // Hide Others
+     [menuItem setKeyEquivalentModifierMask:(NSEventModifierFlagOption|NSEventModifierFlagCommand)];
+     [menu addItemWithTitle:@"Show All" action:@selector(unhideAllApplications:) keyEquivalent:@""]; // Show All
+     [menu addItem:[NSMenuItem separatorItem]]; //Separator
+-    [menu addItemWithTitle:@"Quit QEMU" action:@selector(terminate:) keyEquivalent:@"q"];
++    [menu addItemWithTitle:[NSString stringWithFormat:@"Quit %@", classicmac_bundle_name()]
++                    action:@selector(terminate:) keyEquivalent:@"q"];
+     menuItem = [[NSMenuItem alloc] initWithTitle:@"Apple" action:nil keyEquivalent:@""];
+     [menuItem setSubmenu:menu];
+     [[NSApp mainMenu] addItem:menuItem];
+@@ -1803,8 +1813,8 @@
+     [menu addItem: menuItem];
+     [menuItem setEnabled: NO];
+     [menu addItem: [NSMenuItem separatorItem]];
+-    [menu addItem: [[[NSMenuItem alloc] initWithTitle: @"Reset" action: @selector(restartQEMU:) keyEquivalent: @""] autorelease]];
+-    [menu addItem: [[[NSMenuItem alloc] initWithTitle: @"Power Down" action: @selector(powerDownQEMU:) keyEquivalent: @""] autorelease]];
++    [menu addItem: [[[NSMenuItem alloc] initWithTitle: @"Restart" action: @selector(restartQEMU:) keyEquivalent: @""] autorelease]];
++    [menu addItem: [[[NSMenuItem alloc] initWithTitle: @"Shut Down" action: @selector(powerDownQEMU:) keyEquivalent: @""] autorelease]];
+     menuItem = [[[NSMenuItem alloc] initWithTitle: @"Machine" action:nil keyEquivalent:@""] autorelease];
+     [menuItem setSubmenu:menu];
+     [[NSApp mainMenu] addItem:menuItem];
+@@ -1822,31 +1832,10 @@
+     [menuItem setSubmenu:menu];
+     [[NSApp mainMenu] addItem:menuItem];
+ 
+-    // Speed menu
+-    menu = [[NSMenu alloc] initWithTitle:@"Speed"];
+-
+-    // Add the rest of the Speed menu items
+-    int p, percentage, throttle_pct;
+-    for (p = 10; p >= 0; p--)
+-    {
+-        percentage = p * 10 > 1 ? p * 10 : 1; // prevent a 0% menu item
+-
+-        menuItem = [[[NSMenuItem alloc]
+-                   initWithTitle: [NSString stringWithFormat: @"%d%%", percentage] action:@selector(adjustSpeed:) keyEquivalent:@""] autorelease];
+-
+-        if (percentage == 100) {
+-            [menuItem setState: NSControlStateValueOn];
+-        }
+-
+-        /* Calculate the throttle percentage */
+-        throttle_pct = -1 * percentage + 100;
+-
+-        [menuItem setTag: throttle_pct];
+-        [menu addItem: menuItem];
+-    }
+-    menuItem = [[[NSMenuItem alloc] initWithTitle:@"Speed" action:nil keyEquivalent:@""] autorelease];
+-    [menuItem setSubmenu:menu];
+-    [[NSApp mainMenu] addItem:menuItem];
++    /*
++     * ClassicMac: no Speed (CPU throttle) menu - it is an emulator developer
++     * tool, not something a person running a classic Mac needs.
++     */
+ 
+     // Window menu
+     menu = [[NSMenu alloc] initWithTitle:@"Window"];
+@@ -1856,12 +1845,10 @@
+     [[NSApp mainMenu] addItem:menuItem];
+     [NSApp setWindowsMenu:menu];
+ 
+-    // Help menu
+-    menu = [[NSMenu alloc] initWithTitle:@"Help"];
+-    [menu addItem: [[[NSMenuItem alloc] initWithTitle:@"QEMU Documentation" action:@selector(showQEMUDoc:) keyEquivalent:@"?"] autorelease]]; // QEMU Help
+-    menuItem = [[[NSMenuItem alloc] initWithTitle:@"Window" action:nil keyEquivalent:@""] autorelease];
+-    [menuItem setSubmenu:menu];
+-    [[NSApp mainMenu] addItem:menuItem];
++    /*
++     * ClassicMac: no Help menu - the only item was a link to the QEMU
++     * documentation, which does not apply to this app.
++     */
+ }
+ 
+ /* Returns a name for a given console */
+@@ -2153,6 +2140,19 @@
+ 
+     [QemuApplication sharedApplication];
+ 
++    /*
++     * ClassicMac: make sure the Dock shows the machine icon from the wrapping
++     * helper app bundle even when the process was spawned directly.
++     */
++    NSString *machineIconPath = [[NSBundle mainBundle] pathForResource:@"MachineIcon" ofType:@"icns"];
++    if (machineIconPath) {
++        NSImage *machineIcon = [[NSImage alloc] initWithContentsOfFile:machineIconPath];
++        if (machineIcon) {
++            [NSApp setApplicationIconImage:machineIcon];
++            [machineIcon release];
++        }
++    }
++
+     // Create an Application controller
+     QemuCocoaAppController *controller = [[QemuCocoaAppController alloc] init];
+     [NSApp setDelegate:controller];

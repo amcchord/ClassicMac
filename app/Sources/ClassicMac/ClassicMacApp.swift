@@ -28,19 +28,92 @@ struct ClassicMacApp: App {
         .windowStyle(.titleBar)
         .commands {
             CommandGroup(replacing: .newItem) {
-                Button("New Machine...") {
+                Button("New Machine\u{2026}") {
                     store.isPresentingNewVM = true
                 }
                 .keyboardShortcut("n", modifiers: .command)
 
-                Button("Open...") {
+                Button("Open\u{2026}") {
                     store.presentOpenPanel()
                 }
                 .keyboardShortcut("o", modifiers: .command)
 
                 OpenRecentMenu()
             }
+
+            // App-level commands for the selected machine, so every lifecycle
+            // action is discoverable in the menu bar with a shortcut.
+            CommandMenu("Machine") {
+                MachineCommands()
+            }
         }
+    }
+}
+
+// Menu-bar commands acting on the machine selected in the sidebar. Commands
+// live outside the window's environment, so this observes the shared objects
+// directly.
+private struct MachineCommands: View {
+    @ObservedObject private var store = VMStore.shared
+    @ObservedObject private var manager = QEMUManager.shared
+
+    private var selected: VMConfig? {
+        guard let id = store.selectedID else { return nil }
+        return store.vms.first { $0.id == id }
+    }
+
+    var body: some View {
+        let vm = selected
+        let running = vm.map { manager.isRunning($0.id) } ?? false
+        let paused = vm.map { manager.isPaused($0.id) } ?? false
+
+        Button("Start") {
+            if let vm = vm {
+                manager.start(vm)
+            }
+        }
+        .keyboardShortcut("r", modifiers: .command)
+        .disabled(vm == nil || running)
+
+        if paused {
+            Button("Resume") {
+                if let vm = vm {
+                    manager.resume(vm.id)
+                }
+            }
+            .disabled(!running)
+        } else {
+            Button("Pause") {
+                if let vm = vm {
+                    manager.pause(vm.id)
+                }
+            }
+            .disabled(!running)
+        }
+
+        Button("Restart") {
+            if let vm = vm {
+                manager.reboot(vm.id)
+            }
+        }
+        .keyboardShortcut("r", modifiers: [.command, .shift])
+        .disabled(!running)
+
+        Button("Shut Down") {
+            if let vm = vm {
+                manager.stop(vm.id)
+            }
+        }
+        .disabled(!running)
+
+        Divider()
+
+        Button("Reveal in Finder") {
+            if let folder = vm?.folder {
+                NSWorkspace.shared.activateFileViewerSelecting([folder])
+            }
+        }
+        .disabled(vm == nil)
     }
 }
 

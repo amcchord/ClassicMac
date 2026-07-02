@@ -11,7 +11,7 @@ enum AppPaths {
     // vendored QEMU build directory so the app remains runnable from source.
     static var resourcesDir: URL {
         let bundleResources = Bundle.main.resourceURL
-        if let bundleResources = bundleResources, FileManager.default.fileExists(atPath: bundleResources.appendingPathComponent("qemu/qemu-system-m68k").path) {
+        if let bundleResources = bundleResources, FileManager.default.fileExists(atPath: bundleResources.appendingPathComponent("qemu/pc-bios").path) {
             return bundleResources
         }
         if let override = ProcessInfo.processInfo.environment["CLASSICMAC_RESOURCES"] {
@@ -23,18 +23,36 @@ enum AppPaths {
         return Bundle.main.bundleURL
     }
 
+    // The emulator binaries live inside per-family helper app bundles in
+    // Contents/Helpers so the running machine gets its own Dock icon and name
+    // ("Quadra 800" / "Power Mac G4") instead of appearing as a bare
+    // qemu-system executable.
+    static func helperAppName(for family: MachineFamily) -> String {
+        switch family {
+        case .quadra800: return "Quadra 800"
+        case .powerMacG4: return "Power Mac G4"
+        }
+    }
+
+    private static func helperBinary(app: String, binary: String) -> URL? {
+        let url = Bundle.main.bundleURL
+            .appendingPathComponent("Contents/Helpers/\(app).app/Contents/MacOS/\(binary)")
+        if FileManager.default.isExecutableFile(atPath: url.path) {
+            return url
+        }
+        return nil
+    }
+
     static var qemuSystemBinary: URL {
-        let bundled = resourcesDir.appendingPathComponent("qemu/qemu-system-m68k")
-        if FileManager.default.fileExists(atPath: bundled.path) {
-            return bundled
+        if let helper = helperBinary(app: helperAppName(for: .quadra800), binary: "qemu-system-m68k") {
+            return helper
         }
         return developmentBuildDir.appendingPathComponent("qemu-system-m68k")
     }
 
     static var qemuSystemPPCBinary: URL {
-        let bundled = resourcesDir.appendingPathComponent("qemu/qemu-system-ppc")
-        if FileManager.default.fileExists(atPath: bundled.path) {
-            return bundled
+        if let helper = helperBinary(app: helperAppName(for: .powerMacG4), binary: "qemu-system-ppc") {
+            return helper
         }
         return developmentBuildDir.appendingPathComponent("qemu-system-ppc")
     }
@@ -48,9 +66,8 @@ enum AppPaths {
     }
 
     static var qemuImgBinary: URL {
-        let bundled = resourcesDir.appendingPathComponent("qemu/qemu-img")
-        if FileManager.default.fileExists(atPath: bundled.path) {
-            return bundled
+        if let helper = helperBinary(app: helperAppName(for: .quadra800), binary: "qemu-img") {
+            return helper
         }
         return developmentBuildDir.appendingPathComponent("qemu-img")
     }

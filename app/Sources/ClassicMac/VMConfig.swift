@@ -231,6 +231,8 @@ struct VMConfig: Codable, Identifiable, Hashable {
     var diskImageURL: URL { folder.appendingPathComponent(diskImageName) }
     var pramImageURL: URL { folder.appendingPathComponent(pramImageName) }
     var configURL: URL { folder.appendingPathComponent("config.json") }
+    // The machine's last captured screen, saved when it shuts down.
+    var previewURL: URL { folder.appendingPathComponent("preview.png") }
 
     var resolutionLabel: String {
         if machineFamily == .powerMacG4 {
@@ -271,11 +273,12 @@ enum ColorDepth: Int, CaseIterable, Identifiable {
 
     var id: Int { rawValue }
 
+    // Named the way the classic Monitors control panel does.
     var label: String {
         switch self {
-        case .greys256: return "256 Colors (8-bit)"
-        case .thousands: return "Thousands (16-bit)"
-        case .millions: return "Millions (24-bit)"
+        case .greys256: return "256 Colors"
+        case .thousands: return "Thousands"
+        case .millions: return "Millions"
         }
     }
 }

@@ -1,15 +1,20 @@
-// swift-tools-version: 5.9
+// swift-tools-version: 6.2
 import PackageDescription
 
 let package = Package(
     name: "ClassicMac",
     platforms: [
-        .macOS(.v13)
+        .macOS(.v26)
     ],
     targets: [
         .executableTarget(
             name: "ClassicMac",
-            path: "Sources/ClassicMac"
+            path: "Sources/ClassicMac",
+            swiftSettings: [
+                // The app predates Swift 6 strict concurrency; keep the v5
+                // language mode until the concurrency audit is done.
+                .swiftLanguageMode(.v5)
+            ]
         )
     ]
 )

@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import AppKit
 
 enum CommandResult {
     case success(String)
@@ -32,10 +33,14 @@ final class QEMUManager: ObservableObject {
 
     @Published private(set) var runningIDs: Set<UUID> = []
     @Published private(set) var pausedIDs: Set<UUID> = []
-    @Published var lastError: String?
+    // The latest screen capture of each machine, refreshed while it runs and
+    // kept after shutdown so the library shows what was last on screen.
+    @Published private(set) var previews: [UUID: NSImage] = [:]
+    @Published var lastError: AppError?
 
     private var processes: [UUID: Process] = [:]
     private var qmpMonitors: [UUID: QMPEventMonitor] = [:]
+    private var previewTimers: [UUID: Timer] = [:]
 
     func isRunning(_ id: UUID) -> Bool {
         runningIDs.contains(id)
@@ -71,7 +76,10 @@ final class QEMUManager: ObservableObject {
             return
         }
         guard AppPaths.qemuIsAvailable(for: config.machineFamily) else {
-            lastError = "QEMU is not bundled yet. Run scripts/build-qemu.sh and scripts/bundle-qemu.sh."
+            lastError = AppError(
+                "Couldn't Start \u{201C}\(config.name)\u{201D}",
+                "This copy of ClassicMac is missing its emulation engine. Reinstall ClassicMac to fix this. (Developers: run scripts/build-qemu.sh, then scripts/bundle-qemu.sh.)"
+            )
             return
         }
         if let preflightError = QEMUManager.preflight(config) {
@@ -107,9 +115,15 @@ final class QEMUManager: ObservableObject {
                 self.runningIDs.remove(config.id)
                 self.pausedIDs.remove(config.id)
                 self.processes.removeValue(forKey: config.id)
+                self.stopPreviewUpdates(for: config.id)
+                self.persistPreview(config)
                 if proc.terminationStatus != 0 && proc.terminationReason == .exit {
                     monitor?.cancel()
-                    self.lastError = "Emulator exited unexpectedly.\n\n\(message)"
+                    self.lastError = AppError(
+                        "\u{201C}\(config.name)\u{201D} Shut Down Unexpectedly",
+                        "The emulated Mac stopped on its own. Try starting it again.",
+                        logURL: AppLog.write(message, machineName: config.name)
+                    )
                     return
                 }
                 guard let monitor = monitor else { return }
@@ -127,7 +141,10 @@ final class QEMUManager: ObservableObject {
         do {
             try process.run()
         } catch {
-            lastError = "Could not launch QEMU: \(error.localizedDescription)"
+            lastError = AppError(
+                "Couldn't Start \u{201C}\(config.name)\u{201D}",
+                "The emulator could not be launched. \(error.localizedDescription)"
+            )
             return
         }
 
@@ -141,6 +158,83 @@ final class QEMUManager: ObservableObject {
             monitor.start()
             qmpMonitors[config.id] = monitor
         }
+
+        startPreviewUpdates(for: config)
+
+        // Bring the machine window to the front once it exists. The window
+        // appears a moment after the process spawns, so try twice.
+        activate(config.id, afterDelay: 0.7)
+        activate(config.id, afterDelay: 2.0)
+    }
+
+    // MARK: Machine window
+
+    // Brings the machine's window (a separate helper app process) to the front.
+    func activate(_ id: UUID) {
+        guard let process = processes[id],
+              let app = NSRunningApplication(processIdentifier: process.processIdentifier) else {
+            return
+        }
+        app.activate(from: .current, options: [])
+    }
+
+    private func activate(_ id: UUID, afterDelay delay: TimeInterval) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+            self?.activate(id)
+        }
+    }
+
+    // MARK: Screen previews
+
+    private static func screenDumpURL(for id: UUID) -> URL {
+        let dir = URL(fileURLWithPath: "/tmp/ClassicMac", isDirectory: true)
+        AppPaths.ensureDirectory(dir)
+        return dir.appendingPathComponent("\(id.uuidString).screen.ppm")
+    }
+
+    private func startPreviewUpdates(for config: VMConfig) {
+        stopPreviewUpdates(for: config.id)
+        let timer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                self?.capturePreview(config)
+            }
+        }
+        previewTimers[config.id] = timer
+    }
+
+    private func stopPreviewUpdates(for id: UUID) {
+        previewTimers.removeValue(forKey: id)?.invalidate()
+        try? FileManager.default.removeItem(at: QEMUManager.screenDumpURL(for: id))
+    }
+
+    // Asks the running machine to dump its screen, then decodes the result.
+    // Fire-and-forget: a failed or missed capture just keeps the previous one.
+    private func capturePreview(_ config: VMConfig) {
+        guard runningIDs.contains(config.id) else { return }
+        let socketPath = QEMUManager.monitorSocketURL(for: config.id).path
+        let dumpURL = QEMUManager.screenDumpURL(for: config.id)
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            guard HMPClient.send("screendump \(dumpURL.path)", socketPath: socketPath) else { return }
+            // The dump is written asynchronously after the command; give the
+            // emulator a moment before reading it back.
+            usleep(400_000)
+            guard let image = PPMImage.load(dumpURL) else { return }
+            Task { @MainActor in
+                self?.previews[config.id] = image
+            }
+        }
+    }
+
+    // Keeps the machine's last screen inside its .classic package so the
+    // library can show it across launches.
+    private func persistPreview(_ config: VMConfig) {
+        guard let image = previews[config.id], let bundle = config.bundleURL else { return }
+        guard let tiff = image.tiffRepresentation,
+              let rep = NSBitmapImageRep(data: tiff),
+              let png = rep.representation(using: .png, properties: [:]) else {
+            return
+        }
+        try? png.write(to: bundle.appendingPathComponent("preview.png"))
     }
 
     func stop(_ id: UUID) {
@@ -150,26 +244,44 @@ final class QEMUManager: ObservableObject {
 
     func pause(_ id: UUID) {
         guard runningIDs.contains(id) else { return }
-        sendMonitor("stop", to: id)
         pausedIDs.insert(id)
+        sendMonitor("stop", to: id, actionLabel: "Pause") { [weak self] in
+            // Undo the optimistic state change so the UI matches reality.
+            self?.pausedIDs.remove(id)
+        }
     }
 
     func resume(_ id: UUID) {
         guard runningIDs.contains(id) else { return }
-        sendMonitor("cont", to: id)
         pausedIDs.remove(id)
+        sendMonitor("cont", to: id, actionLabel: "Resume") { [weak self] in
+            self?.pausedIDs.insert(id)
+        }
     }
 
     func reboot(_ id: UUID) {
         guard runningIDs.contains(id) else { return }
-        sendMonitor("system_reset", to: id)
         pausedIDs.remove(id)
+        sendMonitor("system_reset", to: id, actionLabel: "Restart", onFailure: nil)
     }
 
-    private func sendMonitor(_ command: String, to id: UUID) {
+    // Sends a control command to the running machine. Failures (a dead or
+    // unresponsive control socket) surface as an alert instead of silently
+    // doing nothing.
+    private func sendMonitor(_ command: String, to id: UUID, actionLabel: String, onFailure: (() -> Void)?) {
         let path = QEMUManager.monitorSocketURL(for: id).path
         DispatchQueue.global(qos: .userInitiated).async {
-            _ = HMPClient.send(command, socketPath: path)
+            let sent = HMPClient.send(command, socketPath: path)
+            if !sent {
+                Task { @MainActor [weak self] in
+                    guard let self = self else { return }
+                    onFailure?()
+                    self.lastError = AppError(
+                        "Couldn't \(actionLabel) the Machine",
+                        "The running Mac did not respond. If it stays unresponsive, use Shut Down and start it again."
+                    )
+                }
+            }
         }
     }
 
@@ -179,16 +291,25 @@ final class QEMUManager: ObservableObject {
     // as clear messages instead of a cryptic emulator exit. Returns nil when
     // the machine is ready to boot. Also repairs what it safely can (a deleted
     // Quadra PRAM is recreated from the seed).
-    private static func preflight(_ config: VMConfig) -> String? {
+    private static func preflight(_ config: VMConfig) -> AppError? {
         let fm = FileManager.default
+        let title = "Couldn't Start \u{201C}\(config.name)\u{201D}"
 
         let missing = AppPaths.missingFirmware(for: config.machineFamily)
         if !missing.isEmpty {
-            return "The \(config.machineFamily.label) firmware is missing from the application bundle: \(missing.joined(separator: ", ")). Re-run scripts/build-qemu.sh and scripts/bundle-qemu.sh."
+            return AppError(
+                title,
+                "Part of ClassicMac's emulation engine is missing or damaged. Reinstall ClassicMac to fix this.",
+                logURL: AppLog.write("Missing firmware for \(config.machineFamily.label): \(missing.joined(separator: ", "))",
+                                     machineName: config.name)
+            )
         }
 
         guard fm.fileExists(atPath: config.diskImageURL.path) else {
-            return "The machine's hard disk image (\(config.diskImageName)) is missing from \u{201C}\(config.folder.lastPathComponent)\u{201D}. If you moved or edited the machine file, restore its disk image."
+            return AppError(
+                title,
+                "The machine's hard disk is missing from \u{201C}\(config.folder.lastPathComponent)\u{201D}. If you moved or edited the machine file, restore its disk image."
+            )
         }
 
         if config.machineFamily.usesPRAMImage && !fm.fileExists(atPath: config.pramImageURL.path) {
@@ -197,12 +318,18 @@ final class QEMUManager: ObservableObject {
                 try? fm.copyItem(at: AppPaths.pramSeed, to: config.pramImageURL)
             }
             if !fm.fileExists(atPath: config.pramImageURL.path) {
-                return "The machine's PRAM image is missing and could not be recreated."
+                return AppError(
+                    title,
+                    "Part of this machine's memory settings could not be restored. Try creating a new machine."
+                )
             }
         }
 
         if let cdPath = config.cdImagePath, !cdPath.isEmpty, !fm.fileExists(atPath: cdPath) {
-            return "The CD image \u{201C}\(URL(fileURLWithPath: cdPath).lastPathComponent)\u{201D} could not be found. It may have been moved or deleted - eject it in the machine's settings or choose it again."
+            return AppError(
+                title,
+                "The disc \u{201C}\(URL(fileURLWithPath: cdPath).lastPathComponent)\u{201D} could not be found. It may have been moved or deleted. Eject it in the machine's settings or choose it again."
+            )
         }
 
         return nil
@@ -416,7 +543,7 @@ final class QEMUManager: ObservableObject {
     static func runQemuImg(_ arguments: [String]) -> CommandResult {
         let binary = AppPaths.qemuImgBinary
         guard FileManager.default.isExecutableFile(atPath: binary.path) else {
-            return .failure("qemu-img is not bundled yet. Build QEMU first.")
+            return .failure("The disk tool is missing from this copy of ClassicMac. Reinstall ClassicMac to fix this.")
         }
         let process = Process()
         process.executableURL = binary
