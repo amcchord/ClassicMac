@@ -35,6 +35,7 @@ final class QEMUManager: ObservableObject {
     @Published var lastError: String?
 
     private var processes: [UUID: Process] = [:]
+    private var qmpMonitors: [UUID: QMPEventMonitor] = [:]
 
     func isRunning(_ id: UUID) -> Bool {
         runningIDs.contains(id)
@@ -52,6 +53,19 @@ final class QEMUManager: ObservableObject {
         return dir.appendingPathComponent("\(id.uuidString).sock")
     }
 
+    static func qmpSocketURL(for id: UUID) -> URL {
+        let dir = URL(fileURLWithPath: "/tmp/ClassicMac", isDirectory: true)
+        AppPaths.ensureDirectory(dir)
+        return dir.appendingPathComponent("\(id.uuidString).qmp.sock")
+    }
+
+    // SHUTDOWN event reasons after which the VM should boot right back up:
+    // a restart chosen inside the guest, or the app's own Restart command
+    // (system_reset over the monitor socket). Power Mac VMs run with
+    // -action reboot=shutdown, so both arrive as a clean exit + this reason
+    // instead of an in-place reset, which hangs the mac99 machine.
+    private static let relaunchReasons: Set<String> = ["guest-reset", "host-qmp-system-reset"]
+
     func start(_ config: VMConfig) {
         if runningIDs.contains(config.id) {
             return
@@ -65,8 +79,9 @@ final class QEMUManager: ObservableObject {
             return
         }
 
-        // Remove any stale monitor socket so QEMU can bind a fresh one.
+        // Remove any stale sockets so QEMU can bind fresh ones.
         try? FileManager.default.removeItem(at: QEMUManager.monitorSocketURL(for: config.id))
+        try? FileManager.default.removeItem(at: QEMUManager.qmpSocketURL(for: config.id))
 
         let process = Process()
         process.executableURL = AppPaths.qemuBinary(for: config.machineFamily)
@@ -88,11 +103,23 @@ final class QEMUManager: ObservableObject {
             let message = capturedError.string()
             Task { @MainActor in
                 guard let self = self else { return }
+                let monitor = self.qmpMonitors.removeValue(forKey: config.id)
                 self.runningIDs.remove(config.id)
                 self.pausedIDs.remove(config.id)
                 self.processes.removeValue(forKey: config.id)
                 if proc.terminationStatus != 0 && proc.terminationReason == .exit {
+                    monitor?.cancel()
                     self.lastError = "Emulator exited unexpectedly.\n\n\(message)"
+                    return
+                }
+                guard let monitor = monitor else { return }
+                // A restart (from inside the guest or via the app's Restart
+                // command) exits QEMU cleanly with a reset reason; boot the
+                // machine right back up so it behaves like a real reboot.
+                let reason = await monitor.shutdownReasonAfterExit(timeout: 2)
+                monitor.cancel()
+                if let reason = reason, QEMUManager.relaunchReasons.contains(reason) {
+                    self.start(config)
                 }
             }
         }
@@ -106,6 +133,14 @@ final class QEMUManager: ObservableObject {
 
         processes[config.id] = process
         runningIDs.insert(config.id)
+
+        // Power Mac VMs report shutdown/restart intent over QMP (see
+        // relaunchReasons above); watch the event stream for this run.
+        if config.machineFamily == .powerMacG4 {
+            let monitor = QMPEventMonitor(socketPath: QEMUManager.qmpSocketURL(for: config.id).path)
+            monitor.start()
+            qmpMonitors[config.id] = monitor
+        }
     }
 
     func stop(_ id: UUID) {
@@ -235,6 +270,16 @@ final class QEMUManager: ObservableObject {
 
         // HMP monitor on a unix socket so the app can pause/resume/reboot.
         args += ["-monitor", "unix:\(QEMUManager.monitorSocketURL(for: config.id).path),server=on,wait=off"]
+
+        // An in-place system reset hangs the mac99 machine (a longstanding
+        // QEMU limitation: the guest never comes back, leaving a black
+        // screen), so turn any reset request into a clean QEMU exit instead.
+        // The QMP socket lets the app see why QEMU exited (SHUTDOWN event
+        // reason); on a reset reason it relaunches the VM, which makes
+        // Restart behave like a real reboot. A guest Shut Down still just
+        // stops the machine.
+        args += ["-action", "reboot=shutdown"]
+        args += ["-qmp", "unix:\(QEMUManager.qmpSocketURL(for: config.id).path),server=on,wait=off"]
 
         // Main IDE hard disk.
         args += ["-drive", "file=\(config.diskImageURL.path),format=raw,media=disk"]
