@@ -65,10 +65,11 @@ final class VMStore: ObservableObject {
 
     // MARK: Saving
 
-    func save(_ config: VMConfig) {
+    @discardableResult
+    func save(_ config: VMConfig) -> Bool {
         guard let bundle = config.bundleURL else {
             lastError = "This machine has no location on disk to save to."
-            return
+            return false
         }
         AppPaths.ensureDirectory(bundle)
         do {
@@ -76,59 +77,76 @@ final class VMStore: ObservableObject {
             try data.write(to: config.configURL, options: .atomic)
         } catch {
             lastError = "Could not save VM: \(error.localizedDescription)"
-            return
+            return false
         }
         upsert(config)
         addToIndex(bundle)
+        return true
     }
 
     // MARK: Creating
 
-    // Creates the .classic package (config.json, disk image, PRAM image) at the
-    // config's bundleURL using bundled qemu-img, records it in the library, and
-    // selects it. Returns the saved config on success.
+    // Creates the .classic package (config.json, disk image, and on the Quadra
+    // a PRAM image) at the config's bundleURL using bundled qemu-img, records
+    // it in the library, and selects it. Returns the saved config on success.
+    // On failure the partially built package is removed so no broken .classic
+    // file is left behind.
     @discardableResult
     func createVM(_ config: VMConfig) -> VMConfig? {
         guard let bundle = config.bundleURL else {
             lastError = "No save location was chosen for the new machine."
             return nil
         }
+
+        let fm = FileManager.default
+        let bundleExisted = fm.fileExists(atPath: bundle.path)
         do {
-            try FileManager.default.createDirectory(at: bundle, withIntermediateDirectories: true)
+            try fm.createDirectory(at: bundle, withIntermediateDirectories: true)
         } catch {
             lastError = "Could not create the machine package: \(error.localizedDescription)"
             return nil
         }
 
-        let diskResult = QEMUManager.createRawImage(at: config.diskImageURL, sizeArgument: "\(config.diskSizeGB)G")
-        if case let .failure(message) = diskResult {
-            lastError = "Could not create disk image: \(message)"
+        // Remove the package we just created if any later step fails.
+        func fail(_ message: String) -> VMConfig? {
+            lastError = message
+            if !bundleExisted {
+                try? fm.removeItem(at: bundle)
+            }
             return nil
         }
 
-        // Seed PRAM from the known-good template (valid signature) so the virtio
-        // declaration ROM used for folder sharing does not hang the boot. Fall
-        // back to a blank PRAM if the template is unavailable (dev without bundle).
-        let fm = FileManager.default
-        if fm.fileExists(atPath: AppPaths.pramSeed.path) {
-            do {
-                if fm.fileExists(atPath: config.pramImageURL.path) {
-                    try fm.removeItem(at: config.pramImageURL)
+        let diskResult = QEMUManager.createRawImage(at: config.diskImageURL, sizeArgument: "\(config.diskSizeGB)G")
+        if case let .failure(message) = diskResult {
+            return fail("Could not create disk image: \(message)")
+        }
+
+        // The Power Mac (mac99) keeps its NVRAM inside the machine; only the
+        // Quadra boots with an external PRAM image. Seed it from the known-good
+        // template (valid signature) so the virtio declaration ROM used for
+        // folder sharing does not hang the boot; fall back to a blank PRAM if
+        // the template is unavailable (dev without bundle).
+        if config.machineFamily.usesPRAMImage {
+            if fm.fileExists(atPath: AppPaths.pramSeed.path) {
+                do {
+                    if fm.fileExists(atPath: config.pramImageURL.path) {
+                        try fm.removeItem(at: config.pramImageURL)
+                    }
+                    try fm.copyItem(at: AppPaths.pramSeed, to: config.pramImageURL)
+                } catch {
+                    return fail("Could not create PRAM image: \(error.localizedDescription)")
                 }
-                try fm.copyItem(at: AppPaths.pramSeed, to: config.pramImageURL)
-            } catch {
-                lastError = "Could not create PRAM image: \(error.localizedDescription)"
-                return nil
-            }
-        } else {
-            let pramResult = QEMUManager.createRawImage(at: config.pramImageURL, sizeArgument: "256b")
-            if case let .failure(message) = pramResult {
-                lastError = "Could not create PRAM image: \(message)"
-                return nil
+            } else {
+                let pramResult = QEMUManager.createRawImage(at: config.pramImageURL, sizeArgument: "256b")
+                if case let .failure(message) = pramResult {
+                    return fail("Could not create PRAM image: \(message)")
+                }
             }
         }
 
-        save(config)
+        if !save(config) {
+            return fail(lastError ?? "Could not save the machine's settings.")
+        }
         NSDocumentController.shared.noteNewRecentDocumentURL(bundle)
         selectedID = config.id
         return config

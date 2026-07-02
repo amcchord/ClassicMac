@@ -31,6 +31,22 @@ enum AppPaths {
         return developmentBuildDir.appendingPathComponent("qemu-system-m68k")
     }
 
+    static var qemuSystemPPCBinary: URL {
+        let bundled = resourcesDir.appendingPathComponent("qemu/qemu-system-ppc")
+        if FileManager.default.fileExists(atPath: bundled.path) {
+            return bundled
+        }
+        return developmentBuildDir.appendingPathComponent("qemu-system-ppc")
+    }
+
+    // The emulator binary for a machine family.
+    static func qemuBinary(for family: MachineFamily) -> URL {
+        switch family {
+        case .quadra800: return qemuSystemBinary
+        case .powerMacG4: return qemuSystemPPCBinary
+        }
+    }
+
     static var qemuImgBinary: URL {
         let bundled = resourcesDir.appendingPathComponent("qemu/qemu-img")
         if FileManager.default.fileExists(atPath: bundled.path) {
@@ -62,6 +78,17 @@ enum AppPaths {
             return bundled
         }
         return developmentRepoRoot.appendingPathComponent("shared/declrom")
+    }
+
+    // classicvirtio PowerPC driver loader. Injected into guest RAM with QEMU's
+    // generic loader device and run by OpenBIOS (boot-command=init-program go);
+    // it installs the virtio NDRVs and then continues the normal Mac OS boot.
+    static var ndrvLoader: URL {
+        let bundled = resourcesDir.appendingPathComponent("ndrvloader")
+        if FileManager.default.fileExists(atPath: bundled.path) {
+            return bundled
+        }
+        return developmentRepoRoot.appendingPathComponent("shared/ndrvloader")
     }
 
     // A PRAM image that has been through one normal boot, so its signature is
@@ -141,7 +168,35 @@ enum AppPaths {
         FileManager.default.isExecutableFile(atPath: qemuSystemBinary.path)
     }
 
+    static func qemuIsAvailable(for family: MachineFamily) -> Bool {
+        FileManager.default.isExecutableFile(atPath: qemuBinary(for: family).path)
+    }
+
     static var romIsAvailable: Bool {
         FileManager.default.fileExists(atPath: quadraROM.path)
+    }
+
+    // Firmware each machine family loads at launch. The Quadra boots the Apple
+    // ROM (plus the qfb declaration ROM from pc-bios); the Power Mac boots
+    // OpenBIOS and additionally needs the VGA option ROM and the Mac OS video
+    // driver that OpenBIOS passes to the guest.
+    static func requiredFirmware(for family: MachineFamily) -> [URL] {
+        switch family {
+        case .quadra800:
+            return [quadraROM, pcBiosDir.appendingPathComponent("mac_qfb.rom")]
+        case .powerMacG4:
+            return [
+                pcBiosDir.appendingPathComponent("openbios-ppc"),
+                pcBiosDir.appendingPathComponent("vgabios-stdvga.bin"),
+                pcBiosDir.appendingPathComponent("qemu_vga.ndrv")
+            ]
+        }
+    }
+
+    // Names of any firmware files missing for the family; empty means good to go.
+    static func missingFirmware(for family: MachineFamily) -> [String] {
+        requiredFirmware(for: family)
+            .filter { !FileManager.default.fileExists(atPath: $0.path) }
+            .map { $0.lastPathComponent }
     }
 }

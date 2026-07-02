@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 #
 # bundle-qemu.sh - Build the SwiftUI app and assemble a self-contained
-# ClassicMac.app for Apple Silicon: the app binary, the custom qemu-system-m68k
-# and qemu-img, the enhanced framebuffer firmware, the Quadra 800 ROM, and all
-# required dynamic libraries (relocated with dylibbundler), code-signed so QEMU's
-# JIT runs on Apple Silicon.
+# ClassicMac.app for Apple Silicon: the app binary, the custom qemu-system-m68k,
+# qemu-system-ppc and qemu-img, the enhanced framebuffer firmware, the Quadra
+# 800 ROM, the OpenBIOS PPC firmware, and all required dynamic libraries
+# (relocated with dylibbundler), code-signed so QEMU's JIT runs on Apple
+# Silicon.
 #
 # Idempotent: the app bundle is rebuilt from scratch on every run.
 
@@ -15,7 +16,9 @@ APP_SRC_DIR="$ROOT_DIR/app"
 QEMU_BUILD_DIR="$ROOT_DIR/vendor/qemu/build"
 QEMU_PCBIOS_DIR="$ROOT_DIR/vendor/qemu/pc-bios"
 ROM_SRC="$ROOT_DIR/Resources/Quadra800.rom"
+ICON_SRC="$ROOT_DIR/Resources/AppIcon.icns"
 DECLROM_SRC="$ROOT_DIR/shared/declrom"
+NDRVLOADER_SRC="$ROOT_DIR/shared/ndrvloader"
 PRAMSEED_SRC="$ROOT_DIR/shared/pram-seed.img"
 ENTITLEMENTS="$ROOT_DIR/scripts/qemu.entitlements"
 
@@ -38,10 +41,23 @@ die() { printf '\nERROR: %s\n' "$*" >&2; exit 1; }
 # 0. Preconditions
 # ---------------------------------------------------------------------------
 [ -x "$QEMU_BUILD_DIR/qemu-system-m68k" ] || die "qemu-system-m68k not found. Run scripts/build-qemu.sh first."
+[ -x "$QEMU_BUILD_DIR/qemu-system-ppc" ] || die "qemu-system-ppc not found. Run scripts/build-qemu.sh first."
 [ -x "$QEMU_BUILD_DIR/qemu-img" ] || die "qemu-img not found. Run scripts/build-qemu.sh first."
-[ -f "$QEMU_PCBIOS_DIR/mac_qfb.rom" ] || die "mac_qfb.rom firmware not found. Run scripts/build-qemu.sh first."
+# Firmware the emulated machines load at runtime from the -L directory:
+#   mac_qfb.rom        - Quadra enhanced framebuffer declaration ROM
+#   openbios-ppc       - Power Mac boot firmware (screamer-aware build)
+#   vgabios-stdvga.bin - VGA option ROM for the mac99 std VGA display
+#   qemu_vga.ndrv      - Mac OS video driver OpenBIOS hands to the guest
+#                        (ClassicMac build from ppcvid/ with live host-window
+#                        resizing; installed by build-qemu.sh)
+PCBIOS_FILES=(mac_qfb.rom openbios-ppc vgabios-stdvga.bin qemu_vga.ndrv)
+for fw in "${PCBIOS_FILES[@]}"; do
+  [ -f "$QEMU_PCBIOS_DIR/$fw" ] || die "$fw firmware not found. Run scripts/build-qemu.sh first."
+done
 [ -f "$ROM_SRC" ] || die "Quadra800.rom not found in Resources/."
+[ -f "$ICON_SRC" ] || die "AppIcon.icns not found in Resources/."
 [ -f "$DECLROM_SRC" ] || die "shared/declrom (classicvirtio declaration ROM) not found."
+[ -f "$NDRVLOADER_SRC" ] || die "shared/ndrvloader (classicvirtio PPC driver loader) not found."
 [ -f "$PRAMSEED_SRC" ] || die "shared/pram-seed.img (PRAM seed) not found."
 command -v dylibbundler >/dev/null 2>&1 || die "dylibbundler is required (brew install dylibbundler)."
 
@@ -62,10 +78,15 @@ mkdir -p "$MACOS_DIR" "$QEMU_DEST" "$PCBIOS_DEST" "$FRAMEWORKS_DIR"
 
 cp "$APP_BIN" "$MACOS_DIR/ClassicMac"
 cp "$QEMU_BUILD_DIR/qemu-system-m68k" "$QEMU_DEST/"
+cp "$QEMU_BUILD_DIR/qemu-system-ppc" "$QEMU_DEST/"
 cp "$QEMU_BUILD_DIR/qemu-img" "$QEMU_DEST/"
 cp "$ROM_SRC" "$RES_DIR/Quadra800.rom"
-cp "$QEMU_PCBIOS_DIR/mac_qfb.rom" "$PCBIOS_DEST/"
+cp "$ICON_SRC" "$RES_DIR/AppIcon.icns"
+for fw in "${PCBIOS_FILES[@]}"; do
+  cp "$QEMU_PCBIOS_DIR/$fw" "$PCBIOS_DEST/"
+done
 cp "$DECLROM_SRC" "$RES_DIR/declrom"
+cp "$NDRVLOADER_SRC" "$RES_DIR/ndrvloader"
 cp "$PRAMSEED_SRC" "$RES_DIR/pram-seed.img"
 
 # ---------------------------------------------------------------------------
@@ -88,6 +109,8 @@ cat > "$CONTENTS/Info.plist" <<PLIST
 	<string>$APP_VERSION</string>
 	<key>CFBundleExecutable</key>
 	<string>ClassicMac</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>LSMinimumSystemVersion</key>
@@ -149,6 +172,7 @@ log "Bundling dynamic libraries with dylibbundler"
 # ../Frameworks resolves to Contents/Resources/Frameworks.
 dylibbundler -of -b \
   -x "$QEMU_DEST/qemu-system-m68k" \
+  -x "$QEMU_DEST/qemu-system-ppc" \
   -x "$QEMU_DEST/qemu-img" \
   -d "$FRAMEWORKS_DIR" \
   -p "@executable_path/../Frameworks" \
@@ -169,6 +193,7 @@ dedupe_rpaths() {
 
 log "Collapsing duplicate rpaths"
 dedupe_rpaths "$QEMU_DEST/qemu-system-m68k"
+dedupe_rpaths "$QEMU_DEST/qemu-system-ppc"
 dedupe_rpaths "$QEMU_DEST/qemu-img"
 
 # ---------------------------------------------------------------------------
@@ -179,11 +204,14 @@ find "$FRAMEWORKS_DIR" -name '*.dylib' -print0 | while IFS= read -r -d '' lib; d
   codesign --force --sign - --timestamp=none "$lib"
 done
 
-# qemu-system-m68k needs the JIT entitlements; qemu-img does not but signing it
-# keeps the bundle valid.
+# The qemu-system binaries need the JIT entitlements; qemu-img does not but
+# signing it keeps the bundle valid.
 codesign --force --sign - --timestamp=none \
   --options runtime --entitlements "$ENTITLEMENTS" \
   "$QEMU_DEST/qemu-system-m68k"
+codesign --force --sign - --timestamp=none \
+  --options runtime --entitlements "$ENTITLEMENTS" \
+  "$QEMU_DEST/qemu-system-ppc"
 codesign --force --sign - --timestamp=none "$QEMU_DEST/qemu-img"
 
 codesign --force --sign - --timestamp=none "$MACOS_DIR/ClassicMac"

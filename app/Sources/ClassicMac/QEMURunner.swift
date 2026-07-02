@@ -24,8 +24,8 @@ final class DataBox: @unchecked Sendable {
     }
 }
 
-// Launches and tracks emulator processes, and builds qemu-img / qemu-system-m68k
-// command lines from a VMConfig.
+// Launches and tracks emulator processes, and builds qemu-img and
+// qemu-system-m68k / qemu-system-ppc command lines from a VMConfig.
 @MainActor
 final class QEMUManager: ObservableObject {
     static let shared = QEMUManager()
@@ -56,12 +56,12 @@ final class QEMUManager: ObservableObject {
         if runningIDs.contains(config.id) {
             return
         }
-        guard AppPaths.qemuIsAvailable else {
+        guard AppPaths.qemuIsAvailable(for: config.machineFamily) else {
             lastError = "QEMU is not bundled yet. Run scripts/build-qemu.sh and scripts/bundle-qemu.sh."
             return
         }
-        guard AppPaths.romIsAvailable else {
-            lastError = "The Quadra 800 ROM is missing from the application bundle."
+        if let preflightError = QEMUManager.preflight(config) {
+            lastError = preflightError
             return
         }
 
@@ -69,7 +69,7 @@ final class QEMUManager: ObservableObject {
         try? FileManager.default.removeItem(at: QEMUManager.monitorSocketURL(for: config.id))
 
         let process = Process()
-        process.executableURL = AppPaths.qemuSystemBinary
+        process.executableURL = AppPaths.qemuBinary(for: config.machineFamily)
         process.arguments = QEMUManager.buildArguments(for: config)
         process.currentDirectoryURL = config.folder
 
@@ -138,9 +138,135 @@ final class QEMUManager: ObservableObject {
         }
     }
 
+    // MARK: Launch preflight
+
+    // Checks everything QEMU will need before spawning it, so failures surface
+    // as clear messages instead of a cryptic emulator exit. Returns nil when
+    // the machine is ready to boot. Also repairs what it safely can (a deleted
+    // Quadra PRAM is recreated from the seed).
+    private static func preflight(_ config: VMConfig) -> String? {
+        let fm = FileManager.default
+
+        let missing = AppPaths.missingFirmware(for: config.machineFamily)
+        if !missing.isEmpty {
+            return "The \(config.machineFamily.label) firmware is missing from the application bundle: \(missing.joined(separator: ", ")). Re-run scripts/build-qemu.sh and scripts/bundle-qemu.sh."
+        }
+
+        guard fm.fileExists(atPath: config.diskImageURL.path) else {
+            return "The machine's hard disk image (\(config.diskImageName)) is missing from \u{201C}\(config.folder.lastPathComponent)\u{201D}. If you moved or edited the machine file, restore its disk image."
+        }
+
+        if config.machineFamily.usesPRAMImage && !fm.fileExists(atPath: config.pramImageURL.path) {
+            // A PRAM is tiny and recreatable; restore it rather than failing.
+            if fm.fileExists(atPath: AppPaths.pramSeed.path) {
+                try? fm.copyItem(at: AppPaths.pramSeed, to: config.pramImageURL)
+            }
+            if !fm.fileExists(atPath: config.pramImageURL.path) {
+                return "The machine's PRAM image is missing and could not be recreated."
+            }
+        }
+
+        if let cdPath = config.cdImagePath, !cdPath.isEmpty, !fm.fileExists(atPath: cdPath) {
+            return "The CD image \u{201C}\(URL(fileURLWithPath: cdPath).lastPathComponent)\u{201D} could not be found. It may have been moved or deleted - eject it in the machine's settings or choose it again."
+        }
+
+        return nil
+    }
+
     // MARK: Argument construction
 
     static func buildArguments(for config: VMConfig) -> [String] {
+        switch config.machineFamily {
+        case .quadra800:
+            return buildQuadraArguments(for: config)
+        case .powerMacG4:
+            return buildPowerMacArguments(for: config)
+        }
+    }
+
+    // qemu-system-ppc -M mac99: a New World Power Mac that boots Mac OS 8.5
+    // through 9.2.2 (and early OS X) via the bundled OpenBIOS firmware, so no
+    // Apple ROM is involved. Storage is IDE, networking is the sungem NIC, and
+    // via=pmu provides USB (ADB-free) input with correct mouse tracking.
+    // Sound comes from the screamer (AWACS) device ported onto our QEMU build;
+    // the guest driver attaches because the bundled OpenBIOS advertises the
+    // davbus/awacs nodes.
+    private static func buildPowerMacArguments(for config: VMConfig) -> [String] {
+        var args: [String] = []
+
+        // Folder sharing needs the classicvirtio ndrvloader to run before the
+        // OS: it installs the virtio NDRVs and then continues the normal boot.
+        // The loader takes over the firmware boot command, so it is skipped
+        // when booting from CD (e.g. OS installs) - sharing is simply inactive
+        // for that boot.
+        let sharing = config.hasSharedFolder && !(config.bootFromCD && config.cdImagePath?.isEmpty == false)
+
+        args += ["-M", "mac99,via=pmu,audiodev=snd0"]
+        args += ["-m", String(config.ramMB)]
+        args += ["-L", AppPaths.pcBiosDir.path]
+        args += ["-display", "cocoa,swap-opt-cmd=off"]
+        // Live window resizing: expose the host-resize request registers on
+        // the std VGA device (see ppcvid/vga-host-resize.patch). The bundled
+        // qemu_vga.ndrv polls them and switches the guest resolution through
+        // the Display Manager when the window is dragged to a new size.
+        // "-vga std" must be explicit: QEMU treats a -global for the VGA
+        // driver as a user-configured display and would otherwise skip
+        // creating the default one. 64 MB of VRAM covers 3840x2160 at 32-bit
+        // (the default 16 MB tops out below 4K).
+        args += ["-vga", "std"]
+        args += ["-global", "VGA.host-resize=on"]
+        args += ["-global", "VGA.vgamem_mb=64"]
+        // Route the OpenBIOS firmware console to the (disconnected) serial
+        // port so the yellow firmware text screens never appear; the display
+        // stays blank until the Mac OS boot screen takes over.
+        args += ["-prom-env", "output-device=ttya"]
+        // OpenBIOS sizes the framebuffer from -g at boot. Depth is fixed at
+        // millions of colors; Mac OS 9 can still switch lower in Monitors.
+        args += ["-g", "\(config.width)x\(config.height)x32"]
+        args += ["-name", config.name]
+
+        // Audio through the screamer at 44.1 kHz. When sound is off, route to
+        // the null backend so nothing touches the host audio device.
+        if config.sound {
+            args += ["-audiodev", "coreaudio,id=snd0,out.buffer-length=50000"]
+        } else {
+            args += ["-audiodev", "none,id=snd0"]
+        }
+
+        // HMP monitor on a unix socket so the app can pause/resume/reboot.
+        args += ["-monitor", "unix:\(QEMUManager.monitorSocketURL(for: config.id).path),server=on,wait=off"]
+
+        // Main IDE hard disk.
+        args += ["-drive", "file=\(config.diskImageURL.path),format=raw,media=disk"]
+
+        // Optional IDE CD-ROM.
+        if let cdPath = config.cdImagePath, !cdPath.isEmpty {
+            args += ["-drive", "file=\(cdPath),format=raw,media=cdrom"]
+            if config.bootFromCD {
+                args += ["-boot", "d"]
+            }
+        }
+
+        // User-mode networking through the mac99 onboard sungem ethernet.
+        if config.networking {
+            args += ["-nic", "user,model=sungem"]
+        }
+
+        // Shared folder via virtio-9p-pci and the classicvirtio ndrvloader.
+        // The loader is placed in guest RAM by QEMU's generic loader device and
+        // executed by OpenBIOS in place of the default boot command.
+        if sharing {
+            args += ["-device", "loader,addr=0x4000000,file=\(AppPaths.ndrvLoader.path)"]
+            args += ["-prom-env", "boot-command=init-program go"]
+            args += ["-device", "virtio-9p-pci,fsdev=share0,mount_tag=\(config.sharedVolumeName)"]
+            let escapedPath = config.sharedFolderPath!.replacingOccurrences(of: ",", with: ",,")
+            args += ["-fsdev", "local,id=share0,security_model=none,path=\(escapedPath)"]
+        }
+
+        return args
+    }
+
+    private static func buildQuadraArguments(for config: VMConfig) -> [String] {
         var args: [String] = []
 
         let sharing = config.hasSharedFolder

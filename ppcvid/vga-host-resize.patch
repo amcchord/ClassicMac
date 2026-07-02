@@ -1,0 +1,266 @@
+diff --git a/hw/display/vga-pci.c b/hw/display/vga-pci.c
+index 4e68dd5..2a312e0 100644
+--- a/hw/display/vga-pci.c
++++ b/hw/display/vga-pci.c
+@@ -52,6 +52,18 @@ struct PCIVGAState {
+     MemoryRegion mmio;
+     MemoryRegion mrs[4];
+     uint8_t edid[384];
++    /*
++     * Host-window-driven live resizing (host-resize=on): the UI's
++     * dpy_set_ui_info() lands in pci_std_vga_ui_info(), which latches the
++     * requested geometry in these fields. They are exposed read-only to the
++     * guest through the QEXT mmio region so its video driver can follow the
++     * host window, mirroring the nubus-qfb host-request channel.
++     */
++    bool host_resize;
++    uint32_t host_req_width;
++    uint32_t host_req_height;
++    uint32_t host_req_serial;
++    GraphicHwOps host_resize_ops;
+ };
+ 
+ #define TYPE_PCI_VGA "pci-vga"
+@@ -162,6 +174,31 @@ static uint64_t pci_vga_qext_read(void *ptr, hwaddr addr, unsigned size)
+     }
+ }
+ 
++/*
++ * QEXT read handler used when host-resize is enabled. Only registered from
++ * the vga-pci realize paths, so the VGACommonState is known to be embedded
++ * in a PCIVGAState (unlike virtio-vga, which shares pci_vga_qext_ops).
++ */
++static uint64_t pci_vga_qext_resize_read(void *ptr, hwaddr addr,
++                                         unsigned size)
++{
++    VGACommonState *s = ptr;
++    PCIVGAState *d = container_of(s, PCIVGAState, vga);
++
++    switch (addr) {
++    case PCI_VGA_QEXT_REG_SIZE:
++        return PCI_VGA_QEXT_SIZE_RESIZE;
++    case PCI_VGA_QEXT_REG_REQ_WIDTH:
++        return d->host_req_width;
++    case PCI_VGA_QEXT_REG_REQ_HEIGHT:
++        return d->host_req_height;
++    case PCI_VGA_QEXT_REG_REQ_SERIAL:
++        return d->host_req_serial;
++    default:
++        return pci_vga_qext_read(ptr, addr, size);
++    }
++}
++
+ static void pci_vga_qext_write(void *ptr, hwaddr addr,
+                                uint64_t val, unsigned size)
+ {
+@@ -201,11 +238,20 @@ static const MemoryRegionOps pci_vga_qext_ops = {
+     .endianness = DEVICE_LITTLE_ENDIAN,
+ };
+ 
++static const MemoryRegionOps pci_vga_qext_resize_ops = {
++    .read = pci_vga_qext_resize_read,
++    .write = pci_vga_qext_write,
++    .valid.min_access_size = 4,
++    .valid.max_access_size = 4,
++    .endianness = DEVICE_LITTLE_ENDIAN,
++};
++
+ void pci_std_vga_mmio_region_init(VGACommonState *s,
+                                   Object *owner,
+                                   MemoryRegion *parent,
+                                   MemoryRegion *subs,
+-                                  bool qext, bool edid)
++                                  bool qext, bool edid,
++                                  bool host_resize)
+ {
+     PCIVGAState *d = container_of(s, PCIVGAState, vga);
+ 
+@@ -220,8 +266,14 @@ void pci_std_vga_mmio_region_init(VGACommonState *s,
+                                 &subs[1]);
+ 
+     if (qext) {
+-        memory_region_init_io(&subs[2], owner, &pci_vga_qext_ops, s,
+-                              "qemu extended regs", PCI_VGA_QEXT_SIZE);
++        if (host_resize) {
++            memory_region_init_io(&subs[2], owner, &pci_vga_qext_resize_ops,
++                                  s, "qemu extended regs",
++                                  PCI_VGA_QEXT_SIZE_RESIZE);
++        } else {
++            memory_region_init_io(&subs[2], owner, &pci_vga_qext_ops, s,
++                                  "qemu extended regs", PCI_VGA_QEXT_SIZE);
++        }
+         memory_region_add_subregion(parent, PCI_VGA_QEXT_OFFSET,
+                                     &subs[2]);
+     }
+@@ -233,6 +285,63 @@ void pci_std_vga_mmio_region_init(VGACommonState *s,
+     }
+ }
+ 
++/*
++ * UI callback for host-window-driven live resizing (host-resize=on): the
++ * display frontend reports the desired guest resolution (e.g. the Cocoa
++ * window size on drag end); we latch it into the host-request registers and
++ * bump the serial. The guest video driver polls the serial and switches to
++ * the requested mode; nothing is forced from the host side.
++ */
++static void pci_std_vga_host_resize_request(PCIVGAState *d,
++                                            uint32_t w, uint32_t h)
++{
++    if (w == 0 || h == 0) {
++        return; /* no geometry hint in this update */
++    }
++    if (w > VBE_DISPI_MAX_XRES) {
++        w = VBE_DISPI_MAX_XRES;
++    }
++    if (h > VBE_DISPI_MAX_YRES) {
++        h = VBE_DISPI_MAX_YRES;
++    }
++    if (d->host_req_width == w && d->host_req_height == h) {
++        return; /* unchanged: don't nudge the guest */
++    }
++    d->host_req_width = w;
++    d->host_req_height = h;
++    d->host_req_serial++;
++}
++
++static void pci_std_vga_ui_info(void *opaque, uint32_t idx, QemuUIInfo *info)
++{
++    VGACommonState *s = opaque;
++    PCIVGAState *d = container_of(s, PCIVGAState, vga);
++
++    pci_std_vga_host_resize_request(d, info->width, info->height);
++}
++
++/*
++ * Write-only QOM property mirroring the ui_info path, so a resize request
++ * can be injected from the monitor (qom-set ... host-resize-request WxH)
++ * for scripting and testing without a windowing UI.
++ */
++static void pci_std_vga_set_host_resize_request(Object *obj, const char *value,
++                                                Error **errp)
++{
++    PCIVGAState *d = PCI_VGA(PCI_DEVICE(obj));
++    unsigned int w, h;
++
++    if (!d->host_resize) {
++        error_setg(errp, "host-resize is disabled on this device");
++        return;
++    }
++    if (sscanf(value, "%ux%u", &w, &h) != 2 || w == 0 || h == 0) {
++        error_setg(errp, "expected WIDTHxHEIGHT");
++        return;
++    }
++    pci_std_vga_host_resize_request(d, w, h);
++}
++
+ static void pci_std_vga_realize(PCIDevice *dev, Error **errp)
+ {
+     PCIVGAState *d = PCI_VGA(dev);
+@@ -247,6 +356,13 @@ static void pci_std_vga_realize(PCIDevice *dev, Error **errp)
+     vga_init(s, OBJECT(dev), pci_address_space(dev), pci_address_space_io(dev),
+              true);
+ 
++    if (d->host_resize) {
++        /* Wrap the standard ops with a ui_info hook for live resizing. */
++        d->host_resize_ops = *s->hw_ops;
++        d->host_resize_ops.ui_info = pci_std_vga_ui_info;
++        s->hw_ops = &d->host_resize_ops;
++    }
++
+     s->con = graphic_console_init(DEVICE(dev), 0, s->hw_ops, s);
+ 
+     /* XXX: VGA_RAM_SIZE must be a power of two */
+@@ -265,7 +381,7 @@ static void pci_std_vga_realize(PCIDevice *dev, Error **errp)
+             edid = true;
+         }
+         pci_std_vga_mmio_region_init(s, OBJECT(dev), &d->mmio, d->mrs,
+-                                     qext, edid);
++                                     qext, edid, d->host_resize);
+ 
+         pci_register_bar(&d->dev, 2, PCI_BASE_ADDRESS_SPACE_MEMORY, &d->mmio);
+     }
+@@ -295,7 +411,8 @@ static void pci_secondary_vga_realize(PCIDevice *dev, Error **errp)
+     if (d->flags & (1 << PCI_VGA_FLAG_ENABLE_EDID)) {
+         edid = true;
+     }
+-    pci_std_vga_mmio_region_init(s, OBJECT(dev), &d->mmio, d->mrs, qext, edid);
++    pci_std_vga_mmio_region_init(s, OBJECT(dev), &d->mmio, d->mrs, qext, edid,
++                                 false);
+ 
+     pci_register_bar(&d->dev, 0, PCI_BASE_ADDRESS_MEM_PREFETCH, &s->vram);
+     pci_register_bar(&d->dev, 2, PCI_BASE_ADDRESS_SPACE_MEMORY, &d->mmio);
+@@ -337,6 +454,7 @@ static const Property vga_pci_properties[] = {
+                     PCIVGAState, flags, PCI_VGA_FLAG_ENABLE_QEXT, true),
+     DEFINE_PROP_BIT("edid",
+                     PCIVGAState, flags, PCI_VGA_FLAG_ENABLE_EDID, true),
++    DEFINE_PROP_BOOL("host-resize", PCIVGAState, host_resize, false),
+     DEFINE_EDID_PROPERTIES(PCIVGAState, edid_info),
+ };
+ 
+@@ -389,6 +507,10 @@ static void vga_class_init(ObjectClass *klass, const void *data)
+     /* Expose framebuffer byteorder via QOM */
+     object_class_property_add_bool(klass, "big-endian-framebuffer",
+                                    vga_get_big_endian_fb, vga_set_big_endian_fb);
++
++    /* Test/scripting hook for the host-resize channel */
++    object_class_property_add_str(klass, "host-resize-request",
++                                  NULL, pci_std_vga_set_host_resize_request);
+ }
+ 
+ static void secondary_class_init(ObjectClass *klass, const void *data)
+diff --git a/hw/display/vga_int.h b/hw/display/vga_int.h
+index 747b5cc..d7fe348 100644
+--- a/hw/display/vga_int.h
++++ b/hw/display/vga_int.h
+@@ -198,7 +198,8 @@ void pci_std_vga_mmio_region_init(VGACommonState *s,
+                                   Object *owner,
+                                   MemoryRegion *parent,
+                                   MemoryRegion *subs,
+-                                  bool qext, bool edid);
++                                  bool qext, bool edid,
++                                  bool host_resize);
+ 
+ void build_vga_aml(AcpiDevAmlIf *adev, Aml *scope);
+ #endif
+diff --git a/hw/display/virtio-vga.c b/hw/display/virtio-vga.c
+index 5e08716..eb606be 100644
+--- a/hw/display/virtio-vga.c
++++ b/hw/display/virtio-vga.c
+@@ -169,7 +169,7 @@ static void virtio_vga_base_realize(VirtIOPCIProxy *vpci_dev, Error **errp)
+ 
+     /* add stdvga mmio regions */
+     pci_std_vga_mmio_region_init(vga, OBJECT(vvga), &vpci_dev->modern_bar,
+-                                 vvga->vga_mrs, true, false);
++                                 vvga->vga_mrs, true, false, false);
+ 
+     vga->con = g->scanout[0].con;
+     graphic_console_set_hwops(vga->con, &virtio_vga_base_ops, vvga);
+diff --git a/include/hw/display/bochs-vbe.h b/include/hw/display/bochs-vbe.h
+index bc2f046..6b12539 100644
+--- a/include/hw/display/bochs-vbe.h
++++ b/include/hw/display/bochs-vbe.h
+@@ -59,6 +59,8 @@
+ /* qemu extension register region */
+ #define PCI_VGA_QEXT_OFFSET   0x600
+ #define PCI_VGA_QEXT_SIZE     (2 * 4)
++/* region size when the optional host-resize registers are enabled */
++#define PCI_VGA_QEXT_SIZE_RESIZE      (5 * 4)
+ 
+ /* qemu extension registers */
+ #define PCI_VGA_QEXT_REG_SIZE         (0 * 4)
+@@ -66,4 +68,15 @@
+ #define  PCI_VGA_QEXT_LITTLE_ENDIAN   0x1e1e1e1e
+ #define  PCI_VGA_QEXT_BIG_ENDIAN      0xbebebebe
+ 
++/*
++ * Host -> guest window-resize request channel (present when the device is
++ * created with host-resize=on; the guest detects it by reading a REG_SIZE
++ * of at least PCI_VGA_QEXT_SIZE_RESIZE). The UI writes the desired guest
++ * resolution here and bumps the serial; the registers are read-only to the
++ * guest, whose video driver polls the serial and performs the mode switch.
++ */
++#define PCI_VGA_QEXT_REG_REQ_WIDTH    (2 * 4)
++#define PCI_VGA_QEXT_REG_REQ_HEIGHT   (3 * 4)
++#define PCI_VGA_QEXT_REG_REQ_SERIAL   (4 * 4)
++
+ #endif /* HW_DISPLAY_BOCHS_VBE_H */

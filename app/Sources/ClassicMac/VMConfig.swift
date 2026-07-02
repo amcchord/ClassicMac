@@ -1,12 +1,104 @@
 import Foundation
 
-// A single emulated Quadra 800. Each VM is a self-contained ".classic" package
-// (a directory Finder shows as a file) whose location is `bundleURL`; the
-// settings below are persisted as config.json inside that package, alongside
-// disk.img and pram.img.
+// The emulated machine model. Determines which QEMU binary and machine type a
+// VM boots, which OS versions it can run, and which features are available.
+enum MachineFamily: String, Codable, CaseIterable, Identifiable {
+    // Motorola 68040 Quadra 800 (qemu-system-m68k -M q800). System 7.1 - 8.1.
+    case quadra800
+    // PowerPC Power Mac G4 (qemu-system-ppc -M mac99). Mac OS 8.5 - 9.2.2.
+    // Boots through OpenBIOS, so no Apple ROM file is needed.
+    case powerMacG4
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .quadra800: return "Quadra 800"
+        case .powerMacG4: return "Power Mac G4"
+        }
+    }
+
+    var cpuLabel: String {
+        switch self {
+        case .quadra800: return "Motorola 68040"
+        case .powerMacG4: return "PowerPC G4"
+        }
+    }
+
+    var hardwareLabel: String {
+        switch self {
+        case .quadra800: return "Macintosh Quadra 800 - Motorola 68040"
+        case .powerMacG4: return "Power Mac G4 - PowerPC"
+        }
+    }
+
+    var osSupportLabel: String {
+        switch self {
+        case .quadra800: return "System 7.1 - Mac OS 8.1"
+        case .powerMacG4: return "Mac OS 8.5 - 9.2.2"
+        }
+    }
+
+    var defaultName: String {
+        switch self {
+        case .quadra800: return "Mac OS 8.1"
+        case .powerMacG4: return "Mac OS 9.2"
+        }
+    }
+
+    // The Power Mac tops out at 896 MB: Mac OS 9 sound (and general stability
+    // under emulation) breaks with 1 GB or more installed.
+    var ramPresets: [Int] {
+        switch self {
+        case .quadra800: return [64, 128, 256, 512, 1000]
+        case .powerMacG4: return [128, 256, 512, 768, 896]
+        }
+    }
+
+    var defaultRAMMB: Int {
+        switch self {
+        case .quadra800: return 128
+        case .powerMacG4: return 512
+        }
+    }
+
+    var diskSizePresets: [Int] {
+        switch self {
+        case .quadra800: return [1, 2, 4, 8]
+        case .powerMacG4: return [2, 4, 8, 16]
+        }
+    }
+
+    var defaultDiskSizeGB: Int {
+        switch self {
+        case .quadra800: return 2
+        case .powerMacG4: return 8
+        }
+    }
+
+    // The qfb enhanced framebuffer is a Quadra/NuBus feature; the mac99
+    // display is the std VGA framebuffer driven by the bundled qemu_vga.ndrv,
+    // which supports custom boot resolutions (via -g) and live window
+    // resizing (via the vga-host-resize channel). Host folder sharing works
+    // on both: the Quadra through the classicvirtio NuBus transport and the
+    // Power Mac through virtio-9p-pci plus the classicvirtio ndrvloader.
+    // Sound works on both: the Quadra has the Apple Sound Chip and the Power
+    // Mac the screamer (AWACS) port.
+    var supportsEnhancedFramebuffer: Bool { self == .quadra800 }
+    var supportsSharedFolder: Bool { true }
+    var supportsSound: Bool { true }
+    var supportsCustomResolution: Bool { true }
+    var usesPRAMImage: Bool { self == .quadra800 }
+}
+
+// A single emulated classic Macintosh. Each VM is a self-contained ".classic"
+// package (a directory Finder shows as a file) whose location is `bundleURL`;
+// the settings below are persisted as config.json inside that package,
+// alongside disk.img (and pram.img on the Quadra 800).
 struct VMConfig: Codable, Identifiable, Hashable {
     var id: UUID
     var name: String
+    var machineFamily: MachineFamily
     var ramMB: Int
     var diskImageName: String
     var pramImageName: String
@@ -37,13 +129,14 @@ struct VMConfig: Codable, Identifiable, Hashable {
 
     // Only the persisted fields are encoded; bundleURL is intentionally omitted.
     private enum CodingKeys: String, CodingKey {
-        case id, name, ramMB, diskImageName, pramImageName, diskSizeGB
+        case id, name, machineFamily, ramMB, diskImageName, pramImageName, diskSizeGB
         case width, height, depth, useEnhancedFramebuffer, customResolution
         case cdImagePath, bootFromCD, networking, sound, sharedFolderPath
     }
 
     init(id: UUID = UUID(),
          name: String,
+         machineFamily: MachineFamily = .quadra800,
          ramMB: Int = 128,
          diskSizeGB: Int = 2,
          width: Int = 1024,
@@ -59,6 +152,7 @@ struct VMConfig: Codable, Identifiable, Hashable {
          bundleURL: URL? = nil) {
         self.id = id
         self.name = name
+        self.machineFamily = machineFamily
         self.ramMB = ramMB
         self.diskImageName = "disk.img"
         self.pramImageName = "pram.img"
@@ -87,6 +181,9 @@ struct VMConfig: Codable, Identifiable, Hashable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(UUID.self, forKey: .id)
         name = try c.decode(String.self, forKey: .name)
+        // VMs created before PPC support have no machineFamily key; they are
+        // all Quadra 800s.
+        machineFamily = try c.decodeIfPresent(MachineFamily.self, forKey: .machineFamily) ?? .quadra800
         ramMB = try c.decodeIfPresent(Int.self, forKey: .ramMB) ?? 128
         diskImageName = try c.decodeIfPresent(String.self, forKey: .diskImageName) ?? "disk.img"
         pramImageName = try c.decodeIfPresent(String.self, forKey: .pramImageName) ?? "pram.img"
@@ -101,6 +198,27 @@ struct VMConfig: Codable, Identifiable, Hashable {
         networking = try c.decodeIfPresent(Bool.self, forKey: .networking) ?? true
         sound = try c.decodeIfPresent(Bool.self, forKey: .sound) ?? true
         sharedFolderPath = try c.decodeIfPresent(String.self, forKey: .sharedFolderPath)
+        sanitize()
+    }
+
+    // Brings a decoded config back within what its machine family supports, so
+    // configs written by older builds (or edited by hand) always boot. In
+    // particular Mac OS 9 on the Power Mac loses sound and becomes unstable
+    // with 1 GB or more of RAM, so early PPC configs with bigger values are
+    // pulled back to 896 MB.
+    private mutating func sanitize() {
+        if machineFamily == .powerMacG4 {
+            if ramMB > 896 {
+                ramMB = 896
+            }
+            useEnhancedFramebuffer = false
+        }
+        if !machineFamily.supportsSharedFolder {
+            sharedFolderPath = nil
+        }
+        if ramMB < 8 {
+            ramMB = machineFamily.defaultRAMMB
+        }
     }
 
     // Filename extension for a VM package.
@@ -114,7 +232,14 @@ struct VMConfig: Codable, Identifiable, Hashable {
     var pramImageURL: URL { folder.appendingPathComponent(pramImageName) }
     var configURL: URL { folder.appendingPathComponent("config.json") }
 
-    var resolutionLabel: String { "\(width)x\(height)x\(depth)" }
+    var resolutionLabel: String {
+        if machineFamily == .powerMacG4 {
+            // The mac99 display always runs at millions of colors; the stored
+            // depth only applies to the Quadra framebuffers.
+            return "\(width)x\(height)"
+        }
+        return "\(width)x\(height)x\(depth)"
+    }
 
     var hasSharedFolder: Bool {
         guard let path = sharedFolderPath else { return false }
@@ -173,6 +298,5 @@ struct ResolutionPreset: Identifiable, Hashable {
     ]
 }
 
-// RAM presets for the Quadra 800 (real hardware topped out around 136 MB; QEMU
-// allows more but classic Mac OS gains little above 128-256 MB).
-let ramPresets: [Int] = [64, 128, 256, 512, 1000]
+// RAM presets now live on MachineFamily (see ramPresets there); the Quadra
+// keeps its historical values and the Power Mac G4 allows more for Mac OS 9.

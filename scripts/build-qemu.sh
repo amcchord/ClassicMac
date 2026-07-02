@@ -21,7 +21,8 @@ QEMU_REPO="${QEMU_REPO:-https://gitlab.com/qemu-project/qemu.git}"
 QEMU_TAG="${QEMU_TAG:-v11.0.2}"
 QFB_DIR="$ROOT_DIR/qfb"
 
-# Tracked files modified by the qfb integration patch (reset before re-applying).
+# Tracked files modified by the qfb and screamer integration patches (reset
+# before re-applying).
 PATCHED_FILES=(
   hw/display/macfb.c
   include/hw/display/macfb.h
@@ -33,7 +34,22 @@ PATCHED_FILES=(
   pc-bios/meson.build
   ui/cocoa.m
   hw/audio/asc.c
+  hw/audio/Kconfig
+  hw/audio/meson.build
+  hw/ppc/Kconfig
+  hw/ppc/mac_newworld.c
+  hw/ppc/mac_oldworld.c
+  hw/misc/macio/macio.c
+  include/hw/misc/macio/macio.h
+  pc-bios/openbios-ppc
+  hw/display/vga-pci.c
+  hw/display/vga_int.h
+  hw/display/virtio-vga.c
+  include/hw/display/bochs-vbe.h
+  pc-bios/qemu_vga.ndrv
 )
+SCREAMER_DIR="$ROOT_DIR/screamer"
+PPCVID_DIR="$ROOT_DIR/ppcvid"
 
 log() { printf '\n==> %s\n' "$*"; }
 die() { printf '\nERROR: %s\n' "$*" >&2; exit 1; }
@@ -97,6 +113,14 @@ if [ -n "${QFB_BUILD_ROM:-}" ]; then
   "$ROOT_DIR/scripts/build-qfb-rom.sh"
 fi
 
+# Same pattern for the PPC video driver: set PPCVID_BUILD_NDRV=1 to regenerate
+# ppcvid/qemu_vga.ndrv from the driver sources in ppcvid/driver (needs the
+# Retro68 PPC toolchain plus the Universal Interfaces; see the script).
+if [ -n "${PPCVID_BUILD_NDRV:-}" ]; then
+  log "PPCVID_BUILD_NDRV set: rebuilding ppcvid/qemu_vga.ndrv from ppcvid/driver"
+  "$ROOT_DIR/scripts/build-ppcvid-ndrv.sh"
+fi
+
 # ---------------------------------------------------------------------------
 # 3. Apply the nubus-qfb framebuffer port
 # ---------------------------------------------------------------------------
@@ -115,19 +139,46 @@ git -C "$QEMU_DIR" apply "$QFB_DIR/cocoa-resize.patch" || die "Failed to apply c
 git -C "$QEMU_DIR" apply "$QFB_DIR/asc-silence.patch" || die "Failed to apply asc silence patch"
 
 # ---------------------------------------------------------------------------
+# 3b. Apply the screamer (AWACS) PPC Mac audio port
+# ---------------------------------------------------------------------------
+# Sound for the mac99/g3beige machines, ported from Mark Cave-Ayland's
+# out-of-tree "screamer" branch. Needs the matching screamer-aware OpenBIOS
+# (the guest driver only attaches when the firmware exposes the davbus/awacs
+# nodes), which replaces the stock pc-bios/openbios-ppc.
+log "Installing screamer PPC audio (device files + firmware + integration patch)"
+cp "$SCREAMER_DIR/screamer.c" "$QEMU_DIR/hw/audio/screamer.c"
+cp "$SCREAMER_DIR/screamer.h" "$QEMU_DIR/include/hw/audio/screamer.h"
+cp "$SCREAMER_DIR/openbios-ppc" "$QEMU_DIR/pc-bios/openbios-ppc"
+git -C "$QEMU_DIR" apply "$SCREAMER_DIR/integration.patch" || die "Failed to apply screamer integration patch"
+
+# ---------------------------------------------------------------------------
+# 3c. Apply the PPC std-VGA host-resize channel + custom video driver
+# ---------------------------------------------------------------------------
+# Adds a host->guest window-resize request channel to the std VGA device
+# (host-resize=on) and replaces the stock qemu_vga.ndrv with the ClassicMac
+# build that follows the host window via the Display Manager.
+log "Installing PPC VGA host-resize support (patch + qemu_vga.ndrv)"
+git -C "$QEMU_DIR" apply "$PPCVID_DIR/vga-host-resize.patch" || die "Failed to apply vga host-resize patch"
+if [ -f "$PPCVID_DIR/qemu_vga.ndrv" ]; then
+  cp "$PPCVID_DIR/qemu_vga.ndrv" "$QEMU_DIR/pc-bios/qemu_vga.ndrv"
+else
+  log "ppcvid/qemu_vga.ndrv not present; keeping the stock driver (no PPC live resize)"
+fi
+
+# ---------------------------------------------------------------------------
 # 4. Configure (out-of-tree) if not already configured
 # ---------------------------------------------------------------------------
 if [ -f "$BUILD_DIR/build.ninja" ] && [ -z "${FORCE_CONFIGURE:-}" ]; then
   log "Already configured (set FORCE_CONFIGURE=1 to reconfigure)"
 else
-  log "Configuring QEMU for m68k-softmmu (cocoa, slirp, coreaudio, 9p)"
+  log "Configuring QEMU for m68k-softmmu + ppc-softmmu (cocoa, slirp, coreaudio, 9p)"
   rm -rf "$BUILD_DIR"
   mkdir -p "$BUILD_DIR"
   (
     cd "$BUILD_DIR"
     ../configure \
       --python="$PYTHON_BIN" \
-      --target-list=m68k-softmmu \
+      --target-list=m68k-softmmu,ppc-softmmu \
       --enable-cocoa \
       --enable-slirp \
       --enable-tcg \
@@ -149,7 +200,7 @@ fi
 # ---------------------------------------------------------------------------
 JOBS="$(sysctl -n hw.ncpu)"
 log "Building with $JOBS jobs (this can take a while)"
-ninja -C "$BUILD_DIR" qemu-system-m68k qemu-img
+ninja -C "$BUILD_DIR" qemu-system-m68k qemu-system-ppc qemu-img
 
 # ---------------------------------------------------------------------------
 # 6. Verify required devices are present
@@ -170,4 +221,35 @@ done
 
 [ -f "$QEMU_DIR/pc-bios/mac_qfb.rom" ] || die "pc-bios/mac_qfb.rom firmware missing"
 
-log "Done. Binaries: $BUILD_DIR/qemu-system-m68k , $BUILD_DIR/qemu-img"
+QEMU_PPC_BIN="$BUILD_DIR/qemu-system-ppc"
+[ -x "$QEMU_PPC_BIN" ] || die "qemu-system-ppc was not produced"
+if "$QEMU_PPC_BIN" -machine help 2>&1 | grep -q "^mac99"; then
+  printf '    OK  mac99 machine (ppc)\n'
+else
+  die "mac99 machine missing from the ppc build"
+fi
+if "$QEMU_PPC_BIN" -device screamer,help >/dev/null 2>&1; then
+  printf '    OK  screamer audio (ppc)\n'
+else
+  die "screamer audio device missing from the ppc build"
+fi
+if "$QEMU_PPC_BIN" -device VGA,help 2>&1 | grep -q "host-resize"; then
+  printf '    OK  VGA host-resize channel (ppc)\n'
+else
+  die "VGA host-resize property missing from the ppc build"
+fi
+if [ -f "$PPCVID_DIR/qemu_vga.ndrv" ] && cmp -s "$PPCVID_DIR/qemu_vga.ndrv" "$QEMU_DIR/pc-bios/qemu_vga.ndrv"; then
+  printf '    OK  ClassicMac qemu_vga.ndrv installed\n'
+else
+  log "WARNING: pc-bios/qemu_vga.ndrv is not the ClassicMac build (PPC live resize inactive)"
+fi
+[ -f "$QEMU_DIR/pc-bios/openbios-ppc" ] || die "pc-bios/openbios-ppc firmware missing"
+# Note: plain grep (not -q) so strings is read to EOF; grep -q would exit
+# early and the SIGPIPE would fail the pipeline under pipefail.
+if strings "$QEMU_DIR/pc-bios/openbios-ppc" | grep "screamer_init" >/dev/null; then
+  printf '    OK  screamer-aware OpenBIOS\n'
+else
+  die "pc-bios/openbios-ppc is not the screamer-aware build"
+fi
+
+log "Done. Binaries: $BUILD_DIR/qemu-system-m68k , $BUILD_DIR/qemu-system-ppc , $BUILD_DIR/qemu-img"

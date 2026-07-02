@@ -47,7 +47,9 @@ struct VMDetailView: View {
                 displaySection(vm)
                 hardwareSection(vm)
                 mediaSection(vm)
-                sharedFolderSection(vm)
+                if vm.wrappedValue.machineFamily.supportsSharedFolder {
+                    sharedFolderSection(vm)
+                }
             }
             .padding(24)
             .frame(maxWidth: 640, alignment: .leading)
@@ -78,7 +80,7 @@ struct VMDetailView: View {
                 TextField("Name", text: vm.name)
                     .font(.title2.bold())
                     .textFieldStyle(.plain)
-                Text("Macintosh Quadra 800 - Motorola 68040")
+                Text(vm.wrappedValue.machineFamily.hardwareLabel)
                     .foregroundStyle(.secondary)
             }
             Spacer()
@@ -121,6 +123,51 @@ struct VMDetailView: View {
 
     @ViewBuilder
     private func displaySection(_ vm: Binding<VMConfig>) -> some View {
+        if vm.wrappedValue.machineFamily == .powerMacG4 {
+            powerMacDisplaySection(vm)
+        } else {
+            quadraDisplaySection(vm)
+        }
+    }
+
+    @ViewBuilder
+    private func powerMacDisplaySection(_ vm: Binding<VMConfig>) -> some View {
+        SettingsCard(title: "Display", systemImage: "display") {
+            Toggle("Custom resolution", isOn: vm.customResolution)
+                .disabled(running)
+
+            if vm.wrappedValue.customResolution {
+                HStack(spacing: 8) {
+                    TextField("Width", value: maxClamped(vm.width, VMConfig.maxWidth), format: .number)
+                        .frame(width: 76)
+                        .multilineTextAlignment(.trailing)
+                    Text("x")
+                        .foregroundStyle(.secondary)
+                    TextField("Height", value: maxClamped(vm.height, VMConfig.maxHeight), format: .number)
+                        .frame(width: 76)
+                        .multilineTextAlignment(.trailing)
+                    Button("Match Display") {
+                        matchMainDisplay(vm)
+                    }
+                    Spacer()
+                }
+                .disabled(running)
+            } else {
+                Picker("Resolution", selection: resolutionSelection(vm)) {
+                    ForEach(ResolutionPreset.all) { preset in
+                        Text(preset.label).tag(preset)
+                    }
+                }
+                .disabled(running)
+            }
+            Text("This is the startup resolution, at millions of colors. While Mac OS is running, drag the window to any size and the Mac switches to it; lower resolutions and depths can also be chosen in the Monitors control panel.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    @ViewBuilder
+    private func quadraDisplaySection(_ vm: Binding<VMConfig>) -> some View {
         SettingsCard(title: "Display", systemImage: "display") {
             Toggle(isOn: vm.useEnhancedFramebuffer) {
                 VStack(alignment: .leading, spacing: 2) {
@@ -210,7 +257,7 @@ struct VMDetailView: View {
     private func hardwareSection(_ vm: Binding<VMConfig>) -> some View {
         SettingsCard(title: "Hardware", systemImage: "memorychip") {
             Picker("Memory", selection: vm.ramMB) {
-                ForEach(ramPresets, id: \.self) { mb in
+                ForEach(memoryChoices(vm.wrappedValue), id: \.self) { mb in
                     Text("\(mb) MB").tag(mb)
                 }
             }
@@ -227,13 +274,33 @@ struct VMDetailView: View {
             Toggle(isOn: vm.sound) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Sound")
-                    Text("Play the emulated Apple Sound Chip through your Mac's speakers")
+                    Text(soundCaption(vm.wrappedValue))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
             }
             .disabled(running)
         }
+    }
+
+    private func soundCaption(_ vm: VMConfig) -> String {
+        switch vm.machineFamily {
+        case .quadra800:
+            return "Play the emulated Apple Sound Chip through your Mac's speakers"
+        case .powerMacG4:
+            return "Play the emulated screamer (AWACS) chip through your Mac's speakers"
+        }
+    }
+
+    // The family presets, plus the VM's current value if it is nonstandard, so
+    // the picker never shows an empty selection.
+    private func memoryChoices(_ vm: VMConfig) -> [Int] {
+        var choices = vm.machineFamily.ramPresets
+        if !choices.contains(vm.ramMB) {
+            choices.append(vm.ramMB)
+            choices.sort()
+        }
+        return choices
     }
 
     @ViewBuilder
@@ -277,6 +344,11 @@ struct VMDetailView: View {
                 Text("Appears on the Mac desktop as the disk \u{201C}\(vm.wrappedValue.sharedVolumeName)\u{201D}.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                if vm.wrappedValue.machineFamily == .powerMacG4 && vm.wrappedValue.bootFromCD && vm.wrappedValue.cdImagePath?.isEmpty == false {
+                    Text("Sharing is inactive while the machine boots from CD.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
                 Button("Stop Sharing", role: .destructive) {
                     vm.wrappedValue.sharedFolderPath = nil
                 }
@@ -344,7 +416,7 @@ struct VMDetailView: View {
                 } label: {
                     Label("Start", systemImage: "play.fill")
                 }
-                .disabled(!AppPaths.qemuIsAvailable)
+                .disabled(!AppPaths.qemuIsAvailable(for: vm.wrappedValue.machineFamily))
             }
 
             Menu {

@@ -6,9 +6,10 @@ struct NewVMSheet: View {
 
     @Environment(\.dismiss) private var dismiss
 
-    @State private var name = "Mac OS 8.1"
-    @State private var ramMB = 128
-    @State private var diskSizeGB = 2
+    @State private var family: MachineFamily = .quadra800
+    @State private var name = MachineFamily.quadra800.defaultName
+    @State private var ramMB = MachineFamily.quadra800.defaultRAMMB
+    @State private var diskSizeGB = MachineFamily.quadra800.defaultDiskSizeGB
     @State private var useEnhancedFramebuffer = true
     @State private var resolution = ResolutionPreset.all[2]
     @State private var depth = ColorDepth.thousands
@@ -49,7 +50,7 @@ struct NewVMSheet: View {
                 .font(.system(size: 30))
                 .foregroundStyle(.tint)
             VStack(alignment: .leading) {
-                Text("New Quadra 800")
+                Text("New \(family.label)")
                     .font(.headline)
                 Text("Configure a new classic Macintosh.")
                     .font(.subheadline)
@@ -63,6 +64,11 @@ struct NewVMSheet: View {
     private var form: some View {
         Form {
             Section {
+                Picker("Machine", selection: $family) {
+                    ForEach(MachineFamily.allCases) { f in
+                        Text("\(f.label) (\(f.osSupportLabel))").tag(f)
+                    }
+                }
                 TextField("Name", text: $name)
             }
 
@@ -83,23 +89,32 @@ struct NewVMSheet: View {
 
             Section("Hardware") {
                 Picker("Memory", selection: $ramMB) {
-                    ForEach(ramPresets, id: \.self) { mb in
+                    ForEach(family.ramPresets, id: \.self) { mb in
                         Text("\(mb) MB").tag(mb)
                     }
                 }
                 Picker("Hard disk size", selection: $diskSizeGB) {
-                    ForEach([1, 2, 4, 8], id: \.self) { gb in
+                    ForEach(family.diskSizePresets, id: \.self) { gb in
                         Text("\(gb) GB").tag(gb)
                     }
                 }
                 Toggle("Sound", isOn: $sound)
+                if family == .powerMacG4 {
+                    Text("Mac OS 9 needs less than 1 GB of memory for stable sound; the presets stop at 896 MB.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
 
             Section("Display") {
-                Toggle("Enhanced framebuffer", isOn: $useEnhancedFramebuffer)
-                Toggle("Custom resolution", isOn: $customResolution)
-                    .disabled(!useEnhancedFramebuffer)
-                if customResolution {
+                if family.supportsEnhancedFramebuffer {
+                    Toggle("Enhanced framebuffer", isOn: $useEnhancedFramebuffer)
+                    Toggle("Custom resolution", isOn: $customResolution)
+                        .disabled(!useEnhancedFramebuffer)
+                } else if family.supportsCustomResolution {
+                    Toggle("Custom resolution", isOn: $customResolution)
+                }
+                if customResolution && family.supportsCustomResolution {
                     HStack(spacing: 8) {
                         TextField("Width", value: $customWidth, format: .number)
                             .frame(width: 76)
@@ -120,10 +135,16 @@ struct NewVMSheet: View {
                         }
                     }
                 }
-                Picker("Color depth", selection: $depth) {
-                    ForEach(availableDepths) { d in
-                        Text(d.label).tag(d)
+                if family.supportsEnhancedFramebuffer {
+                    Picker("Color depth", selection: $depth) {
+                        ForEach(availableDepths) { d in
+                            Text(d.label).tag(d)
+                        }
                     }
+                } else {
+                    Text("The Power Mac display starts at millions of colors. Once Mac OS is running you can drag the window to any size, or pick lower depths via the Monitors control panel.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             }
 
@@ -149,30 +170,50 @@ struct NewVMSheet: View {
                 }
             }
 
-            Section("Shared Folder") {
-                if let sharedFolderURL = sharedFolderURL {
-                    LabeledContent("Folder") {
-                        Text(sharedFolderURL.lastPathComponent)
+            if family.supportsSharedFolder {
+                Section("Shared Folder") {
+                    if let sharedFolderURL = sharedFolderURL {
+                        LabeledContent("Folder") {
+                            Text(sharedFolderURL.lastPathComponent)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                        }
+                        Button("Remove") {
+                            self.sharedFolderURL = nil
+                        }
+                    } else {
+                        Button("Share a Folder from My Mac...") {
+                            chooseSharedFolder()
+                        }
+                        Text("Optional. The folder appears as a disk on the Mac desktop.")
+                            .font(.caption)
                             .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
                     }
-                    Button("Remove") {
-                        self.sharedFolderURL = nil
-                    }
-                } else {
-                    Button("Share a Folder from My Mac...") {
-                        chooseSharedFolder()
-                    }
-                    Text("Optional. The folder appears as a disk on the Mac desktop.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
                 }
             }
         }
         .formStyle(.grouped)
         .onChange(of: useEnhancedFramebuffer) { _ in clampDepth() }
         .onChange(of: resolution) { _ in clampDepth() }
+        .onChange(of: family) { newFamily in applyFamilyDefaults(newFamily) }
+    }
+
+    // Reset the fields that have per-family defaults, but keep a name the user
+    // typed themselves.
+    private func applyFamilyDefaults(_ newFamily: MachineFamily) {
+        let defaultNames = MachineFamily.allCases.map { $0.defaultName }
+        if defaultNames.contains(name) {
+            name = newFamily.defaultName
+        }
+        ramMB = newFamily.defaultRAMMB
+        diskSizeGB = newFamily.defaultDiskSizeGB
+        if !newFamily.supportsSharedFolder {
+            sharedFolderURL = nil
+        }
+        if !newFamily.supportsCustomResolution {
+            customResolution = false
+        }
     }
 
     private var footer: some View {
@@ -296,7 +337,7 @@ struct NewVMSheet: View {
 
         var width = resolution.width
         var height = resolution.height
-        if customResolution {
+        if customResolution && family.supportsCustomResolution {
             width = customWidth
             if width > VMConfig.maxWidth {
                 width = VMConfig.maxWidth
@@ -310,20 +351,30 @@ struct NewVMSheet: View {
         let trimmedName = name.trimmingCharacters(in: .whitespaces)
         let bundleURL = VMStore.shared.uniqueBundleURL(in: saveFolder, name: trimmedName)
 
+        var effectiveSound = sound
+        if !family.supportsSound {
+            effectiveSound = false
+        }
+        var effectiveSharedFolder = sharedFolderURL?.path
+        if !family.supportsSharedFolder {
+            effectiveSharedFolder = nil
+        }
+
         let config = VMConfig(
             name: trimmedName,
+            machineFamily: family,
             ramMB: ramMB,
             diskSizeGB: diskSizeGB,
             width: width,
             height: height,
             depth: depth.rawValue,
-            useEnhancedFramebuffer: useEnhancedFramebuffer,
-            customResolution: customResolution,
+            useEnhancedFramebuffer: useEnhancedFramebuffer && family.supportsEnhancedFramebuffer,
+            customResolution: customResolution && family.supportsCustomResolution,
             cdImagePath: isoURL?.path,
             bootFromCD: isoURL != nil,
             networking: true,
-            sound: sound,
-            sharedFolderPath: sharedFolderURL?.path,
+            sound: effectiveSound,
+            sharedFolderPath: effectiveSharedFolder,
             bundleURL: bundleURL
         )
 

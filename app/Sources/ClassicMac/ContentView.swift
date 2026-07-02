@@ -60,7 +60,7 @@ struct ContentView: View {
                 } primaryAction: {
                     store.isPresentingNewVM = true
                 }
-                .help("Create a new Quadra 800, or open an existing .classic machine")
+                .help("Create a new classic Macintosh, or open an existing .classic machine")
             }
         }
     }
@@ -76,7 +76,7 @@ struct ContentView: View {
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
             } else {
-                Label("Quadra 800 - 68040", systemImage: "cpu")
+                Label("Quadra 800 & Power Mac G4", systemImage: "cpu")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -119,7 +119,7 @@ struct VMRow: View {
                 .foregroundStyle(.secondary)
             VStack(alignment: .leading, spacing: 2) {
                 Text(vm.name)
-                Text("\(vm.ramMB) MB - \(vm.resolutionLabel)")
+                Text("\(vm.machineFamily.label) - \(vm.ramMB) MB - \(vm.resolutionLabel)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -145,7 +145,7 @@ struct EmptyStateView: View {
             Text("Welcome to ClassicMac")
                 .font(.title)
                 .bold()
-            Text("Emulate a Macintosh Quadra 800 running classic Mac OS.")
+            Text("Emulate a Quadra 800 (System 7 - 8.1) or a Power Mac G4 (Mac OS 8.5 - 9.2).")
                 .foregroundStyle(.secondary)
             Button {
                 showingNewVM = true
