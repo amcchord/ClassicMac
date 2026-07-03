@@ -265,31 +265,57 @@ dedupe_rpaths "$QUADRA_APP/Contents/MacOS/qemu-img"
 dedupe_rpaths "$PPC_APP/Contents/MacOS/qemu-system-ppc"
 
 # ---------------------------------------------------------------------------
-# 5. Code signing (ad-hoc). Sign inner items first, then outward.
+# 5. Code signing. Sign inner items first, then outward.
+#
+# Uses the Developer ID Application certificate when one is present in the
+# keychain (required for notarization / distribution); falls back to ad-hoc
+# signing otherwise. Override with SIGN_IDENTITY=<identity or "-">.
 # ---------------------------------------------------------------------------
-log "Code signing (ad-hoc)"
+SIGN_IDENTITY="${SIGN_IDENTITY:-}"
+if [ -z "$SIGN_IDENTITY" ]; then
+  SIGN_IDENTITY="$(security find-identity -v -p codesigning | awk -F'"' '/Developer ID Application/{print $2; exit}')"
+fi
+if [ -z "$SIGN_IDENTITY" ]; then
+  SIGN_IDENTITY="-"
+fi
+
+# Developer ID signatures need a secure timestamp for notarization; ad-hoc
+# signatures cannot get one.
+TIMESTAMP_FLAG="--timestamp"
+if [ "$SIGN_IDENTITY" = "-" ]; then
+  TIMESTAMP_FLAG="--timestamp=none"
+  log "Code signing (ad-hoc)"
+else
+  log "Code signing (identity: $SIGN_IDENTITY)"
+fi
+
 find "$QUADRA_APP/Contents/Frameworks" "$PPC_APP/Contents/Frameworks" -name '*.dylib' -print0 | while IFS= read -r -d '' lib; do
-  codesign --force --sign - --timestamp=none "$lib"
+  codesign --force --sign "$SIGN_IDENTITY" "$TIMESTAMP_FLAG" "$lib"
 done
 
-# The qemu-system binaries need the JIT entitlements; qemu-img does not but
-# signing it keeps the bundle valid.
-codesign --force --sign - --timestamp=none \
-  --options runtime --entitlements "$ENTITLEMENTS" \
-  "$QUADRA_APP/Contents/MacOS/qemu-system-m68k"
-codesign --force --sign - --timestamp=none \
-  --options runtime --entitlements "$ENTITLEMENTS" \
-  "$PPC_APP/Contents/MacOS/qemu-system-ppc"
-codesign --force --sign - --timestamp=none "$QUADRA_APP/Contents/MacOS/qemu-img"
+# qemu-img is not the helper bundle's main executable, so it needs its own
+# signature (no JIT entitlements required). All executables get the hardened
+# runtime, which notarization requires.
+codesign --force --sign "$SIGN_IDENTITY" "$TIMESTAMP_FLAG" \
+  --options runtime \
+  "$QUADRA_APP/Contents/MacOS/qemu-img"
 
-# Sign the helper apps as bundles, then the outer app.
-codesign --force --sign - --timestamp=none "$QUADRA_APP"
-codesign --force --sign - --timestamp=none "$PPC_APP"
+# Sign the helper apps as bundles, then the outer app. Signing a bundle
+# (re-)signs its main executable - the qemu-system binary - so the JIT
+# entitlements MUST be supplied here or this pass would strip them, leaving a
+# hardened-runtime binary that cannot map its JIT buffer ("allocate ... bytes
+# for jit buffer: Invalid argument" at launch).
+codesign --force --sign "$SIGN_IDENTITY" "$TIMESTAMP_FLAG" \
+  --options runtime --entitlements "$ENTITLEMENTS" \
+  "$QUADRA_APP"
+codesign --force --sign "$SIGN_IDENTITY" "$TIMESTAMP_FLAG" \
+  --options runtime --entitlements "$ENTITLEMENTS" \
+  "$PPC_APP"
 
-codesign --force --sign - --timestamp=none "$MACOS_DIR/ClassicMac"
+codesign --force --sign "$SIGN_IDENTITY" "$TIMESTAMP_FLAG" --options runtime "$MACOS_DIR/ClassicMac"
 
 # Sign the whole bundle last.
-codesign --force --sign - --timestamp=none "$APP"
+codesign --force --sign "$SIGN_IDENTITY" "$TIMESTAMP_FLAG" --options runtime "$APP"
 
 # ---------------------------------------------------------------------------
 # 6. Verify

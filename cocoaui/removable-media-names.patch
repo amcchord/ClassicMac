@@ -1,0 +1,36 @@
+diff --git a/ui/cocoa.m b/ui/cocoa.m
+index 68d618c..ff5b7af 100644
+--- a/ui/cocoa.m
++++ b/ui/cocoa.m
+@@ -2094,15 +2094,29 @@ static void addRemovableDevicesMenuItems(void)
+ 
+         deviceName = [[NSString stringWithFormat: @"%s", currentDevice->value->device] retain];
+ 
++        /* ClassicMac: show Mac-friendly drive names instead of raw QEMU
++         * block-device ids ("cd0", "ide1-cd0", "floppy0"). The raw id still
++         * rides along in representedObject for the QMP calls. */
++        const char *rawName = currentDevice->value->device;
++        const char *displayName = rawName;
++        if (rawName != NULL) {
++            if (strstr(rawName, "cd") != NULL) {
++                displayName = "CD-ROM";
++            } else if (strstr(rawName, "floppy") != NULL ||
++                       strncmp(rawName, "fd", 2) == 0) {
++                displayName = "Floppy";
++            }
++        }
++
+         if(currentDevice->value->removable) {
+-            menuItem = [[NSMenuItem alloc] initWithTitle: [NSString stringWithFormat: @"Change %s...", currentDevice->value->device]
++            menuItem = [[NSMenuItem alloc] initWithTitle: [NSString stringWithFormat: @"Change %s Image\u2026", displayName]
+                                                   action: @selector(changeDeviceMedia:)
+                                            keyEquivalent: @""];
+             [menu addItem: menuItem];
+             [menuItem setRepresentedObject: deviceName];
+             [menuItem autorelease];
+ 
+-            menuItem = [[NSMenuItem alloc] initWithTitle: [NSString stringWithFormat: @"Eject %s", currentDevice->value->device]
++            menuItem = [[NSMenuItem alloc] initWithTitle: [NSString stringWithFormat: @"Eject %s", displayName]
+                                                   action: @selector(ejectDeviceMedia:)
+                                            keyEquivalent: @""];
+             [menu addItem: menuItem];

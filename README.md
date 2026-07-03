@@ -1,179 +1,133 @@
-# ClassicMac
+<p align="center">
+  <img src="Resources/AppIcon.png" width="180" alt="ClassicMac icon">
+</p>
 
-A self-contained macOS (Apple Silicon) application that emulates classic Macintoshes as performantly as possible, built on a custom build of QEMU. It covers the whole classic Mac OS era with two machine models:
+<h1 align="center">ClassicMac</h1>
 
-- **Macintosh Quadra 800** (Motorola 68040) for System 7.1 through Mac OS 8.1.
-- **Power Mac G4** (PowerPC, QEMU `mac99`) for Mac OS 8.5 through 9.2.2.
+<p align="center">
+  <strong>The whole classic Mac OS era, running natively fast on Apple Silicon.</strong><br>
+  A self-contained macOS app that emulates a Motorola 68040 Quadra 800 and a PowerPC Power Mac G4<br>
+  on a custom build of QEMU — no setup, no ROM hunting for Mac OS 9, no terminal.
+</p>
 
-ClassicMac bundles `qemu-system-m68k` (built from mainline QEMU 11.0.2 with a ported-in enhanced **paravirtualized NuBus framebuffer**, `nubus-qfb`), which unlocks arbitrary screen resolutions and 16-bit ("Thousands") color that the stock QEMU framebuffer cannot provide. It also supports **host folder sharing** via the NuBus virtio transport. The bundled `qemu-system-ppc` boots the Power Mac through OpenBIOS, so **no Apple ROM file is needed** for Mac OS 9, supports **host folder sharing** via `virtio-9p-pci` and the classicvirtio ndrvloader, and ships a custom `qemu_vga.ndrv` video driver plus a patched std VGA device that let Mac OS 9 **follow the window when you resize it** - the same live resolution switching the Quadra has. A native SwiftUI configurator manages virtual machines (disks, RAM, resolution, shared folder) and launches QEMU, which renders the emulated Mac in its own fast native Cocoa window.
+<p align="center">
+  <img src="https://img.shields.io/badge/platform-macOS%20(Apple%20Silicon)-black" alt="Platform">
+  <img src="https://img.shields.io/badge/guests-System%207.1%20–%20Mac%20OS%209.2.2-blueviolet" alt="Guest OS range">
+  <img src="https://img.shields.io/badge/QEMU-11.0.2%20(custom)-orange" alt="QEMU">
+  <img src="https://img.shields.io/badge/UI-SwiftUI-blue" alt="SwiftUI">
+</p>
+
+---
+
+<p align="center">
+  <img src="docs/screenshots/configurator.png" width="720" alt="The ClassicMac configurator with a running Power Mac G4">
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/quadra800-macos81.png" width="410" alt="Mac OS 8.1 on the emulated Quadra 800">
+  <img src="docs/screenshots/powermacg4-macos92.png" width="410" alt="Mac OS 9.2 on the emulated Power Mac G4">
+</p>
+
+## What it is
+
+ClassicMac wraps a custom QEMU build in a native SwiftUI app and covers the entire classic Mac OS era with two machines:
+
+| Machine | CPU | Runs | Highlights |
+| --- | --- | --- | --- |
+| **Macintosh Quadra 800** | Motorola 68040 | System 7.1 – Mac OS 8.1 | Enhanced paravirtualized framebuffer (`nubus-qfb`), any resolution up to 3840x2160, all QuickDraw depths incl. Thousands |
+| **Power Mac G4** | PowerPC (`mac99`) | Mac OS 8.5 – 9.2.2 | Boots through OpenBIOS — **no Apple ROM needed**, screamer (AWACS) sound, live window resizing via a custom `qemu_vga.ndrv` |
+
+Everything is bundled into a single `ClassicMac.app`: the two QEMU system emulators, firmware, guest video drivers, folder-sharing drivers, and a guest-additions Tools CD. No Homebrew, no ROM files to track down for Mac OS 9, nothing to install inside the guest.
 
 ## Features
 
-- Emulates a Quadra 800 (Motorola 68040), the sweet spot for Mac OS 7.1 - 8.1.
-- Emulates a Power Mac G4 (`mac99` with PMU/USB input) for Mac OS 8.5 - 9.2.2: IDE storage, sungem user-mode networking, screamer (AWACS) sound, and a std VGA framebuffer at millions of colors driven by a custom `qemu_vga.ndrv`.
-- Enhanced framebuffer (`-M q800,fb=qemu`): arbitrary resolutions up to 3840x2160, all QuickDraw color depths including Thousands (16-bit), gamma correction, and multiple monitors.
-- Live resolution switching on **both machines**: the guest's **Monitors** control panel offers a list of standard resolutions you can switch between without rebooting, and the QEMU window follows. You can also just **drag the QEMU window** to any size and the guest switches to that exact pixel resolution when you release the mouse (the Display Manager does the switch). On the Quadra this needs Mac OS 7.6-8.1; on the Power Mac it works throughout Mac OS 9.
-- Self-contained **`.classic` machine files**: each VM is a single document (a package holding its config, disk, and PRAM) that you can keep anywhere - Documents, Desktop, an external drive - and open or boot by double-clicking in Finder.
-- Simple GUI for creating disk images, choosing RAM and resolution, attaching install CDs, and launching/stopping the machine.
-- VM control bar: Pause / Resume, Restart, and Power Off a running machine (via QEMU's monitor).
-- Custom resolutions, including a "Match Display" button that sizes the Mac to your screen.
-- Host folder sharing on both machines: a folder on your Mac appears as a disk on the emulated desktop (read/write), via the classicvirtio drivers and virtio-9p.
-- Fully bundled, self-contained `ClassicMac.app` for Apple Silicon (M1 or later) - no Homebrew or manual QEMU install required by the end user.
+- **Drag the window, the Mac follows.** On both machines you can drag the QEMU window to any size and the guest switches to that exact pixel resolution when you release the mouse — the Display Manager does a real live resolution switch, no reboot. The Monitors control panel also offers the standard resolution list.
+- **Enhanced video on the Quadra** (`-M q800,fb=qemu`): arbitrary resolutions up to 3840x2160, every QuickDraw depth including Thousands (16-bit), gamma correction, and multiple monitors — far beyond what stock QEMU's macfb can do.
+- **Mac OS 9 without a ROM.** The Power Mac boots through OpenBIOS; a custom `qemu_vga.ndrv` is handed to Mac OS over fw_cfg at boot, so live resizing and millions of colors work with nothing installed in the guest.
+- **Host folder sharing on both machines.** Pick a folder and it mounts on the emulated desktop as a read/write disk (classicvirtio + virtio-9p). Resource forks and type/creator codes round-trip via `.rdump`/`.idump` sidecars.
+- **Clean, working sound.** The Quadra's Apple Sound Chip is patched to feed silence when idle (no more idle buzz), and the Power Mac gets the screamer (AWACS) device with a screamer-aware OpenBIOS.
+- **Self-contained `.classic` machine documents.** Each VM is a single Finder package holding its config, disk, and PRAM. Keep it anywhere, double-click to boot, move it between Macs.
+- **Classic input helpers.** Right-click opens contextual menus as Control+click, and the scroll wheel becomes arrow-key taps — both per-VM toggles for guests with real drivers (e.g. USB Overdrive).
+- **A guest-additions Tools CD** (StuffIt Expander, Disk Copy, USB Overdrive, Transmit, Lido, patched HD SC Setup...) built from `guestcd/manifest.tsv`, insertable at runtime from the machine window's menu — everything pre-expanded and ready to run.
+- **Native machine control.** Pause / Resume, Restart, and Power Off from the app via QEMU's monitor socket, live screen previews in the library, and a "Match Display" button that sizes the Mac to your screen.
+- **Signed, notarized, stapled DMG** for distribution — recipients get a clean Gatekeeper experience even offline.
 
-## Virtual machine files (`.classic`)
+## Getting started
 
-Each machine is a self-contained **`.classic` package** - a folder that Finder
-treats as a single document - holding its `config.json`, hard-disk image, and
-PRAM. You can store these anywhere and move or copy them like any other file.
+1. Grab **ClassicMac.dmg** from the [latest release](../../releases/latest), drag ClassicMac to Applications, and launch it.
+2. Click **+** to create a machine — pick the Quadra 800 (System 7.1–8.1) or Power Mac G4 (Mac OS 8.5–9.2.2), choose disk size, RAM, and resolution.
+3. Attach a Mac OS install CD image (ISOs are not bundled; bring your own), boot from it, and install.
+4. Optional: pick a shared folder and it appears on the emulated desktop as a disk.
 
-- **New machines** are created wherever you choose (default
-  `~/Documents/ClassicMac/`).
-- **Double-click** a `.classic` file in Finder to open it in ClassicMac and boot
-  it; **File > Open** and **File > Open Recent** work too.
-- Removing a machine offers **Move to Trash** (deletes the file) or **Remove
-  from Library** (keeps the file on disk, just forgets it).
-- Machines created by earlier versions (stored under
-  `~/Library/Application Support/ClassicMac/VMs/`) are **migrated automatically**
-  to `.classic` files in `~/Documents/ClassicMac/` the first time you launch this
-  version.
+New machines are created as `.classic` documents (default `~/Documents/ClassicMac/`). Double-click one in Finder to boot it.
 
-## Shared folders
-
-Pick a folder when creating a machine (or in its settings) and it mounts on the
-Mac desktop as a disk. Notes:
-
-- On the Quadra 800 the share arrives through the classicvirtio NuBus
-  declaration ROM. New machines start from a pre-seeded PRAM; the virtio
-  declaration ROM hangs the boot on a blank PRAM, so sharing works reliably on
-  machines created with this version of ClassicMac.
-- On the Power Mac the share arrives through `virtio-9p-pci`; the classicvirtio
-  ndrvloader is placed in guest RAM at boot and installs the driver before Mac
-  OS starts. While the machine is set to boot from CD (e.g. during an OS
-  install), sharing is temporarily inactive.
-- Classic Mac resource forks and type/creator codes are stored beside each file as
-  `.rdump` / `.idump` sidecars, so data files transfer perfectly and Mac files
-  round-trip (leaving those sidecar files in the shared folder).
+Requirements: an Apple Silicon Mac (M1 or later) running a recent macOS.
 
 ## Display & sound notes
 
-- Color depth: the resolution and depth you choose are passed to the enhanced
-  framebuffer as the *deepest available* mode. Classic Mac OS still decides the
-  active depth at startup and, with a fresh system, comes up in black & white
-  until you choose Thousands/Millions once in **Monitors & Sound** (or the
-  Control Strip). That choice is then remembered per machine.
-- Resolution: the value you pick is the *boot* resolution. Once booted, the
-  enhanced framebuffer driver advertises a list of standard resolutions, so you
-  can switch resolution live from **Monitors & Sound** and the window resizes to
-  match. The QEMU window is also freely resizable: drag it to any size and, when
-  you release the mouse, the guest driver switches to that exact pixel
-  resolution (the framebuffer scales to fill the window while you drag). Live
-  switching relies on the Display Manager, so it needs Mac OS ~7.6 or newer;
-  older systems (and A/UX) still boot fine at the configured resolution and just
-  scale to the window.
-- Sound is **on by default** and clean. QEMU's Apple Sound Chip emulation is
-  patched (`qfb/asc-silence.patch`) to feed the audio backend silence whenever
-  the Mac isn't playing anything, so the old constant idle hum/buzz is gone. You
-  can still turn "Sound" off per machine to route audio to a silent backend.
+- The resolution you pick is the *boot* resolution and the depth is the *deepest available* mode; classic Mac OS chooses the active depth at startup (a fresh system comes up in B&W until you pick Thousands/Millions once in Monitors — it's remembered per machine).
+- Live resolution switching relies on the Display Manager, so it needs Mac OS ~7.6+ on the Quadra; on the Power Mac it works throughout Mac OS 9. Older systems still boot fine at the configured resolution and scale to the window. Power Mac widths snap down to a multiple of 8 (a VGA hardware constraint).
+- The Power Mac's packed low-bpp patch adds Black & White, 4 and 16 colors to the Monitors panel alongside 256/thousands/millions.
+- Mac OS 9 wants **less than 1 GB of RAM** for stable sound, so the app's presets stop at 896 MB.
+- On the Quadra, folder sharing arrives through the classicvirtio NuBus declaration ROM (new machines start from a pre-seeded PRAM so it boots reliably). On the Power Mac it arrives through `virtio-9p-pci` and the classicvirtio ndrvloader placed in guest RAM at boot; while booting from CD (e.g. an OS install) sharing is temporarily inactive.
 
-### Power Mac G4 (Mac OS 9) notes
+## Building from source
 
-- The Power Mac boots through **OpenBIOS** (bundled with QEMU); the display
-  resolution you pick (any custom size, or "Match Display") is set at startup
-  and the framebuffer runs at millions of colors.
-- **Live window resizing works here too**: drag the QEMU window to any size
-  and Mac OS switches to that resolution when you release the mouse. Under the
-  hood the std VGA device is patched with a host-resize request channel
-  (`ppcvid/vga-host-resize.patch`) and the bundled `qemu_vga.ndrv` (built from
-  `ppcvid/driver`, a fork of the QemuMacDrivers VGA driver) polls it from its
-  VBL task, retargets a dynamic display mode, and fires a VSL connect-change
-  interrupt so the Display Manager re-probes the display and adopts the new
-  size - no software install inside the guest is needed. Lower
-  resolutions/depths can still be chosen inside Mac OS via the Monitors
-  control panel, and the window follows. Widths snap down to a multiple of 8
-  (a VGA hardware constraint).
-- Host folder sharing works on both machines.
-- **Sound works** via the **screamer (AWACS)** device, ported from Mark
-  Cave-Ayland's out-of-tree QEMU branch (`screamer/` in this repo) together
-  with a screamer-aware OpenBIOS build. Mac OS 9 needs **less than 1 GB of
-  RAM** for stable sound, so the app's presets stop at 896 MB.
-- Storage is IDE and networking is the onboard `sungem` NIC, both supported out
-  of the box by Mac OS 9.
+```bash
+# 1. Build the emulator (clones mainline QEMU 11.0.2, applies the ClassicMac
+#    patch set, compiles qemu-system-m68k + qemu-system-ppc)
+./scripts/build-qemu.sh
 
-## Requirements
+# 2. Build the SwiftUI app and bundle QEMU + firmware + dylibs into
+#    dist/ClassicMac.app (code-signed)
+./scripts/bundle-qemu.sh
 
-- Apple Silicon Mac (M1 or later) running a recent macOS.
-- For **building** from source: Xcode command line tools and [Homebrew](https://brew.sh).
+# 3. Optional: build the guest-additions Tools CD (cached downloads)
+./scripts/build-guest-cd.sh
+
+# 4. Optional: notarize and package a distributable disk image
+./scripts/make-dmg.sh
+```
+
+All scripts are idempotent and safe to re-run. Building needs the Xcode command line tools and [Homebrew](https://brew.sh).
+
+The guest-side binaries are committed, so a normal build needs no cross toolchain. If you change them, rebuild with:
+
+```bash
+# 68k declaration ROM + qfb driver (builds Retro68 into vendor/ on first run)
+./scripts/build-qfb-rom.sh          # -> qfb/mac_qfb.rom
+
+# PPC video driver (adds Retro68 PPC compilers + Universal Interfaces)
+./scripts/build-ppcvid-ndrv.sh      # -> ppcvid/qemu_vga.ndrv
+```
 
 ## Repository layout
 
 ```
 ClassicMac/
-  Resources/Quadra800.rom   # bundled Quadra 800 ROM (checksum F1ACAD13)
-  qfb/                      # nubus-qfb device sources + integration/cocoa patches + firmware
-    driver/                 # 68k declaration ROM + driver source (built with Retro68)
-  ppcvid/                   # PPC live-resize: std VGA host-resize patch + qemu_vga.ndrv
-    driver/                 # PPC video ndrv source (QemuMacDrivers fork, built with Retro68)
-  screamer/                 # screamer (AWACS) PPC audio device + integration patch + OpenBIOS
-  shared/                   # classicvirtio declrom + ndrvloader + PRAM seed for folder sharing
-  scripts/
-    build-qfb-rom.sh        # build the qfb declaration ROM/driver -> qfb/mac_qfb.rom
-    build-ppcvid-ndrv.sh    # build the PPC video driver -> ppcvid/qemu_vga.ndrv
-    build-qemu.sh           # clone mainline QEMU 11.0.2 + apply the qfb port, then build m68k + ppc
-    bundle-qemu.sh          # collect dylibs + firmware and code-sign into the .app
   app/                      # SwiftUI configurator / launcher (SwiftPM package)
+  Resources/                # app icon, machine icon, Quadra 800 ROM (checksum F1ACAD13)
+  qfb/                      # nubus-qfb enhanced framebuffer device + 68k driver ROM
+    driver/                 #   68k declaration ROM + driver source (Retro68)
+  ppcvid/                   # PPC live-resize: VGA host-resize + packed-depth patches
+    driver/                 #   qemu_vga.ndrv source (QemuMacDrivers fork, Retro68)
+  screamer/                 # screamer (AWACS) PPC audio device + OpenBIOS
+  shared/                   # classicvirtio declrom + ndrvloader + PRAM seed (folder sharing)
+  cocoaui/                  # Cocoa display patches: menus, input helpers, media names
+  audio/                    # CoreAudio backend patch
+  guestcd/                  # Tools CD manifest + HFS copy tooling
+  scripts/                  # build-qemu, bundle-qemu, build-guest-cd, make-dmg, notarize...
 ```
 
-> The Quadra 800 ROM is committed so the app is turnkey, and the Power Mac needs no Apple ROM at all (it boots OpenBIOS). Mac OS install ISOs are **not** committed; import your own copy through the app on first run.
+> The Quadra 800 ROM is committed so the app is turnkey, and the Power Mac needs no Apple ROM at all. Mac OS install ISOs are **not** committed; import your own through the app.
 
-## Building
+## How the interesting parts work
 
-```bash
-# 1. Build the emulator (clones mainline QEMU, applies the qfb port, compiles)
-./scripts/build-qemu.sh
-
-# 2. Build the SwiftUI app and bundle QEMU + dependencies into ClassicMac.app
-./scripts/bundle-qemu.sh
-```
-
-Both scripts are idempotent and can be re-run safely.
-
-The enhanced framebuffer firmware (`qfb/mac_qfb.rom`) is committed, so a normal
-build does not need the 68k cross toolchain. If you change the driver sources in
-`qfb/driver/`, rebuild the ROM with:
-
-```bash
-# Builds the Retro68 m68k-apple-macos toolchain on first run (slow, into
-# vendor/), then compiles qfb/driver into qfb/mac_qfb.rom.
-./scripts/build-qfb-rom.sh
-
-# Or fold it into the QEMU build:
-QFB_BUILD_ROM=1 ./scripts/build-qemu.sh
-```
-
-Likewise the Power Mac video driver (`ppcvid/qemu_vga.ndrv`) is committed. If
-you change the driver sources in `ppcvid/driver/`, rebuild it with:
-
-```bash
-# Adds the Retro68 powerpc-apple-macos compilers to the toolchain on first run
-# and installs Apple's Universal Interfaces (downloads the MPW-GM image), then
-# compiles ppcvid/driver into ppcvid/qemu_vga.ndrv.
-./scripts/build-ppcvid-ndrv.sh
-
-# Or fold it into the QEMU build:
-PPCVID_BUILD_NDRV=1 ./scripts/build-qemu.sh
-```
-
-## Emulation notes
-
-- m68k and PowerPC emulation in QEMU use the TCG just-in-time translator. There is
-  no hardware virtualization path for either, so performance is governed by the host
-  CPU; an Apple Silicon Mac runs both machines comfortably faster than the original
-  hardware.
-- The enhanced framebuffer firmware (`mac_qfb.rom`) is part of the QEMU fork and is
-  bundled automatically; no separate driver installation is required inside the guest.
-- The same is true of the Power Mac video driver (`qemu_vga.ndrv`): OpenBIOS hands it
-  to Mac OS at boot over fw_cfg, so live window resizing needs nothing installed in
-  the guest either.
+- **Quadra video** — `nubus-qfb`, a paravirtualized NuBus framebuffer (ported from [SolraBizna/qemu](https://github.com/SolraBizna/qemu) onto QEMU 11.0.2) with a 68k declaration ROM/driver built with Retro68. The Cocoa window scales the framebuffer while you drag and asks the guest driver for the exact size on mouse-up.
+- **Power Mac video** — QEMU's std VGA gains a host-resize request channel (`ppcvid/vga-host-resize.patch`). The bundled `qemu_vga.ndrv` polls it from its VBL task, retargets a dynamic display mode, and fires a VSL connect-change interrupt so the Display Manager re-probes and adopts the new size.
+- **Restart on the Power Mac** — an in-place reset hangs QEMU's `mac99`, so the app runs it with `-action reboot=shutdown`, watches the QMP shutdown reason, and relaunches on a reset — Restart behaves like a real reboot.
+- **Sound** — the ASC is patched to output silence when idle (`qfb/asc-silence.patch`); the Power Mac uses Mark Cave-Ayland's screamer device with a screamer-aware OpenBIOS build.
+- **Emulation speed** — both machines run on QEMU's TCG JIT; an Apple Silicon Mac runs them comfortably faster than the original hardware.
 
 ## Credits
 
@@ -182,3 +136,4 @@ PPCVID_BUILD_NDRV=1 ./scripts/build-qemu.sh
 - [elliotnunn/classicvirtio](https://github.com/elliotnunn/classicvirtio) for the classic Mac OS virtio drivers used for folder sharing (68k declaration ROM and PowerPC ndrvloader), and for the Retro68 ndrv link recipe used to build the Power Mac video driver.
 - [QemuMacDrivers](https://github.com/qemu/QemuMacDrivers) (Benjamin Herrenschmidt, Mark Cave-Ayland) for the `qemu_vga.ndrv` Power Mac video driver that `ppcvid/driver` extends with live host-window resizing.
 - [mcayland/qemu](https://github.com/mcayland/qemu/tree/screamer) for the screamer (AWACS) PPC audio device and screamer-aware OpenBIOS (ported here onto QEMU 11.0.2).
+- [Retro68](https://github.com/autc04/Retro68) for the 68k and PPC classic Mac OS cross toolchain.

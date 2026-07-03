@@ -97,6 +97,20 @@ ClassicMac Tools CD
 Essentials that make an emulated classic Mac much nicer to use.
 Everything on this CD is ready to run - no unstuffing needed.
 
+Apple HD SC Setup (patched)  (68k, System 7.0 - 7.6)
+   Apple's drive formatter with the Apple-drives-only check
+   removed, so it initializes the emulated hard disks that the
+   stock copy on Mac OS install media (e.g. 7.5.3) refuses to
+   see. Use it to initialize a brand-new disk before installing:
+   run it, pick the drive with the arrows, click Initialize.
+   Predates HFS+; format drives with Drive Setup on Mac OS 8.1+
+   if you want Extended format.
+
+Lido 7.56  (68k + PPC, System 6 - Mac OS 9)
+   Third-party disk formatter that accepts any drive on any
+   machine - the most reliable fallback when a drive will not
+   initialize. Open the "Lido 7.56" folder and run "Lido 7.56".
+
 StuffIt Expander 5.5.sea  (68k + PPC, System 7.1.1 or later)
    The must-have archive expander for .sit downloads.
    Double-click the .sea; it unpacks the installer. Run it.
@@ -129,10 +143,10 @@ USB Overdrive 1.4  (Power Mac only, Mac OS 8.5 - 9.2)
    is unregistered shareware, so it shows a reminder dialog now
    and then.
 
-   IMPORTANT: after installing USB Overdrive, open this
-   machine's settings in ClassicMac on your host Mac and turn
-   OFF "Right-click & scroll wheel helpers", so clicks and
-   scrolling are not doubled up.
+   IMPORTANT: after installing USB Overdrive, turn OFF
+   "Right-Click & Scroll Wheel Helpers" in the machine
+   window's View menu (or in the machine's settings in
+   ClassicMac), so clicks and scrolling are not doubled up.
 
 On a Quadra (System 7 through Mac OS 8.1), skip USB Overdrive -
 it needs a Power Mac running Mac OS 8.5 or later.

@@ -1,0 +1,57 @@
+diff --git a/ui/cocoa.m b/ui/cocoa.m
+index ff5b7af..14efcbd 100644
+--- a/ui/cocoa.m
++++ b/ui/cocoa.m
+@@ -1424,6 +1424,7 @@ @interface QemuCocoaAppController : NSObject
+ - (void)doToggleFullScreen:(id)sender;
+ - (void)showQEMUDoc:(id)sender;
+ - (void)zoomToFit:(id) sender;
++- (void)toggleInputHelpers:(id)sender;
+ - (void)displayConsole:(id)sender;
+ - (void)pauseQEMU:(id)sender;
+ - (void)resumeQEMU:(id)sender;
+@@ -1688,6 +1689,25 @@ - (void)toggleZoomInterpolation:(id) sender
+     }
+ }
+ 
++/*
++ * ClassicMac: live toggle for the classic input helpers (right-click as
++ * Control+click, scroll wheel as arrow keys). Mirrors the "Right-click &
++ * scroll wheel helpers" per-VM setting in the host app, which decides the
++ * state the machine starts with; this menu item changes the running
++ * session only, e.g. right after installing USB Overdrive in the guest.
++ */
++- (void)toggleInputHelpers:(id)sender
++{
++    bool enabled = !(right_click_ctrl || scroll_keys);
++    right_click_ctrl = enabled;
++    scroll_keys = enabled;
++    if (enabled) {
++        [sender setState: NSControlStateValueOn];
++    } else {
++        [sender setState: NSControlStateValueOff];
++    }
++}
++
+ /* Displays the console on the screen */
+ - (void)displayConsole:(id)sender
+ {
+@@ -1993,6 +2013,18 @@ static void create_initial_menus(void)
+     menuItem = [[[NSMenuItem alloc] initWithTitle:@"Zoom Interpolation" action:@selector(toggleZoomInterpolation:) keyEquivalent:@""] autorelease];
+     [menuItem setState: zoom_interpolation == kCGInterpolationLow ? NSControlStateValueOn : NSControlStateValueOff];
+     [menu addItem: menuItem];
++    /*
++     * ClassicMac: live toggle of the classic input helpers, mirroring the
++     * "Right-click & scroll wheel helpers" per-VM setting in the host app.
++     */
++    [menu addItem: [NSMenuItem separatorItem]];
++    menuItem = [[[NSMenuItem alloc] initWithTitle:@"Right-Click & Scroll Wheel Helpers" action:@selector(toggleInputHelpers:) keyEquivalent:@""] autorelease];
++    if (right_click_ctrl || scroll_keys) {
++        [menuItem setState: NSControlStateValueOn];
++    } else {
++        [menuItem setState: NSControlStateValueOff];
++    }
++    [menu addItem: menuItem];
+     menuItem = [[[NSMenuItem alloc] initWithTitle:@"View" action:nil keyEquivalent:@""] autorelease];
+     [menuItem setSubmenu:menu];
+     [[NSApp mainMenu] addItem:menuItem];

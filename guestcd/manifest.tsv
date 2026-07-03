@@ -3,6 +3,8 @@
 # macbinary: decode the download as MacBinary straight onto the CD
 # expand:    unpack the archive on the host (unar) and copy the ready-to-run
 #            files onto the CD with forks/type/creator intact
+Apple HD SC Setup (patched)	expand	42b04fb862764d25d232fb75bfea6e03	https://old.mac.gdn/apps/apple_hd_sc_setup.p.sit
+Lido 7.56	expand	9785e23b1b8d788fcf36725f00413740	https://old.mac.gdn/apps/lido7.56.sit
 StuffIt Expander 5.5.sea	macbinary	ec9caa38f84e5004af7d9f391de348ff	https://old.mac.gdn/apps/stuffit_expander_55.bin
 DropStuff 5.5 Installer	expand	f2ec7d51542b5891473be841b552e9fb	https://old.mac.gdn/apps/dropstuff-55-installer.sit
 USB Overdrive 1.4	expand	14f279de3c9b4d8b77da2b937e6ecfcc	https://old.mac.gdn/apps/USB_Overdrive_1.4.sit

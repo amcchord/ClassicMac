@@ -150,6 +150,12 @@ git -C "$QEMU_DIR" apply "$ROOT_DIR/cocoaui/input-remap.patch" || die "Failed to
 # the dedicated tools0 drive while the Mac is running (shown when the app
 # publishes the image path via CLASSICMAC_TOOLS_CD).
 git -C "$QEMU_DIR" apply "$ROOT_DIR/cocoaui/tools-cd-menu.patch" || die "Failed to apply ClassicMac tools CD menu patch"
+# Mac-friendly names for the Removable Media menu items ("Change CD-ROM
+# Image..." instead of "Change cd0...").
+git -C "$QEMU_DIR" apply "$ROOT_DIR/cocoaui/removable-media-names.patch" || die "Failed to apply ClassicMac removable media names patch"
+# View menu checkbox to toggle the classic input helpers (right-click as
+# Control+click, scroll wheel as arrow keys) while the machine runs.
+git -C "$QEMU_DIR" apply "$ROOT_DIR/cocoaui/input-helpers-menu.patch" || die "Failed to apply ClassicMac input helpers menu patch"
 # Apple Sound Chip: always feed the audio backend silence when idle so a live
 # backend (CoreAudio) never replays stale ring-buffer content as a hum/buzz.
 git -C "$QEMU_DIR" apply "$QFB_DIR/asc-silence.patch" || die "Failed to apply asc silence patch"
