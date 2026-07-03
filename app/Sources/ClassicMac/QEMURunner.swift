@@ -96,6 +96,14 @@ final class QEMUManager: ObservableObject {
         process.arguments = QEMUManager.buildArguments(for: config)
         process.currentDirectoryURL = config.folder
 
+        // Tell the QEMU window where the bundled Tools CD lives so its
+        // Machine menu can offer "Insert Tools CD" while the Mac runs.
+        var environment = ProcessInfo.processInfo.environment
+        if let toolsCD = AppPaths.toolsCD {
+            environment["CLASSICMAC_TOOLS_CD"] = toolsCD.path
+        }
+        process.environment = environment
+
         let stderrPipe = Pipe()
         process.standardError = stderrPipe
         let capturedError = DataBox()
@@ -346,6 +354,27 @@ final class QEMUManager: ObservableObject {
         }
     }
 
+    // Extra cocoa display options for the classic input helpers (right-click
+    // as Control+click, scroll wheel as arrow keys). Empty when the helpers
+    // are turned off for this VM.
+    private static func inputHelperOptions(for config: VMConfig) -> String {
+        if config.classicInputHelpers {
+            return ",right-click-ctrl=on,scroll-keys=on"
+        }
+        return ""
+    }
+
+    // The dedicated Tools CD drive (id=tools0). Starts loaded with the
+    // bundled ClassicMac Tools image when the VM's settings ask for it,
+    // otherwise as an empty tray the Machine menu can fill at runtime.
+    private static func toolsDriveSpec(for config: VMConfig, iface: String) -> String {
+        var spec = "if=\(iface),media=cdrom,id=tools0"
+        if config.toolsCDInserted, let toolsCD = AppPaths.toolsCD {
+            spec += ",file=\(toolsCD.path),format=raw"
+        }
+        return spec
+    }
+
     // qemu-system-ppc -M mac99: a New World Power Mac that boots Mac OS 8.5
     // through 9.2.2 (and early OS X) via the bundled OpenBIOS firmware, so no
     // Apple ROM is involved. Storage is IDE, networking is the sungem NIC, and
@@ -369,8 +398,10 @@ final class QEMUManager: ObservableObject {
         // right-click-ctrl: deliver right clicks as Control+click so Mac OS
         // 8/9 contextual menus open. scroll-keys: turn scroll wheel motion
         // into arrow-key taps (classic Mac OS has no wheel driver). Both are
-        // ClassicMac additions to the cocoa display (cocoaui/input-remap.patch).
-        args += ["-display", "cocoa,swap-opt-cmd=off,right-click-ctrl=on,scroll-keys=on"]
+        // ClassicMac additions to the cocoa display (cocoaui/input-remap.patch),
+        // and both are per-VM: off when the guest has a real driver such as
+        // USB Overdrive installed.
+        args += ["-display", "cocoa,swap-opt-cmd=off\(inputHelperOptions(for: config))"]
         // Live window resizing: expose the host-resize request registers on
         // the std VGA device (see ppcvid/vga-host-resize.patch). The bundled
         // qemu_vga.ndrv polls them and switches the guest resolution through
@@ -430,6 +461,14 @@ final class QEMUManager: ObservableObject {
             }
         }
 
+        // Dedicated second CD drive for the ClassicMac Tools CD. Always
+        // present so the QEMU window's Machine menu can insert/eject the
+        // Tools CD while the Mac is running; loaded at boot when the VM's
+        // settings say so. It comes after the user's disc on the IDE chain,
+        // so "-boot d" still starts up from the user's (bootable) CD even
+        // with both inserted.
+        args += ["-drive", toolsDriveSpec(for: config, iface: "ide")]
+
         // User-mode networking through the mac99 onboard sungem ethernet.
         if config.networking {
             args += ["-nic", "user,model=sungem"]
@@ -481,7 +520,7 @@ final class QEMUManager: ObservableObject {
         // only passes through once the window has grabbed the mouse (click in it).
         // right-click-ctrl/scroll-keys: same classic-input remapping as the
         // Power Mac (contextual menus via Control+click, wheel as arrow keys).
-        args += ["-display", "cocoa,swap-opt-cmd=off,right-click-ctrl=on,scroll-keys=on"]
+        args += ["-display", "cocoa,swap-opt-cmd=off\(inputHelperOptions(for: config))"]
         // -g only applies to machine-created framebuffers; when the qfb is added as
         // a device its size is set via device options instead.
         if !qfbAsDevice {
@@ -519,6 +558,11 @@ final class QEMUManager: ObservableObject {
                 args += ["-boot", "d"]
             }
         }
+
+        // Dedicated second CD drive (SCSI ID 4) for the ClassicMac Tools CD;
+        // see the Power Mac builder for the rationale.
+        args += ["-device", "scsi-cd,scsi-id=4,drive=tools0"]
+        args += ["-drive", toolsDriveSpec(for: config, iface: "none")]
 
         // User-mode networking through the Quadra's built-in SONIC ethernet.
         // The q800 machine creates the onboard dp8393x and binds it to nd_table[0],

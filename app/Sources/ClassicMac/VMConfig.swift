@@ -115,9 +115,20 @@ struct VMConfig: Codable, Identifiable, Hashable {
     var cdImagePath: String?
     var bootFromCD: Bool
 
+    // Start up with the bundled ClassicMac Tools CD in the dedicated second
+    // CD drive. Independent of cdImagePath, so a bootable install disc and
+    // the Tools CD can be mounted at the same time.
+    var toolsCDInserted: Bool
+
     // Misc
     var networking: Bool
     var sound: Bool
+
+    // Host-side input remapping for classic guests: right-click delivered as
+    // Control+click (contextual menus) and scroll wheel as arrow keys. On by
+    // default; turned off per-VM when a real driver like USB Overdrive is
+    // installed in the guest, which would otherwise double up input.
+    var classicInputHelpers: Bool
 
     // Host folder shared with the guest (appears on the Mac desktop). Optional.
     var sharedFolderPath: String?
@@ -132,6 +143,7 @@ struct VMConfig: Codable, Identifiable, Hashable {
         case id, name, machineFamily, ramMB, diskImageName, pramImageName, diskSizeGB
         case width, height, depth, useEnhancedFramebuffer, customResolution
         case cdImagePath, bootFromCD, networking, sound, sharedFolderPath
+        case classicInputHelpers, toolsCDInserted
     }
 
     init(id: UUID = UUID(),
@@ -146,8 +158,10 @@ struct VMConfig: Codable, Identifiable, Hashable {
          customResolution: Bool = false,
          cdImagePath: String? = nil,
          bootFromCD: Bool = true,
+         toolsCDInserted: Bool = false,
          networking: Bool = true,
          sound: Bool = true,
+         classicInputHelpers: Bool = true,
          sharedFolderPath: String? = nil,
          bundleURL: URL? = nil) {
         self.id = id
@@ -164,8 +178,10 @@ struct VMConfig: Codable, Identifiable, Hashable {
         self.customResolution = customResolution
         self.cdImagePath = cdImagePath
         self.bootFromCD = bootFromCD
+        self.toolsCDInserted = toolsCDInserted
         self.networking = networking
         self.sound = sound
+        self.classicInputHelpers = classicInputHelpers
         self.sharedFolderPath = sharedFolderPath
         self.bundleURL = bundleURL
     }
@@ -195,8 +211,10 @@ struct VMConfig: Codable, Identifiable, Hashable {
         customResolution = try c.decodeIfPresent(Bool.self, forKey: .customResolution) ?? false
         cdImagePath = try c.decodeIfPresent(String.self, forKey: .cdImagePath)
         bootFromCD = try c.decodeIfPresent(Bool.self, forKey: .bootFromCD) ?? false
+        toolsCDInserted = try c.decodeIfPresent(Bool.self, forKey: .toolsCDInserted) ?? false
         networking = try c.decodeIfPresent(Bool.self, forKey: .networking) ?? true
         sound = try c.decodeIfPresent(Bool.self, forKey: .sound) ?? true
+        classicInputHelpers = try c.decodeIfPresent(Bool.self, forKey: .classicInputHelpers) ?? true
         sharedFolderPath = try c.decodeIfPresent(String.self, forKey: .sharedFolderPath)
         sanitize()
     }

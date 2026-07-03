@@ -146,6 +146,10 @@ git -C "$QEMU_DIR" apply "$ROOT_DIR/cocoaui/classicmac-ui.patch" || die "Failed 
 # and scroll-keys turns wheel motion into arrow-key taps, since classic Mac
 # OS mouse drivers ignore extra buttons and the wheel.
 git -C "$QEMU_DIR" apply "$ROOT_DIR/cocoaui/input-remap.patch" || die "Failed to apply ClassicMac input remap patch"
+# Machine menu items to insert/eject the bundled ClassicMac Tools CD into
+# the dedicated tools0 drive while the Mac is running (shown when the app
+# publishes the image path via CLASSICMAC_TOOLS_CD).
+git -C "$QEMU_DIR" apply "$ROOT_DIR/cocoaui/tools-cd-menu.patch" || die "Failed to apply ClassicMac tools CD menu patch"
 # Apple Sound Chip: always feed the audio backend silence when idle so a live
 # backend (CoreAudio) never replays stale ring-buffer content as a hum/buzz.
 git -C "$QEMU_DIR" apply "$QFB_DIR/asc-silence.patch" || die "Failed to apply asc silence patch"

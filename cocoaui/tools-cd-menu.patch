@@ -1,0 +1,99 @@
+diff --git a/ui/cocoa.m b/ui/cocoa.m
+index 3aa354c..68d618c 100644
+--- a/ui/cocoa.m
++++ b/ui/cocoa.m
+@@ -103,6 +103,11 @@ static void cocoa_switch(DisplayChangeListener *dcl,
+ static bool right_click_ctrl;
+ static bool scroll_keys;
+ 
++/* ClassicMac Tools CD: the drive id the host app always attaches for it and
++ * the environment variable through which the app publishes the image path. */
++#define CLASSICMAC_TOOLS_DRIVE  "tools0"
++#define CLASSICMAC_TOOLS_CD_ENV "CLASSICMAC_TOOLS_CD"
++
+ static CGInterpolationQuality zoom_interpolation = kCGInterpolationNone;
+ static NSTextField *pauseLabel;
+ 
+@@ -1428,6 +1433,8 @@ - (void)restartQEMU:(id)sender;
+ - (void)powerDownQEMU:(id)sender;
+ - (void)ejectDeviceMedia:(id)sender;
+ - (void)changeDeviceMedia:(id)sender;
++- (void)insertToolsCD:(id)sender;
++- (void)ejectToolsCD:(id)sender;
+ - (BOOL)verifyQuit;
+ - (void)openDocumentation:(NSString *)filename;
+ - (IBAction) do_about_menu_item: (id) sender;
+@@ -1810,6 +1817,41 @@ - (void)changeDeviceMedia:(id)sender
+     }
+ }
+ 
++/*
++ * ClassicMac: one-click insert/eject of the bundled Tools CD (guest
++ * additions: StuffIt Expander, Disk Copy, USB Overdrive, ...) into the
++ * dedicated "tools0" drive the host app always attaches. The app points at
++ * the image through the CLASSICMAC_TOOLS_CD environment variable.
++ */
++- (void)insertToolsCD:(id)sender
++{
++    const char *path = getenv(CLASSICMAC_TOOLS_CD_ENV);
++
++    if (path == NULL) {
++        NSBeep();
++        QEMU_Alert(@"The Tools CD image is missing from this copy of ClassicMac.");
++        return;
++    }
++
++    __block Error *err = NULL;
++    with_bql(^{
++        qmp_blockdev_change_medium(CLASSICMAC_TOOLS_DRIVE, NULL, path, "raw",
++                                   true, false,
++                                   false, 0,
++                                   &err);
++    });
++    handleAnyDeviceErrors(err);
++}
++
++- (void)ejectToolsCD:(id)sender
++{
++    __block Error *err = NULL;
++    with_bql(^{
++        qmp_eject(CLASSICMAC_TOOLS_DRIVE, NULL, false, false, &err);
++    });
++    handleAnyDeviceErrors(err);
++}
++
+ /* Verifies if the user really wants to quit */
+ - (BOOL)verifyQuit
+ {
+@@ -1929,6 +1971,15 @@ static void create_initial_menus(void)
+     [menu addItem: [NSMenuItem separatorItem]];
+     [menu addItem: [[[NSMenuItem alloc] initWithTitle: @"Restart" action: @selector(restartQEMU:) keyEquivalent: @""] autorelease]];
+     [menu addItem: [[[NSMenuItem alloc] initWithTitle: @"Shut Down" action: @selector(powerDownQEMU:) keyEquivalent: @""] autorelease]];
++    /*
++     * ClassicMac: quick insert/eject of the bundled Tools CD, shown when the
++     * host app told us where the image lives.
++     */
++    if (getenv(CLASSICMAC_TOOLS_CD_ENV) != NULL) {
++        [menu addItem: [NSMenuItem separatorItem]];
++        [menu addItem: [[[NSMenuItem alloc] initWithTitle: @"Insert Tools CD" action: @selector(insertToolsCD:) keyEquivalent: @""] autorelease]];
++        [menu addItem: [[[NSMenuItem alloc] initWithTitle: @"Eject Tools CD" action: @selector(ejectToolsCD:) keyEquivalent: @""] autorelease]];
++    }
+     menuItem = [[[NSMenuItem alloc] initWithTitle: @"Machine" action:nil keyEquivalent:@""] autorelease];
+     [menuItem setSubmenu:menu];
+     [[NSApp mainMenu] addItem:menuItem];
+@@ -2032,6 +2083,15 @@ static void addRemovableDevicesMenuItems(void)
+ 
+     /* Loop through all the block devices in the emulator */
+     while (currentDevice) {
++        /* ClassicMac: the Tools CD drive has its own friendly Insert/Eject
++         * items in this menu; skip its raw Change/Eject entries. */
++        if (getenv(CLASSICMAC_TOOLS_CD_ENV) != NULL &&
++            currentDevice->value->device != NULL &&
++            strcmp(currentDevice->value->device, CLASSICMAC_TOOLS_DRIVE) == 0) {
++            currentDevice = currentDevice->next;
++            continue;
++        }
++
+         deviceName = [[NSString stringWithFormat: @"%s", currentDevice->value->device] retain];
+ 
+         if(currentDevice->value->removable) {

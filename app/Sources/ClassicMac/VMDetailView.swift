@@ -343,6 +343,16 @@ struct VMDetailView: View {
                 }
             }
             .disabled(running)
+
+            Toggle(isOn: vm.classicInputHelpers) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Right-click & scroll wheel helpers")
+                    Text("Right-click opens contextual menus (Control+click) and the scroll wheel scrolls via arrow keys. Turn off if USB Overdrive is installed in this Mac.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .disabled(running)
         } header: {
             Label("Hardware", systemImage: "memorychip")
         }
@@ -366,7 +376,7 @@ struct VMDetailView: View {
         Section {
             if let cd = vm.wrappedValue.cdImagePath, !cd.isEmpty {
                 LabeledContent("Disc") {
-                    Text(URL(fileURLWithPath: cd).lastPathComponent)
+                    Text(discDisplayName(cd))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                         .truncationMode(.middle)
@@ -388,9 +398,30 @@ struct VMDetailView: View {
                 }
                 .disabled(running)
             }
+
+            if AppPaths.toolsCD != nil {
+                Toggle(isOn: vm.toolsCDInserted) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Tools CD")
+                        Text("Guest essentials in a second CD drive: StuffIt Expander, Disk Copy, a CD image mounter, and (Power Mac) the USB Overdrive scroll wheel driver. Can be inserted alongside a bootable disc, or from the Machine menu while the Mac is running.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .disabled(running)
+            }
         } header: {
             Label("CD-ROM", systemImage: "opticaldiscdrive")
         }
+    }
+
+    // Show the bundled Tools CD under a friendly name instead of a raw
+    // file name.
+    private func discDisplayName(_ path: String) -> String {
+        if let toolsCD = AppPaths.toolsCD, toolsCD.path == path {
+            return "ClassicMac Tools CD"
+        }
+        return URL(fileURLWithPath: path).lastPathComponent
     }
 
     // MARK: Shared folder

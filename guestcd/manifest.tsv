@@ -1,0 +1,7 @@
+# ClassicMac Tools CD manifest (tab-separated)
+# columns: dest name on CD <TAB> handling (macbinary|sit) <TAB> md5 <TAB> url
+StuffIt Expander 5.5.sea	macbinary	ec9caa38f84e5004af7d9f391de348ff	https://old.mac.gdn/apps/stuffit_expander_55.bin
+DropStuff 5.5 Installer.sit	sit	f2ec7d51542b5891473be841b552e9fb	https://old.mac.gdn/apps/dropstuff-55-installer.sit
+USB Overdrive 1.4.sit	sit	14f279de3c9b4d8b77da2b937e6ecfcc	https://old.mac.gdn/apps/USB_Overdrive_1.4.sit
+Disk Copy 6.3.3.sit	sit	0d0918ecf08cdd2dbfd943c486283023	https://old.mac.gdn/apps/Disk-Copy-633-smi.sit
+Virtual CD-DVD Utility.sit	sit	a84a05d7f4329a25fab61a30afce10e4	https://old.mac.gdn/apps/virtual-cd-dvd-ute-10d3.sit

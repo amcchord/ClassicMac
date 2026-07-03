@@ -99,6 +99,16 @@ cp "$DECLROM_SRC" "$RES_DIR/declrom"
 cp "$NDRVLOADER_SRC" "$RES_DIR/ndrvloader"
 cp "$PRAMSEED_SRC" "$RES_DIR/pram-seed.img"
 
+# Guest additions CD (StuffIt Expander, USB Overdrive, Disk Copy, ...).
+# Built by scripts/build-guest-cd.sh; optional so a plain QEMU rebuild
+# doesn't require network access.
+TOOLS_CD_SRC="$ROOT_DIR/dist/ClassicMacTools.iso"
+if [ -f "$TOOLS_CD_SRC" ]; then
+  cp "$TOOLS_CD_SRC" "$RES_DIR/ClassicMacTools.iso"
+else
+  log "WARNING: dist/ClassicMacTools.iso not found; app will lack the Tools CD (run scripts/build-guest-cd.sh)"
+fi
+
 # ---------------------------------------------------------------------------
 # 3. Info.plist
 # ---------------------------------------------------------------------------

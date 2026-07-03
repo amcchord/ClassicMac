@@ -108,6 +108,22 @@ enum AppPaths {
         return developmentRepoRoot.appendingPathComponent("shared/ndrvloader")
     }
 
+    // The "ClassicMac Tools" guest additions CD (HFS image with StuffIt
+    // Expander, USB Overdrive, Disk Copy, ...). Built by
+    // scripts/build-guest-cd.sh and bundled into Resources; nil when absent
+    // so the UI can hide the Insert button.
+    static var toolsCD: URL? {
+        let bundled = resourcesDir.appendingPathComponent("ClassicMacTools.iso")
+        if FileManager.default.fileExists(atPath: bundled.path) {
+            return bundled
+        }
+        let dev = developmentRepoRoot.appendingPathComponent("dist/ClassicMacTools.iso")
+        if FileManager.default.fileExists(atPath: dev.path) {
+            return dev
+        }
+        return nil
+    }
+
     // A PRAM image that has been through one normal boot, so its signature is
     // valid. New VMs start from this so the virtio declaration ROM does not hang
     // the boot (a fresh, all-zero PRAM does).
