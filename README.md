@@ -63,6 +63,7 @@ ClassicMac exists because of years of brilliant work by other engineers. The pat
 - **Classic input helpers.** Right-click opens contextual menus as Control+click, and the scroll wheel becomes arrow-key taps — both per-VM toggles for guests with real drivers (e.g. USB Overdrive).
 - **A guest-additions Tools CD** (StuffIt Expander, Disk Copy, USB Overdrive, Transmit, Lido, patched HD SC Setup...) built from `guestcd/manifest.tsv`, insertable at runtime from the machine window's menu — everything pre-expanded and ready to run.
 - **Native machine control.** Pause / Resume, Restart, and Power Off from the app via QEMU's monitor socket, live screen previews in the library, and a "Match Display" button that sizes the Mac to your screen.
+- **Machine window shortcuts that always work.** Control-Option-F toggles fullscreen and Control-Option-R re-pushes the window's resolution to the guest — both keep working even while the emulator has grabbed the keyboard (as fullscreen does), and both live in the View menu and the machine's Dock icon menu.
 - **Signed, notarized, stapled DMG** for distribution — recipients get a clean Gatekeeper experience even offline.
 
 ## Getting started
@@ -80,6 +81,8 @@ Requirements: an Apple Silicon Mac (M1 or later) running a recent macOS.
 
 - The resolution you pick is the *boot* resolution and the depth is the *deepest available* mode; classic Mac OS chooses the active depth at startup (a fresh system comes up in B&W until you pick Thousands/Millions once in Monitors — it's remembered per machine).
 - Live resolution switching relies on the Display Manager, so it needs Mac OS ~7.6+ on the Quadra; on the Power Mac it works throughout Mac OS 9. Older systems still boot fine at the configured resolution and scale to the window. Power Mac widths snap down to a multiple of 8 (a VGA hardware constraint).
+- If the guest ever misses a resolution change (the window resized but the Mac stayed at the old size), pick **View → Resend Screen Resolution** (Control-Option-R) — also available from the machine's Dock icon menu — to ask it again.
+- To leave fullscreen press **Control-Option-F** (it also enters it). The combo works even while the emulator has grabbed the keyboard; it's listed in the View menu and the Dock icon menu.
 - The Power Mac's packed low-bpp patch adds Black & White, 4 and 16 colors to the Monitors panel alongside 256/thousands/millions.
 - Mac OS 9 wants **less than 1 GB of RAM** for stable sound, so the app's presets stop at 896 MB.
 - On the Quadra, folder sharing arrives through the classicvirtio NuBus card firmware (new machines start from a pre-seeded PRAM so it boots reliably). On the Power Mac it arrives through `virtio-9p-pci` and the classicvirtio ndrvloader placed in guest RAM at boot; while booting from CD (e.g. an OS install) sharing is temporarily inactive.

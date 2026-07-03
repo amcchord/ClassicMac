@@ -1,0 +1,175 @@
+diff --git a/ui/cocoa.m b/ui/cocoa.m
+index 14efcbd..afcd4d5 100644
+--- a/ui/cocoa.m
++++ b/ui/cocoa.m
+@@ -102,6 +102,11 @@ static void cocoa_switch(DisplayChangeListener *dcl,
+ static bool swap_opt_cmd;
+ static bool right_click_ctrl;
+ static bool scroll_keys;
++/*
++ * ClassicMac: the View menu's fullscreen item, retitled between
++ * "Enter Fullscreen" and "Exit Fullscreen" as the window transitions.
++ */
++static NSMenuItem *fullscreen_menu_item;
+ 
+ /* ClassicMac Tools CD: the drive id the host app always attaches for it and
+  * the environment variable through which the app publishes the image path. */
+@@ -777,6 +782,38 @@ - (void) updateUIInfo
+     });
+ }
+ 
++/*
++ * ClassicMac: push the current window size to the guest again, for when the
++ * guest missed (or has not yet acted on) the previous resolution request -
++ * e.g. the Display Manager was still starting up, or the driver's poll
++ * debounce swallowed it.
++ */
++- (void) resendUIInfo
++{
++    if (!allow_events) {
++        return;
++    }
++
++    with_bql(^{
++        if (!qemu_console_is_graphic(dcl.con) ||
++            !dpy_ui_info_supported(dcl.con)) {
++            return;
++        }
++        /*
++         * dpy_set_ui_info() drops updates identical to the last one it
++         * stored, so first nudge a field the guest does not act on. The
++         * console's ui_info timer coalesces the two calls into a single
++         * delivery of the real values, and the display device (nubus-qfb or
++         * the host-resize VGA) bumps its request serial, making the guest
++         * driver re-apply the resolution even if nothing changed host-side.
++         */
++        QemuUIInfo nudge = *dpy_get_ui_info(dcl.con);
++        nudge.xoff ^= 1;
++        dpy_set_ui_info(dcl.con, &nudge, FALSE);
++        [self updateUIInfoLocked];
++    });
++}
++
+ - (void) switchSurface:(pixman_image_t *)image
+ {
+     COCOA_DEBUG("QemuCocoaView: switchSurface\n");
+@@ -1089,6 +1126,21 @@ - (bool) handleEventLocked:(NSEvent *)event
+                         case 'g':
+                             [self ungrabMouse];
+                             return true;
++
++                        /* ClassicMac: toggle fullscreen. Unlike the menu
++                         * shortcut this also works while the mouse is
++                         * grabbed, so it is the reliable way OUT of
++                         * fullscreen (which grabs input on entry). */
++                        case 'f':
++                            [[self window] toggleFullScreen:nil];
++                            return true;
++
++                        /* ClassicMac: re-push the current window size to
++                         * the guest in case it missed the last resolution
++                         * request. */
++                        case 'r':
++                            [self resendUIInfo];
++                            return true;
+                     }
+                 }
+             }
+@@ -1422,6 +1474,7 @@ @interface QemuCocoaAppController : NSObject
+ {
+ }
+ - (void)doToggleFullScreen:(id)sender;
++- (void)resendDisplayResolution:(id)sender;
+ - (void)showQEMUDoc:(id)sender;
+ - (void)zoomToFit:(id) sender;
+ - (void)toggleInputHelpers:(id)sender;
+@@ -1551,11 +1604,17 @@ - (void)windowDidChangeScreen:(NSNotification *)notification
+ 
+ - (void)windowDidEnterFullScreen:(NSNotification *)notification
+ {
++    if (fullscreen_menu_item) {
++        [fullscreen_menu_item setTitle:@"Exit Fullscreen"];
++    }
+     [cocoaView grabMouse];
+ }
+ 
+ - (void)windowDidExitFullScreen:(NSNotification *)notification
+ {
++    if (fullscreen_menu_item) {
++        [fullscreen_menu_item setTitle:@"Enter Fullscreen"];
++    }
+     [cocoaView resizeWindow];
+     [cocoaView ungrabMouse];
+ }
+@@ -1627,6 +1686,47 @@ - (void) doToggleFullScreen:(id)sender
+     [[cocoaView window] toggleFullScreen:sender];
+ }
+ 
++/*
++ * ClassicMac: menu/dock action to push the current window size to the guest
++ * again, for when it missed the previous resolution-change request.
++ */
++- (void) resendDisplayResolution:(id)sender
++{
++    [cocoaView resendUIInfo];
++}
++
++/*
++ * ClassicMac: Dock icon menu. The Dock stays reachable even when the
++ * emulator has grabbed the keyboard and mouse (e.g. in fullscreen), so
++ * these commands double as an always-available escape hatch alongside the
++ * Control-Option key combos.
++ */
++- (NSMenu *) applicationDockMenu:(NSApplication *)sender
++{
++    NSMenu *dockMenu = [[[NSMenu alloc] init] autorelease];
++    NSMenuItem *item;
++    NSString *fullscreenTitle;
++
++    if (([[cocoaView window] styleMask] & NSWindowStyleMaskFullScreen) != 0) {
++        fullscreenTitle = @"Exit Fullscreen";
++    } else {
++        fullscreenTitle = @"Enter Fullscreen";
++    }
++    item = [[[NSMenuItem alloc] initWithTitle:fullscreenTitle
++                                       action:@selector(doToggleFullScreen:)
++                                keyEquivalent:@""] autorelease];
++    [item setTarget:self];
++    [dockMenu addItem:item];
++
++    item = [[[NSMenuItem alloc] initWithTitle:@"Resend Screen Resolution"
++                                       action:@selector(resendDisplayResolution:)
++                                keyEquivalent:@""] autorelease];
++    [item setTarget:self];
++    [dockMenu addItem:item];
++
++    return dockMenu;
++}
++
+ - (void) setFullGrab:(id)sender
+ {
+     COCOA_DEBUG("QemuCocoaAppController: setFullGrab\n");
+@@ -2006,7 +2106,22 @@ static void create_initial_menus(void)
+ 
+     // View menu
+     menu = [[NSMenu alloc] initWithTitle:@"View"];
+-    [menu addItem: [[[NSMenuItem alloc] initWithTitle:@"Enter Fullscreen" action:@selector(doToggleFullScreen:) keyEquivalent:@"f"] autorelease]]; // Fullscreen
++    /*
++     * ClassicMac: Control-Option key equivalents, matching the combos
++     * handleEventLocked intercepts, so both commands keep working while the
++     * emulator has grabbed the keyboard (fullscreen grabs it on entry -
++     * a Command shortcut would be swallowed by the guest there, which made
++     * fullscreen hard to leave).
++     */
++    menuItem = [[[NSMenuItem alloc] initWithTitle:@"Enter Fullscreen" action:@selector(doToggleFullScreen:) keyEquivalent:@"f"] autorelease]; // Fullscreen
++    [menuItem setKeyEquivalentModifierMask:(NSEventModifierFlagControl|NSEventModifierFlagOption)];
++    fullscreen_menu_item = menuItem;
++    [menu addItem: menuItem];
++    /* ClassicMac: ask the guest to switch to the window's resolution again,
++     * for when it missed the request that accompanied the last resize. */
++    menuItem = [[[NSMenuItem alloc] initWithTitle:@"Resend Screen Resolution" action:@selector(resendDisplayResolution:) keyEquivalent:@"r"] autorelease];
++    [menuItem setKeyEquivalentModifierMask:(NSEventModifierFlagControl|NSEventModifierFlagOption)];
++    [menu addItem: menuItem];
+     menuItem = [[[NSMenuItem alloc] initWithTitle:@"Zoom To Fit" action:@selector(zoomToFit:) keyEquivalent:@""] autorelease];
+     [menuItem setState: [[cocoaView window] styleMask] & NSWindowStyleMaskResizable ? NSControlStateValueOn : NSControlStateValueOff];
+     [menu addItem: menuItem];

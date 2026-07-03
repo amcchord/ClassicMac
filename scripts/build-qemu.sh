@@ -156,6 +156,10 @@ git -C "$QEMU_DIR" apply "$ROOT_DIR/cocoaui/removable-media-names.patch" || die 
 # View menu checkbox to toggle the classic input helpers (right-click as
 # Control+click, scroll wheel as arrow keys) while the machine runs.
 git -C "$QEMU_DIR" apply "$ROOT_DIR/cocoaui/input-helpers-menu.patch" || die "Failed to apply ClassicMac input helpers menu patch"
+# Control-Option-F fullscreen toggle (works even while input is grabbed, so
+# fullscreen is easy to leave), Control-Option-R to re-push the window's
+# resolution to the guest, both in the View menu and the Dock icon menu.
+git -C "$QEMU_DIR" apply "$ROOT_DIR/cocoaui/fullscreen-resolution-menu.patch" || die "Failed to apply ClassicMac fullscreen/resolution menu patch"
 # Apple Sound Chip: always feed the audio backend silence when idle so a live
 # backend (CoreAudio) never replays stale ring-buffer content as a hum/buzz.
 git -C "$QEMU_DIR" apply "$QFB_DIR/asc-silence.patch" || die "Failed to apply asc silence patch"
