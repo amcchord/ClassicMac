@@ -2,13 +2,15 @@
 #
 # build-guest-cd.sh - Build the "ClassicMac Tools" guest additions CD image.
 #
-# Produces dist/ClassicMacTools.iso, a plain HFS (standard) volume that both
-# System 7.1 (Quadra) and Mac OS 8/9 (Power Mac) mount natively when attached
-# as a CD-ROM. The contents (StuffIt Expander, USB Overdrive, Disk Copy, ...)
-# are downloaded from Macintosh Garden mirrors as listed in
-# guestcd/manifest.tsv and written onto the volume with hfsutils so resource
-# forks and type/creator codes survive (MacBinary is decoded; .sit archives
-# are copied raw and expanded inside the guest).
+# Produces dist/ClassicMacTools.iso, an Apple Partition Map + HFS (standard)
+# volume that both System 7.1 (Quadra) and Mac OS 8/9 (Power Mac) mount
+# natively when attached as a CD-ROM. The contents (StuffIt Expander, USB
+# Overdrive, Disk Copy, Transmit, ...) are downloaded from the mirrors
+# listed in guestcd/manifest.tsv, pre-expanded on the host with unar, and
+# written onto the volume with hfsutils so resource forks and type/creator
+# codes survive (via guestcd/hfs-copy.py, which re-encodes each file as
+# MacBinary for hcopy -m). Everything on the CD is ready to run: no archive
+# tools are needed in the guest.
 #
 # This script is idempotent: downloads are cached in vendor/guest-cd and only
 # re-fetched when missing or failing their MD5 check; the image itself is
@@ -22,9 +24,10 @@ DL_DIR="$ROOT_DIR/vendor/guest-cd/downloads"
 OUT_DIR="$ROOT_DIR/dist"
 OUT_IMAGE="$OUT_DIR/ClassicMacTools.iso"
 VOLUME_NAME="ClassicMac Tools"
-# 16 MiB: plenty for ~5 MB of tools, and a multiple of the 2048-byte CD
-# sector size.
-IMAGE_BYTES=$((16 * 1024 * 1024))
+HFS_COPY="$ROOT_DIR/guestcd/hfs-copy.py"
+# 32 MiB: plenty for ~10 MB of expanded tools, and a multiple of the
+# 2048-byte CD sector size.
+IMAGE_BYTES=$((32 * 1024 * 1024))
 
 log() { printf '\n==> %s\n' "$*"; }
 die() { printf '\nERROR: %s\n' "$*" >&2; exit 1; }
@@ -44,6 +47,14 @@ done
 
 PYTHON_BIN="$(command -v python3 || true)"
 [ -n "$PYTHON_BIN" ] || die "python3 is required to write the Apple Partition Map."
+
+# unar expands the StuffIt archives on the host so the CD carries
+# ready-to-run files instead of .sit archives.
+if ! command -v unar >/dev/null 2>&1; then
+  command -v brew >/dev/null 2>&1 || die "unar not found and Homebrew unavailable; install unar (The Unarchiver CLI) first."
+  log "Installing unar (needed to expand StuffIt archives on the host)"
+  brew install unar
+fi
 
 # ---------------------------------------------------------------------------
 # 2. Download + verify the tools listed in the manifest
@@ -83,42 +94,48 @@ cat > "$README" <<'EOF'
 ClassicMac Tools CD
 ===================
 
-A few essentials that make an emulated classic Mac much nicer to
-use. Suggested install order:
+Essentials that make an emulated classic Mac much nicer to use.
+Everything on this CD is ready to run - no unstuffing needed.
 
-1. StuffIt Expander 5.5  (68k + PPC, System 7.1.1 or later)
-   Double-click "StuffIt Expander 5.5.sea"; it unpacks the
-   installer. Run it. Install this first: the other items on this
-   CD are .sit archives that Expander opens (drag them onto the
-   Expander icon).
+StuffIt Expander 5.5.sea  (68k + PPC, System 7.1.1 or later)
+   The must-have archive expander for .sit downloads.
+   Double-click the .sea; it unpacks the installer. Run it.
 
-2. DropStuff 5.5 Installer.sit  (optional)
-   Adds the Expander Enhancer, letting StuffIt Expander also open
-   .zip and other formats. Expand, then run the installer.
+DropStuff 5.5 Installer  (optional)
+   Adds the Expander Enhancer so StuffIt Expander also opens
+   .zip and more. Double-click to install.
 
-3. Disk Copy 6.3.3.sit
+Disk Copy 6.3.3.smi
    Apple's disk image utility; mounts .img and .smi images.
-   Expand it, double-click the self-mounting image inside, and
-   drag Disk Copy onto your hard disk.
+   Double-click the .smi (it mounts itself), then drag the Disk
+   Copy application onto your hard disk.
 
-4. Virtual CD-DVD Utility.sit
+Virtual CD-DVD Utility
    Mounts .iso and .toast CD images straight from the Finder.
-   Pairs well with the shared folder: drop a CD image into the
-   share on your host Mac, then mount it here.
+   The utility ships as a Disk Copy image: install Disk Copy
+   first, mount Virtual-CD-DVD-Utility-10d3.img with it, and
+   drag the utility to your hard disk. Pairs well with the
+   shared folder: drop a CD image into the share on your host
+   Mac, then mount it here.
 
-5. USB Overdrive 1.4.sit  (Power Mac only, Mac OS 8.5 - 9.2)
+Transmit 1.6  (PPC and 68k versions)
+   Panic's classic FTP client. Drag the folder that matches
+   your Mac onto the hard disk: "Transmit 1.6 PPC" on the
+   Power Mac, "Transmit 1.6 68k" on the Quadra.
+
+USB Overdrive 1.4  (Power Mac only, Mac OS 8.5 - 9.2)
    Real scroll wheel and right-click support for the USB mouse.
-   Expand, run the installer, restart. USB Overdrive is
-   unregistered shareware, so it shows a reminder dialog now and
-   then.
+   Open the folder, run the installer, restart. USB Overdrive
+   is unregistered shareware, so it shows a reminder dialog now
+   and then.
 
-   IMPORTANT: after installing USB Overdrive, open this machine's
-   settings in ClassicMac on your host Mac and turn OFF
-   "Right-click & scroll wheel helpers", so clicks and scrolling
-   are not doubled up.
+   IMPORTANT: after installing USB Overdrive, open this
+   machine's settings in ClassicMac on your host Mac and turn
+   OFF "Right-click & scroll wheel helpers", so clicks and
+   scrolling are not doubled up.
 
-On a Quadra (System 7 through Mac OS 8.1) only items 1-4 apply;
-USB Overdrive needs a Power Mac running Mac OS 8.5 or later.
+On a Quadra (System 7 through Mac OS 8.1), skip USB Overdrive -
+it needs a Power Mac running Mac OS 8.5 or later.
 EOF
 
 # ---------------------------------------------------------------------------
@@ -185,16 +202,29 @@ hattrib -t TEXT -c ttxt ":Read Me"
 while IFS=$'\t' read -r name handling md5 url; do
   case "$name" in ''|'#'*) continue ;; esac
   src="$DL_DIR/$(basename "$url")"
+  printf '    add     %s\n' "$name"
   case "$handling" in
     macbinary)
       # MacBinary: decode both forks + original type/creator.
       hcopy -m "$src" ":$name"
       ;;
-    sit)
-      # StuffIt archives are data-fork only; copy raw and tag them so
-      # they show up with the right icon and open with Expander.
-      hcopy -r "$src" ":$name"
-      hattrib -t "SIT!" -c "SIT!" ":$name"
+    expand)
+      # Unpack on the host, then copy the ready-to-run files onto the CD
+      # with forks and Finder metadata intact. A single top-level entry
+      # (a file, or the archive's own folder) becomes ":$name" directly;
+      # multiple entries land inside a ":$name" folder.
+      workdir="$(mktemp -d)"
+      unar -quiet -no-directory -output-directory "$workdir" "$src" || die "unar failed for $src"
+      entries=()
+      while IFS= read -r entry; do
+        entries+=("$entry")
+      done < <(ls "$workdir")
+      if [ "${#entries[@]}" -eq 1 ]; then
+        "$PYTHON_BIN" "$HFS_COPY" "$workdir/${entries[0]}" ":$name"
+      else
+        "$PYTHON_BIN" "$HFS_COPY" "$workdir" ":$name"
+      fi
+      rm -rf "$workdir"
       ;;
     *)
       die "unknown handling '$handling' for $name"
