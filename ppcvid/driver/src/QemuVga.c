@@ -207,8 +207,20 @@ static void QemuVga_PollHostResize(void)
 		return;
 
 	serial = ExtReadL(QEMU_EXT_REG_REQ_SERIAL);
-	if (serial == GLOBAL.lastReqSerial)
-		return; /* nothing new since the request we last applied */
+	if (serial == GLOBAL.lastReqSerial) {
+		/* Nothing new since the request we last acted on. If a pending
+		 * mode was never adopted (the Display Manager re-probe didn't
+		 * land, e.g. no Display Manager running), stop advertising it -
+		 * and stop hiding the other modes in GetModeTiming - after a
+		 * few seconds, so the Monitors panel returns to normal. */
+		if (GLOBAL.hostPendingMode != 0) {
+			if (GLOBAL.hostPendingTicks < HOST_RESIZE_PENDING_TIMEOUT_TICKS)
+				GLOBAL.hostPendingTicks++;
+			else
+				GLOBAL.hostPendingMode = 0;
+		}
+		return;
+	}
 
 	/* Debounce: act only once the serial has held steady for a couple of
 	 * ticks, so a drag that publishes several sizes results in a single
@@ -235,6 +247,7 @@ static void QemuVga_PollHostResize(void)
 		return;
 
 	GLOBAL.hostPendingMode = id;
+	GLOBAL.hostPendingTicks = 0;
 	if (GLOBAL.qdConnectInterrupt)
 		VSLDoInterruptService(GLOBAL.qdConnectInterrupt);
 }
@@ -317,6 +330,7 @@ OSStatus QemuVga_Init(void)
 		GLOBAL.pendingReqTicks = 0;
 		GLOBAL.dynToggle = 0;
 		GLOBAL.hostPendingMode = 0;
+		GLOBAL.hostPendingTicks = 0;
 	}
 
 	for (i = 0, v = vModes; v != NULL; v = v->next, i++) {

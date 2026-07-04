@@ -538,8 +538,10 @@ DriverStatusCmd( IOCommandID ioCommandID, IOCommandKind ioCommandKind, CntrlPara
 			rec->height = QemuVga_ReadExt(QEMU_EXT_REG_REQ_HEIGHT);
 			if (rec->width != 0 && rec->height != 0)
 				rec->modeID = QemuVga_PrepareHostModeSwitch(rec->width, rec->height);
-			if (rec->modeID != 0)
+			if (rec->modeID != 0) {
 				GLOBAL.hostPendingMode = rec->modeID;
+				GLOBAL.hostPendingTicks = 0;
+			}
 		}
 		rec->depthMode = DepthToDepthMode(GLOBAL.depth);
 		status = noErr;

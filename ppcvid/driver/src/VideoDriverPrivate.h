@@ -87,6 +87,7 @@ struct DriverGlobal {
 	UInt32				pendingReqTicks;	/* how long it has held steady */
 	UInt32				dynToggle;			/* alternates the dynamic pair */
 	UInt32				hostPendingMode;	/* 1-based mode DM should adopt, 0=none */
+	UInt32				hostPendingTicks;	/* how long it has gone unadopted */
 	InterruptServiceIDType	qdConnectInterrupt;	/* VSL connect-change service */
 };
 typedef struct DriverGlobal DriverGlobal, *DriverGlobalPtr;

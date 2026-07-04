@@ -74,6 +74,10 @@
  * (debounce, mirroring the 68k qfb driver's accRun debounce). */
 #define HOST_RESIZE_DEBOUNCE_TICKS       2
 
+/* Ticks (~30 ms each) before an un-adopted pending host-resize mode is
+ * abandoned, restoring normal mode reporting (about 10 seconds). */
+#define HOST_RESIZE_PENDING_TIMEOUT_TICKS 333
+
 /* --- VModes */
 
 struct _vMode {

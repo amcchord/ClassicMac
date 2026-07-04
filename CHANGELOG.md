@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.0.2 — 2026-07-03
+
+### Fixed
+
+- **Power Mac drag-to-resize works again once a resolution has been saved in
+  the guest.** Live window resizing on the Power Mac G4 stopped working as
+  soon as a resolution was ever picked in the Monitors control panel: the
+  Display Manager's re-probe (which the video driver triggers through a
+  connect-change interrupt when the window is dragged) would revalidate the
+  guest's *saved* display preference and stop, never adopting the
+  window-sized mode. The bundled `qemu_vga.ndrv` now reports every other
+  mode as invalid while a host window resize is pending, so the re-probe
+  falls through to the driver's preferred configuration and the switch
+  lands. Mode reporting returns to normal the moment the switch completes
+  (or after ~10 seconds if no Display Manager is running), so the Monitors
+  panel and boot-time resolution restore behave exactly as before. This
+  also makes Resend Screen Resolution (Control-Option-R) reliable on the
+  Power Mac.
+
 ## 1.0.1 — 2026-07-03
 
 Quality-of-life update for the machine window: fullscreen is easy to leave and
