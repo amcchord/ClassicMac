@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.0.3 — 2026-07-03
+
+### Fixed
+
+- **App icon no longer shrinks inside a grey border.** The checked-in
+  `AppIcon.icns` had drifted to a version whose artwork only covered ~87% of
+  the canvas; macOS renders undersized icon art on its own synthesized
+  backdrop, producing a growing grey border around the icon with each
+  regeneration. The original full-bleed master `AppIcon.png` is restored, the
+  separate `.icns` copy is gone from the repo, and `bundle-qemu.sh` now
+  generates the `.icns` fresh from the master PNG on every build so the two
+  can never drift apart again.
+
 ## 1.0.2 — 2026-07-03
 
 ### Fixed

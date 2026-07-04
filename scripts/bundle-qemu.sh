@@ -16,7 +16,7 @@ APP_SRC_DIR="$ROOT_DIR/app"
 QEMU_BUILD_DIR="$ROOT_DIR/vendor/qemu/build"
 QEMU_PCBIOS_DIR="$ROOT_DIR/vendor/qemu/pc-bios"
 ROM_SRC="$ROOT_DIR/Resources/Quadra800.rom"
-ICON_SRC="$ROOT_DIR/Resources/AppIcon.icns"
+ICON_PNG="$ROOT_DIR/Resources/AppIcon.png"
 DECLROM_SRC="$ROOT_DIR/shared/declrom"
 NDRVLOADER_SRC="$ROOT_DIR/shared/ndrvloader"
 PRAMSEED_SRC="$ROOT_DIR/shared/pram-seed.img"
@@ -36,7 +36,7 @@ HELPERS_DIR="$CONTENTS/Helpers"
 QUADRA_APP="$HELPERS_DIR/Quadra 800.app"
 PPC_APP="$HELPERS_DIR/Power Mac G4.app"
 
-APP_VERSION="${APP_VERSION:-1.0.2}"
+APP_VERSION="${APP_VERSION:-1.0.3}"
 BUNDLE_ID="com.classicmac.emulator"
 
 log() { printf '\n==> %s\n' "$*"; }
@@ -60,7 +60,7 @@ for fw in "${PCBIOS_FILES[@]}"; do
   [ -f "$QEMU_PCBIOS_DIR/$fw" ] || die "$fw firmware not found. Run scripts/build-qemu.sh first."
 done
 [ -f "$ROM_SRC" ] || die "Quadra800.rom not found in Resources/."
-[ -f "$ICON_SRC" ] || die "AppIcon.icns not found in Resources/."
+[ -f "$ICON_PNG" ] || die "AppIcon.png not found in Resources/."
 [ -f "$ROOT_DIR/Resources/MachineIcon.icns" ] || die "MachineIcon.icns not found in Resources/."
 [ -f "$DECLROM_SRC" ] || die "shared/declrom (classicvirtio declaration ROM) not found."
 [ -f "$NDRVLOADER_SRC" ] || die "shared/ndrvloader (classicvirtio PPC driver loader) not found."
@@ -91,7 +91,32 @@ cp "$QEMU_BUILD_DIR/qemu-system-ppc" "$PPC_APP/Contents/MacOS/"
 cp "$ROOT_DIR/Resources/MachineIcon.icns" "$QUADRA_APP/Contents/Resources/MachineIcon.icns"
 cp "$ROOT_DIR/Resources/MachineIcon.icns" "$PPC_APP/Contents/Resources/MachineIcon.icns"
 cp "$ROM_SRC" "$RES_DIR/Quadra800.rom"
-cp "$ICON_SRC" "$RES_DIR/AppIcon.icns"
+
+# App icon: always derived fresh from the full-bleed master PNG, whose artwork
+# must cover the entire 1024x1024 canvas (its own rounded-rect shape included).
+# A pre-shrunken icns once crept in here and macOS responded by drawing the
+# undersized art on its own synthesized backdrop - the "growing grey border" -
+# so the icns is regenerated from the master on every bundle instead of being
+# a second, driftable copy in the repo.
+log "Generating AppIcon.icns from Resources/AppIcon.png"
+ICONSET_DIR="$(mktemp -d)/AppIcon.iconset"
+mkdir -p "$ICONSET_DIR"
+for spec in \
+  "16 icon_16x16" \
+  "32 icon_16x16@2x" \
+  "32 icon_32x32" \
+  "64 icon_32x32@2x" \
+  "128 icon_128x128" \
+  "256 icon_128x128@2x" \
+  "256 icon_256x256" \
+  "512 icon_256x256@2x" \
+  "512 icon_512x512" \
+  "1024 icon_512x512@2x"; do
+  set -- $spec
+  sips -z "$1" "$1" "$ICON_PNG" --out "$ICONSET_DIR/$2.png" >/dev/null || die "Failed to scale AppIcon.png to $1x$1"
+done
+iconutil --convert icns -o "$RES_DIR/AppIcon.icns" "$ICONSET_DIR" || die "iconutil failed to build AppIcon.icns"
+rm -rf "$(dirname "$ICONSET_DIR")"
 for fw in "${PCBIOS_FILES[@]}"; do
   cp "$QEMU_PCBIOS_DIR/$fw" "$PCBIOS_DEST/"
 done
