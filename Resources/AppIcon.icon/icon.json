@@ -1,0 +1,20 @@
+{
+  "fill" : {
+    "solid" : "display-p3:0.96078,0.95294,0.95294,1.00000"
+  },
+  "groups" : [
+    {
+      "layers" : [
+        {
+          "image-name" : "AppIcon.png",
+          "name" : "AppIcon"
+        }
+      ]
+    }
+  ],
+  "supported-platforms" : {
+    "squares" : [
+      "macOS"
+    ]
+  }
+}

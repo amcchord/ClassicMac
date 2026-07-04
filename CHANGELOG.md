@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.0.4 — 2026-07-04
+
+### Fixed
+
+- **App icon out of "icon jail" on macOS 26 Tahoe.** macOS 26 draws any app
+  that ships only a legacy `.icns` shrunken on a synthesized squircle
+  backdrop, no matter how the icon artwork is shaped — 1.0.3's full-bleed
+  `.icns` alone could not escape that. The app now also ships the icon in
+  the Liquid Glass format: an Icon Composer document
+  (`Resources/AppIcon.icon`, with the artwork extended to a full square
+  layer) that `bundle-qemu.sh` compiles with `actool` into `Assets.car`,
+  referenced from `CFBundleIconName`. macOS 26 renders that natively —
+  single squircle, edge to edge — while older macOS keeps using the legacy
+  `.icns`. Building the Liquid Glass icon needs Xcode 26; without it the
+  bundle still builds and just falls back to the legacy icon.
+
 ## 1.0.3 — 2026-07-03
 
 ### Fixed

@@ -17,6 +17,7 @@ QEMU_BUILD_DIR="$ROOT_DIR/vendor/qemu/build"
 QEMU_PCBIOS_DIR="$ROOT_DIR/vendor/qemu/pc-bios"
 ROM_SRC="$ROOT_DIR/Resources/Quadra800.rom"
 ICON_PNG="$ROOT_DIR/Resources/AppIcon.png"
+ICON_DOC="$ROOT_DIR/Resources/AppIcon.icon"
 DECLROM_SRC="$ROOT_DIR/shared/declrom"
 NDRVLOADER_SRC="$ROOT_DIR/shared/ndrvloader"
 PRAMSEED_SRC="$ROOT_DIR/shared/pram-seed.img"
@@ -36,7 +37,7 @@ HELPERS_DIR="$CONTENTS/Helpers"
 QUADRA_APP="$HELPERS_DIR/Quadra 800.app"
 PPC_APP="$HELPERS_DIR/Power Mac G4.app"
 
-APP_VERSION="${APP_VERSION:-1.0.3}"
+APP_VERSION="${APP_VERSION:-1.0.4}"
 BUNDLE_ID="com.classicmac.emulator"
 
 log() { printf '\n==> %s\n' "$*"; }
@@ -61,6 +62,7 @@ for fw in "${PCBIOS_FILES[@]}"; do
 done
 [ -f "$ROM_SRC" ] || die "Quadra800.rom not found in Resources/."
 [ -f "$ICON_PNG" ] || die "AppIcon.png not found in Resources/."
+[ -f "$ICON_DOC/icon.json" ] || die "AppIcon.icon (Icon Composer document) not found in Resources/."
 [ -f "$ROOT_DIR/Resources/MachineIcon.icns" ] || die "MachineIcon.icns not found in Resources/."
 [ -f "$DECLROM_SRC" ] || die "shared/declrom (classicvirtio declaration ROM) not found."
 [ -f "$NDRVLOADER_SRC" ] || die "shared/ndrvloader (classicvirtio PPC driver loader) not found."
@@ -92,12 +94,15 @@ cp "$ROOT_DIR/Resources/MachineIcon.icns" "$QUADRA_APP/Contents/Resources/Machin
 cp "$ROOT_DIR/Resources/MachineIcon.icns" "$PPC_APP/Contents/Resources/MachineIcon.icns"
 cp "$ROM_SRC" "$RES_DIR/Quadra800.rom"
 
-# App icon: always derived fresh from the full-bleed master PNG, whose artwork
-# must cover the entire 1024x1024 canvas (its own rounded-rect shape included).
-# A pre-shrunken icns once crept in here and macOS responded by drawing the
-# undersized art on its own synthesized backdrop - the "growing grey border" -
-# so the icns is regenerated from the master on every bundle instead of being
-# a second, driftable copy in the repo.
+# App icon, two generations of it:
+#
+# 1) Legacy AppIcon.icns for macOS 15 and earlier - always derived fresh from
+#    the full-bleed master PNG, whose artwork must cover the entire 1024x1024
+#    canvas (its own rounded-rect shape included). A pre-shrunken icns once
+#    crept in here and macOS responded by drawing the undersized art on its
+#    own synthesized backdrop - the "growing grey border" - so the icns is
+#    regenerated from the master on every bundle instead of being a second,
+#    driftable copy in the repo.
 log "Generating AppIcon.icns from Resources/AppIcon.png"
 ICONSET_DIR="$(mktemp -d)/AppIcon.iconset"
 mkdir -p "$ICONSET_DIR"
@@ -117,6 +122,33 @@ for spec in \
 done
 iconutil --convert icns -o "$RES_DIR/AppIcon.icns" "$ICONSET_DIR" || die "iconutil failed to build AppIcon.icns"
 rm -rf "$(dirname "$ICONSET_DIR")"
+
+# 2) Liquid Glass icon for macOS 26 (Tahoe) and later, compiled from the Icon
+#    Composer document Resources/AppIcon.icon into Assets.car and referenced
+#    by CFBundleIconName. Without this, macOS 26 refuses the legacy icns as-is
+#    and renders it shrunken on a synthesized squircle backdrop ("icon jail"),
+#    no matter how the icns artwork is shaped. Compiling needs actool from a
+#    full Xcode 26 install; when it is unavailable the build still succeeds
+#    with the legacy icon only (and the jailed look on Tahoe).
+ICON_NAME_PLIST=""
+ACTOOL_OUT="$(mktemp -d)"
+if xcrun actool "$ICON_DOC" --compile "$ACTOOL_OUT" \
+     --output-format human-readable-text \
+     --output-partial-info-plist "$ACTOOL_OUT/partial.plist" \
+     --app-icon AppIcon --include-all-app-icons \
+     --enable-on-demand-resources NO \
+     --development-region en \
+     --target-device mac \
+     --minimum-deployment-target 26.0 \
+     --platform macosx >/dev/null 2>&1 && [ -f "$ACTOOL_OUT/Assets.car" ]; then
+  log "Compiling Liquid Glass icon (Assets.car) from Resources/AppIcon.icon"
+  cp "$ACTOOL_OUT/Assets.car" "$RES_DIR/Assets.car"
+  ICON_NAME_PLIST="	<key>CFBundleIconName</key>
+	<string>AppIcon</string>"
+else
+  log "WARNING: actool unavailable or failed; skipping the macOS 26 Liquid Glass icon (app will show the legacy icon on a synthesized backdrop). Install full Xcode 26 to fix."
+fi
+rm -rf "$ACTOOL_OUT"
 for fw in "${PCBIOS_FILES[@]}"; do
   cp "$QEMU_PCBIOS_DIR/$fw" "$PCBIOS_DEST/"
 done
@@ -156,6 +188,7 @@ cat > "$CONTENTS/Info.plist" <<PLIST
 	<string>ClassicMac</string>
 	<key>CFBundleIconFile</key>
 	<string>AppIcon</string>
+$ICON_NAME_PLIST
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>LSMinimumSystemVersion</key>
