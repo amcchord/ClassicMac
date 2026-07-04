@@ -523,18 +523,15 @@ struct VMDetailView: View {
             }
         } else {
             ToolbarItem {
-                Button {
-                    manager.start(vm.wrappedValue)
-                } label: {
-                    Label("Start", systemImage: "play.fill")
-                }
-                .buttonStyle(.glassProminent)
-                .disabled(!AppPaths.qemuIsAvailable(for: vm.wrappedValue.machineFamily))
-                .help("Start the Mac")
+                startButton(vm)
+                    .disabled(!AppPaths.qemuIsAvailable(for: vm.wrappedValue.machineFamily))
+                    .help("Start the Mac")
             }
         }
 
-        ToolbarSpacer(.fixed)
+        if #available(macOS 26.0, *) {
+            ToolbarSpacer(.fixed)
+        }
 
         ToolbarItem {
             Menu {
@@ -549,6 +546,20 @@ struct VMDetailView: View {
             } label: {
                 Label("More", systemImage: "ellipsis.circle")
             }
+        }
+    }
+
+    @ViewBuilder
+    private func startButton(_ vm: Binding<VMConfig>) -> some View {
+        let button = Button {
+            manager.start(vm.wrappedValue)
+        } label: {
+            Label("Start", systemImage: "play.fill")
+        }
+        if #available(macOS 26.0, *) {
+            button.buttonStyle(.glassProminent)
+        } else {
+            button.buttonStyle(.borderedProminent)
         }
     }
 

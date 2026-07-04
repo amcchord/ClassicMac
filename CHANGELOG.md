@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.0.5 — 2026-07-04
+
+### Added
+
+- **Experimental macOS 15 (Sequoia) support.** The app no longer requires
+  macOS 26 Tahoe: the Swift package targets macOS 15, the two Tahoe-only
+  SwiftUI APIs are behind availability checks (the Start button falls back
+  from Liquid Glass to `.borderedProminent`, and the toolbar spacer is
+  skipped), `LSMinimumSystemVersion` is 15.0 for the app and helper bundles,
+  and `build-qemu.sh` compiles QEMU with `MACOSX_DEPLOYMENT_TARGET=15.0`.
+  Tahoe is unaffected — it keeps the same glass UI and the deployment target
+  only lowers the minimum OS stamp. Support is experimental because the
+  bundled Homebrew libraries (glib, pixman, libslirp, ...) are bottles built
+  for the host OS; a bundle built on Tahoe is stamped for 15.0 but is only
+  guaranteed Sequoia-clean when built on a macOS 15 machine.
+
 ## 1.0.4 — 2026-07-04
 
 ### Fixed

@@ -13,6 +13,11 @@
 
 set -euo pipefail
 
+# Compile for macOS 15 (Sequoia) and later, not just the host OS. clang reads
+# this at every compile, so a full rebuild is needed for it to take effect on
+# an existing build tree.
+export MACOSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-15.0}"
+
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VENDOR_DIR="$ROOT_DIR/vendor"
 QEMU_DIR="$VENDOR_DIR/qemu"
