@@ -353,6 +353,16 @@ struct VMDetailView: View {
                 }
             }
             .disabled(running)
+
+            Toggle(isOn: vm.tabletInput) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Tablet input (seamless mouse)")
+                    Text("The mouse moves freely in and out of the Mac window without capturing. Uses the classicvirtio tablet driver.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .disabled(running)
         } header: {
             Label("Hardware", systemImage: "memorychip")
         }

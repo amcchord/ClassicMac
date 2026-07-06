@@ -387,10 +387,13 @@ final class QEMUManager: ObservableObject {
 
         // Folder sharing needs the classicvirtio ndrvloader to run before the
         // OS: it installs the virtio NDRVs and then continues the normal boot.
-        // The loader takes over the firmware boot command, so it is skipped
-        // when booting from CD (e.g. OS installs) - sharing is simply inactive
-        // for that boot.
+        // Tablet input also needs the ndrvloader (it loads the virtio-tablet
+        // driver). The loader takes over the firmware boot command, so it is
+        // skipped when booting from CD (e.g. OS installs) - sharing and tablet
+        // input are simply inactive for that boot.
         let sharing = config.hasSharedFolder && !(config.bootFromCD && config.cdImagePath?.isEmpty == false)
+        let tablet = config.tabletInput && !(config.bootFromCD && config.cdImagePath?.isEmpty == false)
+        let needsNdrvLoader = sharing || tablet
 
         args += ["-M", "mac99,via=pmu,audiodev=snd0"]
         args += ["-m", String(config.ramMB)]
@@ -476,13 +479,19 @@ final class QEMUManager: ObservableObject {
 
         // Shared folder via virtio-9p-pci and the classicvirtio ndrvloader.
         // The loader is placed in guest RAM by QEMU's generic loader device and
-        // executed by OpenBIOS in place of the default boot command.
-        if sharing {
+        // executed by OpenBIOS in place of the default boot command. Tablet
+        // input uses the same loader to install the virtio-tablet-pci driver.
+        if needsNdrvLoader {
             args += ["-device", "loader,addr=0x4000000,file=\(AppPaths.ndrvLoader.path)"]
             args += ["-prom-env", "boot-command=init-program go"]
-            args += ["-device", "virtio-9p-pci,fsdev=share0,mount_tag=\(config.sharedVolumeName)"]
-            let escapedPath = config.sharedFolderPath!.replacingOccurrences(of: ",", with: ",,")
-            args += ["-fsdev", "local,id=share0,security_model=none,path=\(escapedPath)"]
+            if tablet {
+                args += ["-device", "virtio-tablet-pci"]
+            }
+            if sharing {
+                args += ["-device", "virtio-9p-pci,fsdev=share0,mount_tag=\(config.sharedVolumeName)"]
+                let escapedPath = config.sharedFolderPath!.replacingOccurrences(of: ",", with: ",,")
+                args += ["-fsdev", "local,id=share0,security_model=none,path=\(escapedPath)"]
+            }
         }
 
         return args
@@ -492,17 +501,22 @@ final class QEMUManager: ObservableObject {
         var args: [String] = []
 
         let sharing = config.hasSharedFolder
+        let tablet = config.tabletInput
+
+        // The nubus-virtio-mmio card is needed for both folder sharing and
+        // tablet input (both are classicvirtio features driven by the declrom).
+        let needsVirtioCard = sharing || tablet
 
         // Framebuffer selection.
-        // - No sharing + enhanced: machine creates the qfb (fb=qemu) and -g applies.
-        // - Sharing + enhanced: the virtio card must precede the framebuffer card,
+        // - No virtio card + enhanced: machine creates the qfb (fb=qemu) and -g applies.
+        // - Virtio card + enhanced: the virtio card must precede the framebuffer card,
         //   so the machine creates no framebuffer (fb=none) and we add nubus-qfb as
         //   a -device after nubus-virtio-mmio (its size comes from device options).
         // - Not enhanced: leave the built-in macfb (fb=mac default) and -g applies.
         var machine = "q800"
-        let qfbAsDevice = sharing && config.useEnhancedFramebuffer
+        let qfbAsDevice = needsVirtioCard && config.useEnhancedFramebuffer
         if config.useEnhancedFramebuffer {
-            if sharing {
+            if needsVirtioCard {
                 machine += ",fb=none"
             } else {
                 machine += ",fb=qemu"
@@ -573,15 +587,21 @@ final class QEMUManager: ObservableObject {
 
         // Shared folder via the classicvirtio NuBus virtio transport. The
         // nubus-virtio-mmio card must be created before the nubus-qfb framebuffer
-        // so it lands in the earlier NuBus slot.
-        if sharing {
+        // so it lands in the earlier NuBus slot. The same card also provides
+        // tablet input when enabled.
+        if needsVirtioCard {
             args += ["-device", "nubus-virtio-mmio,romfile=\(AppPaths.declROM.path)"]
             if qfbAsDevice {
                 args += ["-device", "nubus-qfb,width=\(config.width),height=\(config.height),depth=\(config.depth)"]
             }
-            args += ["-device", "virtio-9p-device,fsdev=share0,mount_tag=\(config.sharedVolumeName)"]
-            let escapedPath = config.sharedFolderPath!.replacingOccurrences(of: ",", with: ",,")
-            args += ["-fsdev", "local,id=share0,security_model=none,path=\(escapedPath)"]
+            if tablet {
+                args += ["-device", "virtio-tablet-device"]
+            }
+            if sharing {
+                args += ["-device", "virtio-9p-device,fsdev=share0,mount_tag=\(config.sharedVolumeName)"]
+                let escapedPath = config.sharedFolderPath!.replacingOccurrences(of: ",", with: ",,")
+                args += ["-fsdev", "local,id=share0,security_model=none,path=\(escapedPath)"]
+            }
         }
 
         return args

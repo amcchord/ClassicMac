@@ -124,6 +124,12 @@ struct VMConfig: Codable, Identifiable, Hashable {
     var networking: Bool
     var sound: Bool
 
+    // Tablet input: use a virtio absolute-pointing device so the mouse moves
+    // seamlessly in and out of the VM window without needing to be captured.
+    // On by default. When off, the standard relative mouse is used and the
+    // window grabs the cursor on click (Control-Option-G to release).
+    var tabletInput: Bool
+
     // Host-side input remapping for classic guests: right-click delivered as
     // Control+click (contextual menus) and scroll wheel as arrow keys. On by
     // default; turned off per-VM when a real driver like USB Overdrive is
@@ -143,7 +149,7 @@ struct VMConfig: Codable, Identifiable, Hashable {
         case id, name, machineFamily, ramMB, diskImageName, pramImageName, diskSizeGB
         case width, height, depth, useEnhancedFramebuffer, customResolution
         case cdImagePath, bootFromCD, networking, sound, sharedFolderPath
-        case classicInputHelpers, toolsCDInserted
+        case classicInputHelpers, tabletInput, toolsCDInserted
     }
 
     init(id: UUID = UUID(),
@@ -161,6 +167,7 @@ struct VMConfig: Codable, Identifiable, Hashable {
          toolsCDInserted: Bool = false,
          networking: Bool = true,
          sound: Bool = true,
+         tabletInput: Bool = true,
          classicInputHelpers: Bool = true,
          sharedFolderPath: String? = nil,
          bundleURL: URL? = nil) {
@@ -181,6 +188,7 @@ struct VMConfig: Codable, Identifiable, Hashable {
         self.toolsCDInserted = toolsCDInserted
         self.networking = networking
         self.sound = sound
+        self.tabletInput = tabletInput
         self.classicInputHelpers = classicInputHelpers
         self.sharedFolderPath = sharedFolderPath
         self.bundleURL = bundleURL
@@ -215,6 +223,7 @@ struct VMConfig: Codable, Identifiable, Hashable {
         networking = try c.decodeIfPresent(Bool.self, forKey: .networking) ?? true
         sound = try c.decodeIfPresent(Bool.self, forKey: .sound) ?? true
         classicInputHelpers = try c.decodeIfPresent(Bool.self, forKey: .classicInputHelpers) ?? true
+        tabletInput = try c.decodeIfPresent(Bool.self, forKey: .tabletInput) ?? true
         sharedFolderPath = try c.decodeIfPresent(String.self, forKey: .sharedFolderPath)
         sanitize()
     }
