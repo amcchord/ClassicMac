@@ -377,8 +377,7 @@ final class QEMUManager: ObservableObject {
 
     // qemu-system-ppc -M mac99: a New World Power Mac that boots Mac OS 8.5
     // through 9.2.2 (and early OS X) via the bundled OpenBIOS firmware, so no
-    // Apple ROM is involved. Storage is IDE, networking is the sungem NIC, and
-    // via=pmu provides USB (ADB-free) input with correct mouse tracking.
+    // Apple ROM is involved. Storage is IDE, networking is the sungem NIC.
     // Sound comes from the screamer (AWACS) device ported onto our QEMU build;
     // the guest driver attaches because the bundled OpenBIOS advertises the
     // davbus/awacs nodes.
@@ -395,7 +394,24 @@ final class QEMUManager: ObservableObject {
         let tablet = config.tabletInput && !(config.bootFromCD && config.cdImagePath?.isEmpty == false)
         let needsNdrvLoader = sharing || tablet
 
-        args += ["-M", "mac99,via=pmu,audiodev=snd0"]
+        // Input configuration. QEMU treats whichever pointing device the guest
+        // touched last as "the mouse", and the cocoa display only releases the
+        // cursor while that device is absolute.
+        //
+        // - Tablet off: via=pmu gives the machine a USB keyboard and mouse
+        //   (ADB-free input with correct mouse tracking).
+        // - Tablet on: via=pmu-adb instead. The machine's built-in USB mouse
+        //   would otherwise steal pointer priority back from the virtio tablet
+        //   as soon as Mac OS starts polling USB, which re-captures the host
+        //   cursor and defeats seamless mouse. The ADB mouse never re-asserts
+        //   itself, so the tablet keeps priority once its driver loads - and
+        //   the ADB mouse remains a working (captured) fallback until then,
+        //   or if the guest OS can't run the classicvirtio driver at all.
+        if tablet {
+            args += ["-M", "mac99,via=pmu-adb,audiodev=snd0"]
+        } else {
+            args += ["-M", "mac99,via=pmu,audiodev=snd0"]
+        }
         args += ["-m", String(config.ramMB)]
         args += ["-L", AppPaths.pcBiosDir.path]
         // right-click-ctrl: deliver right clicks as Control+click so Mac OS

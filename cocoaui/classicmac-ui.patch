@@ -29,7 +29,7 @@
  
  // Utility functions to run specified code block with the BQL held
  typedef void (^CodeBlock)(void);
-@@ -1208,10 +1230,7 @@
+@@ -1208,10 +1230,12 @@
  {
      COCOA_DEBUG("QemuCocoaView: grabMouse\n");
  
@@ -37,7 +37,12 @@
 -        [[self window] setTitle:[NSString stringWithFormat:@"QEMU %s - (Press  " UC_CTRL_KEY " " UC_ALT_KEY " G  to release Mouse)", qemu_name]];
 -    else
 -        [[self window] setTitle:@"QEMU - (Press  " UC_CTRL_KEY " " UC_ALT_KEY " G  to release Mouse)"];
-+    [[self window] setTitle:[NSString stringWithFormat:@"%@ \u2014 Press " UC_CTRL_KEY " " UC_ALT_KEY " G to release the mouse", classicmac_machine_name()]];
++    if (isAbsoluteEnabled) {
++        /* Absolute (tablet) pointer: nothing is captured, keep the plain title. */
++        [[self window] setTitle:classicmac_machine_name()];
++    } else {
++        [[self window] setTitle:[NSString stringWithFormat:@"%@ \u2014 Press " UC_CTRL_KEY " " UC_ALT_KEY " G to release the mouse", classicmac_machine_name()]];
++    }
      [self hideCursor];
      CGAssociateMouseAndMouseCursorPosition(isAbsoluteEnabled);
      isMouseGrabbed = TRUE; // while isMouseGrabbed = TRUE, QemuCocoaApp sends all events to [cocoaView handleEvent:]

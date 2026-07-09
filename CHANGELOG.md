@@ -1,5 +1,38 @@
 # Changelog
 
+## 1.1.1 — 2026-07-09
+
+### Fixed
+
+- **Power Mac G4: tablet input no longer falls back to capturing the
+  mouse.** QEMU treats whichever pointing device the guest touched last as
+  "the mouse", and the `via=pmu` machine configuration includes a built-in
+  USB mouse that steals pointer priority back from the virtio tablet as
+  soon as Mac OS starts polling USB — so the window quietly returned to
+  capture mode moments into every boot. With tablet input on, the Power
+  Mac now runs as `via=pmu-adb` instead: the ADB mouse never re-asserts
+  itself, so the tablet keeps priority once its driver loads, and ADB
+  remains a working (captured) fallback for guests that can't run the
+  classicvirtio driver, such as OS X or CD boots. With tablet input off,
+  the machine keeps `via=pmu` and its USB mouse exactly as before.
+- **No more "Press ⌃⌥G to release the mouse" window title in tablet
+  mode.** With an absolute pointer nothing is captured, so the machine
+  window now keeps its plain title while the mouse is inside it.
+
+## 1.1 — 2026-07-05
+
+### Added
+
+- **Tablet input: the mouse moves seamlessly in and out of the machine
+  window, no capture needed.** Both machines now present an absolute
+  pointing device — classicvirtio's `virtio-tablet-device` on the Quadra
+  800 and `virtio-tablet-pci` on the Power Mac G4 — so the host cursor maps
+  directly onto the guest screen instead of being grabbed by the window.
+  The bundled `declrom` and `ndrvloader` already carry the tablet driver,
+  so nothing needs to be installed in the guest. Tablet input is on by
+  default; a per-VM "Tablet input" toggle in the Hardware section falls
+  back to traditional mouse capture if needed.
+
 ## 1.0.5 — 2026-07-04
 
 ### Added
