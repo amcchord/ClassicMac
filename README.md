@@ -39,7 +39,7 @@ ClassicMac wraps a custom QEMU build in a native SwiftUI app and covers the enti
 
 Everything is bundled into a single `ClassicMac.app`: the two QEMU system emulators, firmware, guest video drivers, folder-sharing drivers, and a guest-additions Tools CD. No Homebrew, nothing to hunt down, nothing to install inside the guest.
 
-You bring your own Mac OS installation media: every classic Mac OS version is available in the [WinWorld operating system library](https://winworldpc.com/library/operating-systems), and ClassicMac imports the disc image with a couple of clicks.
+You bring your own Mac OS installation media: every classic Mac OS version is available in the [WinWorld operating system library](https://winworldpc.com/library/operating-systems), and ClassicMac imports the disc image with a couple of clicks. For Mac OS 9 on the Power Mac, use the [Mac OS 9.2.2 Universal Install CD](https://macintoshgarden.org/apps/mac-os-922-universal) — see the note in Getting started.
 
 ## Built on the shoulders of giants
 
@@ -72,6 +72,9 @@ ClassicMac exists because of years of brilliant work by other engineers. The pat
 2. Click **+** to create a machine — pick the Quadra 800 (System 7.1–8.1) or Power Mac G4 (Mac OS 8.5–9.2.2), choose disk size, RAM, and resolution.
 3. Attach a Mac OS install CD image and boot from it. Installation media is not bundled — download the classic Mac OS version you want from the [WinWorld operating system library](https://winworldpc.com/library/operating-systems).
 4. Optional: pick a shared folder and it appears on the emulated desktop as a disk.
+
+> [!IMPORTANT]
+> **Installing Mac OS 9? Use the [Mac OS 9.2.2 Universal Install CD](https://macintoshgarden.org/apps/mac-os-922-universal)** (Macintosh Garden; an official Apple CD from 2002, MD5 `5ba031dfd678a74b9dee414af93ea514` for the zip). It installs cleanly under emulation. Some other Mac OS 9.2.x CD images — notably certain 9.2.1 ISOs — boot fine but their installer **hangs about a third of the way through the file copy** (progress frozen at "About 4 minutes remaining") on QEMU's `mac99` machine, on every QEMU build we tested. Deceptively, force-rebooting such a machine still boots the half-copied System Folder, so the install *looks* like it worked until things misbehave later. If your install stalls there, don't debug the machine — switch install media.
 
 New machines are created as `.classic` documents (default `~/Documents/ClassicMac/`). Double-click one in Finder to boot it.
 
@@ -135,7 +138,7 @@ ClassicMac/
   scripts/                  # build-qemu, bundle-qemu, build-guest-cd, make-dmg, notarize...
 ```
 
-> Mac OS installation media is **not** committed; download the version you want from the [WinWorld operating system library](https://winworldpc.com/library/operating-systems) and import it through the app.
+> Mac OS installation media is **not** committed; download the version you want from the [WinWorld operating system library](https://winworldpc.com/library/operating-systems) (for Mac OS 9, prefer the [9.2.2 Universal Install CD](https://macintoshgarden.org/apps/mac-os-922-universal)) and import it through the app.
 
 ## How the interesting parts work
 
