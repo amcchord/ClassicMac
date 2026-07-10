@@ -29,3 +29,7 @@ DerivedData/
 
 # Editor
 *.swp
+
+# Local Python/test harness artifacts
+__pycache__/
+tools/os9-install-harness/shots/

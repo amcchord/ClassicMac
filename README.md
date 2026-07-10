@@ -39,7 +39,7 @@ ClassicMac wraps a custom QEMU build in a native SwiftUI app and covers the enti
 
 Everything is bundled into a single `ClassicMac.app`: the two QEMU system emulators, firmware, guest video drivers, folder-sharing drivers, and a guest-additions Tools CD. No Homebrew, nothing to hunt down, nothing to install inside the guest.
 
-You bring your own Mac OS installation media: every classic Mac OS version is available in the [WinWorld operating system library](https://winworldpc.com/library/operating-systems), and ClassicMac imports the disc image with a couple of clicks. For Mac OS 9 on the Power Mac, use the [Mac OS 9.2.2 Universal Install CD](https://macintoshgarden.org/apps/mac-os-922-universal) — see the note in Getting started.
+You bring your own Mac OS installation media: every classic Mac OS version is available in the [WinWorld operating system library](https://winworldpc.com/library/operating-systems), and ClassicMac imports the disc image with a couple of clicks. Mac OS 9.2.1 and the [Mac OS 9.2.2 Universal Install CD](https://macintoshgarden.org/apps/mac-os-922-universal) both install reliably on the Power Mac — see the note in Getting started.
 
 ## Built on the shoulders of giants
 
@@ -74,7 +74,13 @@ ClassicMac exists because of years of brilliant work by other engineers. The pat
 4. Optional: pick a shared folder and it appears on the emulated desktop as a disk.
 
 > [!IMPORTANT]
-> **Installing Mac OS 9? Use the [Mac OS 9.2.2 Universal Install CD](https://macintoshgarden.org/apps/mac-os-922-universal)** (Macintosh Garden; an official Apple CD from 2002, MD5 `5ba031dfd678a74b9dee414af93ea514` for the zip). It installs cleanly under emulation. Some other Mac OS 9.2.x CD images — notably certain 9.2.1 ISOs — boot fine but their installer **hangs about a third of the way through the file copy** (progress frozen at "About 4 minutes remaining") on QEMU's `mac99` machine, on every QEMU build we tested. Deceptively, force-rebooting such a machine still boots the half-copied System Folder, so the install *looks* like it worked until things misbehave later. If your install stalls there, don't debug the machine — switch install media.
+> **Installing Mac OS 9?** Initialize the destination with Drive Setup from
+> the CD first. In the Installer's final **Install Software** screen, open
+> **Options…** and turn off **Update Apple Hard Disk Drivers**, then perform a
+> regular installation. ClassicMac's QEMU build fixes the MacIO IDE/DBDMA
+> completion race that made some 9.2.1 and 9.2.2 installers freeze around
+> "About 4 minutes remaining," so a frozen partial System Folder is no longer
+> expected or considered a successful install.
 
 New machines are created as `.classic` documents (default `~/Documents/ClassicMac/`). Double-click one in Finder to boot it.
 
@@ -134,11 +140,12 @@ ClassicMac/
   shared/                   # classicvirtio card firmware + ndrvloader + PRAM seed
   cocoaui/                  # Cocoa display patches: menus, input helpers, media names
   audio/                    # CoreAudio backend patch
+  ide/                      # PPC MacIO IDE/DBDMA timing fix + tracepoints
   guestcd/                  # Tools CD manifest + HFS copy tooling
   scripts/                  # build-qemu, bundle-qemu, build-guest-cd, make-dmg, notarize...
 ```
 
-> Mac OS installation media is **not** committed; download the version you want from the [WinWorld operating system library](https://winworldpc.com/library/operating-systems) (for Mac OS 9, prefer the [9.2.2 Universal Install CD](https://macintoshgarden.org/apps/mac-os-922-universal)) and import it through the app.
+> Mac OS installation media is **not** committed; download the version you want from the [WinWorld operating system library](https://winworldpc.com/library/operating-systems) (Mac OS 9.2.1 and the [9.2.2 Universal Install CD](https://macintoshgarden.org/apps/mac-os-922-universal) are both supported) and import it through the app.
 
 ## How the interesting parts work
 
@@ -146,4 +153,5 @@ ClassicMac/
 - **Power Mac video** — QEMU's std VGA gains a host-resize request channel (`ppcvid/vga-host-resize.patch`). The bundled `qemu_vga.ndrv` polls it from its VBL task, retargets a dynamic display mode, and fires a VSL connect-change interrupt so the Display Manager re-probes and adopts the new size.
 - **Restart on the Power Mac** — an in-place reset hangs QEMU's `mac99`, so the app runs it with `-action reboot=shutdown`, watches the QMP shutdown reason, and relaunches on a reset — Restart behaves like a real reboot.
 - **Sound** — the ASC is patched to output silence when idle (`qfb/asc-silence.patch`); the Power Mac uses Mark Cave-Ayland's screamer device with a screamer-aware OpenBIOS build.
+- **Power Mac storage** — MacIO IDE/DBDMA holds the final DMA descriptor for 1 ms before publishing completion. Real hardware cannot finish in the same scheduling window in which the driver starts an operation; without this small latency, cached host I/O can beat Mac OS 9's synchronous-wait setup and lose its wakeup, freezing Installer mid-copy. Focused MacIO/DBDMA tracepoints remain available for regression runs.
 - **Emulation speed** — both machines run on QEMU's TCG JIT; an Apple Silicon Mac runs them comfortably faster than the original hardware.

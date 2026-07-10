@@ -1,0 +1,489 @@
+diff --git a/hw/ide/macio.c b/hw/ide/macio.c
+index a7ed41fa265..1a8fa26bd84 100644
+--- a/hw/ide/macio.c
++++ b/hw/ide/macio.c
+@@ -32,8 +32,10 @@
+ #include "hw/misc/macio/macio.h"
+ #include "system/block-backend.h"
+ #include "system/dma.h"
++#include "qemu/timer.h"
+ 
+ #include "ide-internal.h"
++#include "trace.h"
+ 
+ /* debug MACIO */
+ // #define DEBUG_MACIO
+@@ -55,19 +57,96 @@ static const int debug_macio = 0;
+ /* MacIO based PowerPC IDE */
+ 
+ #define MACIO_PAGE_SIZE 4096
++#define MACIO_IDE_DEFAULT_COMPLETION_DELAY_NS (1 * SCALE_MS)
++
++static IDEState *pmac_ide_dma_state(MACIOIDEState *m)
++{
++    if (m->dma_active || m->dma_completion_pending) {
++        return &m->bus.ifs[m->dma_unit];
++    }
++
++    return ide_bus_active_if(&m->bus);
++}
++
++static void pmac_ide_complete(void *opaque)
++{
++    MACIOIDEState *m = opaque;
++    DBDMAState *dbdma = m->dbdma;
++    DBDMA_io *io = &dbdma->channels[m->channel].io;
++    IDEState *s = &m->bus.ifs[m->dma_unit];
++
++    assert(m->dma_completion_pending);
++    trace_pmac_ide_completion(m, s->unit, m->dma_completion_atapi,
++                              m->dma_completion_delay_ns);
++
++    m->dma_completion_pending = false;
++    m->dma_active = false;
++
++    if (m->dma_completion_atapi) {
++        ide_atapi_cmd_ok(s);
++    } else {
++        s->status = READY_STAT | SEEK_STAT;
++        ide_bus_set_irq(s->bus);
++    }
++
++    ide_set_inactive(s, false);
++    io->dma_end(io);
++}
++
++static void pmac_ide_complete_pending(MACIOIDEState *m)
++{
++    if (!m->dma_completion_pending) {
++        return;
++    }
++
++    timer_del(m->dma_completion_timer);
++    pmac_ide_complete(m);
++}
++
++static bool pmac_ide_delay_completion(MACIOIDEState *m, IDEState *s,
++                                      bool atapi)
++{
++    if (!m->dma_completion_delay_ns) {
++        return false;
++    }
++
++    assert(!m->dma_completion_pending);
++    m->dma_completion_pending = true;
++    m->dma_completion_atapi = atapi;
++    s->bus->dma->aiocb = NULL;
++
++    /*
++     * Real block-backed MacIO DMA cannot finish in the same scheduling
++     * window in which the guest starts it.  With a cached host image QEMU
++     * can do exactly that, racing classic Mac OS before its synchronous I/O
++     * wait is armed.  Keep the terminal descriptor active briefly, then
++     * publish the IDE and DBDMA completions together from the timer callback.
++     */
++    trace_pmac_ide_completion_scheduled(m, s->unit, atapi,
++                                        m->dma_completion_delay_ns);
++    timer_mod(m->dma_completion_timer,
++              qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) +
++              m->dma_completion_delay_ns);
++    return true;
++}
+ 
+ static void pmac_ide_atapi_transfer_cb(void *opaque, int ret)
+ {
+     DBDMA_io *io = opaque;
+     MACIOIDEState *m = io->opaque;
+-    IDEState *s = ide_bus_active_if(&m->bus);
++    IDEState *s = pmac_ide_dma_state(m);
+     int64_t offset;
+ 
++    trace_pmac_ide_transfer_cb(m, s->unit, s->drive_kind, s->dma_cmd,
++                               true, ret, m->dma_active, io->len,
++                               s->io_buffer_size, s->io_buffer_index);
++
+     MACIO_DPRINTF("pmac_ide_atapi_transfer_cb\n");
+ 
+     if (ret < 0) {
+         MACIO_DPRINTF("DMA error: %d\n", ret);
+         qemu_sglist_destroy(&s->sg);
++        m->dma_active = false;
+         ide_atapi_io_error(s, ret);
+         goto done;
+     }
+@@ -83,6 +162,10 @@ static void pmac_ide_atapi_transfer_cb(void *opaque, int ret)
+     if (s->io_buffer_size <= 0) {
+         MACIO_DPRINTF("End of IDE transfer\n");
+         qemu_sglist_destroy(&s->sg);
++        if (pmac_ide_delay_completion(m, s, true)) {
++            block_acct_done(blk_get_stats(s->blk), &s->acct);
++            return;
++        }
+         ide_atapi_cmd_ok(s);
+         m->dma_active = false;
+         goto done;
+@@ -109,6 +192,9 @@ static void pmac_ide_atapi_transfer_cb(void *opaque, int ret)
+ 
+     qemu_sglist_init(&s->sg, DEVICE(m), io->len / MACIO_PAGE_SIZE + 1,
+                      &address_space_memory);
++    trace_pmac_ide_transfer_submit(m, s->unit, s->drive_kind, s->dma_cmd,
++                                   true, offset, io->addr, io->len,
++                                   s->io_buffer_size, s->io_buffer_index);
+     qemu_sglist_add(&s->sg, io->addr, io->len);
+     s->io_buffer_size -= io->len;
+     s->io_buffer_index += io->len;
+@@ -133,14 +219,19 @@ static void pmac_ide_transfer_cb(void *opaque, int ret)
+ {
+     DBDMA_io *io = opaque;
+     MACIOIDEState *m = io->opaque;
+-    IDEState *s = ide_bus_active_if(&m->bus);
++    IDEState *s = pmac_ide_dma_state(m);
+     int64_t offset;
+ 
++    trace_pmac_ide_transfer_cb(m, s->unit, s->drive_kind, s->dma_cmd,
++                               false, ret, m->dma_active, io->len,
++                               s->io_buffer_size, s->io_buffer_index);
++
+     MACIO_DPRINTF("pmac_ide_transfer_cb\n");
+ 
+     if (ret < 0) {
+         MACIO_DPRINTF("DMA error: %d\n", ret);
+         qemu_sglist_destroy(&s->sg);
++        m->dma_active = false;
+         ide_dma_error(s);
+         goto done;
+     }
+@@ -156,6 +247,13 @@ static void pmac_ide_transfer_cb(void *opaque, int ret)
+     if (s->io_buffer_size <= 0) {
+         MACIO_DPRINTF("End of IDE transfer\n");
+         qemu_sglist_destroy(&s->sg);
++        if (pmac_ide_delay_completion(m, s, false)) {
++            if (s->dma_cmd == IDE_DMA_READ ||
++                s->dma_cmd == IDE_DMA_WRITE) {
++                block_acct_done(blk_get_stats(s->blk), &s->acct);
++            }
++            return;
++        }
+         s->status = READY_STAT | SEEK_STAT;
+         ide_bus_set_irq(s->bus);
+         m->dma_active = false;
+@@ -172,6 +270,9 @@ static void pmac_ide_transfer_cb(void *opaque, int ret)
+ 
+     qemu_sglist_init(&s->sg, DEVICE(m), io->len / MACIO_PAGE_SIZE + 1,
+                      &address_space_memory);
++    trace_pmac_ide_transfer_submit(m, s->unit, s->drive_kind, s->dma_cmd,
++                                   false, offset, io->addr, io->len,
++                                   s->io_buffer_size, s->io_buffer_index);
+     qemu_sglist_add(&s->sg, io->addr, io->len);
+     s->io_buffer_size -= io->len;
+     s->io_buffer_index += io->len;
+@@ -180,7 +281,7 @@ static void pmac_ide_transfer_cb(void *opaque, int ret)
+     switch (s->dma_cmd) {
+     case IDE_DMA_READ:
+         s->bus->dma->aiocb = dma_blk_read(s->blk, &s->sg, offset, 0x1,
+-                                          pmac_ide_atapi_transfer_cb, io);
++                                          pmac_ide_transfer_cb, io);
+         break;
+     case IDE_DMA_WRITE:
+         s->bus->dma->aiocb = dma_blk_write(s->blk, &s->sg, offset, 0x1,
+@@ -213,7 +314,11 @@ done:
+ static void pmac_ide_transfer(DBDMA_io *io)
+ {
+     MACIOIDEState *m = io->opaque;
+-    IDEState *s = ide_bus_active_if(&m->bus);
++    IDEState *s = pmac_ide_dma_state(m);
++
++    trace_pmac_ide_transfer(m, s->unit, s->drive_kind, s->dma_cmd,
++                            m->dma_active, io->len, s->io_buffer_size,
++                            s->io_buffer_index, s->status, s->nsector);
+ 
+     MACIO_DPRINTF("\n");
+ 
+@@ -241,14 +346,21 @@ static void pmac_ide_transfer(DBDMA_io *io)
+     pmac_ide_transfer_cb(io, 0);
+ }
+ 
+-static void pmac_ide_flush(DBDMA_io *io)
++static void pmac_ide_drain(MACIOIDEState *m)
+ {
+-    MACIOIDEState *m = io->opaque;
+-    IDEState *s = ide_bus_active_if(&m->bus);
++    IDEState *s = pmac_ide_dma_state(m);
+ 
+     if (s->bus->dma->aiocb) {
+         blk_drain(s->blk);
+     }
++
++    /* blk_drain() can turn the final AIO into a pending timer. */
++    pmac_ide_complete_pending(m);
++}
++
++static void pmac_ide_flush(DBDMA_io *io)
++{
++    pmac_ide_drain(io->opaque);
+ }
+ 
+ /* PowerMac IDE memory IO */
+@@ -318,12 +430,19 @@ static void pmac_ide_write(void *opaque, hwaddr addr, uint64_t val,
+         break;
+     case 0x1 ... 0x7:
+         if (size == 1) {
++            if (reg == 0x7 && val == WIN_DEVICE_RESET) {
++                pmac_ide_drain(d);
++            }
+             ide_ioport_write(&d->bus, reg, val);
+         }
+         break;
+     case 0x8:
+     case 0x16:
+         if (size == 1) {
++            if (!(d->bus.cmd & IDE_CTRL_RESET) &&
++                (val & IDE_CTRL_RESET)) {
++                pmac_ide_drain(d);
++            }
+             ide_ctrl_write(&d->bus, 0, val);
+         }
+         break;
+@@ -350,14 +469,41 @@ static const MemoryRegionOps pmac_ide_ops = {
+     .endianness = DEVICE_LITTLE_ENDIAN,
+ };
+ 
++static int macio_ide_post_load(void *opaque, int version_id)
++{
++    MACIOIDEState *m = opaque;
++    DBDMAState *dbdma = m->dbdma;
++    DBDMA_io *io = &dbdma->channels[m->channel].io;
++
++    if (version_id < 6) {
++        m->dma_unit = m->bus.unit;
++        m->dma_completion_pending = false;
++        m->dma_completion_atapi = false;
++    }
++
++    if (m->dma_unit >= ARRAY_SIZE(m->bus.ifs) ||
++        m->dma_completion_pending != timer_pending(m->dma_completion_timer) ||
++        (m->dma_completion_pending &&
++         (!m->dma_active || !io->processing))) {
++        return -EINVAL;
++    }
++
++    return 0;
++}
++
+ static const VMStateDescription vmstate_pmac = {
+     .name = "ide",
+-    .version_id = 5,
++    .version_id = 6,
+     .minimum_version_id = 0,
++    .post_load = macio_ide_post_load,
+     .fields = (const VMStateField[]) {
+         VMSTATE_IDE_BUS(bus, MACIOIDEState),
+         VMSTATE_IDE_DRIVES(bus.ifs, MACIOIDEState),
+         VMSTATE_BOOL(dma_active, MACIOIDEState),
++        VMSTATE_BOOL_V(dma_completion_pending, MACIOIDEState, 6),
++        VMSTATE_BOOL_V(dma_completion_atapi, MACIOIDEState, 6),
++        VMSTATE_UINT8_V(dma_unit, MACIOIDEState, 6),
++        VMSTATE_TIMER_PTR_V(dma_completion_timer, MACIOIDEState, 6),
+         VMSTATE_UINT32(timing_reg, MACIOIDEState),
+         VMSTATE_UINT32(irq_reg, MACIOIDEState),
+         VMSTATE_END_OF_LIST()
+@@ -368,7 +514,15 @@ static void macio_ide_reset(DeviceState *dev)
+ {
+     MACIOIDEState *d = MACIO_IDE(dev);
+ 
++    timer_del(d->dma_completion_timer);
++    if (d->dma_completion_pending) {
++        DBDMAState *dbdma = d->dbdma;
++
++        dbdma->channels[d->channel].io.processing = false;
++    }
++    d->dma_completion_pending = false;
+     ide_bus_reset(&d->bus);
++    d->dma_active = false;
+ }
+ 
+ static int ide_nop_int(const IDEDMA *dma, bool is_write)
+@@ -386,6 +540,7 @@ static void ide_dbdma_start(const IDEDMA *dma, IDEState *s,
+ {
+     MACIOIDEState *m = container_of(dma, MACIOIDEState, dma);
+ 
++    m->dma_unit = s->unit;
+     s->io_buffer_index = 0;
+     if (s->drive_kind == IDE_CD) {
+         s->io_buffer_size = s->packet_transfer_size;
+@@ -400,6 +555,9 @@ static void ide_dbdma_start(const IDEDMA *dma, IDEState *s,
+     MACIO_DPRINTF("-------------------------\n");
+ 
+     m->dma_active = true;
++    trace_pmac_ide_dbdma_start(m, s->unit, s->drive_kind, s->dma_cmd,
++                               s->io_buffer_size, s->io_buffer_index,
++                               s->status, s->nsector);
+     DBDMA_kick(m->dbdma);
+ }
+ 
+@@ -451,6 +609,9 @@ static void macio_ide_initfn(Object *obj)
+     sysbus_init_irq(d, &s->real_ide_irq);
+     sysbus_init_irq(d, &s->real_dma_irq);
+ 
++    s->dma_completion_timer = timer_new_ns(QEMU_CLOCK_VIRTUAL,
++                                            pmac_ide_complete, s);
++
+     qdev_init_gpio_in(DEVICE(obj), pmac_ide_irq, MACIO_IDE_PMAC_NIRQS);
+ 
+     object_property_add_link(obj, "dbdma", TYPE_MAC_DBDMA,
+@@ -461,13 +622,29 @@ static void macio_ide_initfn(Object *obj)
+ static const Property macio_ide_properties[] = {
+     DEFINE_PROP_UINT32("channel", MACIOIDEState, channel, 0),
+     DEFINE_PROP_UINT32("addr", MACIOIDEState, addr, -1),
++    DEFINE_PROP_UINT64("dma-completion-delay-ns", MACIOIDEState,
++                       dma_completion_delay_ns,
++                       MACIO_IDE_DEFAULT_COMPLETION_DELAY_NS),
+ };
+ 
++static void macio_ide_finalizefn(Object *obj)
++{
++    MACIOIDEState *s = MACIO_IDE(obj);
++
++    timer_free(s->dma_completion_timer);
++}
++
++static void macio_ide_unrealizefn(DeviceState *dev)
++{
++    macio_ide_reset(dev);
++}
++
+ static void macio_ide_class_init(ObjectClass *oc, const void *data)
+ {
+     DeviceClass *dc = DEVICE_CLASS(oc);
+ 
+     dc->realize = macio_ide_realizefn;
++    dc->unrealize = macio_ide_unrealizefn;
+     device_class_set_legacy_reset(dc, macio_ide_reset);
+     device_class_set_props(dc, macio_ide_properties);
+     dc->vmsd = &vmstate_pmac;
+@@ -479,6 +656,7 @@ static const TypeInfo macio_ide_type_info = {
+     .parent = TYPE_SYS_BUS_DEVICE,
+     .instance_size = sizeof(MACIOIDEState),
+     .instance_init = macio_ide_initfn,
++    .instance_finalize = macio_ide_finalizefn,
+     .class_init = macio_ide_class_init,
+ };
+ 
+diff --git a/hw/ide/trace-events b/hw/ide/trace-events
+index 57042cafddc..0965dc3ace4 100644
+--- a/hw/ide/trace-events
++++ b/hw/ide/trace-events
+@@ -21,6 +21,14 @@ ide_reset(void *s) "IDEstate %p"
+ ide_bus_reset_aio(void) "aio_cancel"
+ ide_dma_cb(void *s, int64_t sector_num, int n, const char *dma) "IDEState %p; sector_num=%"PRId64" n=%d cmd=%s"
+ 
++# macio.c
++pmac_ide_transfer(void *m, int unit, int kind, int dma_cmd, bool dma_active, int io_len, int buffer_size, int buffer_index, uint8_t status, uint32_t nsector) "macio-ide %p unit=%d kind=%d dma_cmd=%d active=%d descriptor=%d buffer=%d index=%d status=0x%02x nsector=%u"
++pmac_ide_transfer_cb(void *m, int unit, int kind, int dma_cmd, bool atapi, int ret, bool dma_active, int io_len, int buffer_size, int buffer_index) "macio-ide %p unit=%d kind=%d dma_cmd=%d atapi_callback=%d ret=%d active=%d residual=%d buffer=%d index=%d"
++pmac_ide_transfer_submit(void *m, int unit, int kind, int dma_cmd, bool atapi, int64_t offset, uint64_t addr, int io_len, int buffer_size, int buffer_index) "macio-ide %p unit=%d kind=%d dma_cmd=%d atapi_submit=%d offset=%"PRId64" addr=0x%"PRIx64" len=%d buffer=%d index=%d"
++pmac_ide_dbdma_start(void *m, int unit, int kind, int dma_cmd, int buffer_size, int buffer_index, uint8_t status, uint32_t nsector) "macio-ide %p unit=%d kind=%d dma_cmd=%d IDE-ready buffer=%d index=%d status=0x%02x nsector=%u"
++pmac_ide_completion_scheduled(void *m, int unit, bool atapi, uint64_t delay_ns) "macio-ide %p unit=%d atapi=%d completion delayed by %"PRIu64" ns"
++pmac_ide_completion(void *m, int unit, bool atapi, uint64_t delay_ns) "macio-ide %p unit=%d atapi=%d delayed completion after %"PRIu64" ns"
++
+ # BMDMA HBAs:
+ 
+ # cmd646.c
+diff --git a/hw/misc/macio/mac_dbdma.c b/hw/misc/macio/mac_dbdma.c
+index a55c9c99824..01e9199679c 100644
+--- a/hw/misc/macio/mac_dbdma.c
++++ b/hw/misc/macio/mac_dbdma.c
+@@ -45,6 +45,7 @@
+ #include "qemu/module.h"
+ #include "qemu/log.h"
+ #include "system/dma.h"
++#include "trace.h"
+ 
+ /* debug DBDMA */
+ #define DEBUG_DBDMA 0
+@@ -281,6 +282,10 @@ static void dbdma_end(DBDMA_io *io)
+     DBDMA_channel *ch = io->channel;
+     dbdma_cmd *current = &ch->current;
+ 
++    trace_mac_dbdma_end(ch->channel, io->len, io->is_last,
++                        ch->regs[DBDMA_STATUS],
++                        ch->regs[DBDMA_CMDPTR_LO]);
++
+     DBDMA_DPRINTFCH(ch, "%s\n", __func__);
+ 
+     if (conditional_wait(ch))
+@@ -307,6 +312,9 @@ wait:
+ static void start_output(DBDMA_channel *ch, int key, uint32_t addr,
+                         uint16_t req_count, int is_last)
+ {
++    trace_mac_dbdma_start(ch->channel, false, key, addr, req_count,
++                          is_last, ch->regs[DBDMA_STATUS],
++                          ch->regs[DBDMA_CMDPTR_LO]);
+     DBDMA_DPRINTFCH(ch, "start_output\n");
+ 
+     /* KEY_REGS, KEY_DEVICE and KEY_STREAM
+@@ -333,6 +341,9 @@ static void start_output(DBDMA_channel *ch, int key, uint32_t addr,
+ static void start_input(DBDMA_channel *ch, int key, uint32_t addr,
+                        uint16_t req_count, int is_last)
+ {
++    trace_mac_dbdma_start(ch->channel, true, key, addr, req_count,
++                          is_last, ch->regs[DBDMA_STATUS],
++                          ch->regs[DBDMA_CMDPTR_LO]);
+     DBDMA_DPRINTFCH(ch, "start_input\n");
+ 
+     /* KEY_REGS, KEY_DEVICE and KEY_STREAM
+@@ -578,6 +589,8 @@ void DBDMA_register_channel(void *dbdma, int nchan, qemu_irq irq,
+     ch->rw = rw;
+     ch->flush = flush;
+     ch->io.opaque = opaque;
++    /* Function pointers are not migrated with the DBDMA I/O state. */
++    ch->io.dma_end = dbdma_end;
+ }
+ 
+ static void dbdma_control_write(DBDMA_channel *ch)
+@@ -593,6 +606,8 @@ static void dbdma_control_write(DBDMA_channel *ch)
+      * appropriately and store back
+      */
+     status = ch->regs[DBDMA_STATUS];
++    trace_mac_dbdma_control(ch->channel, mask, value, status,
++                            ch->regs[DBDMA_CMDPTR_LO], ch->io.processing);
+ 
+     /* RUN and PAUSE are bits under SW control only
+      * FLUSH and WAKE are set by SW and cleared by HW
+diff --git a/hw/misc/macio/trace-events b/hw/misc/macio/trace-events
+index 055a407aebb..c37d04573fe 100644
+--- a/hw/misc/macio/trace-events
++++ b/hw/misc/macio/trace-events
+@@ -21,6 +21,11 @@ macio_gpio_irq_deassert(int gpio) "deasserting GPIO %d"
+ macio_gpio_write(uint64_t addr, uint64_t val) "addr 0x%"PRIx64" val 0x%"PRIx64
+ macio_gpio_read(uint64_t addr, uint64_t val) "addr 0x%"PRIx64" val 0x%"PRIx64
+ 
++# mac_dbdma.c
++mac_dbdma_start(int channel, bool input, int key, uint32_t addr, uint16_t count, bool is_last, uint32_t status, uint32_t cmdptr) "channel=0x%02x input=%d key=0x%x addr=0x%08x count=%u last=%d status=0x%08x cmdptr=0x%08x"
++mac_dbdma_end(int channel, int residual, bool is_last, uint32_t status, uint32_t cmdptr) "channel=0x%02x residual=%d last=%d status=0x%08x cmdptr=0x%08x"
++mac_dbdma_control(int channel, uint16_t mask, uint16_t value, uint32_t status, uint32_t cmdptr, bool processing) "channel=0x%02x mask=0x%04x value=0x%04x status=0x%08x cmdptr=0x%08x processing=%d"
++
+ # pmu.c
+ pmu_adb_poll(int olen) "ADB autopoll, olen=%d"
+ pmu_one_sec_timer(void) "PMU one sec..."
+diff --git a/include/hw/misc/macio/macio.h b/include/hw/misc/macio/macio.h
+--- a/include/hw/misc/macio/macio.h
++++ b/include/hw/misc/macio/macio.h
+@@ -36,5 +36,6 @@
+ #include "hw/ppc/openpic.h"
+ #include "hw/audio/screamer.h"
++#include "qemu/timer.h"
+ #include "qom/object.h"
+ 
+ /* Old World IRQs */
+@@ -93,6 +94,11 @@ struct MACIOIDEState {
+     IDEDMA dma;
+     void *dbdma;
+     bool dma_active;
++    bool dma_completion_pending;
++    bool dma_completion_atapi;
++    uint8_t dma_unit;
++    uint64_t dma_completion_delay_ns;
++    QEMUTimer *dma_completion_timer;
+     uint32_t timing_reg;
+     uint32_t irq_reg;
+ };

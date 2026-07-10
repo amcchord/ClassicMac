@@ -436,6 +436,11 @@ final class QEMUManager: ObservableObject {
         // bundled qemu_vga.ndrv offer Black & White, 4 and 16 colors in the
         // Monitors control panel alongside 256/thousands/millions.
         args += ["-global", "VGA.packed-lowbpp=on"]
+        // Cached host I/O can complete a MacIO DBDMA command before classic
+        // Mac OS has armed its synchronous wait. Keep the final descriptor
+        // active for 1 ms so IDE and DBDMA completion arrive after the guest
+        // is ready; without this, Mac OS 9.2.x Installer can wait forever.
+        args += ["-global", "macio-ide.dma-completion-delay-ns=1000000"]
         // Route the OpenBIOS firmware console to the (disconnected) serial
         // port so the firmware text screens never appear. Together with the
         // bundled OpenBIOS's console background being repainted black (see
