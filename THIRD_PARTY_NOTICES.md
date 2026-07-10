@@ -11,8 +11,8 @@ QEMU emulator as a whole is licensed under the GNU General Public License,
 version 2. Individual source and firmware files may carry compatible licenses,
 as described by QEMU's `LICENSE` file and their source headers.
 
-The exact corresponding source is reproducible from the ClassicMac 1.2.0
-source at <https://github.com/amcchord/ClassicMac/tree/v1.2.0>. The repository's
+The exact corresponding source is reproducible from the ClassicMac 1.2.1
+source at <https://github.com/amcchord/ClassicMac/tree/v1.2.1>. The repository's
 `scripts/build-qemu.sh` retrieves the pinned upstream QEMU 11.0.2 source and
 applies every ClassicMac modification stored in the repository.
 
