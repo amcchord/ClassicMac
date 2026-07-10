@@ -8,7 +8,9 @@ final class QEMURunnerArgumentTests: XCTestCase {
         family: MachineFamily = .powerMacG4,
         bootFromCD: Bool = true,
         toolsCDInserted: Bool = true,
-        networking: Bool = true
+        networking: Bool = true,
+        tabletInput: Bool = true,
+        sharedFolderPath: String? = nil
     ) -> VMConfig {
         VMConfig(
             name: "Argument Test",
@@ -19,7 +21,8 @@ final class QEMURunnerArgumentTests: XCTestCase {
             toolsCDInserted: toolsCDInserted,
             networking: networking,
             sound: false,
-            tabletInput: false,
+            tabletInput: tabletInput,
+            sharedFolderPath: sharedFolderPath,
             bundleURL: URL(fileURLWithPath: "/tmp/argument-test.classic")
         )
     }
@@ -106,5 +109,75 @@ final class QEMURunnerArgumentTests: XCTestCase {
 
         XCTAssertEqual(optionValues("-nic", in: powerMacArguments), ["none"])
         XCTAssertEqual(optionValues("-nic", in: quadraArguments), ["none"])
+    }
+
+    func testPowerMacCDStartupKeepsTabletInputEnabled() {
+        let arguments = QEMUManager.buildArguments(
+            for: config(tabletInput: true)
+        )
+        let devices = optionValues("-device", in: arguments)
+
+        XCTAssertEqual(
+            optionValues("-M", in: arguments),
+            ["mac99,via=pmu-adb,audiodev=snd0"]
+        )
+        XCTAssertEqual(optionValues("-boot", in: arguments), ["d"])
+        XCTAssertTrue(devices.contains("virtio-tablet-pci"))
+        XCTAssertTrue(
+            devices.contains { $0.hasPrefix("loader,addr=0x4000000,file=") }
+        )
+        XCTAssertTrue(
+            optionValues("-prom-env", in: arguments)
+                .contains("boot-command=init-program go")
+        )
+    }
+
+    func testPowerMacCDStartupSuppressesSharingButKeepsTabletInput() {
+        let arguments = QEMUManager.buildArguments(
+            for: config(
+                tabletInput: true,
+                sharedFolderPath: "/tmp/shared-folder"
+            )
+        )
+        let devices = optionValues("-device", in: arguments)
+
+        XCTAssertTrue(devices.contains("virtio-tablet-pci"))
+        XCTAssertFalse(devices.contains { $0.hasPrefix("virtio-9p-pci,") })
+        XCTAssertTrue(optionValues("-fsdev", in: arguments).isEmpty)
+    }
+
+    func testPowerMacCDStartupWithoutTabletUsesRelativeMouse() {
+        let arguments = QEMUManager.buildArguments(
+            for: config(tabletInput: false)
+        )
+        let devices = optionValues("-device", in: arguments)
+
+        XCTAssertEqual(
+            optionValues("-M", in: arguments),
+            ["mac99,via=pmu,audiodev=snd0"]
+        )
+        XCTAssertFalse(devices.contains("virtio-tablet-pci"))
+        XCTAssertFalse(
+            devices.contains { $0.hasPrefix("loader,addr=0x4000000,file=") }
+        )
+        XCTAssertFalse(
+            optionValues("-prom-env", in: arguments)
+                .contains("boot-command=init-program go")
+        )
+    }
+
+    func testPowerMacNormalStartupKeepsTabletInputEnabled() {
+        let arguments = QEMUManager.buildArguments(
+            for: config(bootFromCD: false, tabletInput: true)
+        )
+
+        XCTAssertEqual(
+            optionValues("-M", in: arguments),
+            ["mac99,via=pmu-adb,audiodev=snd0"]
+        )
+        XCTAssertTrue(
+            optionValues("-device", in: arguments)
+                .contains("virtio-tablet-pci")
+        )
     }
 }

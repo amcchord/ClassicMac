@@ -390,14 +390,14 @@ final class QEMUManager: ObservableObject {
 
         // Folder sharing needs the classicvirtio ndrvloader to run before the
         // OS: it installs the virtio NDRVs and then continues the normal boot.
-        // Tablet input also needs the ndrvloader (it loads the virtio-tablet
-        // driver). The loader takes over the firmware boot command, so it is
-        // skipped when booting from CD (e.g. OS installs) - sharing and tablet
-        // input are simply inactive for that boot.
+        // Sharing stays inactive while booting an installer CD so the install
+        // environment never sees the host folder. Tablet input uses the same
+        // loader, but remains enabled: after injecting its NDRV the loader runs
+        // Open Firmware's normal `boot` command, which still honors `-boot d`.
         let bootingFromUserCD = config.bootFromCD && config.cdImagePath?.isEmpty == false
         let deferToolsMedia = bootingFromUserCD && config.networking
         let sharing = config.hasSharedFolder && !bootingFromUserCD
-        let tablet = config.tabletInput && !bootingFromUserCD
+        let tablet = config.tabletInput
         let needsNdrvLoader = sharing || tablet
 
         // Input configuration. QEMU treats whichever pointing device the guest

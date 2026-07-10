@@ -14,6 +14,12 @@
   machine's default network adapter when no `-nic` option is supplied, so the
   old off path silently left networking enabled. ClassicMac now passes
   `-nic none` explicitly.
+- **Power Mac tablet input now stays seamless while booting installer CDs.**
+  The CD path used to ignore the enabled tablet setting, omit the classicvirtio
+  driver loader, and fall back to a relative USB mouse that captured the host
+  pointer. The loader installs the tablet NDRV and then resumes Open Firmware's
+  selected boot device, so it can safely remain active while `-boot d` starts
+  Mac OS 9.2.1 or 9.2.2 from CD.
 
 ## 1.2.0 — 2026-07-10
 
