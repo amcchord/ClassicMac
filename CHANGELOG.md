@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.3.0 — 2026-07-10
+
+### Added
+
+- **Borderless machine windows.** Choose View → Hide Title Bar or press
+  Control-Option-T to remove the title, traffic-light controls, and titlebar
+  separator for a clean guest-only window. The command becomes Show Title Bar
+  while active and is also available from the machine's Dock menu.
+
+### Fixed
+
+- **Fullscreen now uses the complete drawable resolution.** The Cocoa display
+  previously subtracted the screen's safe-area inset and could request a guest
+  mode one titlebar-height shorter than the actual fullscreen content. It now
+  reports the final content frame after the transition, opts the machine helper
+  out of camera-housing compatibility mode, and leaves fullscreen sizing to
+  AppKit.
+
 ## 1.2.1 — 2026-07-10
 
 ### Fixed

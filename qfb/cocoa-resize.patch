@@ -27,10 +27,10 @@ diff --git a/ui/cocoa.m b/ui/cocoa.m
 +     * produces an oversized window. We deliberately do NOT lock the window's
 +     * aspect ratio, so the user can freely drag it toward any resolution.
 +     */
-+    if ([[self window] styleMask] & NSWindowStyleMaskFullScreen) {
-+        [[self window] setContentSize:[self fixAspectRatio:[self screenSafeAreaSize]]];
-+        [[self window] center];
-+    } else {
++    if (!([[self window] styleMask] & NSWindowStyleMaskFullScreen)) {
++        /* Native fullscreen windows are sized by AppKit. Only resize windowed
++         * content here; the guest follows the actual fullscreen view instead. */
++
          CGFloat width = screen.width;
          CGFloat height = screen.height;
          NSSize maxSize = [self screenSafeAreaSize];
@@ -46,7 +46,19 @@ diff --git a/ui/cocoa.m b/ui/cocoa.m
      }
  }
  
-@@ -706,8 +705,15 @@
+@@ -663,10 +662,9 @@
+         CGDirectDisplayID display = [[description objectForKey:@"NSScreenNumber"] unsignedIntValue];
+         NSSize screenSize = [[[self window] screen] frame].size;
+         CGSize screenPhysicalSize = CGDisplayScreenSize(display);
+-        bool isFullscreen = ([[self window] styleMask] & NSWindowStyleMaskFullScreen) != 0;
+         CVDisplayLinkRef displayLink;
+ 
+-        frameSize = isFullscreen ? [self screenSafeAreaSize] : [self frame].size;
++        frameSize = [self frame].size;
+ 
+         if (!CVDisplayLinkCreateWithCGDisplay(display, &displayLink)) {
+             CVTime period = CVDisplayLinkGetNominalOutputVideoRefreshPeriod(displayLink);
+@@ -706,8 +704,15 @@
  
      info.xoff = 0;
      info.yoff = 0;
@@ -64,7 +76,7 @@ diff --git a/ui/cocoa.m b/ui/cocoa.m
  
      dpy_set_ui_info(dcl.con, &info, TRUE);
  }
-@@ -1317,12 +1323,20 @@
+@@ -1317,12 +1322,20 @@
  
          // create a window
          window = [[NSWindow alloc] initWithContentRect:[cocoaView frame]
@@ -86,7 +98,7 @@ diff --git a/ui/cocoa.m b/ui/cocoa.m
          [window setAcceptsMouseMovedEvents:YES];
          [window setCollectionBehavior:NSWindowCollectionBehaviorFullScreenPrimary];
          [window setTitle:qemu_name ? [NSString stringWithFormat:@"QEMU %s", qemu_name] : @"QEMU"];
-@@ -1411,6 +1425,24 @@
+@@ -1411,6 +1424,24 @@
  - (void)windowDidResize:(NSNotification *)notification
  {
      [cocoaView updateBounds];

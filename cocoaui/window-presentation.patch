@@ -1,0 +1,167 @@
+diff --git a/ui/cocoa.m b/ui/cocoa.m
+index 00e07d700f3..74f021cd2ac 100644
+--- a/ui/cocoa.m
++++ b/ui/cocoa.m
+@@ -108,6 +108,10 @@ static void cocoa_switch(DisplayChangeListener *dcl,
+  */
+ static NSMenuItem *fullscreen_menu_item;
+ 
++/* ClassicMac: borderless-window state and its dynamically retitled menu item. */
++static NSMenuItem *titlebar_menu_item;
++static bool titlebar_hidden;
++
+ /* ClassicMac Tools CD: the drive id the host app always attaches for it and
+  * the environment variable through which the app publishes the image path. */
+ #define CLASSICMAC_TOOLS_DRIVE  "tools0"
+@@ -364,6 +368,8 @@ @interface QemuCocoaView : NSView
+     bool mouseOn;
+ }
+ - (void) switchSurface:(pixman_image_t *)image;
++- (void) applyTitleBarAppearance;
++- (void) toggleTitleBar;
+ - (void) grabMouse;
+ - (void) ungrabMouse;
+ - (void) setFullGrab:(id)sender;
+@@ -813,6 +819,54 @@ - (void) resendUIInfo
+     });
+ }
+ 
++/*
++ * Visually hide the titlebar without making the NSWindow truly borderless.
++ * Keeping NSWindowStyleMaskTitled preserves key-window behavior, native
++ * fullscreen, and edge resizing; FullSizeContentView plus transparent hidden
++ * chrome lets the guest view fill the complete window instead.
++ */
++- (void) applyTitleBarAppearance
++{
++    NSWindow *window = [self window];
++    NSWindowStyleMask styleMask;
++
++    /* AppKit owns the temporary fullscreen style mask. Apply the saved choice
++     * after windowDidExitFullScreen instead of mutating it mid-transition. */
++    if (!window || ([window styleMask] & NSWindowStyleMaskFullScreen)) {
++        return;
++    }
++
++    styleMask = [window styleMask];
++    if (titlebar_hidden) {
++        styleMask |= NSWindowStyleMaskFullSizeContentView;
++    } else {
++        styleMask &= ~NSWindowStyleMaskFullSizeContentView;
++    }
++    [window setStyleMask:styleMask];
++    [window setTitleVisibility:(titlebar_hidden ?
++                                NSWindowTitleHidden : NSWindowTitleVisible)];
++    [window setTitlebarAppearsTransparent:titlebar_hidden];
++    [window setTitlebarSeparatorStyle:(titlebar_hidden ?
++                                       NSTitlebarSeparatorStyleNone :
++                                       NSTitlebarSeparatorStyleAutomatic)];
++    [[window standardWindowButton:NSWindowCloseButton] setHidden:titlebar_hidden];
++    [[window standardWindowButton:NSWindowMiniaturizeButton] setHidden:titlebar_hidden];
++    [[window standardWindowButton:NSWindowZoomButton] setHidden:titlebar_hidden];
++
++    [self updateBounds];
++    [self updateUIInfo];
++}
++
++- (void) toggleTitleBar
++{
++    titlebar_hidden = !titlebar_hidden;
++    if (titlebar_menu_item) {
++        [titlebar_menu_item setTitle:(titlebar_hidden ?
++                                      @"Show Title Bar" : @"Hide Title Bar")];
++    }
++    [self applyTitleBarAppearance];
++}
++
+ - (void) switchSurface:(pixman_image_t *)image
+ {
+     COCOA_DEBUG("QemuCocoaView: switchSurface\n");
+@@ -1134,6 +1188,11 @@ - (bool) handleEventLocked:(NSEvent *)event
+                             [[self window] toggleFullScreen:nil];
+                             return true;
+ 
++                        /* ClassicMac: toggle the borderless-window look. */
++                        case 't':
++                            [self toggleTitleBar];
++                            return true;
++
+                         /* ClassicMac: re-push the current window size to
+                          * the guest in case it missed the last resolution
+                          * request. */
+@@ -1478,6 +1537,7 @@ @interface QemuCocoaAppController : NSObject
+ {
+ }
+ - (void)doToggleFullScreen:(id)sender;
++- (void)toggleTitleBar:(id)sender;
+ - (void)resendDisplayResolution:(id)sender;
+ - (void)showQEMUDoc:(id)sender;
+ - (void)zoomToFit:(id) sender;
+@@ -1611,6 +1671,10 @@ - (void)windowDidEnterFullScreen:(NSNotification *)notification
+     if (fullscreen_menu_item) {
+         [fullscreen_menu_item setTitle:@"Exit Fullscreen"];
+     }
++    /* Publish the final post-animation content frame. Intermediate resize
++     * notifications can still reflect the former titlebar-sized window. */
++    [cocoaView updateBounds];
++    [cocoaView updateUIInfo];
+     [cocoaView grabMouse];
+ }
+ 
+@@ -1620,6 +1684,6 @@ - (void)windowDidExitFullScreen:(NSNotification *)notification
+         [fullscreen_menu_item setTitle:@"Enter Fullscreen"];
+     }
+-    [cocoaView resizeWindow];
++    [cocoaView applyTitleBarAppearance];
+     [cocoaView ungrabMouse];
+ }
+ 
+@@ -1690,6 +1755,11 @@ - (void) doToggleFullScreen:(id)sender
+     [[cocoaView window] toggleFullScreen:sender];
+ }
+ 
++- (void) toggleTitleBar:(id)sender
++{
++    [cocoaView toggleTitleBar];
++}
++
+ /*
+  * ClassicMac: menu/dock action to push the current window size to the guest
+  * again, for when it missed the previous resolution-change request.
+@@ -1722,6 +1792,14 @@ - (NSMenu *) applicationDockMenu:(NSApplication *)sender
+     [item setTarget:self];
+     [dockMenu addItem:item];
+ 
++    item = [[[NSMenuItem alloc] initWithTitle:(titlebar_hidden ?
++                                               @"Show Title Bar" :
++                                               @"Hide Title Bar")
++                                       action:@selector(toggleTitleBar:)
++                                keyEquivalent:@""] autorelease];
++    [item setTarget:self];
++    [dockMenu addItem:item];
++
+     item = [[[NSMenuItem alloc] initWithTitle:@"Resend Screen Resolution"
+                                        action:@selector(resendDisplayResolution:)
+                                 keyEquivalent:@""] autorelease];
+@@ -2112,7 +2190,7 @@ static void create_initial_menus(void)
+     menu = [[NSMenu alloc] initWithTitle:@"View"];
+     /*
+      * ClassicMac: Control-Option key equivalents, matching the combos
+-     * handleEventLocked intercepts, so both commands keep working while the
++     * handleEventLocked intercepts, so the commands keep working while the
+      * emulator has grabbed the keyboard (fullscreen grabs it on entry -
+      * a Command shortcut would be swallowed by the guest there, which made
+      * fullscreen hard to leave).
+@@ -2121,6 +2199,12 @@ static void create_initial_menus(void)
+     [menuItem setKeyEquivalentModifierMask:(NSEventModifierFlagControl|NSEventModifierFlagOption)];
+     fullscreen_menu_item = menuItem;
+     [menu addItem: menuItem];
++    /* ClassicMac: visually remove/restore the titlebar while preserving a
++     * normal key-capable, resizable NSWindow underneath. */
++    menuItem = [[[NSMenuItem alloc] initWithTitle:@"Hide Title Bar" action:@selector(toggleTitleBar:) keyEquivalent:@"t"] autorelease];
++    [menuItem setKeyEquivalentModifierMask:(NSEventModifierFlagControl|NSEventModifierFlagOption)];
++    titlebar_menu_item = menuItem;
++    [menu addItem: menuItem];
+     /* ClassicMac: ask the guest to switch to the window's resolution again,
+      * for when it missed the request that accompanied the last resize. */
+     menuItem = [[[NSMenuItem alloc] initWithTitle:@"Resend Screen Resolution" action:@selector(resendDisplayResolution:) keyEquivalent:@"r"] autorelease];
