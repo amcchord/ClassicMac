@@ -38,7 +38,7 @@ HELPERS_DIR="$CONTENTS/Helpers"
 QUADRA_APP="$HELPERS_DIR/Quadra 800.app"
 PPC_APP="$HELPERS_DIR/Power Mac G4.app"
 
-APP_VERSION="${APP_VERSION:-1.2.1}"
+APP_VERSION="${APP_VERSION:-1.3.0}"
 BUNDLE_ID="com.classicmac.emulator"
 
 log() { printf '\n==> %s\n' "$*"; }
@@ -305,6 +305,8 @@ write_helper_plist() {
 	<string>15.0</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
+	<key>NSPrefersDisplaySafeAreaCompatibilityMode</key>
+	<false/>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
 </dict>
