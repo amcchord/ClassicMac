@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.2.0 — 2026-07-10
+
+### Fixed
+
+- **Mac OS 9.2.1 and 9.2.2 installations no longer freeze during file
+  copy.** QEMU's MacIO IDE model could complete cached DBDMA I/O before
+  classic Mac OS armed the synchronous wait for it, losing the wakeup and
+  leaving Installer stuck forever around “About 4 minutes remaining.” The
+  custom QEMU build now keeps the final DMA descriptor active for 1 ms before
+  publishing IDE and DBDMA completion, matching the non-zero latency of real
+  hardware. The same patch fixes a long-standing QEMU typo that sent ordinary
+  hard-disk DMA reads through the ATAPI completion callback, latches the
+  originating IDE unit for asynchronous completion, and adds focused trace
+  events plus a headless install regression harness.
+
 ## 1.1.1 — 2026-07-09
 
 ### Fixed

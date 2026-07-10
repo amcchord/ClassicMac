@@ -1,0 +1,12 @@
+# MacIO IDE request/descriptor/completion state
+pmac_ide_transfer
+pmac_ide_transfer_cb
+pmac_ide_transfer_submit
+pmac_ide_dbdma_start
+pmac_ide_completion_scheduled
+pmac_ide_completion
+
+# DBDMA channel state
+mac_dbdma_start
+mac_dbdma_end
+mac_dbdma_control

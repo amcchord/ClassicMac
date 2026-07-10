@@ -48,6 +48,10 @@ PATCHED_FILES=(
   hw/ppc/mac_oldworld.c
   hw/misc/macio/macio.c
   include/hw/misc/macio/macio.h
+  hw/ide/macio.c
+  hw/ide/trace-events
+  hw/misc/macio/mac_dbdma.c
+  hw/misc/macio/trace-events
   pc-bios/openbios-ppc
   hw/display/vga.c
   hw/display/vga-pci.c
@@ -59,6 +63,7 @@ PATCHED_FILES=(
 SCREAMER_DIR="$ROOT_DIR/screamer"
 PPCVID_DIR="$ROOT_DIR/ppcvid"
 AUDIO_DIR="$ROOT_DIR/audio"
+IDE_DIR="$ROOT_DIR/ide"
 
 log() { printf '\n==> %s\n' "$*"; }
 die() { printf '\nERROR: %s\n' "$*" >&2; exit 1; }
@@ -186,6 +191,14 @@ cp "$SCREAMER_DIR/screamer.c" "$QEMU_DIR/hw/audio/screamer.c"
 cp "$SCREAMER_DIR/screamer.h" "$QEMU_DIR/include/hw/audio/screamer.h"
 cp "$SCREAMER_DIR/openbios-ppc" "$QEMU_DIR/pc-bios/openbios-ppc"
 git -C "$QEMU_DIR" apply "$SCREAMER_DIR/integration.patch" || die "Failed to apply screamer integration patch"
+
+# MacIO IDE/DBDMA completion timing: cached host I/O can otherwise complete
+# before classic Mac OS arms its synchronous wait, losing the wakeup and
+# freezing Mac OS 9.2.x Installer mid-copy. This also fixes the ordinary ATA
+# read path's accidental ATAPI completion callback and adds focused tracepoints
+# for the MacIO/DBDMA state machine.
+log "Installing MacIO IDE DMA race fix and tracepoints"
+git -C "$QEMU_DIR" apply "$IDE_DIR/macio-ide-dma-race.patch" || die "Failed to apply MacIO IDE DMA race patch"
 
 # Repaint the OpenBIOS console background from pale yellow (0xFFFFCC) to
 # black. The firmware fills the whole framebuffer with that palette entry at
@@ -315,6 +328,11 @@ if "$QEMU_PPC_BIN" -device VGA,help 2>&1 | grep -q "packed-lowbpp"; then
   printf '    OK  VGA packed low-bpp modes (ppc)\n'
 else
   die "VGA packed-lowbpp property missing from the ppc build"
+fi
+if "$QEMU_PPC_BIN" -device macio-ide,help 2>&1 | grep -q "dma-completion-delay-ns"; then
+  printf '    OK  MacIO IDE DMA completion delay (ppc)\n'
+else
+  die "MacIO IDE DMA completion delay property missing from the ppc build"
 fi
 if [ -f "$PPCVID_DIR/qemu_vga.ndrv" ] && cmp -s "$PPCVID_DIR/qemu_vga.ndrv" "$QEMU_DIR/pc-bios/qemu_vga.ndrv"; then
   printf '    OK  ClassicMac qemu_vga.ndrv installed\n'
