@@ -367,9 +367,13 @@ final class QEMUManager: ObservableObject {
     // The dedicated Tools CD drive (id=tools0). Starts loaded with the
     // bundled ClassicMac Tools image when the VM's settings ask for it,
     // otherwise as an empty tray the Machine menu can fill at runtime.
-    private static func toolsDriveSpec(for config: VMConfig, iface: String) -> String {
+    private static func toolsDriveSpec(
+        for config: VMConfig,
+        iface: String,
+        loadMedia: Bool = true
+    ) -> String {
         var spec = "if=\(iface),media=cdrom,id=tools0"
-        if config.toolsCDInserted, let toolsCD = AppPaths.toolsCD {
+        if loadMedia, config.toolsCDInserted, let toolsCD = AppPaths.toolsCD {
             spec += ",file=\(toolsCD.path),format=raw"
         }
         return spec
@@ -390,8 +394,10 @@ final class QEMUManager: ObservableObject {
         // driver). The loader takes over the firmware boot command, so it is
         // skipped when booting from CD (e.g. OS installs) - sharing and tablet
         // input are simply inactive for that boot.
-        let sharing = config.hasSharedFolder && !(config.bootFromCD && config.cdImagePath?.isEmpty == false)
-        let tablet = config.tabletInput && !(config.bootFromCD && config.cdImagePath?.isEmpty == false)
+        let bootingFromUserCD = config.bootFromCD && config.cdImagePath?.isEmpty == false
+        let deferToolsMedia = bootingFromUserCD && config.networking
+        let sharing = config.hasSharedFolder && !bootingFromUserCD
+        let tablet = config.tabletInput && !bootingFromUserCD
         let needsNdrvLoader = sharing || tablet
 
         // Input configuration. QEMU treats whichever pointing device the guest
@@ -488,14 +494,23 @@ final class QEMUManager: ObservableObject {
         // Dedicated second CD drive for the ClassicMac Tools CD. Always
         // present so the QEMU window's Machine menu can insert/eject the
         // Tools CD while the Mac is running; loaded at boot when the VM's
-        // settings say so. It comes after the user's disc on the IDE chain,
-        // so "-boot d" still starts up from the user's (bootable) CD even
-        // with both inserted.
-        args += ["-drive", toolsDriveSpec(for: config, iface: "ide")]
+        // settings say so. Keep its tray empty while starting a networked
+        // Power Mac from another CD: Mac OS 9.2.1's startup is unstable when
+        // it mounts a second CD alongside the installer and initializes
+        // Sungem. The empty drive remains available, so the Machine menu can
+        // insert the Tools image after Finder appears. With networking off,
+        // the requested Tools media is safe to load normally.
+        args += [
+            "-drive",
+            toolsDriveSpec(for: config, iface: "ide", loadMedia: !deferToolsMedia)
+        ]
 
         // User-mode networking through the mac99 onboard sungem ethernet.
         if config.networking {
             args += ["-nic", "user,model=sungem"]
+        } else {
+            // QEMU otherwise creates the mac99 machine's default Sungem NIC.
+            args += ["-nic", "none"]
         }
 
         // Shared folder via virtio-9p-pci and the classicvirtio ndrvloader.
@@ -604,6 +619,9 @@ final class QEMUManager: ObservableObject {
         // so networking is configured with -nic (not a separate -device).
         if config.networking {
             args += ["-nic", "user,model=dp83932"]
+        } else {
+            // QEMU otherwise creates the q800 machine's default NIC.
+            args += ["-nic", "none"]
         }
 
         // Shared folder via the classicvirtio NuBus virtio transport. The

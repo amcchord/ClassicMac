@@ -80,7 +80,10 @@ ClassicMac exists because of years of brilliant work by other engineers. The pat
 > regular installation. ClassicMac's QEMU build fixes the MacIO IDE/DBDMA
 > completion race that made some 9.2.1 and 9.2.2 installers freeze around
 > "About 4 minutes remaining," so a frozen partial System Folder is no longer
-> expected or considered a successful install.
+> expected or considered a successful install. During a Power Mac CD boot, the
+> Tools CD starts with an empty tray when networking is enabled to avoid a Mac
+> OS 9.2.1 startup crash; after Finder appears, insert it from the QEMU
+> **Machine** menu if needed.
 
 New machines are created as `.classic` documents (default `~/Documents/ClassicMac/`). Double-click one in Finder to boot it.
 

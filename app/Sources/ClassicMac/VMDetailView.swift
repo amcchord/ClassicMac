@@ -413,9 +413,18 @@ struct VMDetailView: View {
                 Toggle(isOn: vm.toolsCDInserted) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Tools CD")
-                        Text("Guest essentials in a second CD drive: StuffIt Expander, Disk Copy, a CD image mounter, and (Power Mac) the USB Overdrive scroll wheel driver. Can be inserted alongside a bootable disc, or from the Machine menu while the Mac is running.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                        if vm.wrappedValue.machineFamily == .powerMacG4 &&
+                            vm.wrappedValue.bootFromCD &&
+                            vm.wrappedValue.cdImagePath?.isEmpty == false &&
+                            vm.wrappedValue.networking {
+                            Text("With networking enabled, the Tools tray starts empty during a Power Mac CD boot for Mac OS 9 compatibility. After the desktop appears, insert it from the Machine menu.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Text("Guest essentials in a second CD drive: StuffIt Expander, Disk Copy, a CD image mounter, and (Power Mac) the USB Overdrive scroll wheel driver. Can also be inserted from the Machine menu while the Mac is running.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
                 .disabled(running)

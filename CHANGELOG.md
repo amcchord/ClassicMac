@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.2.1 — 2026-07-10
+
+### Fixed
+
+- **The Mac OS 9.2.1 install CD no longer stops at an Apple Audio Extension
+  address error.** The failure requires a loaded second Tools CD and Sungem
+  networking at the same time; either device alone boots normally. Networked
+  Power Mac CD boots now leave the dedicated Tools tray empty at startup while
+  keeping the drive available for manual insertion from the Machine menu after
+  Finder appears.
+- **Turning networking off now removes the emulated NIC.** QEMU creates each
+  machine's default network adapter when no `-nic` option is supplied, so the
+  old off path silently left networking enabled. ClassicMac now passes
+  `-nic none` explicitly.
+
 ## 1.2.0 — 2026-07-10
 
 ### Fixed

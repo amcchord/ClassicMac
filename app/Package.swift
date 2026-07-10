@@ -15,6 +15,11 @@ let package = Package(
                 // language mode until the concurrency audit is done.
                 .swiftLanguageMode(.v5)
             ]
+        ),
+        .testTarget(
+            name: "ClassicMacTests",
+            dependencies: ["ClassicMac"],
+            path: "Tests/ClassicMacTests"
         )
     ]
 )
