@@ -60,10 +60,10 @@ ClassicMac exists because of years of brilliant work by other engineers. The pat
 - **Host folder sharing on both machines.** Pick a folder and it mounts on the emulated desktop as a read/write disk (classicvirtio + virtio-9p). Resource forks and type/creator codes round-trip via `.rdump`/`.idump` sidecars.
 - **Clean, working sound.** The Quadra's Apple Sound Chip is patched to feed silence when idle (no more idle buzz), and the Power Mac gets the screamer (AWACS) device with a screamer-aware OpenBIOS.
 - **Self-contained `.classic` machine documents.** Each VM is a single Finder package holding its config, disk, and PRAM. Keep it anywhere, double-click to boot, move it between Macs.
-- **Classic input helpers.** Right-click opens contextual menus as Control+click, and the scroll wheel becomes arrow-key taps — both per-VM toggles for guests with real drivers (e.g. USB Overdrive).
-- **A guest-additions Tools CD** (StuffIt Expander, Disk Copy, USB Overdrive, Transmit, Lido, patched HD SC Setup...) built from `guestcd/manifest.tsv`, insertable at runtime from the machine window's menu — everything pre-expanded and ready to run.
-- **Native machine control.** Pause / Resume, Restart, and Power Off from the app via QEMU's monitor socket, live screen previews in the library, and a "Match Display" button that sizes the Mac to your screen.
-- **Machine window shortcuts that always work.** Control-Option-T hides or restores the title bar for a clean borderless look, Control-Option-F toggles fullscreen, and Control-Option-R re-pushes the window's resolution to the guest. All three keep working even while the emulator has grabbed the keyboard, and they also live in the View menu and the machine's Dock icon menu.
+- **Classic input helpers.** Secondary click opens contextual menus as Control+click, and the scroll wheel becomes arrow-key taps. Toggle both together while the Mac is running with **Mac → Secondary Click and Scrolling**, or turn them off for guests with real drivers (e.g. USB Overdrive).
+- **A guest-additions Tools CD** (StuffIt Expander, Disk Copy, USB Overdrive, Transmit, Lido, patched HD SC Setup...) built from `guestcd/manifest.tsv`, insertable at runtime from the **Mac** menu. The action changes between **Insert “ClassicMac Tools”** and **Eject “ClassicMac Tools”** to match the current state; **Mac → Disc** handles other disc images — everything on the Tools CD is pre-expanded and ready to run.
+- **Native machine control.** Pause / Resume, Restart, and Shut Down from the app, live screen previews in the library, and a "Match Display" button that sizes the Mac to your screen.
+- **Machine window shortcuts that always work.** Control-Option-T hides or restores the title bar for a clean borderless look, Control-Option-F toggles Full Screen, and Control-Option-R matches the Mac screen to the window again. All three keep working even while the emulator has grabbed the keyboard, and they also live in the **View** menu and the machine's Dock icon menu.
 - **Signed, notarized, stapled DMG** for distribution — recipients get a clean Gatekeeper experience even offline.
 
 ## Getting started
@@ -80,10 +80,10 @@ ClassicMac exists because of years of brilliant work by other engineers. The pat
 > regular installation. ClassicMac's QEMU build fixes the MacIO IDE/DBDMA
 > completion race that made some 9.2.1 and 9.2.2 installers freeze around
 > "About 4 minutes remaining," so a frozen partial System Folder is no longer
-> expected or considered a successful install. During a Power Mac CD boot, the
-> Tools CD starts with an empty tray when networking is enabled to avoid a Mac
-> OS 9.2.1 startup crash; after Finder appears, insert it from the QEMU
-> **Machine** menu if needed.
+> expected or considered a successful install. During a Power Mac CD boot,
+> ClassicMac leaves the Tools tray empty so the selected startup disc boots
+> cleanly; after Finder appears, choose **Mac → Insert “ClassicMac Tools”** if
+> needed.
 
 New machines are created as `.classic` documents (default `~/Documents/ClassicMac/`). Double-click one in Finder to boot it.
 
@@ -93,9 +93,9 @@ Requirements: an Apple Silicon Mac (M1 or later) running a recent macOS.
 
 - The resolution you pick is the *boot* resolution and the depth is the *deepest available* mode; classic Mac OS chooses the active depth at startup (a fresh system comes up in B&W until you pick Thousands/Millions once in Monitors — it's remembered per machine).
 - Live resolution switching relies on the Display Manager, so it needs Mac OS ~7.6+ on the Quadra; on the Power Mac it works throughout Mac OS 9. Older systems still boot fine at the configured resolution and scale to the window. Power Mac widths snap down to a multiple of 8 (a VGA hardware constraint).
-- If the guest ever misses a resolution change (the window resized but the Mac stayed at the old size), pick **View → Resend Screen Resolution** (Control-Option-R) — also available from the machine's Dock icon menu — to ask it again.
+- If the guest ever misses a resolution change (the window resized but the Mac stayed at the old size), pick **View → Match Mac Screen to Window** (Control-Option-R) — also available from the machine's Dock icon menu — to ask it again.
 - For a borderless machine window, choose **View → Hide Title Bar** or press **Control-Option-T**. Use the same shortcut (or **Show Title Bar**) to restore the normal window controls.
-- To leave fullscreen press **Control-Option-F** (it also enters it). The combo works even while the emulator has grabbed the keyboard; it's listed in the View menu and the Dock icon menu.
+- To leave Full Screen, press **Control-Option-F** (it also enters it). The combo works even while the emulator has grabbed the keyboard; the **View** menu and Dock icon menu show **Enter Full Screen** or **Exit Full Screen** to match the current state.
 - The Power Mac's packed low-bpp patch adds Black & White, 4 and 16 colors to the Monitors panel alongside 256/thousands/millions.
 - Mac OS 9 wants **less than 1 GB of RAM** for stable sound, so the app's presets stop at 896 MB.
 - On the Quadra, folder sharing arrives through the classicvirtio NuBus card firmware (new machines start from a pre-seeded PRAM so it boots reliably). On the Power Mac it arrives through `virtio-9p-pci` and the classicvirtio ndrvloader placed in guest RAM at boot; while booting from CD (e.g. an OS install) sharing is temporarily inactive.

@@ -293,7 +293,7 @@ struct NewVMSheet: View {
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.canCreateDirectories = true
-        panel.message = "Choose a folder on your Mac to share with the emulated Mac"
+        panel.message = "Choose a folder on this Mac to share with your classic Mac"
         if panel.runModal() == .OK {
             sharedFolderURL = panel.url
         }

@@ -173,6 +173,10 @@ git -C "$QEMU_DIR" apply "$ROOT_DIR/cocoaui/fullscreen-resolution-menu.patch" ||
 # Control-Option-T borderless-window toggle plus final-frame reporting after
 # native fullscreen transitions, so the guest uses the complete drawable area.
 git -C "$QEMU_DIR" apply "$ROOT_DIR/cocoaui/window-presentation.patch" || die "Failed to apply ClassicMac window presentation patch"
+# Final Mac-native menu pass: a state-aware Tools command, friendly Disc
+# submenu and errors, focused View controls, and no raw emulator consoles or
+# removable-device identifiers in the menu bar.
+git -C "$QEMU_DIR" apply "$ROOT_DIR/cocoaui/mac-native-menus.patch" || die "Failed to apply ClassicMac native menus patch"
 # Apple Sound Chip: always feed the audio backend silence when idle so a live
 # backend (CoreAudio) never replays stale ring-buffer content as a hum/buzz.
 git -C "$QEMU_DIR" apply "$QFB_DIR/asc-silence.patch" || die "Failed to apply asc silence patch"

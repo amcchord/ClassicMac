@@ -144,8 +144,8 @@ USB Overdrive 1.4  (Power Mac only, Mac OS 8.5 - 9.2)
    and then.
 
    IMPORTANT: after installing USB Overdrive, turn OFF
-   "Right-Click & Scroll Wheel Helpers" in the machine
-   window's View menu (or in the machine's settings in
+   "Secondary Click and Scrolling" in the machine
+   window's Mac menu (or in the machine's settings in
    ClassicMac), so clicks and scrolling are not doubled up.
 
 On a Quadra (System 7 through Mac OS 8.1), skip USB Overdrive -

@@ -6,6 +6,7 @@ import Darwin
 final class QEMURunnerArgumentTests: XCTestCase {
     private func config(
         family: MachineFamily = .powerMacG4,
+        cdImagePath: String? = "/tmp/install.iso",
         bootFromCD: Bool = true,
         toolsCDInserted: Bool = true,
         networking: Bool = true,
@@ -16,7 +17,7 @@ final class QEMURunnerArgumentTests: XCTestCase {
             name: "Argument Test",
             machineFamily: family,
             ramMB: family.defaultRAMMB,
-            cdImagePath: "/tmp/install.iso",
+            cdImagePath: cdImagePath,
             bootFromCD: bootFromCD,
             toolsCDInserted: toolsCDInserted,
             networking: networking,
@@ -68,7 +69,18 @@ final class QEMURunnerArgumentTests: XCTestCase {
             let toolsDrive = optionValues("-drive", in: arguments)
                 .first { $0.contains("id=tools0") }
 
-            XCTAssertEqual(toolsDrive, "if=ide,media=cdrom,id=tools0")
+            XCTAssertEqual(
+                toolsDrive,
+                "if=ide,index=3,media=cdrom,id=tools0,readonly=on"
+            )
+            let userDisc = optionValues("-drive", in: arguments)
+                .first { $0.contains("id=cd0") }
+            XCTAssertEqual(
+                userDisc,
+                "if=ide,index=2,media=cdrom,id=cd0,readonly=on,file=/tmp/install.iso,format=raw"
+            )
+            let devices = optionValues("-device", in: arguments)
+            XCTAssertFalse(devices.contains { $0.contains("classicmac-tools") })
             XCTAssertTrue(optionValues("-nic", in: arguments).contains("user,model=sungem"))
         }
     }
@@ -80,12 +92,20 @@ final class QEMURunnerArgumentTests: XCTestCase {
                 optionValues("-drive", in: arguments).first { $0.contains("id=tools0") }
             )
 
-            XCTAssertTrue(toolsDrive.contains("file="))
-            XCTAssertTrue(toolsDrive.hasSuffix(",format=raw"))
+            XCTAssertTrue(
+                toolsDrive.hasPrefix(
+                    "if=ide,index=2,media=cdrom,id=tools0,file="
+                )
+            )
+            XCTAssertTrue(toolsDrive.hasSuffix(",format=raw,readonly=on"))
+            XCTAssertFalse(
+                optionValues("-device", in: arguments)
+                    .contains { $0.contains("classicmac-tools") }
+            )
         }
     }
 
-    func testPowerMacCDStartupCanLoadToolsWhenNetworkingIsOff() throws {
+    func testPowerMacCDStartupKeepsToolsTrayEmptyWhenNetworkingIsOff() throws {
         try withTemporaryToolsCD {
             let arguments = QEMUManager.buildArguments(
                 for: config(networking: false)
@@ -94,9 +114,124 @@ final class QEMURunnerArgumentTests: XCTestCase {
                 optionValues("-drive", in: arguments).first { $0.contains("id=tools0") }
             )
 
-            XCTAssertTrue(toolsDrive.contains("file="))
+            XCTAssertEqual(
+                toolsDrive,
+                "if=ide,index=3,media=cdrom,id=tools0,readonly=on"
+            )
+            XCTAssertEqual(
+                optionValues("-drive", in: arguments)
+                    .first { $0.contains("id=cd0") },
+                "if=ide,index=2,media=cdrom,id=cd0,readonly=on,file=/tmp/install.iso,format=raw"
+            )
             XCTAssertEqual(optionValues("-nic", in: arguments), ["none"])
         }
+    }
+
+    func testPowerMacToolsPreferenceOffKeepsRemovableDriveEmpty() throws {
+        try withTemporaryToolsCD {
+            let arguments = QEMUManager.buildArguments(
+                for: config(
+                    bootFromCD: false,
+                    toolsCDInserted: false,
+                    networking: false
+                )
+            )
+            let toolsDrive = try XCTUnwrap(
+                optionValues("-drive", in: arguments).first { $0.contains("id=tools0") }
+            )
+
+            XCTAssertEqual(
+                toolsDrive,
+                "if=ide,index=2,media=cdrom,id=tools0,readonly=on"
+            )
+        }
+    }
+
+    func testPowerMacKeepsAnEmptyUserDiscTrayAvailable() {
+        let arguments = QEMUManager.buildArguments(
+            for: config(
+                cdImagePath: nil,
+                bootFromCD: false,
+                toolsCDInserted: false
+            )
+        )
+
+        XCTAssertTrue(optionValues("-boot", in: arguments).isEmpty)
+        XCTAssertEqual(
+            optionValues("-drive", in: arguments)
+                .first { $0.contains("id=cd0") },
+            "if=ide,index=3,media=cdrom,id=cd0,readonly=on"
+        )
+    }
+
+    func testQuadraToolsDriveRemainsOnDedicatedSCSIPosition() throws {
+        try withTemporaryToolsCD {
+            let arguments = QEMUManager.buildArguments(
+                for: config(family: .quadra800, bootFromCD: false)
+            )
+            let toolsDrive = try XCTUnwrap(
+                optionValues("-drive", in: arguments).first { $0.contains("id=tools0") }
+            )
+
+            XCTAssertTrue(
+                toolsDrive.hasPrefix("if=none,media=cdrom,id=tools0,file=")
+            )
+            XCTAssertFalse(toolsDrive.contains("bus="))
+            XCTAssertFalse(toolsDrive.contains("unit="))
+            XCTAssertTrue(
+                optionValues("-device", in: arguments)
+                    .contains(
+                        "scsi-cd,scsi-id=4,drive=tools0"
+                    )
+            )
+        }
+    }
+
+    func testQuadraToolsPreferenceOffKeepsSCSITrayEmpty() throws {
+        try withTemporaryToolsCD {
+            let arguments = QEMUManager.buildArguments(
+                for: config(
+                    family: .quadra800,
+                    bootFromCD: false,
+                    toolsCDInserted: false
+                )
+            )
+            let toolsDrive = try XCTUnwrap(
+                optionValues("-drive", in: arguments).first { $0.contains("id=tools0") }
+            )
+
+            XCTAssertEqual(
+                toolsDrive,
+                "if=none,media=cdrom,id=tools0,readonly=on"
+            )
+            XCTAssertTrue(
+                optionValues("-device", in: arguments)
+                    .contains(
+                        "scsi-cd,scsi-id=4,drive=tools0"
+                    )
+            )
+        }
+    }
+
+    func testQuadraKeepsAnEmptyUserDiscTrayAvailable() {
+        let arguments = QEMUManager.buildArguments(
+            for: config(
+                family: .quadra800,
+                cdImagePath: nil,
+                bootFromCD: false,
+                toolsCDInserted: false
+            )
+        )
+
+        XCTAssertTrue(
+            optionValues("-device", in: arguments)
+                .contains("scsi-cd,scsi-id=3,drive=cd0")
+        )
+        XCTAssertEqual(
+            optionValues("-drive", in: arguments)
+                .first { $0.contains("id=cd0") },
+            "media=cdrom,if=none,id=cd0,readonly=on"
+        )
     }
 
     func testNetworkingOffExplicitlyDisablesDefaultNICs() {

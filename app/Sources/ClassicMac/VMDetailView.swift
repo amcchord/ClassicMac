@@ -346,8 +346,8 @@ struct VMDetailView: View {
 
             Toggle(isOn: vm.classicInputHelpers) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Right-click & scroll wheel helpers")
-                    Text("Right-click opens contextual menus (Control+click) and the scroll wheel scrolls via arrow keys. Turn off if USB Overdrive is installed in this Mac.")
+                    Text("Secondary click & scrolling")
+                    Text("Right-click opens contextual menus, and the scroll wheel scrolls in classic Mac apps. Turn this off if USB Overdrive is installed.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -356,8 +356,8 @@ struct VMDetailView: View {
 
             Toggle(isOn: vm.tabletInput) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Tablet input (seamless mouse)")
-                    Text("The mouse moves freely in and out of the Mac window without capturing. Uses the classicvirtio tablet driver.")
+                    Text("Seamless mouse")
+                    Text("Move the pointer freely in and out of the Mac window without releasing it first.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -412,16 +412,16 @@ struct VMDetailView: View {
             if AppPaths.toolsCD != nil {
                 Toggle(isOn: vm.toolsCDInserted) {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Tools CD")
-                        if vm.wrappedValue.machineFamily == .powerMacG4 &&
+                        Text("ClassicMac Tools")
+                        if vm.wrappedValue.toolsCDInserted &&
+                            vm.wrappedValue.machineFamily == .powerMacG4 &&
                             vm.wrappedValue.bootFromCD &&
-                            vm.wrappedValue.cdImagePath?.isEmpty == false &&
-                            vm.wrappedValue.networking {
-                            Text("With networking enabled, the Tools tray starts empty during a Power Mac CD boot for Mac OS 9 compatibility. After the desktop appears, insert it from the Machine menu.")
+                            vm.wrappedValue.cdImagePath?.isEmpty == false {
+                            Text("During this Power Mac disc startup, ClassicMac Tools waits until the desktop appears. Then choose Insert “ClassicMac Tools” from the Mac menu.")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         } else {
-                            Text("Guest essentials in a second CD drive: StuffIt Expander, Disk Copy, a CD image mounter, and (Power Mac) the USB Overdrive scroll wheel driver. Can also be inserted from the Machine menu while the Mac is running.")
+                            Text("Useful classic Mac apps, including StuffIt Expander, Disk Copy, a disc image mounter, and USB Overdrive for Power Macs. You can insert or eject it from the Mac menu while the Mac is running.")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -430,7 +430,9 @@ struct VMDetailView: View {
                 .disabled(running)
             }
         } header: {
-            Label("CD-ROM", systemImage: "opticaldiscdrive")
+            Label("Discs", systemImage: "opticaldiscdrive")
+        } footer: {
+            Text("While the Mac is running, use Mac → Disc to insert or eject a disc image.")
         }
     }
 
@@ -481,7 +483,7 @@ struct VMDetailView: View {
                 Text("Appears on the Mac desktop as the disk \u{201C}\(vm.sharedVolumeName)\u{201D}.")
             }
         } else {
-            Text("Share a folder from this Mac so its files appear on the emulated Mac's desktop.")
+            Text("Share a folder from this Mac so its files appear on your classic Mac's desktop.")
         }
     }
 
@@ -491,7 +493,7 @@ struct VMDetailView: View {
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.canCreateDirectories = true
-        panel.message = "Choose a folder on your Mac to share with the emulated Mac"
+        panel.message = "Choose a folder on this Mac to share with your classic Mac"
         if panel.runModal() == .OK, let url = panel.url {
             vm.wrappedValue.sharedFolderPath = url.path
         }
