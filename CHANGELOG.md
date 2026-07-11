@@ -1,5 +1,35 @@
 # Changelog
 
+## 1.4.0 — 2026-07-11
+
+### Added
+
+- **Mac-native menus for running machines.** The Mac menu now provides Pause,
+  Resume, Restart, Shut Down, a state-aware ClassicMac Tools command, a Disc
+  submenu, and Secondary Click and Scrolling. The View menu focuses on Full
+  Screen, title-bar presentation, matching the Mac screen to the window, and
+  smooth scaling. Raw QEMU consoles, backend identifiers, developer speed
+  controls, and QEMU documentation are no longer exposed.
+- **A permanent user-facing disc tray.** Both machine families keep a Disc
+  drive available even when it starts empty, so a disc image can be inserted
+  or ejected from the Mac menu without restarting the machine.
+
+### Fixed
+
+- **ClassicMac Tools now inserts and ejects reliably while a Mac is running.**
+  The Power Mac's Tools drive previously landed beside the hard disk instead
+  of on its optical IDE channel, so QEMU accepted a media change but Mac OS 9
+  never saw the disc. Power Macs now use dedicated optical positions, while
+  Quadras keep separate fixed SCSI positions for the Disc and Tools trays.
+- **Power Macs still start correctly from a selected installation disc.**
+  OpenBIOS probes only the primary optical position for CD startup. During a
+  disc startup, ClassicMac temporarily gives that position to the selected
+  disc and leaves Tools empty in the secondary position; normal hard-disk
+  startups continue to put Tools first.
+- **Disc errors are clearer and safer.** Menu actions target the exact Disc
+  tray, keep implementation details in the log, and distinguish a busy drive
+  from an image that cannot be opened or read.
+
 ## 1.3.0 — 2026-07-10
 
 ### Added

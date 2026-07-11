@@ -96,8 +96,8 @@ final class QEMUManager: ObservableObject {
         process.arguments = QEMUManager.buildArguments(for: config)
         process.currentDirectoryURL = config.folder
 
-        // Tell the QEMU window where the bundled Tools CD lives so its
-        // Machine menu can offer "Insert Tools CD" while the Mac runs.
+        // Tell the running Mac window where the bundled tools disc lives so
+        // its Mac menu can insert or eject it while the Mac runs.
         var environment = ProcessInfo.processInfo.environment
         if let toolsCD = AppPaths.toolsCD {
             environment["CLASSICMAC_TOOLS_CD"] = toolsCD.path
@@ -129,7 +129,7 @@ final class QEMUManager: ObservableObject {
                     monitor?.cancel()
                     self.lastError = AppError(
                         "\u{201C}\(config.name)\u{201D} Shut Down Unexpectedly",
-                        "The emulated Mac stopped on its own. Try starting it again.",
+                        "The Mac stopped on its own. Try starting it again.",
                         logURL: AppLog.write(message, machineName: config.name)
                     )
                     return
@@ -151,7 +151,7 @@ final class QEMUManager: ObservableObject {
         } catch {
             lastError = AppError(
                 "Couldn't Start \u{201C}\(config.name)\u{201D}",
-                "The emulator could not be launched. \(error.localizedDescription)"
+                "The Mac could not be started. \(error.localizedDescription)"
             )
             return
         }
@@ -364,19 +364,25 @@ final class QEMUManager: ObservableObject {
         return ""
     }
 
-    // The dedicated Tools CD drive (id=tools0). Starts loaded with the
-    // bundled ClassicMac Tools image when the VM's settings ask for it,
-    // otherwise as an empty tray the Machine menu can fill at runtime.
+    // The dedicated Tools CD drive (id=tools0). It starts loaded when the
+    // machine's settings ask for it; otherwise the Mac menu can fill its
+    // empty tray while the machine is running.
     private static func toolsDriveSpec(
         for config: VMConfig,
         iface: String,
+        index: Int? = nil,
         loadMedia: Bool = true
     ) -> String {
-        var spec = "if=\(iface),media=cdrom,id=tools0"
-        if loadMedia, config.toolsCDInserted, let toolsCD = AppPaths.toolsCD {
-            spec += ",file=\(toolsCD.path),format=raw"
+        var options = ["if=\(iface)"]
+        if let index {
+            options.append("index=\(index)")
         }
-        return spec
+        options += ["media=cdrom", "id=tools0"]
+        if loadMedia, config.toolsCDInserted, let toolsCD = AppPaths.toolsCD {
+            options += ["file=\(toolsCD.path)", "format=raw"]
+        }
+        options.append("readonly=on")
+        return options.joined(separator: ",")
     }
 
     // qemu-system-ppc -M mac99: a New World Power Mac that boots Mac OS 8.5
@@ -395,7 +401,7 @@ final class QEMUManager: ObservableObject {
         // loader, but remains enabled: after injecting its NDRV the loader runs
         // Open Firmware's normal `boot` command, which still honors `-boot d`.
         let bootingFromUserCD = config.bootFromCD && config.cdImagePath?.isEmpty == false
-        let deferToolsMedia = bootingFromUserCD && config.networking
+        let deferToolsMedia = bootingFromUserCD
         let sharing = config.hasSharedFolder && !bootingFromUserCD
         let tablet = config.tabletInput
         let needsNdrvLoader = sharing || tablet
@@ -483,27 +489,38 @@ final class QEMUManager: ObservableObject {
         // Main IDE hard disk.
         args += ["-drive", "file=\(config.diskImageURL.path),format=raw,media=disk"]
 
-        // Optional IDE CD-ROM.
+        // Keep a user-facing disc tray present on the optical IDE channel,
+        // even when it starts empty, so the running window's Disc menu can
+        // insert an image later. OpenBIOS only tries the primary optical unit
+        // for `-boot d`, so temporarily give that position to the selected
+        // startup disc. Normal hard-disk starts reserve it for Tools.
+        let userDiscIndex = bootingFromUserCD ? 2 : 3
+        var userDisc = "if=ide,index=\(userDiscIndex),media=cdrom,id=cd0,readonly=on"
         if let cdPath = config.cdImagePath, !cdPath.isEmpty {
-            args += ["-drive", "file=\(cdPath),format=raw,media=cdrom"]
-            if config.bootFromCD {
-                args += ["-boot", "d"]
-            }
+            userDisc += ",file=\(cdPath),format=raw"
+        }
+        args += ["-drive", userDisc]
+        if bootingFromUserCD {
+            args += ["-boot", "d"]
         }
 
-        // Dedicated second CD drive for the ClassicMac Tools CD. Always
-        // present so the QEMU window's Machine menu can insert/eject the
-        // Tools CD while the Mac is running; loaded at boot when the VM's
-        // settings say so. Keep its tray empty while starting a networked
-        // Power Mac from another CD: Mac OS 9.2.1's startup is unstable when
-        // it mounts a second CD alongside the installer and initializes
-        // Sungem. The empty drive remains available, so the Machine menu can
-        // insert the Tools image after Finder appears. With networking off,
-        // the requested Tools media is safe to load normally.
-        args += [
-            "-drive",
-            toolsDriveSpec(for: config, iface: "ide", loadMedia: !deferToolsMedia)
-        ]
+        // Put ClassicMac Tools on the Power Mac's optical IDE channel. The
+        // former automatic placement made it the hard disk's IDE slave, which
+        // Mac OS 9 did not treat as its removable CD tray; QEMU accepted menu
+        // media changes, but Finder never saw them. Normally Tools occupies
+        // the primary optical position. When starting from a selected CD, it
+        // moves to the secondary position and stays empty so OpenBIOS boots
+        // that selected disc and the installer starts with only one mounted
+        // CD. Tools can be inserted from the Mac menu afterward.
+        let loadToolsMedia = !deferToolsMedia && config.toolsCDInserted &&
+            AppPaths.toolsCD != nil
+        let toolsDiscIndex = bootingFromUserCD ? 3 : 2
+        args += ["-drive", toolsDriveSpec(
+            for: config,
+            iface: "ide",
+            index: toolsDiscIndex,
+            loadMedia: loadToolsMedia
+        )]
 
         // User-mode networking through the mac99 onboard sungem ethernet.
         if config.networking {
@@ -600,14 +617,17 @@ final class QEMUManager: ObservableObject {
         args += ["-device", "scsi-hd,scsi-id=0,drive=hd0"]
         args += ["-drive", "file=\(config.diskImageURL.path),media=disk,format=raw,if=none,id=hd0"]
 
-        // Optional CD-ROM at SCSI ID 3.
+        // User-facing CD-ROM at SCSI ID 3. Keep its tray available even when
+        // empty so the running window's Disc menu can insert an image.
+        args += ["-device", "scsi-cd,scsi-id=3,drive=cd0"]
+        var userDisc = "media=cdrom,if=none,id=cd0,readonly=on"
         if let cdPath = config.cdImagePath, !cdPath.isEmpty {
-            args += ["-device", "scsi-cd,scsi-id=3,drive=cd0"]
-            args += ["-drive", "file=\(cdPath),media=cdrom,if=none,id=cd0"]
+            userDisc += ",file=\(cdPath),format=raw"
             if config.bootFromCD {
                 args += ["-boot", "d"]
             }
         }
+        args += ["-drive", userDisc]
 
         // Dedicated second CD drive (SCSI ID 4) for the ClassicMac Tools CD;
         // see the Power Mac builder for the rationale.
