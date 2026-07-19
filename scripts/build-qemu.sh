@@ -58,12 +58,15 @@ PATCHED_FILES=(
   hw/display/vga_int.h
   hw/display/virtio-vga.c
   include/hw/display/bochs-vbe.h
+  hw/block/virtio-blk.c
+  include/hw/virtio/virtio-blk.h
   pc-bios/qemu_vga.ndrv
 )
 SCREAMER_DIR="$ROOT_DIR/screamer"
 PPCVID_DIR="$ROOT_DIR/ppcvid"
 AUDIO_DIR="$ROOT_DIR/audio"
 IDE_DIR="$ROOT_DIR/ide"
+VIRTIO_DIR="$ROOT_DIR/virtio"
 
 log() { printf '\n==> %s\n' "$*"; }
 die() { printf '\nERROR: %s\n' "$*" >&2; exit 1; }
@@ -135,6 +138,13 @@ if [ -n "${PPCVID_BUILD_NDRV:-}" ]; then
   "$ROOT_DIR/scripts/build-ppcvid-ndrv.sh"
 fi
 
+# Rebuild the 68k classicvirtio declaration ROM with the writable removable
+# floppy driver when requested. This uses the same Retro68 toolchain.
+if [ -n "${CLASSICVIRTIO_BUILD_ROM:-}" ]; then
+  log "CLASSICVIRTIO_BUILD_ROM set: rebuilding shared/declrom"
+  "$ROOT_DIR/scripts/build-classicvirtio-floppy.sh"
+fi
+
 # ---------------------------------------------------------------------------
 # 3. Apply the nubus-qfb framebuffer port
 # ---------------------------------------------------------------------------
@@ -177,6 +187,11 @@ git -C "$QEMU_DIR" apply "$ROOT_DIR/cocoaui/window-presentation.patch" || die "F
 # submenu and errors, focused View controls, and no raw emulator consoles or
 # removable-device identifiers in the menu bar.
 git -C "$QEMU_DIR" apply "$ROOT_DIR/cocoaui/mac-native-menus.patch" || die "Failed to apply ClassicMac native menus patch"
+# Quadra-only floppy image controls for the removable classicvirtio drive.
+git -C "$QEMU_DIR" apply "$ROOT_DIR/cocoaui/floppy-menu.patch" || die "Failed to apply ClassicMac floppy menu patch"
+# Allow a VirtIO block device to start empty, exchange raw media while running,
+# and report capacity changes to the guest driver.
+git -C "$QEMU_DIR" apply "$VIRTIO_DIR/virtio-blk-removable.patch" || die "Failed to apply removable VirtIO block patch"
 # Apple Sound Chip: always feed the audio backend silence when idle so a live
 # backend (CoreAudio) never replays stale ring-buffer content as a hum/buzz.
 git -C "$QEMU_DIR" apply "$QFB_DIR/asc-silence.patch" || die "Failed to apply asc silence patch"
@@ -311,6 +326,12 @@ for dev in nubus-qfb nubus-virtio-mmio virtio-9p-device; do
     die "device $dev missing from the build"
   fi
 done
+
+if "$QEMU_BIN" -device virtio-blk-device,help 2>&1 | grep "removable" >/dev/null; then
+  printf '    OK  removable virtio-blk floppy backend\n'
+else
+  die "removable virtio-blk property missing from the build"
+fi
 
 [ -f "$QEMU_DIR/pc-bios/mac_qfb.rom" ] || die "pc-bios/mac_qfb.rom firmware missing"
 

@@ -1,0 +1,263 @@
+diff --git a/hw/block/virtio-blk.c b/hw/block/virtio-blk.c
+index 6b92066aff4..882f1e04387 100644
+--- a/hw/block/virtio-blk.c
++++ b/hw/block/virtio-blk.c
+@@ -14,6 +14,7 @@
+ #include "qemu/osdep.h"
+ #include "qemu/defer-call.h"
+ #include "qapi/error.h"
++#include "qapi/qapi-commands-block.h"
+ #include "qemu/iov.h"
+ #include "qemu/module.h"
+ #include "qemu/error-report.h"
+@@ -40,9 +41,21 @@
+ 
+ /* Internal buffer size limit for zone report */
+ #define VIRTIO_BLK_MAX_ZONES_PER_BATCH 4096
++#define CLASSICMAC_VIRTIO_BLK_T_EJECT 0x434d0100
+ 
+ static void virtio_blk_ioeventfd_attach(VirtIOBlock *s);
+ 
++static void virtio_blk_guest_eject_bh(void *opaque)
++{
++    VirtIOBlock *s = opaque;
++    Error *err = NULL;
++
++    qmp_eject(blk_name(s->blk), NULL, true, true, &err);
++    if (err) {
++        error_report_err(err);
++    }
++}
++
+ static void virtio_blk_init_request(VirtIOBlock *s, VirtQueue *vq,
+                                     VirtIOBlockReq *req)
+ {
+@@ -868,6 +881,18 @@ static int virtio_blk_handle_request(VirtIOBlockReq *req, MultiReqBuffer *mrb)
+      * is an optional flag. Although a guest should not send this flag if
+      * not negotiated we ignored it in the past. So keep ignoring it. */
+     switch (type & ~(VIRTIO_BLK_T_OUT | VIRTIO_BLK_T_BARRIER)) {
++    case CLASSICMAC_VIRTIO_BLK_T_EJECT:
++        if (!s->conf.removable) {
++            virtio_blk_req_complete(req, VIRTIO_BLK_S_UNSUPP);
++            g_free(req);
++            break;
++        }
++        s->eject_requested = false;
++        virtio_blk_req_complete(req, VIRTIO_BLK_S_OK);
++        g_free(req);
++        aio_bh_schedule_oneshot(qemu_get_aio_context(),
++                                virtio_blk_guest_eject_bh, s);
++        break;
+     case VIRTIO_BLK_T_IN:
+     {
+         bool is_write = type & VIRTIO_BLK_T_OUT;
+@@ -1204,7 +1229,8 @@ static void virtio_blk_update_config(VirtIODevice *vdev, uint8_t *config)
+      * per track (cylinder).
+      */
+     length = blk_getlength(s->blk);
+-    if (length > 0 && length / conf->heads / conf->secs % blk_size) {
++    if (length > 0 && conf->heads && conf->secs &&
++        length / conf->heads / conf->secs % blk_size) {
+         blkcfg.geometry.sectors = conf->secs & ~s->sector_mask;
+     } else {
+         blkcfg.geometry.sectors = conf->secs;
+@@ -1236,7 +1262,10 @@ static void virtio_blk_update_config(VirtIODevice *vdev, uint8_t *config)
+         blkcfg.write_zeroes_may_unmap = 1;
+         virtio_stl_p(vdev, &blkcfg.max_write_zeroes_seg, 1);
+     }
+-    if (bs->bl.zoned != BLK_Z_NONE) {
++    if (s->conf.removable) {
++        blkcfg.unused1[0] = s->eject_requested;
++    }
++    if (bs && bs->bl.zoned != BLK_Z_NONE) {
+         switch (bs->bl.zoned) {
+         case BLK_Z_HM:
+             blkcfg.zoned.model = VIRTIO_BLK_Z_HM;
+@@ -1296,7 +1325,8 @@ static uint64_t virtio_blk_get_features(VirtIODevice *vdev, uint64_t features,
+          virtio_has_feature(features, VIRTIO_BLK_F_CONFIG_WCE))) {
+         virtio_add_feature(&features, VIRTIO_BLK_F_WCE);
+     }
+-    if (!blk_is_writable(s->blk)) {
++    if (!blk_is_writable(s->blk) &&
++        !(s->conf.removable && !blk_is_inserted(s->blk))) {
+         virtio_add_feature(&features, VIRTIO_BLK_F_RO);
+     }
+     if (s->conf.num_queues > 1) {
+@@ -1415,6 +1445,54 @@ static void virtio_blk_resize(void *opaque)
+     aio_bh_schedule_oneshot(qemu_get_aio_context(), virtio_resize_cb, vdev);
+ }
+ 
++static void virtio_blk_change_media(void *opaque, bool load, Error **errp)
++{
++    VirtIOBlock *s = opaque;
++
++    s->eject_requested = false;
++    s->tray_open = !load;
++
++    if (!load) {
++        blk_set_perm(s->blk, 0, BLK_PERM_ALL, &error_abort);
++        s->original_wce = false;
++    } else {
++        if (!blkconf_apply_backend_options(&s->conf.conf,
++                                           !blk_supports_write_perm(s->blk),
++                                           true, errp)) {
++            return;
++        }
++        if (!blkconf_geometry(&s->conf.conf, NULL, 65535, 255, 255, errp) ||
++            !blkconf_blocksizes(&s->conf.conf, errp)) {
++            return;
++        }
++        s->original_wce = blk_enable_write_cache(s->blk);
++    }
++
++    virtio_blk_resize(s);
++}
++
++static void virtio_blk_eject_request(void *opaque, bool force)
++{
++    VirtIOBlock *s = opaque;
++
++    s->eject_requested = true;
++    virtio_notify_config(VIRTIO_DEVICE(s));
++}
++
++static bool virtio_blk_is_medium_locked(void *opaque)
++{
++    VirtIOBlock *s = opaque;
++
++    return blk_is_inserted(s->blk);
++}
++
++static bool virtio_blk_is_tray_open(void *opaque)
++{
++    VirtIOBlock *s = opaque;
++
++    return s->tray_open;
++}
++
+ static void virtio_blk_ioeventfd_detach(VirtIOBlock *s)
+ {
+     VirtIODevice *vdev = VIRTIO_DEVICE(s);
+@@ -1461,6 +1539,16 @@ static const BlockDevOps virtio_block_ops = {
+     .drained_end   = virtio_blk_drained_end,
+ };
+ 
++static const BlockDevOps virtio_block_removable_ops = {
++    .change_media_cb = virtio_blk_change_media,
++    .eject_request_cb = virtio_blk_eject_request,
++    .is_medium_locked = virtio_blk_is_medium_locked,
++    .is_tray_open     = virtio_blk_is_tray_open,
++    .resize_cb       = virtio_blk_resize,
++    .drained_begin   = virtio_blk_drained_begin,
++    .drained_end     = virtio_blk_drained_end,
++};
++
+ /* Context: BQL held */
+ static bool virtio_blk_vq_aio_context_init(VirtIOBlock *s, Error **errp)
+ {
+@@ -1739,7 +1827,7 @@ static void virtio_blk_device_realize(DeviceState *dev, Error **errp)
+         error_setg(errp, "drive property not set");
+         return;
+     }
+-    if (!blk_is_inserted(conf->conf.blk)) {
++    if (!blk_is_inserted(conf->conf.blk) && !conf->removable) {
+         error_setg(errp, "Device needs media, but drive is empty");
+         return;
+     }
+@@ -1763,22 +1851,25 @@ static void virtio_blk_device_realize(DeviceState *dev, Error **errp)
+         return;
+     }
+ 
+-    if (!blkconf_apply_backend_options(&conf->conf,
+-                                       !blk_supports_write_perm(conf->conf.blk),
+-                                       true, errp)) {
+-        return;
+-    }
+-    s->original_wce = blk_enable_write_cache(conf->conf.blk);
+-    if (!blkconf_geometry(&conf->conf, NULL, 65535, 255, 255, errp)) {
+-        return;
+-    }
+-
+-    if (!blkconf_blocksizes(&conf->conf, errp)) {
+-        return;
++    bs = blk_bs(conf->conf.blk);
++    if (bs) {
++        if (!blkconf_apply_backend_options(&conf->conf,
++                                           !blk_supports_write_perm(conf->conf.blk),
++                                           true, errp)) {
++            return;
++        }
++        s->original_wce = blk_enable_write_cache(conf->conf.blk);
++        if (!blkconf_geometry(&conf->conf, NULL, 65535, 255, 255, errp) ||
++            !blkconf_blocksizes(&conf->conf, errp)) {
++            return;
++        }
++    } else {
++        conf->conf.logical_block_size = BDRV_SECTOR_SIZE;
++        conf->conf.physical_block_size = BDRV_SECTOR_SIZE;
++        s->original_wce = false;
+     }
+ 
+-    bs = blk_bs(conf->conf.blk);
+-    if (bs->bl.zoned != BLK_Z_NONE) {
++    if (bs && bs->bl.zoned != BLK_Z_NONE) {
+         virtio_add_feature(&s->host_features, VIRTIO_BLK_F_ZONED);
+         if (bs->bl.zoned == BLK_Z_HM) {
+             virtio_clear_feature(&s->host_features, VIRTIO_BLK_F_DISCARD);
+@@ -1806,11 +1897,16 @@ static void virtio_blk_device_realize(DeviceState *dev, Error **errp)
+ 
+     s->config_size = virtio_get_config_size(&virtio_blk_cfg_size_params,
+                                             s->host_features);
++    if (conf->removable) {
++        s->config_size = MAX(s->config_size,
++                             offsetof(struct virtio_blk_config, unused1) + 1);
++    }
+     virtio_init(vdev, VIRTIO_ID_BLOCK, s->config_size);
+ 
+     qemu_mutex_init(&s->rq_lock);
+ 
+     s->blk = conf->conf.blk;
++    s->tray_open = !blk_is_inserted(s->blk);
+     s->rq = NULL;
+     s->sector_mask = (s->conf.conf.logical_block_size / BDRV_SECTOR_SIZE) - 1;
+ 
+@@ -1842,7 +1938,8 @@ static void virtio_blk_device_realize(DeviceState *dev, Error **errp)
+         qdev_add_vm_change_state_handler(dev, virtio_blk_dma_restart_cb, NULL, s);
+ 
+     blk_ram_registrar_init(&s->blk_ram_registrar, s->blk);
+-    blk_set_dev_ops(s->blk, &virtio_block_ops, s);
++    blk_set_dev_ops(s->blk, conf->removable ? &virtio_block_removable_ops
++                                            : &virtio_block_ops, s);
+ 
+     blk_iostatus_enable(s->blk);
+ 
+@@ -1913,6 +2010,7 @@ static const Property virtio_blk_properties[] = {
+                       VIRTIO_BLK_F_DISCARD, true),
+     DEFINE_PROP_BOOL("report-discard-granularity", VirtIOBlock,
+                      conf.report_discard_granularity, true),
++    DEFINE_PROP_BOOL("removable", VirtIOBlock, conf.removable, false),
+     DEFINE_PROP_BIT64("write-zeroes", VirtIOBlock, host_features,
+                       VIRTIO_BLK_F_WRITE_ZEROES, true),
+     DEFINE_PROP_UINT32("max-discard-sectors", VirtIOBlock,
+diff --git a/include/hw/virtio/virtio-blk.h b/include/hw/virtio/virtio-blk.h
+index 3d8dee7ec15..5522f49ac91 100644
+--- a/include/hw/virtio/virtio-blk.h
++++ b/include/hw/virtio/virtio-blk.h
+@@ -45,6 +45,7 @@ struct VirtIOBlkConf
+     uint16_t queue_size;
+     bool seg_max_adjust;
+     bool report_discard_granularity;
++    bool removable;
+     uint32_t max_discard_sectors;
+     uint32_t max_write_zeroes_sectors;
+     bool x_enable_wce_if_config_wce;
+@@ -64,6 +65,8 @@ struct VirtIOBlock {
+     bool ioeventfd_started;
+     bool ioeventfd_starting;
+     bool ioeventfd_stopping;
++    bool eject_requested;
++    bool tray_open;
+ 
+     /*
+      * The AioContext for each virtqueue. The BlockDriverState will use the
+

@@ -379,7 +379,7 @@ struct VMDetailView: View {
         return choices
     }
 
-    // MARK: CD-ROM
+    // MARK: Removable media
 
     @ViewBuilder
     private func mediaSection(_ vm: Binding<VMConfig>) -> some View {
@@ -429,10 +429,41 @@ struct VMDetailView: View {
                 }
                 .disabled(running)
             }
+
+            if vm.wrappedValue.machineFamily.supportsFloppyDisk {
+                Divider()
+
+                if let floppy = vm.wrappedValue.floppyImagePath,
+                   !floppy.isEmpty {
+                    LabeledContent("Floppy disk") {
+                        Text(URL(fileURLWithPath: floppy).lastPathComponent)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+                    Button("Eject Floppy Disk", role: .destructive) {
+                        vm.wrappedValue.floppyImagePath = nil
+                    }
+                    .disabled(running)
+                } else {
+                    LabeledContent("Floppy disk") {
+                        Text("No floppy inserted")
+                            .foregroundStyle(.secondary)
+                    }
+                    Button("Insert Floppy Disk\u{2026}") {
+                        chooseFloppy(vm)
+                    }
+                    .disabled(running)
+                }
+            }
         } header: {
-            Label("Discs", systemImage: "opticaldiscdrive")
+            Label("Media", systemImage: "opticaldiscdrive")
         } footer: {
-            Text("While the Mac is running, use Mac → Disc to insert or eject a disc image.")
+            if vm.wrappedValue.machineFamily.supportsFloppyDisk {
+                Text("While the Mac is running, use Mac → Disc or Mac → Floppy to change removable media.")
+            } else {
+                Text("While the Mac is running, use Mac → Disc to insert or eject a disc image.")
+            }
         }
     }
 
@@ -639,6 +670,18 @@ struct VMDetailView: View {
         if panel.runModal() == .OK, let url = panel.url {
             vm.wrappedValue.cdImagePath = url.path
             vm.wrappedValue.bootFromCD = true
+        }
+    }
+
+    private func chooseFloppy(_ vm: Binding<VMConfig>) {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        panel.message = "Choose a raw floppy disk image (.img, .dsk, .ima, or .raw)"
+        panel.prompt = "Insert"
+        if panel.runModal() == .OK, let url = panel.url {
+            vm.wrappedValue.floppyImagePath = url.path
         }
     }
 

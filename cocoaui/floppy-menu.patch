@@ -1,0 +1,259 @@
+--- a/ui/cocoa.m
++++ b/ui/cocoa.m
+@@ -42,6 +42,8 @@
+ #include "qapi/qapi-commands-block.h"
+ #include "qapi/qapi-commands-machine.h"
+ #include "qapi/qapi-commands-misc.h"
++#include "block/block_int-global-state.h"
++#include "system/block-backend-global-state.h"
+ #include "qemu-version.h"
+ #include "qemu/cutils.h"
+ #include "qemu/main-loop.h"
+@@ -117,12 +119,17 @@
+ #define CLASSICMAC_TOOLS_CD_ENV "CLASSICMAC_TOOLS_CD"
+ 
+ #define CLASSICMAC_DISC_DRIVE "cd0"
++#define CLASSICMAC_FLOPPY_DRIVE "fd0"
+ 
+ /* Native, stateful media controls for the running Mac's menus. */
+ static NSMenuItem *tools_cd_menu_item;
+ static NSMenuItem *disc_eject_menu_item;
++static NSMenuItem *floppy_insert_menu_item;
++static NSMenuItem *floppy_eject_menu_item;
+ static NSMenuItem *input_helpers_menu_item;
+ static NSString *classicmac_disc_drive;
++static NSString *classicmac_floppy_drive;
++static bool classicmac_floppy_eject_pending;
+ 
+ static CGInterpolationQuality zoom_interpolation = kCGInterpolationNone;
+ static NSTextField *pauseLabel;
+@@ -2009,32 +2016,59 @@
+     });
+ }
+ 
+-/* Ejects the user-selected disc. */
++/* Ejects the selected user-facing disc or floppy image. */
+ - (void)ejectDeviceMedia:(id)sender
+ {
+     NSString *drive = [sender representedObject];
++    bool isFloppy = classicmac_floppy_drive &&
++        [drive isEqualToString:classicmac_floppy_drive];
+     if(drive == nil) {
+         NSBeep();
+-        QEMU_Alert(@"The Mac's disc drive is unavailable.");
++        QEMU_Alert(isFloppy ? @"The Mac's floppy drive is unavailable."
++                            : @"The Mac's disc drive is unavailable.");
+         return;
+     }
+ 
+     __block Error *err = NULL;
+     with_bql(^{
+-        qmp_eject([drive UTF8String], NULL, true, true, &err);
++        if (isFloppy) {
++            BlockBackend *blk = blk_by_name([drive UTF8String]);
++            if (blk) {
++                blk_dev_eject_request(blk, false);
++                classicmac_floppy_eject_pending = true;
++            } else {
++                error_setg(&err, "Floppy drive '%s' was not found",
++                           [drive UTF8String]);
++            }
++        } else {
++            qmp_eject([drive UTF8String], NULL, true, true, &err);
++        }
+     });
+-    if (!classicmac_handle_media_error(err, @"The Disc Couldn't Be Ejected", @"The Mac's disc drive may be busy. Wait a moment, then try again.")) {
+-        [disc_eject_menu_item setEnabled:NO];
++    NSString *message = isFloppy ? @"The Floppy Disk Couldn't Be Ejected"
++                                  : @"The Disc Couldn't Be Ejected";
++    NSString *informativeText = isFloppy
++        ? @"The Mac may still be using the floppy disk. Eject it from the desktop, then try again."
++        : @"The Mac's disc drive may be busy. Wait a moment, then try again.";
++    if (!classicmac_handle_media_error(err, message, informativeText)) {
++        if (isFloppy) {
++            [floppy_eject_menu_item setTitle:@"Ejecting Floppy Disk…"];
++            [floppy_eject_menu_item setEnabled:NO];
++        } else {
++            [disc_eject_menu_item setEnabled:NO];
++        }
+     }
+ }
+ 
+-/* Asks for a disc image and inserts it into the user-facing CD drive. */
++/* Asks for an image and inserts it into the selected removable drive. */
+ - (void)changeDeviceMedia:(id)sender
+ {
+     NSString *drive = [sender representedObject];
++    bool isFloppy = classicmac_floppy_drive &&
++        [drive isEqualToString:classicmac_floppy_drive];
+     if(drive == nil) {
+         NSBeep();
+-        QEMU_Alert(@"The Mac's disc drive is unavailable.");
++        QEMU_Alert(isFloppy ? @"The Mac's floppy drive is unavailable."
++                            : @"The Mac's disc drive is unavailable.");
+         return;
+     }
+ 
+@@ -2043,12 +2077,15 @@
+     [openPanel setCanChooseDirectories:NO];
+     [openPanel setAllowsMultipleSelection:NO];
+     [openPanel setPrompt:@"Insert"];
+-    [openPanel setMessage:@"Choose a disc image for the Mac."];
++    [openPanel setMessage:(isFloppy
++        ? @"Choose a raw floppy disk image (.img, .dsk, .ima, or .raw)."
++        : @"Choose a disc image for the Mac.")];
+     if([openPanel runModal] == NSModalResponseOK) {
+         NSString *file = [[[openPanel URLs] objectAtIndex:0] path];
+         if(file == nil) {
+             NSBeep();
+-            QEMU_Alert(@"That disc image couldn't be opened.");
++            QEMU_Alert(isFloppy ? @"That floppy disk image couldn't be opened."
++                                : @"That disc image couldn't be opened.");
+             return;
+         }
+ 
+@@ -2058,12 +2095,25 @@
+                                        [file fileSystemRepresentation], "raw",
+                                        true, true,
+                                        true,
+-                                       BLOCKDEV_CHANGE_READ_ONLY_MODE_READ_ONLY,
++                                       isFloppy
++                                           ? BLOCKDEV_CHANGE_READ_ONLY_MODE_READ_WRITE
++                                           : BLOCKDEV_CHANGE_READ_ONLY_MODE_READ_ONLY,
+                                        &err);
+         });
+-        if (!classicmac_handle_media_error(err,
+-                                           @"The Disc Couldn't Be Inserted", @"ClassicMac couldn't read the selected image, or the Mac's disc drive is busy. Check that the file is available, then try again.")) {
+-            [disc_eject_menu_item setEnabled:YES];
++        NSString *message = isFloppy
++            ? @"The Floppy Disk Couldn't Be Inserted"
++            : @"The Disc Couldn't Be Inserted";
++        NSString *informativeText = isFloppy
++            ? @"ClassicMac couldn't read the selected raw floppy image. Check that the file is available and writable, then try again."
++            : @"ClassicMac couldn't read the selected image, or the Mac's disc drive is busy. Check that the file is available, then try again.";
++        if (!classicmac_handle_media_error(err, message, informativeText)) {
++            if (isFloppy) {
++                classicmac_floppy_eject_pending = false;
++                [floppy_insert_menu_item setEnabled:NO];
++                [floppy_eject_menu_item setEnabled:YES];
++            } else {
++                [disc_eject_menu_item setEnabled:YES];
++            }
+         }
+     }
+ }
+@@ -2114,7 +2164,9 @@
+ {
+     __block bool toolsInserted = false;
+     __block bool discInserted = false;
++    __block bool floppyInserted = false;
+     const char *discDrive = [classicmac_disc_drive UTF8String];
++    const char *floppyDrive = [classicmac_floppy_drive UTF8String];
+ 
+     with_bql(^{
+         if (tools_cd_menu_item) {
+@@ -2123,11 +2175,22 @@
+         if (discDrive) {
+             discInserted = classicmac_drive_has_media(discDrive);
+         }
++        if (floppyDrive) {
++            floppyInserted = classicmac_drive_has_media(floppyDrive);
++        }
+     });
+ 
+     [tools_cd_menu_item setTitle:(toolsInserted ?
+         @"Eject “ClassicMac Tools”" : @"Insert “ClassicMac Tools”")];
+     [disc_eject_menu_item setEnabled:discInserted];
++    if (!floppyInserted) {
++        classicmac_floppy_eject_pending = false;
++    }
++    [floppy_insert_menu_item setEnabled:!floppyInserted];
++    [floppy_eject_menu_item setTitle:(classicmac_floppy_eject_pending
++        ? @"Ejecting Floppy Disk…" : @"Eject Floppy Disk")];
++    [floppy_eject_menu_item setEnabled:
++        floppyInserted && !classicmac_floppy_eject_pending];
+ }
+ 
+ - (void)menuWillOpen:(NSMenu *)menu
+@@ -2332,13 +2395,15 @@
+      */
+ }
+ 
+-/* Add one native Disc submenu for the user-selected CD drive. Internal
+- * consoles, floppy controllers, and backend identifiers stay out of the UI. */
++/* Add native Disc and Floppy submenus for ClassicMac's user-facing removable
++ * drives. Internal controllers and backend identifiers stay out of the UI. */
+ static void addRemovableDevicesMenuItems(void)
+ {
+     NSMenu *menu = [[[NSApp mainMenu] itemWithTitle:@"Mac"] submenu];
+     BlockInfoList *currentDevice = qmp_query_block(false, false, NULL);
+     BlockInfoList *pointerToFree = currentDevice;
++    NSMenuItem *discItem = nil;
++    NSMenuItem *floppyItem = nil;
+ 
+     while (currentDevice) {
+         const char *rawName = currentDevice->value->device;
+@@ -2367,19 +2432,56 @@
+                 currentDevice->value->inserted != NULL];
+             [discMenu addItem:disc_eject_menu_item];
+ 
+-            NSMenuItem *discItem = [[[NSMenuItem alloc]
++            discItem = [[[NSMenuItem alloc]
+                 initWithTitle:@"Disc" action:nil keyEquivalent:@""] autorelease];
+             [discItem setSubmenu:discMenu];
++        } else if (currentDevice->value->removable &&
++                   rawName &&
++                   strcmp(rawName, CLASSICMAC_FLOPPY_DRIVE) == 0) {
++            classicmac_floppy_drive = [[NSString stringWithUTF8String:rawName]
++                                        retain];
+ 
+-            NSInteger inputIndex = [menu indexOfItem:input_helpers_menu_item];
+-            NSInteger insertionIndex = inputIndex > 0 ? inputIndex - 1
+-                                                       : [menu numberOfItems];
+-            [menu insertItem:discItem atIndex:insertionIndex];
+-            break;
++            NSMenu *floppyMenu = [[[NSMenu alloc] initWithTitle:@"Floppy"]
++                                  autorelease];
++            [floppyMenu setAutoenablesItems:NO];
++            floppy_insert_menu_item = [[[NSMenuItem alloc]
++                initWithTitle:@"Insert Floppy Disk Image…"
++                        action:@selector(changeDeviceMedia:)
++                 keyEquivalent:@""] autorelease];
++            [floppy_insert_menu_item
++                setRepresentedObject:classicmac_floppy_drive];
++            [floppy_insert_menu_item setEnabled:
++                currentDevice->value->inserted == NULL];
++            [floppyMenu addItem:floppy_insert_menu_item];
++
++            floppy_eject_menu_item = [[[NSMenuItem alloc]
++                initWithTitle:@"Eject Floppy Disk"
++                        action:@selector(ejectDeviceMedia:)
++                 keyEquivalent:@""] autorelease];
++            [floppy_eject_menu_item
++                setRepresentedObject:classicmac_floppy_drive];
++            [floppy_eject_menu_item setEnabled:
++                currentDevice->value->inserted != NULL];
++            [floppyMenu addItem:floppy_eject_menu_item];
++
++            floppyItem = [[[NSMenuItem alloc]
++                initWithTitle:@"Floppy" action:nil keyEquivalent:@""]
++                autorelease];
++            [floppyItem setSubmenu:floppyMenu];
+         }
+         currentDevice = currentDevice->next;
+     }
+ 
++    NSInteger inputIndex = [menu indexOfItem:input_helpers_menu_item];
++    NSInteger insertionIndex = inputIndex > 0 ? inputIndex - 1
++                                               : [menu numberOfItems];
++    if (discItem) {
++        [menu insertItem:discItem atIndex:insertionIndex++];
++    }
++    if (floppyItem) {
++        [menu insertItem:floppyItem atIndex:insertionIndex];
++    }
++
+     qapi_free_BlockInfoList(pointerToFree);
+ }
+ 
+

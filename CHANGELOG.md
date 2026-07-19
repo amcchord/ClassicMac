@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.5.0 — 2026-07-18
+
+### Added
+
+- **Writable floppy disk images on the Quadra 800.** Attach a raw `.img`,
+  `.dsk`, `.ima`, or `.raw` image in a machine's Media settings, or insert one
+  while the Mac is running from **Mac → Floppy**. The bundled classicvirtio
+  driver mounts the image as a removable disk and writes guest changes back to
+  the host file.
+- **Guest-coordinated floppy ejection.** Ejecting from the Mac menu asks classic
+  Mac OS to flush and unmount the disk before QEMU detaches its image. Ejecting
+  the floppy from Finder follows the same path, avoiding stale desktop volumes
+  and lost writes.
+
 ## 1.4.0 — 2026-07-11
 
 ### Added

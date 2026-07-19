@@ -88,6 +88,7 @@ enum MachineFamily: String, Codable, CaseIterable, Identifiable {
     var supportsSharedFolder: Bool { true }
     var supportsSound: Bool { true }
     var supportsCustomResolution: Bool { true }
+    var supportsFloppyDisk: Bool { self == .quadra800 }
     var usesPRAMImage: Bool { self == .quadra800 }
 }
 
@@ -114,6 +115,11 @@ struct VMConfig: Codable, Identifiable, Hashable {
     // Media + boot
     var cdImagePath: String?
     var bootFromCD: Bool
+
+    // Writable raw floppy image mounted in the Quadra's removable drive.
+    // New World Power Macs did not have floppy hardware, so this setting is
+    // only available for the Quadra 800.
+    var floppyImagePath: String?
 
     // Start up with the bundled ClassicMac Tools CD in the dedicated second
     // CD drive. Independent of cdImagePath, so a bootable install disc and
@@ -148,7 +154,8 @@ struct VMConfig: Codable, Identifiable, Hashable {
     private enum CodingKeys: String, CodingKey {
         case id, name, machineFamily, ramMB, diskImageName, pramImageName, diskSizeGB
         case width, height, depth, useEnhancedFramebuffer, customResolution
-        case cdImagePath, bootFromCD, networking, sound, sharedFolderPath
+        case cdImagePath, bootFromCD, floppyImagePath
+        case networking, sound, sharedFolderPath
         case classicInputHelpers, tabletInput, toolsCDInserted
     }
 
@@ -164,6 +171,7 @@ struct VMConfig: Codable, Identifiable, Hashable {
          customResolution: Bool = false,
          cdImagePath: String? = nil,
          bootFromCD: Bool = true,
+         floppyImagePath: String? = nil,
          toolsCDInserted: Bool = false,
          networking: Bool = true,
          sound: Bool = true,
@@ -185,6 +193,7 @@ struct VMConfig: Codable, Identifiable, Hashable {
         self.customResolution = customResolution
         self.cdImagePath = cdImagePath
         self.bootFromCD = bootFromCD
+        self.floppyImagePath = machineFamily.supportsFloppyDisk ? floppyImagePath : nil
         self.toolsCDInserted = toolsCDInserted
         self.networking = networking
         self.sound = sound
@@ -219,6 +228,7 @@ struct VMConfig: Codable, Identifiable, Hashable {
         customResolution = try c.decodeIfPresent(Bool.self, forKey: .customResolution) ?? false
         cdImagePath = try c.decodeIfPresent(String.self, forKey: .cdImagePath)
         bootFromCD = try c.decodeIfPresent(Bool.self, forKey: .bootFromCD) ?? false
+        floppyImagePath = try c.decodeIfPresent(String.self, forKey: .floppyImagePath)
         toolsCDInserted = try c.decodeIfPresent(Bool.self, forKey: .toolsCDInserted) ?? false
         networking = try c.decodeIfPresent(Bool.self, forKey: .networking) ?? true
         sound = try c.decodeIfPresent(Bool.self, forKey: .sound) ?? true
@@ -242,6 +252,9 @@ struct VMConfig: Codable, Identifiable, Hashable {
         }
         if !machineFamily.supportsSharedFolder {
             sharedFolderPath = nil
+        }
+        if !machineFamily.supportsFloppyDisk {
+            floppyImagePath = nil
         }
         if ramMB < 8 {
             ramMB = machineFamily.defaultRAMMB

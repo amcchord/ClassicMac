@@ -8,6 +8,7 @@ final class QEMURunnerArgumentTests: XCTestCase {
         family: MachineFamily = .powerMacG4,
         cdImagePath: String? = "/tmp/install.iso",
         bootFromCD: Bool = true,
+        floppyImagePath: String? = nil,
         toolsCDInserted: Bool = true,
         networking: Bool = true,
         tabletInput: Bool = true,
@@ -19,6 +20,7 @@ final class QEMURunnerArgumentTests: XCTestCase {
             ramMB: family.defaultRAMMB,
             cdImagePath: cdImagePath,
             bootFromCD: bootFromCD,
+            floppyImagePath: floppyImagePath,
             toolsCDInserted: toolsCDInserted,
             networking: networking,
             sound: false,
@@ -231,6 +233,70 @@ final class QEMURunnerArgumentTests: XCTestCase {
             optionValues("-drive", in: arguments)
                 .first { $0.contains("id=cd0") },
             "media=cdrom,if=none,id=cd0,readonly=on"
+        )
+    }
+
+    func testQuadraKeepsAnEmptyWritableFloppyDriveAvailable() {
+        let arguments = QEMUManager.buildArguments(
+            for: config(
+                family: .quadra800,
+                cdImagePath: nil,
+                bootFromCD: false,
+                floppyImagePath: nil,
+                toolsCDInserted: false
+            )
+        )
+
+        XCTAssertEqual(
+            optionValues("-drive", in: arguments)
+                .first { $0.contains("id=fd0") },
+            "if=none,id=fd0,media=cdrom,readonly=off"
+        )
+        XCTAssertTrue(
+            optionValues("-device", in: arguments).contains(
+                "virtio-blk-device,drive=fd0,removable=on"
+            )
+        )
+    }
+
+    func testQuadraLoadsConfiguredFloppyImageWritable() {
+        let arguments = QEMUManager.buildArguments(
+            for: config(
+                family: .quadra800,
+                cdImagePath: nil,
+                bootFromCD: false,
+                floppyImagePath: "/tmp/System Tools.img",
+                toolsCDInserted: false
+            )
+        )
+
+        XCTAssertEqual(
+            optionValues("-drive", in: arguments)
+                .first { $0.contains("id=fd0") },
+            "if=none,id=fd0,file=/tmp/System Tools.img,format=raw"
+        )
+        XCTAssertTrue(
+            optionValues("-device", in: arguments).contains(
+                "virtio-blk-device,drive=fd0,removable=on"
+            )
+        )
+    }
+
+    func testPowerMacDoesNotExposeAFloppyDrive() {
+        let arguments = QEMUManager.buildArguments(
+            for: config(
+                family: .powerMacG4,
+                floppyImagePath: "/tmp/System Tools.img"
+            )
+        )
+
+        XCTAssertFalse(
+            optionValues("-drive", in: arguments)
+                .contains { $0.contains("id=fd0") }
+        )
+        XCTAssertFalse(
+            optionValues("-device", in: arguments)
+                .contains { $0.contains("drive=fd0") }
         )
     }
 

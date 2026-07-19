@@ -1,0 +1,294 @@
+diff --git a/device-block.c b/device-block.c
+index d06a91a..3089ab8 100644
+--- a/device-block.c
++++ b/device-block.c
+@@ -12,7 +12,9 @@ The slowdown is probably negligible on a host with an SSD.
+ 
+ Does not yet seem to work right on PowerPC hosts!
+ 
+-Read-only for now.
++ClassicMac uses this as a removable floppy-image drive.  The host reports
++insert/eject through the standard Virtio capacity configuration and the driver
++posts a disk event when that capacity changes.
+ */
+ 
+ #include <Devices.h>
+@@ -64,7 +66,8 @@ struct config {
+ 	uint32_t max_write_zeroes_sectors;
+ 	uint32_t max_write_zeroes_seg;
+ 	uint8_t write_zeroes_may_unmap;
+-	uint8_t unused1[3];
++	uint8_t eject_requested;
++	uint8_t unused1[2];
+ 	uint32_t max_secure_erase_sectors;
+ 	uint32_t max_secure_erase_seg;
+ 	uint32_t secure_erase_sector_alignment;
+@@ -88,6 +91,11 @@ static void installDrive(void);
+ static void removeDrive(void);
+ static struct DrvQEl *findDrive(short num);
+ static void *readSector(int which);
++static void refreshMedia(bool postEvent);
++static int transfer(IOParam *pb, bool write);
++static int flushWrites(void);
++static int ejectMedia(void);
++static OSErr cAccRun(struct CntrlParam *pb);
+ static OSErr stressfulGetPhysical(LogicalToPhysicalTable *addresses, unsigned long *physicalEntryCount);
+ void probePartitions(uint32_t *firstblock, uint32_t *numblocks);
+ static OSErr cIcon(struct CntrlParam *pb);
+@@ -101,17 +109,19 @@ static OSErr dgDeviceType(struct DriverGestaltParam *pb);
+ 
+ enum {
+ 	MAXBUFFERS = 16,
++	CLASSICMAC_VIRTIO_BLK_T_EJECT = 0x434d0100,
+ };
+ 
+ static struct fixedbuf *fixedbuf;
+ static uint32_t pfixedbuf;
+ static int buffers; // more buffers means more fragmentation tolerated
+ static short drvrRefNum;
++static bool ejectRequested;
+ uint32_t firstblock, numblocks;
+ static struct DrvSts2 dqe = {
+ 	.track = 0,       // not for us
+ 	.writeProt = 0,   // set once Virtio device is probed
+-	.diskInPlace = 8, // nonejectable
++	.diskInPlace = 0, // removable, initially empty
+ 	.installed = 1,   // refers to the drive, not the disk
+ 	.sides = 0x80,    // double-sided, why not
+ 	.qLink = NULL,
+@@ -164,6 +174,7 @@ int DriverStart(short refNum) {
+ 
+ 	dqe.writeProt = 0x80 * VGetDevFeature(5); // VIRTIO_BLK_F_RO
+ 	VSetFeature(5, VGetDevFeature(5)); // SHOULD use feature if offered
++	VSetFeature(9, VGetDevFeature(9)); // VIRTIO_BLK_F_FLUSH
+ 	if (!VFeaturesOK()) {
+ 		printf("Feature negotiation failure\n");
+ 		goto openErr;
+@@ -184,24 +195,10 @@ int DriverStart(short refNum) {
+ 		goto openErr;
+ 	}
+ 
+-	// Probe the disk
+-	struct config *config = VConfig;
+-	printf("Device size: %#llx bytes, %#llx blocks\n", config->capacity*512, config->capacity);
+-	firstblock = 0;
+-	numblocks = config->capacity; // 2^32 block max for Mac OS
+-	probePartitions(&firstblock, &numblocks);
+-	printf("Volume size: %#llx bytes, %#lx blocks, %#lx skipblocks\n", (uint64_t)numblocks*512, numblocks, firstblock);
+-	struct HFSMasterDirectoryBlock *mdb = readSector(2); // now adjusted for partition
+-	if (mdb->drSigWord == 0x4244) {
+-		printf("HFS volume name: %.*s\n", *mdb->drVN, mdb->drVN+1);
+-	}
+-	dqe.driveSize = numblocks;
+-	dqe.driveS1 = numblocks >> 16;
+-
+ 	installDrive();
+ 	RegisterCleanup(removeDrive);
+-
+-	PostEvent(diskEvt, dqe.dQDrive); // might be worth re-posting with accRun
++	(*GetDCtlEntry(drvrRefNum))->dCtlFlags |= dNeedTimeMask;
++	refreshMedia(true);
+ 
+ 	printf("Ready\n");
+ 	return noErr;
+@@ -211,14 +208,24 @@ openErr:
+ }
+ 
+ int DriverRead(IOParam *pb) {
++	return transfer(pb, false);
++}
++
++int DriverWrite(IOParam *pb) {
++	if (dqe.writeProt) return wPrErr;
++	return transfer(pb, true);
++}
++
++static int transfer(IOParam *pb, bool write) {
+ 	if (LogEnable) printf("%s", PBPrint(pb, pb->ioTrap|0xa000, 1));
++	if (!dqe.diskInPlace) return offLinErr;
+ 	int err = noErr;
+ 
+ 	// First element is a logical buffer, subsequent ones are the result of GetPhysical
+ 	MemoryBlock memblocks[1+MAXBUFFERS] = {{pb->ioBuffer, pb->ioReqCount}};
+ 	LockMemory(pb->ioBuffer, pb->ioReqCount); // already held by VM
+ 	pb->ioActCount = 0;
+-	fixedbuf->request.type = 0;
++	fixedbuf->request.type = write ? 1 : 0;
+ 
+ 	// Might take a few goes if there is mem fragmentation
+ 	while (pb->ioActCount != pb->ioReqCount) {
+@@ -239,10 +246,15 @@ int DriverRead(IOParam *pb) {
+ 		phys[1+n] = pfixedbuf + offsetof(struct fixedbuf, reply);
+ 	 	size[1+n] = sizeof(fixedbuf->reply);
+ 
+-		QSend(0, 1/*n_out*/, n+1/*n_in*/, phys, size, NULL, true/*wait*/);
++		fixedbuf->reply = 0xff;
++		QSend(0,
++			write ? n+1 : 1,
++			write ? 1 : n+1,
++			phys, size, NULL, true/*wait*/);
+ 
+ 		if (fixedbuf->reply != 0) {
+-			panic("bad reply");
++			err = ioErr;
++			break;
+ 		}
+ 
+ 		for (int i=1; i<=n; i++) {
+@@ -250,13 +262,47 @@ int DriverRead(IOParam *pb) {
+ 		}
+ 	}
+ 	UnlockMemory(pb->ioBuffer, pb->ioReqCount);
++	if (write && err == noErr) err = flushWrites();
+ 
+ 	if (LogEnable) printf("%s", PBPrint(pb, pb->ioTrap|0xa000, err));
+ 	return err;
+ }
+ 
+-int DriverWrite(IOParam *pb) {
+-	return writErr;
++static int flushWrites(void) {
++	if (!VGetDevFeature(9)) return noErr;
++
++	fixedbuf->request.type = 4;
++	fixedbuf->request.sector = 0;
++	fixedbuf->reply = 0xff;
++	uint32_t phys[2] = {
++		pfixedbuf + offsetof(struct fixedbuf, request),
++		pfixedbuf + offsetof(struct fixedbuf, reply),
++	};
++	uint32_t size[2] = {
++		sizeof fixedbuf->request,
++		sizeof fixedbuf->reply,
++	};
++	QSend(0, 1, 1, phys, size, NULL, true/*wait*/);
++	return fixedbuf->reply == 0 ? noErr : ioErr;
++}
++
++static int ejectMedia(void) {
++	int err = flushWrites();
++	if (err != noErr) return err;
++
++	fixedbuf->request.type = CLASSICMAC_VIRTIO_BLK_T_EJECT;
++	fixedbuf->request.sector = 0;
++	fixedbuf->reply = 0xff;
++	uint32_t phys[2] = {
++		pfixedbuf + offsetof(struct fixedbuf, request),
++		pfixedbuf + offsetof(struct fixedbuf, reply),
++	};
++	uint32_t size[2] = {
++		sizeof fixedbuf->request,
++		sizeof fixedbuf->reply,
++	};
++	QSend(0, 1, 1, phys, size, NULL, true/*wait*/);
++	return fixedbuf->reply == 0 ? noErr : ioErr;
+ }
+ 
+ static void installDrive(void) {
+@@ -267,6 +313,7 @@ static void installDrive(void) {
+ }
+ 
+ static void removeDrive(void) {
++	(*GetDCtlEntry(drvrRefNum))->dCtlFlags &= ~dNeedTimeMask;
+ 	int err = Dequeue((QElem *)&dqe.qLink, GetDrvQHdr());
+ 	printf("the dequeue call returned %d\n", err);
+ }
+@@ -357,6 +404,33 @@ void DNotified(uint16_t q, volatile uint32_t *retlen) {
+ }
+ 
+ void DConfigChange(void) {
++	struct config *config = VConfig;
++	if (config->eject_requested) ejectRequested = true;
++	refreshMedia(true);
++}
++
++static void refreshMedia(bool postEvent) {
++	struct config *config = VConfig;
++	uint64_t capacity = config->capacity;
++	bool inserted = capacity != 0;
++	bool wasInserted = dqe.diskInPlace != 0;
++
++	firstblock = 0;
++	numblocks = capacity > UINT32_MAX ? UINT32_MAX : capacity;
++	dqe.driveSize = numblocks;
++	dqe.driveS1 = numblocks >> 16;
++	dqe.diskInPlace = inserted ? 1 : 0;
++
++	printf("Device size: %#llx bytes, %#llx blocks\n", capacity*512, capacity);
++	if (inserted && !postEvent) {
++		probePartitions(&firstblock, &numblocks);
++		dqe.driveSize = numblocks;
++		dqe.driveS1 = numblocks >> 16;
++	}
++
++	if (postEvent && inserted != wasInserted) {
++		PostEvent(diskEvt, dqe.dQDrive);
++	}
+ }
+ 
+ static OSErr cIcon(struct CntrlParam *pb) {
+@@ -365,7 +439,7 @@ static OSErr cIcon(struct CntrlParam *pb) {
+ 		unsigned char location[64];
+ 	};
+ 
+-	// B&W HD icon, Sys 8+ converts to colour version
++	// B&W disk icon, Sys 8+ converts to a colour version
+ 	static struct about hd = {
+ 		{
+ 			0x00000000, 0x00000000, 0x00000000, 0x00000000, // Icon
+@@ -384,7 +458,7 @@ static OSErr cIcon(struct CntrlParam *pb) {
+ 			0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff,
+ 			0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff,
+ 			0x7ffffffe, 0x00000000, 0x00000000, 0x00000000},
+-		"\x13" "Virtio block device"
++		"\x13" "Virtio floppy drive"
+ 	};
+ 
+ 	static const void *ret = &hd;
+@@ -395,8 +469,8 @@ static OSErr cIcon(struct CntrlParam *pb) {
+ static OSErr cDriveInfo(struct CntrlParam *pb) {
+ 	uint32_t ret =
+ 		(0 << 8) |  // set for external, clear for internal
+-		(1 << 9) |  // set if SCSI, clear if IWM
+-		(1 << 10) | // set if fixed, clear if can be removed
++		(0 << 9) |  // set if SCSI, clear if IWM
++		(0 << 10) | // set if fixed, clear if can be removed
+ 		(1 << 11) | // set for secondary drives, clear for primary drive
+ 		1;
+ 
+@@ -409,6 +483,21 @@ static OSErr sDriveStatus(struct CntrlParam *pb) {
+ 	return noErr;
+ }
+ 
++static OSErr cAccRun(struct CntrlParam *pb) {
++	if (!ejectRequested || !dqe.diskInPlace) return noErr;
++
++	ejectRequested = false;
++	ParamBlockRec ejectPB = {};
++	ejectPB.volumeParam.ioNamePtr = NULL;
++	ejectPB.volumeParam.ioVRefNum = dqe.dQDrive;
++	OSErr err = PBEject(&ejectPB);
++	if (err != noErr) {
++		printf("Eject request deferred: %d\n", err);
++		ejectRequested = true;
++	}
++	return noErr;
++}
++
+ // When the /chosen "bootpath" property is set to this PCI device,
+ // the following three Driver Gestalt handlers tell the NewWorld ROM
+ // to root from this volume -- without waiting for the ?-floppy to time out.
+@@ -475,7 +564,11 @@ int DriverCtl(CntrlParam *pb) {
+ 	if (LogEnable) printf("%s", PBPrint(pb, pb->ioTrap|0xa000, 1));
+ 
+ 	int err = controlErr;
+-	if (pb->csCode == kDriveIcon) {
++	if (pb->csCode == accRun) {
++		err = cAccRun(pb);
++	} else if (pb->csCode == kEject) {
++		err = ejectMedia();
++	} else if (pb->csCode == kDriveIcon) {
+ 		err = cIcon(pb);
+ 	} else if (pb->csCode == kMediaIcon) {
+ 		err = cIcon(pb);
+

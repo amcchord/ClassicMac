@@ -340,6 +340,15 @@ final class QEMUManager: ObservableObject {
             )
         }
 
+        if let floppyPath = config.floppyImagePath,
+           !floppyPath.isEmpty,
+           !fm.fileExists(atPath: floppyPath) {
+            return AppError(
+                title,
+                "The floppy disk \u{201C}\(URL(fileURLWithPath: floppyPath).lastPathComponent)\u{201D} could not be found. It may have been moved or deleted. Eject it in the machine's settings or choose it again."
+            )
+        }
+
         return nil
     }
 
@@ -556,9 +565,11 @@ final class QEMUManager: ObservableObject {
         let sharing = config.hasSharedFolder
         let tablet = config.tabletInput
 
-        // The nubus-virtio-mmio card is needed for both folder sharing and
-        // tablet input (both are classicvirtio features driven by the declrom).
-        let needsVirtioCard = sharing || tablet
+        // The nubus-virtio-mmio card carries the classicvirtio folder-sharing,
+        // tablet, and removable floppy drivers. Keep it present even when the
+        // floppy starts empty so the running Mac menu can insert an image.
+        let needsVirtioCard = sharing || tablet ||
+            config.machineFamily.supportsFloppyDisk
 
         // Framebuffer selection.
         // - No virtio card + enhanced: machine creates the qfb (fb=qemu) and -g applies.
@@ -634,6 +645,18 @@ final class QEMUManager: ObservableObject {
         args += ["-device", "scsi-cd,scsi-id=4,drive=tools0"]
         args += ["-drive", toolsDriveSpec(for: config, iface: "none")]
 
+        // Writable raw floppy images use the bundled classicvirtio block
+        // driver. An empty optical-style backend lets QEMU create a drive with
+        // no initial medium; the patched removable VirtIO device then reports
+        // insert/eject capacity changes to classic Mac OS.
+        var floppy = "if=none,id=fd0"
+        if let floppyPath = config.floppyImagePath, !floppyPath.isEmpty {
+            floppy += ",file=\(floppyPath),format=raw"
+        } else {
+            floppy += ",media=cdrom,readonly=off"
+        }
+        args += ["-drive", floppy]
+
         // User-mode networking through the Quadra's built-in SONIC ethernet.
         // The q800 machine creates the onboard dp8393x and binds it to nd_table[0],
         // so networking is configured with -nic (not a separate -device).
@@ -650,6 +673,7 @@ final class QEMUManager: ObservableObject {
         // tablet input when enabled.
         if needsVirtioCard {
             args += ["-device", "nubus-virtio-mmio,romfile=\(AppPaths.declROM.path)"]
+            args += ["-device", "virtio-blk-device,drive=fd0,removable=on"]
             if qfbAsDevice {
                 args += ["-device", "nubus-qfb,width=\(config.width),height=\(config.height),depth=\(config.depth)"]
             }
