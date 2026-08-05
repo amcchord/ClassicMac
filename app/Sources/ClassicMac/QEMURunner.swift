@@ -37,6 +37,7 @@ final class QEMUManager: ObservableObject {
     // kept after shutdown so the library shows what was last on screen.
     @Published private(set) var previews: [UUID: NSImage] = [:]
     @Published var lastError: AppError?
+    @Published private(set) var pendingStopID: UUID?
 
     private var processes: [UUID: Process] = [:]
     private var qmpMonitors: [UUID: QMPEventMonitor] = [:]
@@ -122,6 +123,9 @@ final class QEMUManager: ObservableObject {
                 let monitor = self.qmpMonitors.removeValue(forKey: config.id)
                 self.runningIDs.remove(config.id)
                 self.pausedIDs.remove(config.id)
+                if self.pendingStopID == config.id {
+                    self.pendingStopID = nil
+                }
                 self.processes.removeValue(forKey: config.id)
                 self.stopPreviewUpdates(for: config.id)
                 self.persistPreview(config)
@@ -245,7 +249,22 @@ final class QEMUManager: ObservableObject {
         try? png.write(to: bundle.appendingPathComponent("preview.png"))
     }
 
-    func stop(_ id: UUID) {
+    func requestStop(_ id: UUID) {
+        guard runningIDs.contains(id) else { return }
+        pendingStopID = id
+    }
+
+    func cancelStop() {
+        pendingStopID = nil
+    }
+
+    func confirmStop() {
+        guard let id = pendingStopID else { return }
+        pendingStopID = nil
+        stop(id)
+    }
+
+    private func stop(_ id: UUID) {
         guard let process = processes[id] else { return }
         process.terminate()
     }

@@ -101,7 +101,7 @@ private struct MachineCommands: View {
 
         Button("Shut Down") {
             if let vm = vm {
-                manager.stop(vm.id)
+                manager.requestStop(vm.id)
             }
         }
         .disabled(!running)

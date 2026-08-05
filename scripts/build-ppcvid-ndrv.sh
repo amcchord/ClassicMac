@@ -143,6 +143,8 @@ else
     export BUILD_PPC=true
     export BUILD_CARBON=false
     export INTERFACES_KIND=universal
+    # Resolved from the Retro68 checkout created earlier in this script.
+    # shellcheck source=/dev/null
     source "$RETRO68_SRC/interfaces-and-libraries.sh"
     locateAndCheckInterfacesAndLibraries
     setUpInterfacesAndLibraries

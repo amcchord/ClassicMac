@@ -30,9 +30,9 @@ struct VMDetailView: View {
     }
 
     private var configBinding: Binding<VMConfig>? {
-        guard config != nil else { return nil }
+        guard let initialConfig = config else { return nil }
         return Binding(
-            get: { config! },
+            get: { config ?? initialConfig },
             set: { newValue in
                 config = newValue
                 store.save(newValue)
@@ -88,10 +88,19 @@ struct VMDetailView: View {
                 TextField("Name", text: vm.name)
                     .font(.title2.bold())
                     .textFieldStyle(.plain)
+                    .disabled(running)
                 Text(vm.wrappedValue.machineFamily.hardwareLabel)
                     .foregroundStyle(.secondary)
+                HStack(spacing: 14) {
+                    Label("\(vm.wrappedValue.ramMB) MB", systemImage: "memorychip")
+                    Label("\(vm.wrappedValue.diskSizeGB) GB", systemImage: "internaldrive")
+                    Label("\(vm.wrappedValue.width) \u{00D7} \(vm.wrappedValue.height)", systemImage: "display")
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .padding(.top, 2)
                 if running {
-                    Text("Settings can be changed after the Mac shuts down.")
+                    Text("Settings are locked while this Mac is running.")
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                 }
@@ -160,7 +169,7 @@ struct VMDetailView: View {
                         .resizable()
                         .scaledToFit()
                         .frame(maxWidth: .infinity)
-                        .frame(maxHeight: 300)
+                        .frame(maxHeight: 210)
                         .saturation(running ? 1 : 0.6)
                         .opacity(running ? 1 : 0.75)
                         .clipShape(RoundedRectangle(cornerRadius: 8))
@@ -168,6 +177,16 @@ struct VMDetailView: View {
                             RoundedRectangle(cornerRadius: 8)
                                 .strokeBorder(.separator, lineWidth: 1)
                         )
+                        .overlay(alignment: .bottomTrailing) {
+                            if running {
+                                Label("Open Screen", systemImage: "arrow.up.forward.app")
+                                    .font(.caption.weight(.semibold))
+                                    .padding(.horizontal, 9)
+                                    .padding(.vertical, 6)
+                                    .background(.regularMaterial, in: Capsule())
+                                    .padding(10)
+                            }
+                        }
                 }
                 .buttonStyle(.plain)
                 .disabled(!running)
@@ -196,7 +215,7 @@ struct VMDetailView: View {
     @ViewBuilder
     private func powerMacDisplaySection(_ vm: Binding<VMConfig>) -> some View {
         Section {
-            Toggle("Custom resolution", isOn: vm.customResolution)
+            Toggle("Custom resolution", isOn: customResolutionSelection(vm))
                 .disabled(running)
 
             if vm.wrappedValue.customResolution {
@@ -219,7 +238,7 @@ struct VMDetailView: View {
     @ViewBuilder
     private func quadraDisplaySection(_ vm: Binding<VMConfig>) -> some View {
         Section {
-            Toggle(isOn: vm.useEnhancedFramebuffer) {
+            Toggle(isOn: enhancedFramebufferSelection(vm)) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Enhanced video card")
                     Text("Any resolution, with richer color at every size")
@@ -229,7 +248,7 @@ struct VMDetailView: View {
             }
             .disabled(running)
 
-            Toggle("Custom resolution", isOn: vm.customResolution)
+            Toggle("Custom resolution", isOn: customResolutionSelection(vm))
                 .disabled(running || !vm.wrappedValue.useEnhancedFramebuffer)
 
             if vm.wrappedValue.customResolution {
@@ -260,14 +279,22 @@ struct VMDetailView: View {
     private func customResolutionFields(_ vm: Binding<VMConfig>) -> some View {
         LabeledContent("Size") {
             HStack(spacing: 8) {
-                TextField("Width", value: maxClamped(vm.width, VMConfig.maxWidth), format: .number)
-                    .frame(width: 76)
-                    .multilineTextAlignment(.trailing)
+                TextField(
+                    "Width",
+                    value: bounded(vm.width, minimum: VMConfig.minWidth, maximum: VMConfig.maxWidth),
+                    format: .number
+                )
+                .frame(width: 76)
+                .multilineTextAlignment(.trailing)
                 Text("\u{00D7}")
                     .foregroundStyle(.secondary)
-                TextField("Height", value: maxClamped(vm.height, VMConfig.maxHeight), format: .number)
-                    .frame(width: 76)
-                    .multilineTextAlignment(.trailing)
+                TextField(
+                    "Height",
+                    value: bounded(vm.height, minimum: VMConfig.minHeight, maximum: VMConfig.maxHeight),
+                    format: .number
+                )
+                .frame(width: 76)
+                .multilineTextAlignment(.trailing)
                 Button("Match Display") {
                     matchMainDisplay(vm)
                 }
@@ -276,35 +303,18 @@ struct VMDetailView: View {
         .disabled(running)
     }
 
-    private func maxClamped(_ source: Binding<Int>, _ maxValue: Int) -> Binding<Int> {
+    private func bounded(_ source: Binding<Int>, minimum: Int, maximum: Int) -> Binding<Int> {
         Binding(
             get: { source.wrappedValue },
-            set: { newValue in
-                var value = newValue
-                if value > maxValue {
-                    value = maxValue
-                }
-                if value < 1 {
-                    value = 1
-                }
-                source.wrappedValue = value
-            }
+            set: { source.wrappedValue = min(max($0, minimum), maximum) }
         )
     }
 
     private func matchMainDisplay(_ vm: Binding<VMConfig>) {
         guard let screen = NSScreen.main else { return }
-        var width = Int(screen.frame.width)
-        var height = Int(screen.frame.height)
-        if width > VMConfig.maxWidth {
-            width = VMConfig.maxWidth
-        }
-        if height > VMConfig.maxHeight {
-            height = VMConfig.maxHeight
-        }
         vm.wrappedValue.customResolution = true
-        vm.wrappedValue.width = width
-        vm.wrappedValue.height = height
+        vm.wrappedValue.width = VMConfig.clampedWidth(Int(screen.frame.width))
+        vm.wrappedValue.height = VMConfig.clampedHeight(Int(screen.frame.height))
     }
 
     // MARK: Hardware
@@ -567,7 +577,7 @@ struct VMDetailView: View {
                 .help("Restart the Mac")
 
                 Button(role: .destructive) {
-                    manager.stop(vmID)
+                    manager.requestStop(vmID)
                 } label: {
                     Label("Shut Down", systemImage: "power")
                 }
@@ -617,14 +627,53 @@ struct VMDetailView: View {
 
     // MARK: Selection helpers
 
+    private func enhancedFramebufferSelection(_ vm: Binding<VMConfig>) -> Binding<Bool> {
+        Binding(
+            get: { vm.wrappedValue.useEnhancedFramebuffer },
+            set: { enabled in
+                vm.wrappedValue.useEnhancedFramebuffer = enabled
+                if !enabled {
+                    vm.wrappedValue.customResolution = false
+                    let preset = ResolutionPreset.closest(
+                        toWidth: vm.wrappedValue.width,
+                        height: vm.wrappedValue.height
+                    )
+                    vm.wrappedValue.width = preset.width
+                    vm.wrappedValue.height = preset.height
+                    clampDepth(vm)
+                }
+            }
+        )
+    }
+
+    private func customResolutionSelection(_ vm: Binding<VMConfig>) -> Binding<Bool> {
+        Binding(
+            get: { vm.wrappedValue.customResolution },
+            set: { isCustom in
+                vm.wrappedValue.customResolution = isCustom
+                if !isCustom {
+                    let preset = ResolutionPreset.closest(
+                        toWidth: vm.wrappedValue.width,
+                        height: vm.wrappedValue.height
+                    )
+                    vm.wrappedValue.width = preset.width
+                    vm.wrappedValue.height = preset.height
+                    clampDepth(vm)
+                }
+            }
+        )
+    }
+
     private func resolutionSelection(_ vm: Binding<VMConfig>) -> Binding<ResolutionPreset> {
         Binding(
             get: {
-                let match = ResolutionPreset.all.first { $0.width == vm.wrappedValue.width && $0.height == vm.wrappedValue.height }
-                if let match = match {
-                    return match
-                }
-                return ResolutionPreset.all[2]
+                ResolutionPreset.matching(
+                    width: vm.wrappedValue.width,
+                    height: vm.wrappedValue.height
+                ) ?? ResolutionPreset.closest(
+                    toWidth: vm.wrappedValue.width,
+                    height: vm.wrappedValue.height
+                )
             },
             set: { preset in
                 vm.wrappedValue.width = preset.width

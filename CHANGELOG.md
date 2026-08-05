@@ -1,5 +1,38 @@
 # Changelog
 
+## 1.6.0 — 2026-08-05
+
+### Added
+
+- **A guided new-machine setup.** Creating a Mac is now a focused three-step
+  flow for the model and file location, hardware and display, then installation
+  media and folder sharing. A final summary makes the important choices easy to
+  verify before the machine is created.
+- **Safer immediate shutdown.** ClassicMac now warns that forcing off a running
+  machine can lose unsaved guest work and recommends shutting down from inside
+  Mac OS when possible.
+
+### Changed
+
+- **The machine library opens directly to an existing Mac.** ClassicMac selects
+  the first available machine at launch and keeps a nearby machine selected
+  after one is removed, instead of falling back to first-run messaging.
+- **Machine details are easier to scan.** The header now summarizes memory,
+  disk size, and display resolution, while the saved-screen preview is more
+  compact so display settings remain visible in a standard-size window.
+- **Display and configuration validation is consistent.** Names, resolutions,
+  color depths, and model-specific limits are normalized in one place for both
+  newly created and older machine files.
+
+### Fixed
+
+- Copying an installation disc whose filename matches existing media now
+  creates a unique copy instead of silently reusing the older file.
+- Turning off custom or enhanced video now keeps the stored resolution and the
+  visible preset in sync.
+- The new-machine window remains open when disk creation fails so the selected
+  settings are not lost.
+
 ## 1.5.0 — 2026-07-18
 
 ### Added
