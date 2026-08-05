@@ -38,7 +38,7 @@ HELPERS_DIR="$CONTENTS/Helpers"
 QUADRA_APP="$HELPERS_DIR/Quadra 800.app"
 PPC_APP="$HELPERS_DIR/Power Mac G4.app"
 
-APP_VERSION="${APP_VERSION:-1.5.0}"
+APP_VERSION="${APP_VERSION:-1.6.0}"
 BUNDLE_ID="com.classicmac.emulator"
 
 log() { printf '\n==> %s\n' "$*"; }
@@ -122,8 +122,11 @@ for spec in \
   "512 icon_256x256@2x" \
   "512 icon_512x512" \
   "1024 icon_512x512@2x"; do
-  set -- $spec
-  sips -z "$1" "$1" "$ICON_PNG" --out "$ICONSET_DIR/$2.png" >/dev/null || die "Failed to scale AppIcon.png to $1x$1"
+  read -r icon_size icon_name <<< "$spec"
+  if ! sips -z "$icon_size" "$icon_size" "$ICON_PNG" \
+    --out "$ICONSET_DIR/$icon_name.png" >/dev/null; then
+    die "Failed to scale AppIcon.png to ${icon_size}x${icon_size}"
+  fi
 done
 iconutil --convert icns -o "$RES_DIR/AppIcon.icns" "$ICONSET_DIR" || die "iconutil failed to build AppIcon.icns"
 rm -rf "$(dirname "$ICONSET_DIR")"

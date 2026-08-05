@@ -201,6 +201,7 @@ struct VMConfig: Codable, Identifiable, Hashable {
         self.classicInputHelpers = classicInputHelpers
         self.sharedFolderPath = sharedFolderPath
         self.bundleURL = bundleURL
+        sanitize()
     }
 
     // Bounds accepted by the enhanced framebuffer.
@@ -208,6 +209,14 @@ struct VMConfig: Codable, Identifiable, Hashable {
     static let maxHeight = 2160
     static let minWidth = 512
     static let minHeight = 384
+
+    static func clampedWidth(_ value: Int) -> Int {
+        min(max(value, minWidth), maxWidth)
+    }
+
+    static func clampedHeight(_ value: Int) -> Int {
+        min(max(value, minHeight), maxHeight)
+    }
 
     // Tolerant decoding so VMs created by older builds keep loading.
     init(from decoder: Decoder) throws {
@@ -244,11 +253,36 @@ struct VMConfig: Codable, Identifiable, Hashable {
     // with 1 GB or more of RAM, so early PPC configs with bigger values are
     // pulled back to 896 MB.
     private mutating func sanitize() {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        name = trimmedName.isEmpty ? machineFamily.defaultName : trimmedName
+
         if machineFamily == .powerMacG4 {
             if ramMB > 896 {
                 ramMB = 896
             }
             useEnhancedFramebuffer = false
+        }
+        width = Self.clampedWidth(width)
+        height = Self.clampedHeight(height)
+
+        // A standard-framebuffer Quadra only exposes the known preset modes.
+        // Keep the stored size and the picker in agreement when loading an
+        // older or hand-edited configuration.
+        if machineFamily == .quadra800 && !useEnhancedFramebuffer {
+            customResolution = false
+        }
+        if !customResolution {
+            let preset = ResolutionPreset.closest(toWidth: width, height: height)
+            width = preset.width
+            height = preset.height
+        }
+
+        let validDepths = Set(ColorDepth.allCases.map(\.rawValue))
+        if !validDepths.contains(depth) {
+            depth = ColorDepth.thousands.rawValue
+        }
+        if machineFamily == .quadra800 && !useEnhancedFramebuffer && width >= 1152 {
+            depth = ColorDepth.greys256.rawValue
         }
         if !machineFamily.supportsSharedFolder {
             sharedFolderPath = nil
@@ -339,6 +373,20 @@ struct ResolutionPreset: Identifiable, Hashable {
         ResolutionPreset(width: 1280, height: 1024),
         ResolutionPreset(width: 1440, height: 900)
     ]
+
+    static let recommended = all[2]
+
+    static func matching(width: Int, height: Int) -> ResolutionPreset? {
+        all.first { $0.width == width && $0.height == height }
+    }
+
+    static func closest(toWidth width: Int, height: Int) -> ResolutionPreset {
+        all.min { lhs, rhs in
+            let lhsDistance = abs(lhs.width - width) + abs(lhs.height - height)
+            let rhsDistance = abs(rhs.width - width) + abs(rhs.height - height)
+            return lhsDistance < rhsDistance
+        } ?? recommended
+    }
 }
 
 // RAM presets now live on MachineFamily (see ramPresets there); the Quadra

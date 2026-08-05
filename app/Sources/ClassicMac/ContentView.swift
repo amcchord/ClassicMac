@@ -14,7 +14,9 @@ struct ContentView: View {
             NewVMSheet { newConfig in
                 if let created = store.createVM(newConfig) {
                     store.selectedID = created.id
+                    return true
                 }
+                return false
             }
         }
         .alert(
@@ -34,6 +36,20 @@ struct ContentView: View {
         } message: { error in
             Text(error.message)
         }
+        .confirmationDialog(
+            "Shut Down \(pendingStopName)?",
+            isPresented: stopConfirmationBinding,
+            titleVisibility: .visible
+        ) {
+            Button("Shut Down Now", role: .destructive) {
+                manager.confirmStop()
+            }
+            Button("Cancel", role: .cancel) {
+                manager.cancelStop()
+            }
+        } message: {
+            Text("This turns the machine off immediately and may lose unsaved work. When possible, shut down from inside Mac OS instead.")
+        }
     }
 
     private var currentError: AppError? {
@@ -46,6 +62,25 @@ struct ContentView: View {
     private func clearErrors() {
         store.lastError = nil
         manager.lastError = nil
+    }
+
+    private var pendingStopName: String {
+        guard let id = manager.pendingStopID,
+              let vm = store.vms.first(where: { $0.id == id }) else {
+            return "this machine"
+        }
+        return "\u{201C}\(vm.name)\u{201D}"
+    }
+
+    private var stopConfirmationBinding: Binding<Bool> {
+        Binding(
+            get: { manager.pendingStopID != nil },
+            set: { isPresented in
+                if !isPresented {
+                    manager.cancelStop()
+                }
+            }
+        )
     }
 
     private var sidebar: some View {
@@ -99,7 +134,7 @@ struct ContentView: View {
         let running = manager.isRunning(vm.id)
         if running {
             Button("Shut Down") {
-                manager.stop(vm.id)
+                manager.requestStop(vm.id)
             }
         } else {
             Button("Start") {
@@ -137,7 +172,11 @@ struct ContentView: View {
             VMDetailView(vmID: id)
                 .id(id)
         } else {
-            EmptyStateView(showingNewVM: $store.isPresentingNewVM)
+            EmptyStateView(
+                hasMachines: !store.vms.isEmpty,
+                showingNewVM: $store.isPresentingNewVM,
+                openExisting: store.presentOpenPanel
+            )
         }
     }
 
@@ -191,7 +230,9 @@ struct VMRow: View {
 }
 
 struct EmptyStateView: View {
+    let hasMachines: Bool
     @Binding var showingNewVM: Bool
+    let openExisting: () -> Void
 
     var body: some View {
         VStack(spacing: 12) {
@@ -200,23 +241,37 @@ struct EmptyStateView: View {
                 MachineBadgeView(family: .powerMacG4, size: 76)
             }
             .padding(.bottom, 12)
-            Text("Welcome to ClassicMac")
+            Text(hasMachines ? "Choose a Mac" : "Welcome to ClassicMac")
                 .font(.largeTitle.bold())
-            Text("Run the classic Mac OS you grew up with. Create a Quadra 800 for System 7 through Mac OS 8.1, or a Power Mac G4 for Mac OS 8.5 through 9.2.")
+            Text(description)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 420)
-            Button {
-                showingNewVM = true
-            } label: {
-                Label("Create Your First Mac", systemImage: "plus")
-                    .padding(.horizontal, 4)
+            HStack(spacing: 10) {
+                Button {
+                    showingNewVM = true
+                } label: {
+                    Label(hasMachines ? "New Machine" : "Create Your First Mac", systemImage: "plus")
+                        .padding(.horizontal, 4)
+                }
+                .buttonStyle(.borderedProminent)
+
+                Button(action: openExisting) {
+                    Label("Open Machine", systemImage: "folder")
+                }
+                .buttonStyle(.bordered)
             }
             .controlSize(.large)
-            .buttonStyle(.borderedProminent)
             .padding(.top, 8)
         }
         .padding(40)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var description: String {
+        if hasMachines {
+            return "Select a machine in the sidebar, or create another classic Macintosh."
+        }
+        return "Run System 7 through Mac OS 9 on a Quadra 800 or Power Mac G4. Each machine is a portable file you can keep anywhere."
     }
 }

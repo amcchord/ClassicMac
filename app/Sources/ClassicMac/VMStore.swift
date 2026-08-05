@@ -42,6 +42,7 @@ final class VMStore: ObservableObject {
     func reload() {
         migrateLegacyVMsIfNeeded()
 
+        let previousSelection = selectedID
         var loaded: [VMConfig] = []
         var validPaths: [String] = []
         for url in indexedBundleURLs() {
@@ -51,6 +52,11 @@ final class VMStore: ObservableObject {
         }
         loaded.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
         vms = loaded
+        if let previousSelection, loaded.contains(where: { $0.id == previousSelection }) {
+            selectedID = previousSelection
+        } else {
+            selectedID = loaded.first?.id
+        }
         // Prune entries whose packages have gone missing.
         writeIndex(validPaths)
     }
@@ -198,8 +204,12 @@ final class VMStore: ObservableObject {
 
     // Forgets a VM but leaves its package on disk.
     func removeFromLibrary(_ config: VMConfig) {
+        let removedIndex = vms.firstIndex { $0.id == config.id }
         vms.removeAll { $0.id == config.id }
-        if selectedID == config.id { selectedID = nil }
+        if selectedID == config.id {
+            let nextIndex = min(removedIndex ?? 0, max(vms.count - 1, 0))
+            selectedID = vms.isEmpty ? nil : vms[nextIndex].id
+        }
         if let bundle = config.bundleURL {
             removeFromIndex(bundle)
         }
@@ -312,6 +322,35 @@ final class VMStore: ObservableObject {
         var counter = 2
         while fm.fileExists(atPath: candidate.path) {
             candidate = directory.appendingPathComponent("\(base) \(counter).\(VMConfig.packageExtension)")
+            counter += 1
+        }
+        return candidate
+    }
+
+    // A non-colliding URL for copied installation media. Keeping this logic
+    // beside package naming prevents a same-named disc from silently reusing
+    // an unrelated older image in the shared media directory.
+    nonisolated static func uniqueFileURL(in directory: URL, suggestedName: String) -> URL {
+        let source = URL(fileURLWithPath: suggestedName)
+        let ext = source.pathExtension
+        let rawBase = source.deletingPathExtension().lastPathComponent
+        var base = rawBase.trimmingCharacters(in: .whitespacesAndNewlines)
+        base = base.replacingOccurrences(of: "/", with: "-")
+        base = base.replacingOccurrences(of: ":", with: "-")
+        if base.isEmpty {
+            base = "Disc"
+        }
+        let fm = FileManager.default
+
+        func fileName(counter: Int?) -> String {
+            let suffix = counter.map { " \($0)" } ?? ""
+            return ext.isEmpty ? "\(base)\(suffix)" : "\(base)\(suffix).\(ext)"
+        }
+
+        var candidate = directory.appendingPathComponent(fileName(counter: nil))
+        var counter = 2
+        while fm.fileExists(atPath: candidate.path) {
+            candidate = directory.appendingPathComponent(fileName(counter: counter))
             counter += 1
         }
         return candidate
