@@ -1,0 +1,193 @@
+diff --git a/hw/misc/macio/cuda.c b/hw/misc/macio/cuda.c
+index 312dde242ba..6f0c8ae333b 100644
+--- a/hw/misc/macio/cuda.c
++++ b/hw/misc/macio/cuda.c
+@@ -204,7 +204,7 @@ static void cuda_adb_poll(void *opaque)
+ {
+     CUDAState *s = opaque;
+     ADBBusState *adb_bus = &s->adb_bus;
+-    uint8_t obuf[ADB_MAX_OUT_LEN + 2];
++    uint8_t obuf[ADB_MAX_OUT_LEN + 3];
+     int olen;
+ 
+     olen = adb_poll(adb_bus, obuf + 2, adb_bus->autopoll_mask);
+@@ -212,6 +212,39 @@ static void cuda_adb_poll(void *opaque)
+         obuf[0] = ADB_PACKET;
+         obuf[1] = 0x40; /* polled data */
+         cuda_send_packet_to_host(s, obuf, olen + 2);
++        return;
++    }
++
++    if (s->one_second_mode) {
++        uint32_t ti = s->tick_offset +
++                      (qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) /
++                       NANOSECONDS_PER_SECOND);
++
++        if (ti != s->last_second_tick) {
++            if (s->one_second_first_packet || s->one_second_mode == 1 ||
++                !(ti & 3)) {
++                obuf[0] = CUDA_PACKET;
++                obuf[1] = 0;
++                obuf[2] = CUDA_GET_TIME;
++                obuf[3] = ti >> 24;
++                obuf[4] = ti >> 16;
++                obuf[5] = ti >> 8;
++                obuf[6] = ti;
++                olen = 7;
++            } else if (s->one_second_mode == 2) {
++                obuf[0] = CUDA_PACKET;
++                obuf[1] = 0;
++                obuf[2] = CUDA_GET_TIME;
++                olen = 3;
++            } else {
++                obuf[0] = TIMER_PACKET;
++                olen = 1;
++            }
++
++            s->last_second_tick = ti;
++            s->one_second_first_packet = false;
++            cuda_send_packet_to_host(s, obuf, olen);
++        }
+     }
+ }
+ 
+@@ -367,6 +400,20 @@ static bool cuda_cmd_set_time(CUDAState *s,
+     return true;
+ }
+ 
++static bool cuda_cmd_one_second_mode(CUDAState *s,
++                                     const uint8_t *in_data, int in_len,
++                                     uint8_t *out_data, int *out_len)
++{
++    if (in_len != 1) {
++        return false;
++    }
++
++    s->one_second_mode = in_data[0];
++    s->last_second_tick = 0;
++    s->one_second_first_packet = true;
++    return true;
++}
++
+ static const CudaCommand handlers[] = {
+     { CUDA_AUTOPOLL, "AUTOPOLL", cuda_cmd_autopoll },
+     { CUDA_SET_AUTO_RATE, "SET_AUTO_RATE",  cuda_cmd_set_autorate },
+@@ -377,6 +424,8 @@ static const CudaCommand handlers[] = {
+       cuda_cmd_set_file_server_flag },
+     { CUDA_SET_POWER_MESSAGES, "SET_POWER_MESSAGES",
+       cuda_cmd_set_power_message },
++    { CUDA_SET_ONE_SECOND_MODE, "SET_ONE_SECOND_MODE",
++      cuda_cmd_one_second_mode },
+     { CUDA_GET_TIME, "GET_TIME", cuda_cmd_get_time },
+     { CUDA_SET_TIME, "SET_TIME", cuda_cmd_set_time },
+ };
+@@ -485,7 +534,7 @@ static const MemoryRegionOps mos6522_cuda_ops = {
+ 
+ static const VMStateDescription vmstate_cuda = {
+     .name = "cuda",
+-    .version_id = 6,
++    .version_id = 7,
+     .minimum_version_id = 6,
+     .fields = (const VMStateField[]) {
+         VMSTATE_STRUCT(mos6522_cuda.parent_obj, CUDAState, 0, vmstate_mos6522,
+@@ -498,6 +547,9 @@ static const VMStateDescription vmstate_cuda = {
+         VMSTATE_BUFFER(data_in, CUDAState),
+         VMSTATE_BUFFER(data_out, CUDAState),
+         VMSTATE_UINT32(tick_offset, CUDAState),
++        VMSTATE_UINT32_V(last_second_tick, CUDAState, 7),
++        VMSTATE_UINT8_V(one_second_mode, CUDAState, 7),
++        VMSTATE_BOOL_V(one_second_first_packet, CUDAState, 7),
+         VMSTATE_TIMER_PTR(sr_delay_timer, CUDAState),
+         VMSTATE_END_OF_LIST()
+     }
+@@ -511,6 +563,9 @@ static void cuda_reset(DeviceState *dev)
+     s->data_in_size = 0;
+     s->data_in_index = 0;
+     s->data_out_index = 0;
++    s->last_second_tick = 0;
++    s->one_second_mode = 0;
++    s->one_second_first_packet = true;
+ 
+     adb_set_autopoll_enabled(adb_bus, false);
+ }
+@@ -595,7 +650,7 @@ static void mos6522_cuda_reset_hold(Object *obj, ResetType type)
+     }
+ 
+     ms->timers[0].frequency = CUDA_TIMER_FREQ;
+-    ms->timers[1].frequency = (SCALE_US * 6000) / 4700;
++    ms->timers[1].frequency = CUDA_TIMER_FREQ;
+ }
+ 
+ static void mos6522_cuda_class_init(ObjectClass *oc, const void *data)
+diff --git a/hw/nvram/mac_nvram.c b/hw/nvram/mac_nvram.c
+index efadb3c943c..a6c144c3e5a 100644
+--- a/hw/nvram/mac_nvram.c
++++ b/hw/nvram/mac_nvram.c
+@@ -38,6 +38,7 @@
+ #include <zlib.h> /* for adler32 */
+ 
+ #define DEF_SYSTEM_SIZE 0xc10
++#define DEF_MACOS_SIZE  0x510
+ 
+ /* macio style NVRAM device */
+ static void macio_nvram_writeb(void *opaque, hwaddr addr,
+@@ -169,11 +170,27 @@ static void pmac_format_nvram_partition_of(MacIONVRAMState *nvr, int off,
+                                            int len)
+ {
+     int sysp_end;
++    ChrpNvramPartHdr *part_header;
+ 
+     /* OpenBIOS nvram variables partition */
+     sysp_end = chrp_nvram_create_system_partition(&nvr->data[off],
+                                                   DEF_SYSTEM_SIZE, len) + off;
+ 
++    /* New World Mac OS expects the OF partition to be named "common". */
++    part_header = (ChrpNvramPartHdr *)&nvr->data[off];
++    pstrcpy(part_header->name, sizeof(part_header->name), "common");
++    chrp_nvram_finish_partition(part_header, sysp_end - off);
++
++    /*
++     * Mac OS 8 and 9 store 256 bytes of XPRAM followed by 1 KiB of
++     * Name Registry data in an APL,MacOS75 partition.
++     */
++    part_header = (ChrpNvramPartHdr *)&nvr->data[sysp_end];
++    part_header->signature = 0xa0;
++    pstrcpy(part_header->name, sizeof(part_header->name), "APL,MacOS75");
++    chrp_nvram_finish_partition(part_header, DEF_MACOS_SIZE);
++    sysp_end += DEF_MACOS_SIZE;
++
+     /* Free space partition */
+     chrp_nvram_create_free_partition(&nvr->data[sysp_end], len - sysp_end);
+ }
+@@ -205,12 +222,6 @@ static void pmac_format_nvram_partition_osx(MacIONVRAMState *nvr, int off,
+ /* Set up NVRAM with OF and OSX partitions */
+ void pmac_format_nvram_partition(MacIONVRAMState *nvr, int len)
+ {
+-    /*
+-     * Mac OS X expects side "B" of the flash at the second half of NVRAM,
+-     * so we use half of the chip for OF and the other half for a free OSX
+-     * partition.
+-     */
+-    pmac_format_nvram_partition_of(nvr, 0, len / 2);
+-    pmac_format_nvram_partition_osx(nvr, len / 2, len / 2);
++    pmac_format_nvram_partition_of(nvr, 0, len);
+ }
+ type_init(macio_nvram_register_types)
+diff --git a/include/hw/misc/macio/cuda.h b/include/hw/misc/macio/cuda.h
+index 8a6678c7494..1c6e1546b26 100644
+--- a/include/hw/misc/macio/cuda.h
++++ b/include/hw/misc/macio/cuda.h
+@@ -82,8 +82,12 @@ struct CUDAState {
+     MOS6522CUDAState mos6522_cuda;
+ 
+     uint32_t tick_offset;
++    uint32_t last_second_tick;
+     uint64_t tb_frequency;
+ 
++    uint8_t one_second_mode;
++    bool one_second_first_packet;
++
+     uint8_t last_b;
+     uint8_t last_acr;
+ 
+

@@ -1,0 +1,269 @@
+diff --git a/device-block.c b/device-block.c
+index 3089ab8..365c8a9 100644
+--- a/device-block.c
++++ b/device-block.c
+@@ -25,6 +25,7 @@ posts a disk event when that capacity changes.
+ #include <Files.h>
+ #include <HFSVolumes.h>
+ #include <Memory.h>
++#include <NameRegistry.h>
+ #include <Traps.h>
+ #include <Types.h>
+ #include <stdbool.h>
+@@ -106,6 +107,8 @@ static OSErr dgBoot(struct DriverGestaltParam *pb);
+ static OSErr dgDeviceReference(struct DriverGestaltParam *pb);
+ static OSErr dgInterface(struct DriverGestaltParam *pb);
+ static OSErr dgDeviceType(struct DriverGestaltParam *pb);
++static bool claimDevice(short refNum);
++static void releaseDevice(void);
+ 
+ enum {
+ 	MAXBUFFERS = 16,
+@@ -117,11 +120,14 @@ static uint32_t pfixedbuf;
+ static int buffers; // more buffers means more fragmentation tolerated
+ static short drvrRefNum;
+ static bool ejectRequested;
++#if GENERATINGCFM
++static RegEntryID deviceRegistryEntry;
++#endif
+ uint32_t firstblock, numblocks;
+ static struct DrvSts2 dqe = {
+ 	.track = 0,       // not for us
+ 	.writeProt = 0,   // set once Virtio device is probed
+-	.diskInPlace = 0, // removable, initially empty
++	.diskInPlace = 8, // non-ejectable startup media is present
+ 	.installed = 1,   // refers to the drive, not the disk
+ 	.sides = 0x80,    // double-sided, why not
+ 	.qLink = NULL,
+@@ -166,6 +172,11 @@ int DriverStart(short refNum) {
+ 	drvrRefNum = refNum;
+ 	InitLog();
+ 	sprintf(LogPrefix, "Block(%d) ", refNum);
++	if (!claimDevice(refNum)) {
++		printf("Another block driver instance is already active\n");
++		return openErr;
++	}
++	RegisterCleanup(releaseDevice);
+ 
+ 	if (!VInit(refNum)) {
+ 		printf("Transport layer failure\n");
+@@ -195,10 +206,13 @@ int DriverStart(short refNum) {
+ 		goto openErr;
+ 	}
+ 
++	refreshMedia(false);
+ 	installDrive();
+ 	RegisterCleanup(removeDrive);
+-	(*GetDCtlEntry(drvrRefNum))->dCtlFlags |= dNeedTimeMask;
+-	refreshMedia(true);
++	if (!dqe.writeProt) {
++		(*GetDCtlEntry(drvrRefNum))->dCtlFlags |= dNeedTimeMask;
++	}
++	PostEvent(diskEvt, dqe.dQDrive);
+ 
+ 	printf("Ready\n");
+ 	return noErr;
+@@ -207,6 +221,41 @@ openErr:
+ 	return openErr;
+ }
+ 
++static bool claimDevice(short refNum) {
++#if GENERATINGCFM
++	static const char markerName[] = "classicmac-block-active";
++	RegPropertyValueSize markerSize = 0;
++	uint8_t marker = 1;
++
++	GetDriverInformation(refNum,
++		(UnitNumber []){0},
++		(DriverFlags []){0},
++		(DriverOpenCount []){0},
++		(Str255){},
++		&deviceRegistryEntry,
++		&(CFragSystem7Locator){.u={.onDisk={.fileSpec=&(FSSpec){}}}},
++		(CFragConnectionID []){0},
++		(DriverEntryPointPtr []){NULL},
++		(DriverDescription []){{}});
++
++	if (RegistryPropertyGetSize(&deviceRegistryEntry, markerName,
++			&markerSize) == noErr) {
++		return false;
++	}
++
++	return RegistryPropertyCreate(&deviceRegistryEntry, markerName,
++		&marker, sizeof marker) == noErr;
++#else
++	return true;
++#endif
++}
++
++static void releaseDevice(void) {
++#if GENERATINGCFM
++	RegistryPropertyDelete(&deviceRegistryEntry, "classicmac-block-active");
++#endif
++}
++
+ int DriverRead(IOParam *pb) {
+ 	return transfer(pb, false);
+ }
+@@ -308,6 +357,7 @@ static int ejectMedia(void) {
+ static void installDrive(void) {
+ 	short driveNum = 8; // conventional lowest number for HD
+ 	while (findDrive(driveNum) != NULL) driveNum++;
++	dqe.dQDrive = driveNum;
+ 	AddDrive(drvrRefNum, driveNum, (DrvQEl *)&dqe.qLink);
+ 	printf("Drive number: %d\n", dqe.dQDrive);
+ }
+@@ -382,21 +432,28 @@ void probePartitions(uint32_t *firstblock, uint32_t *numblocks) {
+ 	}
+ 
+ 	struct Partition part;
+-	int index = 0;
++	uint32_t mapBlocks = 1;
+ 	struct Partition chosen = {};
+-	do {
+-		memcpy(&part, readSector(blk0.sbBlkSize / 512 * ++index), sizeof part);
+-		printf("Partition #%d type=%-24s name=%s", index, part.pmParType, part.pmPartName);
++	for (uint32_t index = 1; index <= mapBlocks; index++) {
++		memcpy(&part, readSector(index), sizeof part);
++		if (part.pmSig != 0x504d) break;
++		if (index == 1) {
++			if (part.pmMapBlkCnt == 0 || part.pmMapBlkCnt > 4096) break;
++			mapBlocks = part.pmMapBlkCnt;
++		}
++		printf("Partition #%lu type=%-24s name=%s", index, part.pmParType, part.pmPartName);
+ 		if (!strcmp((const char *)part.pmParType, "Apple_HFS")) {
+ 			printf("  *selected*");
+ 			chosen = part;
+ 		}
+ 		printf("\n");
+-	} while (index < part.pmMapBlkCnt);
++	}
+ 
+ 	if (chosen.pmSig) {
+-		*firstblock = blk0.sbBlkSize / 512 * chosen.pmPyPartStart;
+-		*numblocks = blk0.sbBlkSize / 512 * chosen.pmPartBlkCnt;
++		/* Apple partition-map offsets are expressed in 512-byte sectors, even
++		 * when CD media reports a larger device block size in Block0. */
++		*firstblock = chosen.pmPyPartStart;
++		*numblocks = chosen.pmPartBlkCnt;
+ 	}
+ }
+ 
+@@ -419,7 +476,7 @@ static void refreshMedia(bool postEvent) {
+ 	numblocks = capacity > UINT32_MAX ? UINT32_MAX : capacity;
+ 	dqe.driveSize = numblocks;
+ 	dqe.driveS1 = numblocks >> 16;
+-	dqe.diskInPlace = inserted ? 1 : 0;
++	dqe.diskInPlace = inserted ? (dqe.writeProt ? 8 : 1) : 0;
+ 
+ 	printf("Device size: %#llx bytes, %#llx blocks\n", capacity*512, capacity);
+ 	if (inserted && !postEvent) {
+@@ -469,8 +526,8 @@ static OSErr cIcon(struct CntrlParam *pb) {
+ static OSErr cDriveInfo(struct CntrlParam *pb) {
+ 	uint32_t ret =
+ 		(0 << 8) |  // set for external, clear for internal
+-		(0 << 9) |  // set if SCSI, clear if IWM
+-		(0 << 10) | // set if fixed, clear if can be removed
++		((dqe.writeProt != 0) << 9) |  // set if SCSI, clear if IWM
++		((dqe.writeProt != 0) << 10) | // set if fixed, clear if removable
+ 		(1 << 11) | // set for secondary drives, clear for primary drive
+ 		1;
+ 
+@@ -564,7 +621,9 @@ int DriverCtl(CntrlParam *pb) {
+ 	if (LogEnable) printf("%s", PBPrint(pb, pb->ioTrap|0xa000, 1));
+ 
+ 	int err = controlErr;
+-	if (pb->csCode == accRun) {
++	if (pb->csCode == 70) { /* kdgLowPowerMode */
++		err = noErr;
++	} else if (pb->csCode == accRun) {
+ 		err = cAccRun(pb);
+ 	} else if (pb->csCode == kEject) {
+ 		err = ejectMedia();
+diff --git a/ndrvloader.c b/ndrvloader.c
+index 83d0c7f..1afa700 100644
+--- a/ndrvloader.c
++++ b/ndrvloader.c
+@@ -261,6 +261,42 @@ void chain9p(void) {
+ }
+ 
+ void chainNormalBoot(void) {
++	char path[512] = {};
++	long pathlen = 0;
++
++	for (long ph=dtroot(); ph!=0; ph=dtstep(ph)) {
++		long vendorid = 0, deviceid = 0;
++		of("getprop",
++			4, ph, "vendor-id", &vendorid, sizeof vendorid,
++			1, NULL);
++		of("getprop",
++			4, ph, "device-id", &deviceid, sizeof deviceid,
++			1, NULL);
++		if (vendorid != 0x1af4 || virtiotype(deviceid) != 2) continue;
++
++		of("package-to-path",
++			3, ph, path, sizeof path,
++			1, &pathlen);
++		if (pathlen <= 0 || pathlen + 12 >= sizeof path) break;
++		path[pathlen] = 0;
++		strcat(path, ":,\\\\:tbxi");
++
++		long chosenph = 0;
++		of("finddevice",
++			1, "/chosen",
++			1, &chosenph);
++		if (chosenph) {
++			of("setprop",
++				4, chosenph, "classicmac-bootpath",
++				path, strlen(path)+1,
++				1, NULL);
++		}
++		ofprint("Mac OS Virtio startup disk: ");
++		ofprint(path);
++		ofprint("\n");
++		break;
++	}
++
+ 	of("interpret",
+ 		1, "boot",
+ 		0);
+diff --git a/transport-ndrv.c b/transport-ndrv.c
+index 8864c0b..31a0c20 100644
+--- a/transport-ndrv.c
++++ b/transport-ndrv.c
+@@ -54,8 +54,9 @@ bool VInit(short refNum) {
+ 
+ 	// PCI configuration structures point to addresses we need within the BARs
+ 	uint8_t cap_offset;
++	unsigned cap_count = 0;
+ 	for (ExpMgrConfigReadByte(&dev, (LogicalAddress)0x34, &cap_offset);
+-		cap_offset != 0;
++		cap_offset != 0 && cap_count++ < 64;
+ 		ExpMgrConfigReadByte(&dev, (LogicalAddress)(cap_offset+1), &cap_offset)) {
+ 
+ 		uint8_t cap_vndr, cfg_type, bar;
+@@ -83,7 +84,22 @@ bool VInit(short refNum) {
+ 		}
+ 	}
+ 
+-	if (!gCommonConfig || !gNotify || !gISRStatus || !VConfig) return false;
++	if (!gCommonConfig || !gNotify || !gISRStatus || !VConfig) {
++		/*
++		 * Mac OS 8.5's PCI configuration byte reads return the byte at the
++		 * containing longword's base address, so walking the capability list
++		 * never advances.  QEMU's modern Virtio BAR layout is stable and shared
++		 * by all of the ClassicMac Virtio devices; use it as a compatibility
++		 * fallback when the capability walk fails.
++		 */
++		if (!bars[4]) return false;
++		gCommonConfig = (volatile struct virtio_pci_common_cfg *)
++			((uint8_t *)bars[4] + 0x0000);
++		gISRStatus = (uint8_t *)bars[4] + 0x1000;
++		VConfig = (uint8_t *)bars[4] + 0x2000;
++		gNotify = (uint16_t *)((uint8_t *)bars[4] + 0x3000);
++		gNotifyMultiplier = 4;
++	}
+ 
+ 	// Incantation to enable memory-mapped access
+ 	uint16_t pci_status = 0;
+

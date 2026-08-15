@@ -25,6 +25,7 @@ BUILD_DIR="$QEMU_DIR/build"
 QEMU_REPO="${QEMU_REPO:-https://gitlab.com/qemu-project/qemu.git}"
 QEMU_TAG="${QEMU_TAG:-v11.0.2}"
 QFB_DIR="$ROOT_DIR/qfb"
+POWERMAC_DIR="$ROOT_DIR/powermac"
 
 # Tracked files modified by the qfb and screamer integration patches (reset
 # before re-applying).
@@ -61,6 +62,9 @@ PATCHED_FILES=(
   hw/block/virtio-blk.c
   include/hw/virtio/virtio-blk.h
   pc-bios/qemu_vga.ndrv
+  hw/misc/macio/cuda.c
+  include/hw/misc/macio/cuda.h
+  hw/nvram/mac_nvram.c
 )
 SCREAMER_DIR="$ROOT_DIR/screamer"
 PPCVID_DIR="$ROOT_DIR/ppcvid"
@@ -138,11 +142,18 @@ if [ -n "${PPCVID_BUILD_NDRV:-}" ]; then
   "$ROOT_DIR/scripts/build-ppcvid-ndrv.sh"
 fi
 
-# Rebuild the 68k classicvirtio declaration ROM with the writable removable
-# floppy driver when requested. This uses the same Retro68 toolchain.
+# Rebuild the classicvirtio declaration ROM and PowerPC NDRV loader when
+# requested. This uses the same Retro68 toolchain.
 if [ -n "${CLASSICVIRTIO_BUILD_ROM:-}" ]; then
-  log "CLASSICVIRTIO_BUILD_ROM set: rebuilding shared/declrom"
+  log "CLASSICVIRTIO_BUILD_ROM set: rebuilding shared classicvirtio drivers"
   "$ROOT_DIR/scripts/build-classicvirtio-floppy.sh"
+fi
+
+# Rebuild the patched PowerPC OpenBIOS firmware in its Linux cross-build
+# container when requested. Routine QEMU builds use the committed binary.
+if [ -n "${OPENBIOS_BUILD:-}" ]; then
+  log "OPENBIOS_BUILD set: rebuilding screamer/openbios-ppc"
+  "$ROOT_DIR/scripts/build-openbios.sh"
 fi
 
 # ---------------------------------------------------------------------------
@@ -213,6 +224,11 @@ cp "$SCREAMER_DIR/screamer.c" "$QEMU_DIR/hw/audio/screamer.c"
 cp "$SCREAMER_DIR/screamer.h" "$QEMU_DIR/include/hw/audio/screamer.h"
 cp "$SCREAMER_DIR/openbios-ppc" "$QEMU_DIR/pc-bios/openbios-ppc"
 git -C "$QEMU_DIR" apply "$SCREAMER_DIR/integration.patch" || die "Failed to apply screamer integration patch"
+
+# CUDA timing/one-second messages and classic New World NVRAM partitions used
+# by Mac OS 8.5 and 8.6 during early startup.
+log "Installing classic Mac OS 8 Power Mac compatibility fixes"
+git -C "$QEMU_DIR" apply "$POWERMAC_DIR/classic-macos-8.patch" || die "Failed to apply Power Mac compatibility patch"
 
 # MacIO IDE/DBDMA completion timing: cached host I/O can otherwise complete
 # before classic Mac OS arms its synchronous wait, losing the wakeup and
@@ -370,10 +386,16 @@ fi
 [ -f "$QEMU_DIR/pc-bios/openbios-ppc" ] || die "pc-bios/openbios-ppc firmware missing"
 # Note: plain grep (not -q) so strings is read to EOF; grep -q would exit
 # early and the SIGPIPE would fail the pipeline under pipefail.
-if strings "$QEMU_DIR/pc-bios/openbios-ppc" | grep "screamer_init" >/dev/null; then
+if strings "$QEMU_DIR/pc-bios/openbios-ppc" | grep "screamer" >/dev/null; then
   printf '    OK  screamer-aware OpenBIOS\n'
 else
   die "pc-bios/openbios-ppc is not the screamer-aware build"
+fi
+if strings "$QEMU_DIR/pc-bios/openbios-ppc" | grep "iMac,1" >/dev/null && \
+   strings "$QEMU_DIR/pc-bios/openbios-ppc" | grep "nvram-fetch" >/dev/null; then
+  printf '    OK  classic Mac OS 8 OpenBIOS profile\n'
+else
+  die "pc-bios/openbios-ppc is missing classic Mac OS 8 compatibility"
 fi
 
 log "Done. Binaries: $BUILD_DIR/qemu-system-m68k , $BUILD_DIR/qemu-system-ppc , $BUILD_DIR/qemu-img"
