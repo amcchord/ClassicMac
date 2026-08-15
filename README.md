@@ -39,7 +39,7 @@ ClassicMac wraps a custom QEMU build in a native SwiftUI app and covers the enti
 
 Everything is bundled into a single `ClassicMac.app`: the two QEMU system emulators, firmware, guest video drivers, folder-sharing drivers, and a guest-additions Tools CD. No Homebrew, nothing to hunt down, nothing to install inside the guest.
 
-You bring your own Mac OS installation media: every classic Mac OS version is available in the [WinWorld operating system library](https://winworldpc.com/library/operating-systems), and ClassicMac imports the disc image with a couple of clicks. Mac OS 9.2.1 and the [Mac OS 9.2.2 Universal Install CD](https://macintoshgarden.org/apps/mac-os-922-universal) both install reliably on the Power Mac — see the note in Getting started.
+You bring your own Mac OS installation media: every classic Mac OS version is available in the [WinWorld operating system library](https://winworldpc.com/library/operating-systems), and ClassicMac imports the disc image with a couple of clicks. Mac OS 8.5, 8.6, 9.2.1, and the [Mac OS 9.2.2 Universal Install CD](https://macintoshgarden.org/apps/mac-os-922-universal) all boot reliably on the Power Mac — see the note in Getting started.
 
 ## Built on the shoulders of giants
 
@@ -130,8 +130,11 @@ The guest-side binaries are committed, so a normal build needs no cross toolchai
 # PPC video driver (adds Retro68 PPC compilers + Universal Interfaces)
 ./scripts/build-ppcvid-ndrv.sh      # -> ppcvid/qemu_vga.ndrv
 
-# Quadra classicvirtio card firmware with the removable floppy driver
-./scripts/build-classicvirtio-floppy.sh  # -> shared/declrom
+# Classicvirtio Quadra card firmware and Power Mac NDRV loader
+./scripts/build-classicvirtio-floppy.sh  # -> shared/declrom + shared/ndrvloader
+
+# Power Mac OpenBIOS firmware (uses the OpenBIOS Linux builder container)
+./scripts/build-openbios.sh               # -> screamer/openbios-ppc
 ```
 
 ## Repository layout
@@ -144,7 +147,8 @@ ClassicMac/
     driver/                 #   68k card firmware + driver source (Retro68)
   ppcvid/                   # PPC live-resize: VGA host-resize + packed-depth patches
     driver/                 #   qemu_vga.ndrv source (QemuMacDrivers fork, Retro68)
-  classicvirtio/            # writable/removable 68k VirtIO block driver patch
+  classicvirtio/            # removable floppy + Power Mac startup-driver patches
+  powermac/                 # QEMU and OpenBIOS Mac OS 8 compatibility patches
   virtio/                   # QEMU removable VirtIO block device patch
   screamer/                 # screamer (AWACS) PPC audio device + OpenBIOS
   shared/                   # classicvirtio card firmware + ndrvloader + PRAM seed
@@ -155,7 +159,7 @@ ClassicMac/
   scripts/                  # build-qemu, bundle-qemu, build-guest-cd, make-dmg, notarize...
 ```
 
-> Mac OS installation media is **not** committed; download the version you want from the [WinWorld operating system library](https://winworldpc.com/library/operating-systems) (Mac OS 9.2.1 and the [9.2.2 Universal Install CD](https://macintoshgarden.org/apps/mac-os-922-universal) are both supported) and import it through the app.
+> Mac OS installation media is **not** committed; download the version you want from the [WinWorld operating system library](https://winworldpc.com/library/operating-systems) (Mac OS 8.5, 8.6, 9.2.1, and the [9.2.2 Universal Install CD](https://macintoshgarden.org/apps/mac-os-922-universal) are supported) and import it through the app.
 
 ## How the interesting parts work
 
@@ -164,5 +168,6 @@ ClassicMac/
 - **Restart on the Power Mac** — an in-place reset hangs QEMU's `mac99`, so the app runs it with `-action reboot=shutdown`, watches the QMP shutdown reason, and relaunches on a reset — Restart behaves like a real reboot.
 - **Sound** — the ASC is patched to output silence when idle (`qfb/asc-silence.patch`); the Power Mac uses Mark Cave-Ayland's screamer device with a screamer-aware OpenBIOS build.
 - **Power Mac storage** — MacIO IDE/DBDMA holds the final DMA descriptor for 1 ms before publishing completion. Real hardware cannot finish in the same scheduling window in which the driver starts an operation; without this small latency, cached host I/O can beat Mac OS 9's synchronous-wait setup and lose its wakeup, freezing Installer mid-copy. Focused MacIO/DBDMA tracepoints remain available for regression runs.
+- **Power Mac Mac OS 8 startup** — the machine uses a CUDA/G3 profile with an original-iMac OpenBIOS identity and classic Mac NVRAM/RTAS services. During CD startup, a read-only Virtio mirror lets the Mac OS 8.5/8.6 ROM read the selected disc before its IDE driver is active; the ordinary IDE CD stays present for Installer and Finder.
 - **Quadra floppy storage** — a removable `virtio-blk-device` rides on the existing classicvirtio NuBus transport. A small extension to the 68k block driver adds writes, flushes, media-change events, and a host/guest eject handshake so Finder owns the unmount before QEMU removes the raw image.
 - **Emulation speed** — both machines run on QEMU's TCG JIT; an Apple Silicon Mac runs them comfortably faster than the original hardware.

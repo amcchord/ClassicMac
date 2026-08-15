@@ -426,32 +426,25 @@ final class QEMUManager: ObservableObject {
         // OS: it installs the virtio NDRVs and then continues the normal boot.
         // Sharing stays inactive while booting an installer CD so the install
         // environment never sees the host folder. Tablet input uses the same
-        // loader, but remains enabled: after injecting its NDRV the loader runs
-        // Open Firmware's normal `boot` command, which still honors `-boot d`.
+        // loader, but remains enabled. CD starts also use the loader so the
+        // early Mac OS ROM can reach a read-only Virtio mirror of the disc.
         let bootingFromUserCD = config.bootFromCD && config.cdImagePath?.isEmpty == false
         let deferToolsMedia = bootingFromUserCD
         let sharing = config.hasSharedFolder && !bootingFromUserCD
         let tablet = config.tabletInput
-        let needsNdrvLoader = sharing || tablet
+        let needsNdrvLoader = sharing || tablet || bootingFromUserCD
 
         // Input configuration. QEMU treats whichever pointing device the guest
         // touched last as "the mouse", and the cocoa display only releases the
         // cursor while that device is absolute.
         //
-        // - Tablet off: via=pmu gives the machine a USB keyboard and mouse
-        //   (ADB-free input with correct mouse tracking).
-        // - Tablet on: via=pmu-adb instead. The machine's built-in USB mouse
-        //   would otherwise steal pointer priority back from the virtio tablet
-        //   as soon as Mac OS starts polling USB, which re-captures the host
-        //   cursor and defeats seamless mouse. The ADB mouse never re-asserts
-        //   itself, so the tablet keeps priority once its driver loads - and
-        //   the ADB mouse remains a working (captured) fallback until then,
-        //   or if the guest OS can't run the classicvirtio driver at all.
-        if tablet {
-            args += ["-M", "mac99,via=pmu-adb,audiodev=snd0"]
-        } else {
-            args += ["-M", "mac99,via=pmu,audiodev=snd0"]
-        }
+        // Mac OS 8.5 and 8.6 predate the KeyLargo PMU used by QEMU's default
+        // mac99 profile. Use the CUDA/ADB profile and a G3 CPU, matching the
+        // original iMac identity advertised by the bundled OpenBIOS. The ADB
+        // mouse is also a working captured fallback until the optional Virtio
+        // tablet driver loads.
+        args += ["-M", "mac99,via=cuda,audiodev=snd0"]
+        args += ["-cpu", "g3"]
         args += ["-m", String(config.ramMB)]
         args += ["-L", AppPaths.pcBiosDir.path]
         // right-click-ctrl: deliver right clicks as Control+click so Mac OS
@@ -519,17 +512,31 @@ final class QEMUManager: ObservableObject {
 
         // Keep a user-facing disc tray present on the optical IDE channel,
         // even when it starts empty, so the running window's Disc menu can
-        // insert an image later. OpenBIOS only tries the primary optical unit
-        // for `-boot d`, so temporarily give that position to the selected
-        // startup disc. Normal hard-disk starts reserve it for Tools.
+        // insert an image later. Give the primary optical position to a
+        // selected startup disc; normal hard-disk starts reserve it for Tools.
         let userDiscIndex = bootingFromUserCD ? 2 : 3
         var userDisc = "if=ide,index=\(userDiscIndex),media=cdrom,id=cd0,readonly=on"
-        if let cdPath = config.cdImagePath, !cdPath.isEmpty {
-            userDisc += ",file=\(cdPath),format=raw"
+        let escapedCDPath = config.cdImagePath?
+            .replacingOccurrences(of: ",", with: ",,")
+        if let escapedCDPath, !escapedCDPath.isEmpty {
+            userDisc += ",file=\(escapedCDPath),format=raw"
         }
         args += ["-drive", userDisc]
         if bootingFromUserCD {
-            args += ["-boot", "d"]
+            // Mac OS 8.5/8.6 cannot use mac99's KeyLargo IDE controller while
+            // the ROM is starting. Mirror the selected disc read-only through
+            // Virtio for startup; the ordinary IDE CD remains visible to the
+            // installer once Mac OS is running.
+            args += [
+                "-blockdev",
+                "driver=file,node-name=classicmac-cd-file,filename=\(escapedCDPath!),read-only=on",
+                "-blockdev",
+                "driver=raw,node-name=classicmac-cd-boot,file=classicmac-cd-file,read-only=on",
+                "-device",
+                "virtio-blk-pci,drive=classicmac-cd-boot",
+                "-prom-env",
+                "boot-device=virtio0:\\\\:tbxi"
+            ]
         }
 
         // Put ClassicMac Tools on the Power Mac's optical IDE channel. The

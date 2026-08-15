@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.6.1 — 2026-08-15
+
+### Fixed
+
+- **Mac OS 8.5 and 8.6 installation discs now boot on Power Macs instead of
+  stopping at a black screen.** The Power Mac profile now matches the
+  CUDA-based original iMac hardware those releases support, corrects CUDA
+  timer and one-second-message behavior, and supplies the classic NVRAM and
+  RTAS firmware interfaces expected by their Mac OS ROMs.
+- **Older installation discs can reach their startup volume before Mac OS has
+  initialized IDE.** ClassicMac exposes the selected CD through a read-only
+  Virtio startup mirror, with fixes for OpenBIOS HFS loading, Apple partition
+  maps on CD media, and Mac OS 8.5's PCI capability reads. The same disc
+  remains available through the normal CD drive after Finder starts.
+
 ## 1.6.0 — 2026-08-05
 
 ### Added
