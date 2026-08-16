@@ -16,7 +16,7 @@ DriverDescription TheDriverDescription = {
 	kTheDescriptionSignature,		/* OSType driverDescSignature */
 	kInitialDriverDescriptor,		/* DriverDescVersion driverDescVersion */
 	QEMU_PCI_VIDEO_NAME,
-	0x01, 0x02,				/* 1.2: ClassicMac host-resize build */
+	0x01, 0x03,				/* 1.3: direct scanout + host hardware cursor */
 	0, 0,
 	/*
 	 * DriverOSRuntime driverOSRuntimeInfo
@@ -162,7 +162,6 @@ DoDriverIO( AddressSpaceID addressSpaceID, IOCommandID ioCommandID, IOCommandCon
 	}
 	return status;
 }
-
 /*
  * DriverInitializeCmd
  *
@@ -635,5 +634,3 @@ DriverOpenCmd( AddressSpaceID addressSpaceID, ParmBlkPtr pb )
 
 	return noErr;
 }
-
-

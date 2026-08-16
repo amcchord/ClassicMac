@@ -1,0 +1,164 @@
+--- a/hw/display/vga_int.h
++++ b/hw/display/vga_int.h
+@@ -143,6 +143,14 @@
+      * instead of being rejected (1/2) or mapped to planar VGA (4).
+      */
+     bool packed_lowbpp;
++    /*
++     * untracked-vram=on lets a display backend scan out a shared linear
++     * framebuffer without re-protecting every page after each refresh.  This
++     * avoids TCG's per-page notdirty traps for framebuffer-heavy guests.
++     */
++    bool untracked_vram;
++    bool untracked_vram_active;
++    bool dirty_log_enabled;
+     bool global_vmstate;
+     /* hardware mouse cursor support */
+     uint32_t invalidated_y_table[VGA_MAX_HEIGHT / 32];
+--- a/hw/display/vga.c
++++ b/hw/display/vga.c
+@@ -1526,12 +1526,18 @@
+ 
+ void vga_dirty_log_start(VGACommonState *s)
+ {
+-    memory_region_set_log(&s->vram, true, DIRTY_MEMORY_VGA);
++    if (!s->dirty_log_enabled) {
++        memory_region_set_log(&s->vram, true, DIRTY_MEMORY_VGA);
++        s->dirty_log_enabled = true;
++    }
+ }
+ 
+ void vga_dirty_log_stop(VGACommonState *s)
+ {
+-    memory_region_set_log(&s->vram, false, DIRTY_MEMORY_VGA);
++    if (s->dirty_log_enabled) {
++        memory_region_set_log(&s->vram, false, DIRTY_MEMORY_VGA);
++        s->dirty_log_enabled = false;
++    }
+ }
+ 
+ /*
+@@ -1686,12 +1692,46 @@
+      * endian surfaces for 15bpp and above and byteswapped
+      * surfaces for 24bpp and above.
+      */
+-    format = qemu_default_pixman_format(depth, !byteswap);
++    /*
++     * Pixman has no byte-swapped RGB555/RGB565 names.  Use its BGR variants
++     * as private markers for a big-endian 16-bit shared surface; backends must
++     * explicitly opt in to these formats before VGA will expose them.  Cocoa
++     * maps the raw bytes directly with kCGBitmapByteOrder16Big.
++     */
++    if (byteswap && depth == 15) {
++        format = PIXMAN_x1b5g5r5;
++    } else if (byteswap && depth == 16) {
++        format = PIXMAN_b5g6r5;
++    } else {
++        format = qemu_default_pixman_format(depth, !byteswap);
++    }
+     if (format) {
+         allocate_surface = !dpy_gfx_check_format(s->con, format)
+             || s->force_shadow || force_shadow;
+     } else {
+         allocate_surface = true;
++    }
++
++    /*
++     * A shared surface already points at VRAM, so dirty-page snapshots are
++     * unnecessary.  More importantly, clearing DIRTY_MEMORY_VGA after every
++     * refresh re-protects the framebuffer and sends the first write to each
++     * page through TCG's notdirty slow path.  Disable that tracking while the
++     * opt-in shared scanout is active and notify the backend once per frame.
++     * Shadow surfaces retain normal dirty tracking and selective conversion.
++     */
++    if (s->untracked_vram) {
++        bool untracked = !allocate_surface;
++
++        if (untracked != s->untracked_vram_active) {
++            s->untracked_vram_active = untracked;
++            if (untracked) {
++                vga_dirty_log_stop(s);
++            } else {
++                vga_dirty_log_start(s);
++            }
++            full_update = 1;
++        }
+     }
+ 
+     if (s->params.line_offset != s->last_line_offset ||
+@@ -1749,7 +1789,7 @@
+     linesize = surface_stride(surface);
+     y1 = 0;
+ 
+-    if (!full_update) {
++    if (!full_update && !s->untracked_vram_active) {
+         snap = memory_region_snapshot_and_clear_dirty(&s->vram, region_start,
+                                                       region_end - region_start,
+                                                       DIRTY_MEMORY_VGA);
+@@ -1777,6 +1817,8 @@
+                                                       page0, s->vbe_size - page0);
+             update |= memory_region_snapshot_get_dirty(&s->vram, snap,
+                                                        0, page1);
++        } else if (s->untracked_vram_active) {
++            update = true;
+         } else {
+             update = memory_region_snapshot_get_dirty(&s->vram, snap,
+                                                       page0, page1 - page0);
+--- a/hw/display/vga-pci.c
++++ b/hw/display/vga-pci.c
+@@ -564,6 +564,7 @@
+                     PCIVGAState, flags, PCI_VGA_FLAG_ENABLE_EDID, true),
+     DEFINE_PROP_BOOL("host-resize", PCIVGAState, host_resize, false),
+     DEFINE_PROP_BOOL("packed-lowbpp", PCIVGAState, vga.packed_lowbpp, false),
++    DEFINE_PROP_BOOL("untracked-vram", PCIVGAState, vga.untracked_vram, false),
+     DEFINE_PROP_BOOL("hardware-cursor", PCIVGAState, hardware_cursor, false),
+     DEFINE_EDID_PROPERTIES(PCIVGAState, edid_info),
+ };
+--- a/ui/cocoa.m
++++ b/ui/cocoa.m
+@@ -651,6 +651,7 @@
+         int h = pixman_image_get_height(pixman_image);
+         pixman_format_code_t format = pixman_image_get_format(pixman_image);
+         int bitsPerPixel = PIXMAN_FORMAT_BPP(format);
++        int bitsPerComponent = DIV_ROUND_UP(bitsPerPixel, 8) * 2;
+         int stride = pixman_image_get_stride(pixman_image);
+         CGBitmapInfo bitmapInfo = kCGBitmapByteOrder32Little |
+                                   kCGImageAlphaNoneSkipFirst;
+@@ -663,6 +664,16 @@
+         if (format == PIXMAN_b8g8r8x8) {
+             bitmapInfo = kCGBitmapByteOrder32Big |
+                          kCGImageAlphaNoneSkipFirst;
++        } else if (format == PIXMAN_x1b5g5r5) {
++            /* Private VGA marker for a raw big-endian RGB555 surface. */
++            bitsPerComponent = 5;
++            bitmapInfo = kCGBitmapByteOrder16Big |
++                         kCGImageAlphaNoneSkipFirst;
++        } else if (format == PIXMAN_b5g6r5) {
++            /* Private VGA marker for a raw big-endian RGB565 surface. */
++            bitsPerComponent = 5;
++            bitmapInfo = kCGBitmapByteOrder16Big |
++                         kCGImageAlphaNone;
+         }
+         CGDataProviderRef dataProviderRef = CGDataProviderCreateWithData(
+             NULL,
+@@ -673,7 +684,7 @@
+         CGImageRef imageRef = CGImageCreate(
+             w, //width
+             h, //height
+-            DIV_ROUND_UP(bitsPerPixel, 8) * 2, //bitsPerComponent
++            bitsPerComponent, //bitsPerComponent
+             bitsPerPixel, //bitsPerPixel
+             stride, //bytesPerRow
+             colorspace, //colorspace
+@@ -2660,8 +2671,9 @@
+                                    pixman_format_code_t format)
+ {
+     (void)dcl;
+-    /* drawRect has direct Core Graphics mappings for these 32-bit layouts. */
+-    return format == PIXMAN_x8r8g8b8 || format == PIXMAN_b8g8r8x8;
++    /* drawRect has direct Core Graphics mappings for these layouts. */
++    return format == PIXMAN_x8r8g8b8 || format == PIXMAN_b8g8r8x8 ||
++           format == PIXMAN_x1b5g5r5 || format == PIXMAN_b5g6r5;
+ }
+ 
+ static void cocoa_refresh(DisplayChangeListener *dcl)

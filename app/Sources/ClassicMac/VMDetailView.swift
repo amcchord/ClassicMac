@@ -228,10 +228,17 @@ struct VMDetailView: View {
                 }
                 .disabled(running)
             }
+
+            Picker("Colors", selection: depthSelection(vm)) {
+                ForEach(availableDepths(vm.wrappedValue)) { depth in
+                    Text(depth.label).tag(depth)
+                }
+            }
+            .disabled(running)
         } header: {
             Label("Display", systemImage: "display")
         } footer: {
-            Text("The Mac starts at this size, in millions of colors. While it's running, drag the window to any size and the Mac follows, or pick any depth from Black & White up to millions in the Monitors control panel.")
+            Text("Thousands reduces framebuffer bandwidth and is usually faster. While it's running, drag the window to any size and the Mac follows; other depths remain available in the Monitors control panel.")
         }
     }
 
@@ -353,6 +360,18 @@ struct VMDetailView: View {
                 }
             }
             .disabled(running)
+
+            if vm.wrappedValue.machineFamily == .powerMacG4 {
+                Toggle(isOn: vm.useG4CPU) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("PowerPC G4 acceleration")
+                        Text("Recommended for Mac OS 8.6 and 9. Turn off for Mac OS 8.5 compatibility.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .disabled(running)
+            }
 
             Toggle(isOn: vm.classicInputHelpers) {
                 VStack(alignment: .leading, spacing: 2) {
@@ -693,6 +712,9 @@ struct VMDetailView: View {
     // The stock framebuffer at 1152x870 only supports 8-bit; the enhanced one is
     // unrestricted. Constrain the available depths accordingly.
     private func availableDepths(_ vm: VMConfig) -> [ColorDepth] {
+        if vm.machineFamily == .powerMacG4 {
+            return [.thousands, .millions]
+        }
         if vm.useEnhancedFramebuffer {
             return ColorDepth.allCases
         }

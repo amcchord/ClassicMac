@@ -81,6 +81,16 @@ struct DriverGlobal {
 	 * when QEMU advertises the feature we offer the full classic ladder
 	 * of depth modes (B&W through millions) instead of just 8/15/32. */
 	Boolean				lowDepthAvail;
+
+	/* Hardware cursor state. The image is converted by VideoServicesLib to
+	 * a 16x16 non-premultiplied ARGB sprite, then sent through QEXT for host
+	 * composition so cursor movement no longer dirties the framebuffer. */
+	Boolean				hardwareCursorAvail;
+	Boolean				cursorSet;
+	Boolean				cursorVisible;
+	SInt32				cursorX;
+	SInt32				cursorY;
+	UInt32				cursorPixels[16 * 16];
 	UInt32				numBaseModes;		/* modes before the dynamic pair */
 	UInt32				lastReqSerial;		/* last serial we acted upon */
 	UInt32				pendingReqSerial;	/* serial being debounced */

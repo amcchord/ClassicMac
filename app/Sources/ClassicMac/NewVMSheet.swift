@@ -19,6 +19,7 @@ struct NewVMSheet: View {
     @State private var customWidth = ResolutionPreset.recommended.width
     @State private var customHeight = ResolutionPreset.recommended.height
     @State private var sound = true
+    @State private var useG4CPU = true
 
     @State private var saveFolder: URL = AppPaths.defaultLibraryDir
     @State private var isoURL: URL?
@@ -150,6 +151,16 @@ struct NewVMSheet: View {
                     }
                 }
                 Toggle("Sound", isOn: $sound)
+                if family == .powerMacG4 {
+                    Toggle(isOn: $useG4CPU) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("PowerPC G4 acceleration")
+                            Text("Recommended for Mac OS 8.6 and 9; turn off for Mac OS 8.5")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
             } header: {
                 Label("Hardware", systemImage: "memorychip")
             } footer: {
@@ -183,7 +194,7 @@ struct NewVMSheet: View {
                     }
                 }
 
-                if family.supportsEnhancedFramebuffer {
+                if family.supportsEnhancedFramebuffer || family == .powerMacG4 {
                     Picker("Colors", selection: $depth) {
                         ForEach(availableDepths) { candidate in
                             Text(candidate.label).tag(candidate)
@@ -382,6 +393,9 @@ struct NewVMSheet: View {
     }
 
     private var availableDepths: [ColorDepth] {
+        if family == .powerMacG4 {
+            return [.thousands, .millions]
+        }
         guard !useEnhancedFramebuffer else { return ColorDepth.allCases }
         return resolution.width >= 1152 ? [.greys256] : ColorDepth.allCases
     }
@@ -393,7 +407,7 @@ struct NewVMSheet: View {
 
     private var displayFooter: String {
         if family == .powerMacG4 {
-            return "The Mac starts at this size in millions of colors. Drag its window after startup to resize the guest display."
+            return "Thousands reduces framebuffer bandwidth and is usually faster. Drag the window after startup to resize the guest display."
         }
         return "This is the startup size and deepest available color mode. Lower modes remain available in the Monitors control panel."
     }
@@ -401,7 +415,7 @@ struct NewVMSheet: View {
     private var displaySummary: String {
         let size = customResolution ? "\(customWidth) \u{00D7} \(customHeight)" : resolution.label
         if family == .powerMacG4 {
-            return "\(size) \u{2022} Millions"
+            return "\(size) \u{2022} \(depth.label)"
         }
         return "\(size) \u{2022} \(depth.label)"
     }
@@ -425,6 +439,7 @@ struct NewVMSheet: View {
         resolution = .recommended
         depth = .thousands
         sound = newFamily.supportsSound
+        useG4CPU = newFamily == .powerMacG4
     }
 
     private func bounded(_ source: Binding<Int>, minimum: Int, maximum: Int) -> Binding<Int> {
@@ -517,6 +532,7 @@ struct NewVMSheet: View {
             bootFromCD: isoURL != nil,
             networking: true,
             sound: sound,
+            useG4CPU: useG4CPU,
             sharedFolderPath: sharedFolderURL?.path,
             bundleURL: bundleURL
         )

@@ -263,7 +263,7 @@ GraphicsCoreSupportsHardwareCursor(VDSupportsHardwareCursorRec *hwCursRec)
 	hwCursRec->csReserved1 = 0;
 	hwCursRec->csReserved2 = 0;
 
-	hwCursRec->csSupportsHardwareCursor = false;
+	hwCursRec->csSupportsHardwareCursor = GLOBAL.hardwareCursorAvail;
 
 	return noErr;
 }
@@ -271,25 +271,84 @@ GraphicsCoreSupportsHardwareCursor(VDSupportsHardwareCursorRec *hwCursRec)
 OSStatus
 GraphicsCoreSetHardwareCursor(VDSetHardwareCursorRec *setHwCursRec)
 {
+	HardwareCursorDescriptorRec descriptor;
+	HardwareCursorInfoRec info;
+
+	CHECK_OPEN( controlErr );
 	Trace(GraphicsCoreSetHardwareCursor);
 
-	return controlErr;
+	if (!GLOBAL.hardwareCursorAvail || setHwCursRec->csCursorRef == NULL)
+		return controlErr;
+
+	BlockZero(&descriptor, sizeof(descriptor));
+	BlockZero(&info, sizeof(info));
+	BlockZero(GLOBAL.cursorPixels, sizeof(GLOBAL.cursorPixels));
+
+	descriptor.majorVersion = kHardwareCursorDescriptorMajorVersion;
+	descriptor.minorVersion = kHardwareCursorDescriptorMinorVersion;
+	descriptor.height = QEMU_EXT_CURSOR_HEIGHT;
+	descriptor.width = QEMU_EXT_CURSOR_WIDTH;
+	descriptor.bitDepth = 32;
+	descriptor.maskBitDepth = 0;
+	descriptor.numColors = 0;
+	descriptor.colorEncodings = NULL;
+	descriptor.flags = 0;
+
+	info.majorVersion = kHardwareCursorInfoMajorVersion;
+	info.minorVersion = kHardwareCursorInfoMinorVersion;
+	info.cursorHeight = QEMU_EXT_CURSOR_HEIGHT;
+	info.cursorWidth = QEMU_EXT_CURSOR_WIDTH;
+	info.colorMap = NULL;
+	info.hardwareCursor = (Ptr)GLOBAL.cursorPixels;
+
+	if (!VSLPrepareCursorForHardwareCursor(setHwCursRec->csCursorRef,
+										 &descriptor, &info)) {
+		GLOBAL.cursorSet = false;
+		return controlErr;
+	}
+	if (info.cursorWidth > QEMU_EXT_CURSOR_WIDTH ||
+		info.cursorHeight > QEMU_EXT_CURSOR_HEIGHT) {
+		GLOBAL.cursorSet = false;
+		return controlErr;
+	}
+
+	QemuVga_SetCursor(GLOBAL.cursorPixels);
+	GLOBAL.cursorSet = true;
+	return noErr;
 }
 
 OSStatus
 GraphicsCoreDrawHardwareCursor(VDDrawHardwareCursorRec *drawHwCursRec)
 {
+	CHECK_OPEN( controlErr );
 	Trace(GraphicsCoreDrawHardwareCursor);
 
-	return controlErr;
+	if (!GLOBAL.hardwareCursorAvail || !GLOBAL.cursorSet)
+		return controlErr;
+
+	GLOBAL.cursorX = drawHwCursRec->csCursorX;
+	GLOBAL.cursorY = drawHwCursRec->csCursorY;
+	GLOBAL.cursorVisible = drawHwCursRec->csCursorVisible != 0;
+	QemuVga_DrawCursor(GLOBAL.cursorX, GLOBAL.cursorY, GLOBAL.cursorVisible);
+	return noErr;
 }
 
 OSStatus
 GraphicsCoreGetHardwareCursorDrawState(VDHardwareCursorDrawStateRec *hwCursDStateRec)
 {
+	CHECK_OPEN( statusErr );
 	Trace(GraphicsCoreGetHardwareCursorDrawState);
 
-	return statusErr;
+	if (!GLOBAL.hardwareCursorAvail)
+		return statusErr;
+
+	hwCursDStateRec->csCursorX = GLOBAL.cursorX;
+	hwCursDStateRec->csCursorY = GLOBAL.cursorY;
+	hwCursDStateRec->csCursorVisible = GLOBAL.cursorVisible;
+	hwCursDStateRec->csCursorSet = GLOBAL.cursorSet;
+	hwCursDStateRec->csReserved1 = 0;
+	hwCursDStateRec->csReserved2 = 0;
+	return noErr;
 }
 
 /************************ Misc ****************************/

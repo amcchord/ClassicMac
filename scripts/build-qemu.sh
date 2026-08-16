@@ -65,6 +65,8 @@ PATCHED_FILES=(
   hw/misc/macio/cuda.c
   include/hw/misc/macio/cuda.h
   hw/nvram/mac_nvram.c
+  accel/tcg/cputlb.c
+  accel/tcg/tb-maint.c
 )
 SCREAMER_DIR="$ROOT_DIR/screamer"
 PPCVID_DIR="$ROOT_DIR/ppcvid"
@@ -200,6 +202,9 @@ git -C "$QEMU_DIR" apply "$ROOT_DIR/cocoaui/window-presentation.patch" || die "F
 git -C "$QEMU_DIR" apply "$ROOT_DIR/cocoaui/mac-native-menus.patch" || die "Failed to apply ClassicMac native menus patch"
 # Quadra-only floppy image controls for the removable classicvirtio drive.
 git -C "$QEMU_DIR" apply "$ROOT_DIR/cocoaui/floppy-menu.patch" || die "Failed to apply ClassicMac floppy menu patch"
+# Faster 32-bit Power Mac scanout: let Cocoa consume a big-endian framebuffer
+# directly, and poll display updates at roughly the guest's 60 Hz VBL cadence.
+git -C "$QEMU_DIR" apply "$ROOT_DIR/cocoaui/display-performance.patch" || die "Failed to apply Cocoa display performance patch"
 # Allow a VirtIO block device to start empty, exchange raw media while running,
 # and report capacity changes to the guest driver.
 git -C "$QEMU_DIR" apply "$VIRTIO_DIR/virtio-blk-removable.patch" || die "Failed to apply removable VirtIO block patch"
@@ -229,7 +234,13 @@ git -C "$QEMU_DIR" apply "$SCREAMER_DIR/integration.patch" || die "Failed to app
 # by Mac OS 8.5 and 8.6 during early startup.
 log "Installing classic Mac OS 8 Power Mac compatibility fixes"
 git -C "$QEMU_DIR" apply "$POWERMAC_DIR/classic-macos-8.patch" || die "Failed to apply Power Mac compatibility patch"
-
+# Classic Mac graphics workloads write heavily around translated code. Keep a
+# conservative per-page coverage summary so writes outside translated regions
+# avoid walking the page's TB list, while preserving the original locked path
+# for cross-page and otherwise ambiguous cases. Also keep Clang from expanding
+# the small victim-TLB scan into hundreds of outlined helper calls.
+log "Installing TCG graphics-workload fast path"
+git -C "$QEMU_DIR" apply "$POWERMAC_DIR/tcg-graphics-fast-path.patch" || die "Failed to apply TCG graphics fast-path patch"
 # MacIO IDE/DBDMA completion timing: cached host I/O can otherwise complete
 # before classic Mac OS arms its synchronous wait, losing the wakeup and
 # freezing Mac OS 9.2.x Installer mid-copy. This also fixes the ordinary ATA
@@ -283,6 +294,13 @@ git -C "$QEMU_DIR" apply "$PPCVID_DIR/vga-host-resize.patch" || die "Failed to a
 # on top of the host-resize patch (extends its QEXT register block with a
 # feature bitmap the guest driver probes).
 git -C "$QEMU_DIR" apply "$PPCVID_DIR/vga-packed-depths.patch" || die "Failed to apply vga packed-depths patch"
+# QEXT host-composited cursor channel used by the bundled PowerPC NDRV. This
+# keeps pointer movement out of the guest framebuffer and Cocoa scanout path.
+git -C "$QEMU_DIR" apply "$PPCVID_DIR/vga-hardware-cursor.patch" || die "Failed to apply vga hardware-cursor patch"
+# Share big-endian 15/16-bpp VRAM directly with Cocoa and stop clearing VGA's
+# dirty bitmap for shared surfaces. This removes the repeated TCG write traps
+# that dominate framebuffer-heavy QuickDraw workloads.
+git -C "$QEMU_DIR" apply "$PPCVID_DIR/vga-fast-scanout.patch" || die "Failed to apply vga fast-scanout patch"
 if [ -f "$PPCVID_DIR/qemu_vga.ndrv" ]; then
   cp "$PPCVID_DIR/qemu_vga.ndrv" "$QEMU_DIR/pc-bios/qemu_vga.ndrv"
 else
@@ -372,6 +390,16 @@ if "$QEMU_PPC_BIN" -device VGA,help 2>&1 | grep -q "packed-lowbpp"; then
   printf '    OK  VGA packed low-bpp modes (ppc)\n'
 else
   die "VGA packed-lowbpp property missing from the ppc build"
+fi
+if "$QEMU_PPC_BIN" -device VGA,help 2>&1 | grep -q "hardware-cursor"; then
+  printf '    OK  VGA hardware cursor channel (ppc)\n'
+else
+    die "VGA hardware-cursor property missing from the ppc build"
+fi
+if "$QEMU_PPC_BIN" -device VGA,help 2>&1 | grep -q "untracked-vram"; then
+  printf '    OK  VGA untracked direct scanout (ppc)\n'
+else
+  die "VGA untracked-vram property missing from the ppc build"
 fi
 if "$QEMU_PPC_BIN" -device macio-ide,help 2>&1 | grep -q "dma-completion-delay-ns"; then
   printf '    OK  MacIO IDE DMA completion delay (ppc)\n'

@@ -42,6 +42,24 @@ final class VMConfigTests: XCTestCase {
         XCTAssertEqual(config.name, MachineFamily.powerMacG4.defaultName)
     }
 
+    func testPowerMacRestrictsStartupDepthToDirectColorModes() {
+        let config = VMConfig(
+            name: "Power Mac",
+            machineFamily: .powerMacG4,
+            depth: ColorDepth.greys256.rawValue
+        )
+
+        XCTAssertEqual(config.depth, ColorDepth.thousands.rawValue)
+        XCTAssertEqual(config.resolutionLabel, "1024x768x16")
+        XCTAssertTrue(config.useG4CPU)
+    }
+
+    func testQuadraNeverEnablesPowerPCG4CPU() {
+        let config = VMConfig(name: "Quadra", machineFamily: .quadra800, useG4CPU: true)
+
+        XCTAssertFalse(config.useG4CPU)
+    }
+
     func testCopiedMediaNamesNeverReuseAnExistingFile() throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)

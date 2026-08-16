@@ -1,5 +1,40 @@
 # Changelog
 
+## 1.7.0 beta 3 — 2026-08-16
+
+### Changed
+
+- **QuickDraw graphics are 56% faster in the controlled MacBench 5
+  comparison.** The signed-beta Graphics baseline of 9,078 increased to a
+  two-run mean of 14,125, with the warm validation run reaching 14,765. The
+  exact notarized release bundle scored 14,457, a 59% gain over the baseline.
+- Power Mac graphics workloads now avoid unnecessary translated-code page
+  walks when framebuffer writes cannot overlap generated code. Ambiguous and
+  cross-page writes continue through QEMU's original locked invalidation path.
+- The small victim-TLB scan retains its existing order and behavior while
+  avoiding a compiler expansion that produced hundreds of outlined helper
+  calls on Apple Silicon.
+
+## 1.7.0 beta 2 — 2026-08-16
+
+### Added
+
+- **PowerPC G4 acceleration for Mac OS 8.6 and 9.** New Power Mac machines use
+  QEMU's 7400 CPU model by default, while a per-machine compatibility switch
+  retains the G3 model required by Mac OS 8.5.
+- **Faster Power Mac display modes.** Power Macs can now start in Thousands or
+  Millions of colors; Thousands is the recommended high-performance mode.
+
+### Changed
+
+- **QuickDraw graphics are 52% faster in the controlled MacBench 5 comparison.**
+  The paired Graphics mean increased from 9,054 on the G3 control to 13,768
+  with the beta's G4 and display acceleration enabled.
+- Power Mac framebuffers scan out directly to the native macOS display path,
+  avoiding repeated TCG dirty-page traps and redundant pixel conversion.
+- The classic Mac cursor is composited by the host instead of being redrawn
+  into guest video memory on every pointer movement.
+
 ## 1.6.1 — 2026-08-15
 
 ### Fixed

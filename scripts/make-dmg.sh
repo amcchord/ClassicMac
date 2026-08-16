@@ -34,16 +34,25 @@ if [ -z "$SIGN_IDENTITY" ]; then
 fi
 [ -n "$SIGN_IDENTITY" ] || die "No Developer ID Application certificate found in the keychain."
 
-# Notary credentials: prefer the keychain profile, but fall back to explicit
-# NOTARY_APPLE_ID / NOTARY_TEAM_ID / NOTARY_PASSWORD env vars when the
-# keychain is unavailable (e.g. locked in a headless session).
-NOTARY_AUTH=(--keychain-profile "$PROFILE")
-if ! xcrun notarytool history "${NOTARY_AUTH[@]}" >/dev/null 2>&1; then
-  if [ -n "${NOTARY_APPLE_ID:-}" ] && [ -n "${NOTARY_TEAM_ID:-}" ] && [ -n "${NOTARY_PASSWORD:-}" ]; then
-    log "Keychain profile '$PROFILE' unavailable; using NOTARY_* env credentials"
-    NOTARY_AUTH=(--apple-id "$NOTARY_APPLE_ID" --team-id "$NOTARY_TEAM_ID" --password "$NOTARY_PASSWORD")
-  else
-    die "Notary keychain profile '$PROFILE' is unavailable (keychain locked or profile missing). Unlock the login keychain or re-run 'xcrun notarytool store-credentials $PROFILE', or set NOTARY_APPLE_ID, NOTARY_TEAM_ID and NOTARY_PASSWORD."
+# Notary credentials: use an explicitly supplied API key first, then the
+# keychain profile, then Apple ID credentials. This keeps automation from
+# depending on an unlocked login keychain.
+if [ -n "${NOTARY_KEY:-}" ] && [ -n "${NOTARY_KEY_ID:-}" ]; then
+  NOTARY_AUTH=(--key "$NOTARY_KEY" --key-id "$NOTARY_KEY_ID")
+  if [ -n "${NOTARY_ISSUER_ID:-}" ]; then
+    NOTARY_AUTH+=(--issuer "$NOTARY_ISSUER_ID")
+  fi
+  xcrun notarytool history "${NOTARY_AUTH[@]}" >/dev/null 2>&1 || \
+    die "The supplied NOTARY_KEY credentials were rejected by Apple."
+else
+  NOTARY_AUTH=(--keychain-profile "$PROFILE")
+  if ! xcrun notarytool history "${NOTARY_AUTH[@]}" >/dev/null 2>&1; then
+    if [ -n "${NOTARY_APPLE_ID:-}" ] && [ -n "${NOTARY_TEAM_ID:-}" ] && [ -n "${NOTARY_PASSWORD:-}" ]; then
+      log "Keychain profile '$PROFILE' unavailable; using NOTARY_* Apple ID credentials"
+      NOTARY_AUTH=(--apple-id "$NOTARY_APPLE_ID" --team-id "$NOTARY_TEAM_ID" --password "$NOTARY_PASSWORD")
+    else
+      die "No usable notary credentials. Set NOTARY_KEY and NOTARY_KEY_ID (plus NOTARY_ISSUER_ID for a Team API Key), unlock or recreate keychain profile '$PROFILE', or set NOTARY_APPLE_ID, NOTARY_TEAM_ID and NOTARY_PASSWORD."
+    fi
   fi
 fi
 
