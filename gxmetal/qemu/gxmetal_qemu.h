@@ -8,6 +8,7 @@
 #include "qom/object.h"
 
 #include "gxmetal_queue.h"
+#include "gxmetal_metal.h"
 #include "gxmetal_renderer.h"
 
 typedef struct GXMetalQemuState {
@@ -15,6 +16,7 @@ typedef struct GXMetalQemuState {
     MemoryRegion shared;
     MemoryRegion *framebuffer_region;
     GXMetalQueue queue;
+    GXMetalMetalRenderer *metal;
     GXMetalRenderer renderer;
     uint64_t features;
 } GXMetalQemuState;

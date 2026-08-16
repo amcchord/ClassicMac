@@ -304,14 +304,17 @@ git -C "$QEMU_DIR" apply "$PPCVID_DIR/vga-hardware-cursor.patch" || die "Failed 
 git -C "$QEMU_DIR" apply "$PPCVID_DIR/vga-fast-scanout.patch" || die "Failed to apply vga fast-scanout patch"
 
 # GXMetal's RAVE transport extends std-VGA with a validated command queue in a
-# separate shared PCI BAR. The initial QEMU backend deliberately advertises
-# only trace/fence support; raster feature bits arrive with the Metal backend.
+# separate shared PCI BAR. Metal is selected on supported macOS hosts, with the
+# portable reference rasterizer retained as a deterministic fallback.
 log "Installing GXMetal command transport"
 cp "$GXMETAL_DIR/protocol/gxmetal_protocol.h" "$QEMU_DIR/hw/display/gxmetal_protocol.h"
 cp "$GXMETAL_DIR/host/gxmetal_decode.h" "$QEMU_DIR/hw/display/gxmetal_decode.h"
 cp "$GXMETAL_DIR/host/gxmetal_decode.c" "$QEMU_DIR/hw/display/gxmetal_decode.c"
 cp "$GXMETAL_DIR/host/gxmetal_queue.h" "$QEMU_DIR/hw/display/gxmetal_queue.h"
 cp "$GXMETAL_DIR/host/gxmetal_queue.c" "$QEMU_DIR/hw/display/gxmetal_queue.c"
+cp "$GXMETAL_DIR/host/gxmetal_metal.h" "$QEMU_DIR/hw/display/gxmetal_metal.h"
+cp "$GXMETAL_DIR/host/gxmetal_metal.m" "$QEMU_DIR/hw/display/gxmetal_metal.m"
+cp "$GXMETAL_DIR/host/gxmetal_metal_stub.c" "$QEMU_DIR/hw/display/gxmetal_metal_stub.c"
 cp "$GXMETAL_DIR/host/gxmetal_renderer.h" "$QEMU_DIR/hw/display/gxmetal_renderer.h"
 cp "$GXMETAL_DIR/host/gxmetal_renderer.c" "$QEMU_DIR/hw/display/gxmetal_renderer.c"
 cp "$GXMETAL_DIR/qemu/gxmetal_qemu.h" "$QEMU_DIR/hw/display/gxmetal_qemu.h"
@@ -421,6 +424,12 @@ if "$QEMU_PPC_BIN" -device VGA,help 2>&1 | grep -q "gxmetal"; then
   printf '    OK  GXMetal command transport (ppc)\n'
 else
   die "VGA gxmetal property missing from the ppc build"
+fi
+if nm "$QEMU_PPC_BIN" 2>/dev/null | grep "_gxmetal_metal_dispatch" >/dev/null &&
+   otool -L "$QEMU_PPC_BIN" | grep "/Metal.framework/" >/dev/null; then
+  printf '    OK  GXMetal native Metal renderer (ppc)\n'
+else
+  die "GXMetal Metal renderer missing from the ppc build"
 fi
 "$PYTHON_BIN" "$GXMETAL_DIR/tests/test_qemu_transport.py" "$QEMU_PPC_BIN" || \
   die "GXMetal QEMU realization tests failed"

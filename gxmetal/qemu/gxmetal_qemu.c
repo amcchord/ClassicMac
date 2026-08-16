@@ -1,9 +1,8 @@
 /*
  * GXMetal paravirtual command transport for QEMU std-VGA.
  *
- * The initial backend includes the portable reference rasterizer. It provides
- * deterministic bring-up and conformance coverage before commands are routed
- * through the Metal implementation.
+ * Metal is the primary renderer on macOS.  The portable reference rasterizer
+ * remains the deterministic fallback on other hosts.
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
@@ -20,10 +19,15 @@ static uint32_t gxmetal_render_dispatch(void *opaque,
     GXMetalQemuState *state = opaque;
     uint32_t error;
 
-    error = gxmetal_renderer_dispatch(&state->renderer, packet);
+    if (state->metal != NULL) {
+        error = gxmetal_metal_dispatch(state->metal, packet);
+    } else {
+        error = gxmetal_renderer_dispatch(&state->renderer, packet);
+    }
     if (error == GXMETAL_ERROR_NONE &&
         (packet->opcode == GXMETAL_OP_CLEAR ||
-         packet->opcode == GXMETAL_OP_DRAW_GOURAUD)) {
+         packet->opcode == GXMETAL_OP_DRAW_GOURAUD ||
+         packet->opcode == GXMETAL_OP_PRESENT)) {
         memory_region_set_dirty(state->framebuffer_region, 0,
                                 state->renderer.framebuffer_bytes);
     }
@@ -146,8 +150,13 @@ bool gxmetal_qemu_init(GXMetalQemuState *state, Object *owner,
     framebuffer = memory_region_get_ram_ptr(framebuffer_region);
     state->framebuffer_region = framebuffer_region;
     gxmetal_renderer_init(&state->renderer, framebuffer, framebuffer_bytes);
-    state->features = GXMETAL_FEATURE_GOURAUD | GXMETAL_FEATURE_FENCE |
-                      GXMETAL_FEATURE_TRACE;
+    state->metal = gxmetal_metal_create(framebuffer, framebuffer_bytes);
+    state->features = GXMETAL_FEATURE_GOURAUD | GXMETAL_FEATURE_FENCE;
+    if (state->metal != NULL) {
+        state->features |= GXMETAL_FEATURE_METAL;
+    } else {
+        state->features |= GXMETAL_FEATURE_TRACE;
+    }
     gxmetal_queue_init(&state->queue, shared, GXMETAL_SHARED_BYTES,
                        GXMETAL_RING_OFFSET, GXMETAL_RING_BYTES,
                        gxmetal_render_dispatch, state);
@@ -161,5 +170,6 @@ bool gxmetal_qemu_init(GXMetalQemuState *state, Object *owner,
 void gxmetal_qemu_reset(GXMetalQemuState *state)
 {
     gxmetal_queue_reset(&state->queue);
+    gxmetal_metal_reset(state->metal);
     gxmetal_renderer_reset(&state->renderer);
 }

@@ -74,7 +74,8 @@ enum GXMetalFeature {
     GXMETAL_FEATURE_DOUBLE_BUFFER = UINT64_C(1) << 5,
     GXMETAL_FEATURE_MESH          = UINT64_C(1) << 6,
     GXMETAL_FEATURE_SCISSOR       = UINT64_C(1) << 7,
-    GXMETAL_FEATURE_FENCE         = UINT64_C(1) << 8
+    GXMETAL_FEATURE_FENCE         = UINT64_C(1) << 8,
+    GXMETAL_FEATURE_METAL         = UINT64_C(1) << 9
 };
 
 /* C11 enum constants are restricted to int even though the feature word is 64-bit. */

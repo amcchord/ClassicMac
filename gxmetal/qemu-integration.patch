@@ -62,7 +62,7 @@ diff --git a/hw/display/vga-pci.c b/hw/display/vga-pci.c
 diff --git a/hw/display/meson.build b/hw/display/meson.build
 --- a/hw/display/meson.build
 +++ b/hw/display/meson.build
-@@ -16,7 +16,13 @@ system_ss.add(when: 'CONFIG_SSD0303', if_true: files('ssd0303.c'))
+@@ -16,7 +16,16 @@ system_ss.add(when: 'CONFIG_SSD0303', if_true: files('ssd0303.c'))
  system_ss.add(when: 'CONFIG_SSD0323', if_true: files('ssd0323.c'))
  system_ss.add(when: 'CONFIG_XEN_BUS', if_true: files('xenfb.c'))
  
@@ -74,6 +74,9 @@ diff --git a/hw/display/meson.build b/hw/display/meson.build
 +  'gxmetal_renderer.c',
 +  'gxmetal_qemu.c',
 +))
++system_ss.add(when: ['CONFIG_VGA_PCI', pvg],
++  if_true: [files('gxmetal_metal.m'), pvg],
++  if_false: files('gxmetal_metal_stub.c'))
  system_ss.add(when: 'CONFIG_VGA_ISA', if_true: files('vga-isa.c'))
  system_ss.add(when: 'CONFIG_VGA_MMIO', if_true: files('vga-mmio.c'))
  system_ss.add(when: 'CONFIG_VMWARE_VGA', if_true: files('vmware_vga.c'))
