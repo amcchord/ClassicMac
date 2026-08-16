@@ -19,6 +19,7 @@
 typedef struct GXMetalMetalVertex {
     float x;
     float y;
+    float z;
     float r;
     float g;
     float b;
@@ -37,9 +38,14 @@ typedef struct GXMetalMetalContext {
     uint32_t row_bytes;
     uint32_t pixel_format;
     uint32_t framebuffer_offset;
+    uint32_t flags;
+    uint32_t z_function;
+    uint32_t z_write;
+    uint32_t blend;
     int active;
     int committed;
     id<MTLTexture> texture;
+    id<MTLTexture> depth_texture;
     id<MTLCommandBuffer> command_buffer;
     id<MTLRenderCommandEncoder> encoder;
 } GXMetalMetalContext;
@@ -49,14 +55,17 @@ struct GXMetalMetalRenderer {
     uint32_t framebuffer_bytes;
     id<MTLDevice> device;
     id<MTLCommandQueue> command_queue;
-    id<MTLRenderPipelineState> pipeline;
+    id<MTLRenderPipelineState> pipelines[3];
+    id<MTLRenderPipelineState> clear_pipeline;
+    id<MTLRenderPipelineState> depth_clear_pipeline;
+    id<MTLDepthStencilState> depth_states[9][2];
     GXMetalMetalContext contexts[GXMETAL_METAL_MAX_CONTEXTS];
 };
 
 static NSString *const kGXMetalShaderSource = @
     "#include <metal_stdlib>\n"
     "using namespace metal;\n"
-    "struct GXVertex { float x; float y; float r; float g; float b; float a; };\n"
+    "struct GXVertex { float x; float y; float z; float r; float g; float b; float a; };\n"
     "struct GXViewport { float width; float height; };\n"
     "struct GXOut { float4 position [[position]]; float4 color; };\n"
     "vertex GXOut gxmetal_vertex(const device GXVertex *vertices [[buffer(0)]], "
@@ -65,7 +74,7 @@ static NSString *const kGXMetalShaderSource = @
     "  GXVertex v = vertices[index];\n"
     "  GXOut out;\n"
     "  out.position = float4(v.x / viewport.width * 2.0 - 1.0, "
-    "                        1.0 - v.y / viewport.height * 2.0, 0.0, 1.0);\n"
+    "                        1.0 - v.y / viewport.height * 2.0, v.z, 1.0);\n"
     "  out.color = float4(v.r, v.g, v.b, v.a);\n"
     "  return out;\n"
     "}\n"
@@ -128,6 +137,7 @@ static void gxmetal_metal_release_context(GXMetalMetalContext *context)
     }
     gxmetal_metal_release_frame(context);
     [context->texture release];
+    [context->depth_texture release];
     memset(context, 0, sizeof(*context));
 }
 
@@ -152,7 +162,9 @@ static int gxmetal_metal_begin_frame(GXMetalMetalRenderer *renderer,
 
 static int gxmetal_metal_ensure_encoder(GXMetalMetalRenderer *renderer,
                                         GXMetalMetalContext *context,
-                                        int clear, MTLClearColor clear_color)
+                                        uint32_t clear_flags,
+                                        MTLClearColor clear_color,
+                                        double clear_depth)
 {
     MTLRenderPassDescriptor *pass;
 
@@ -160,7 +172,7 @@ static int gxmetal_metal_ensure_encoder(GXMetalMetalRenderer *renderer,
         !gxmetal_metal_begin_frame(renderer, context)) {
         return 0;
     }
-    if (clear && context->encoder != nil) {
+    if (clear_flags != 0 && context->encoder != nil) {
         [context->encoder endEncoding];
         [context->encoder release];
         context->encoder = nil;
@@ -170,16 +182,23 @@ static int gxmetal_metal_ensure_encoder(GXMetalMetalRenderer *renderer,
     }
     pass = [MTLRenderPassDescriptor renderPassDescriptor];
     pass.colorAttachments[0].texture = context->texture;
-    pass.colorAttachments[0].loadAction = clear ? MTLLoadActionClear :
-                                                  MTLLoadActionLoad;
+    pass.colorAttachments[0].loadAction =
+        (clear_flags & GXMETAL_CLEAR_COLOR) ? MTLLoadActionClear :
+                                             MTLLoadActionLoad;
     pass.colorAttachments[0].storeAction = MTLStoreActionStore;
     pass.colorAttachments[0].clearColor = clear_color;
+    pass.depthAttachment.texture = context->depth_texture;
+    pass.depthAttachment.loadAction =
+        (clear_flags & GXMETAL_CLEAR_DEPTH) ? MTLLoadActionClear :
+                                             MTLLoadActionLoad;
+    pass.depthAttachment.storeAction = MTLStoreActionStore;
+    pass.depthAttachment.clearDepth = clear_depth;
     context->encoder = [[context->command_buffer
         renderCommandEncoderWithDescriptor:pass] retain];
     if (context->encoder == nil) {
         return 0;
     }
-    [context->encoder setRenderPipelineState:renderer->pipeline];
+    [context->encoder setRenderPipelineState:renderer->pipelines[0]];
     return 1;
 }
 
@@ -215,6 +234,8 @@ static uint32_t gxmetal_metal_context_create(
         packet->payload + GXMETAL_CONTEXT_PIXEL_FORMAT_OFFSET);
     context->framebuffer_offset = gxmetal_load_le32(
         packet->payload + GXMETAL_CONTEXT_FRAMEBUFFER_OFFSET);
+    context->flags = gxmetal_load_le32(
+        packet->payload + GXMETAL_CONTEXT_FLAGS_OFFSET);
     bytes_per_pixel = gxmetal_metal_bytes_per_pixel(context->pixel_format);
     end = (uint64_t)context->framebuffer_offset +
           (uint64_t)(context->height - 1) * context->row_bytes +
@@ -232,10 +253,23 @@ static uint32_t gxmetal_metal_context_create(
     descriptor.usage = MTLTextureUsageRenderTarget;
     descriptor.storageMode = MTLStorageModeShared;
     context->texture = [renderer->device newTextureWithDescriptor:descriptor];
-    if (context->texture == nil) {
+    descriptor = [MTLTextureDescriptor
+        texture2DDescriptorWithPixelFormat:MTLPixelFormatDepth32Float
+        width:context->width height:context->height mipmapped:NO];
+    descriptor.usage = MTLTextureUsageRenderTarget;
+    descriptor.storageMode = MTLStorageModePrivate;
+    context->depth_texture = [renderer->device
+        newTextureWithDescriptor:descriptor];
+    if (context->texture == nil || context->depth_texture == nil) {
+        [context->texture release];
+        [context->depth_texture release];
         memset(context, 0, sizeof(*context));
         return GXMETAL_ERROR_RENDERER;
     }
+    context->z_function = (context->flags & GXMETAL_CONTEXT_Z16) ?
+        GXMETAL_Z_LT : GXMETAL_Z_NONE;
+    context->z_write = 1;
+    context->blend = GXMETAL_BLEND_INTERPOLATE;
     context->active = 1;
     return GXMETAL_ERROR_NONE;
 }
@@ -259,9 +293,10 @@ static uint32_t gxmetal_metal_clear(GXMetalMetalRenderer *renderer,
     MTLClearColor color;
     MTLScissorRect scissor;
     float components[4];
+    float depth;
     uint32_t i;
 
-    if ((flags & GXMETAL_CLEAR_COLOR) == 0) {
+    if ((flags & (GXMETAL_CLEAR_COLOR | GXMETAL_CLEAR_DEPTH)) == 0) {
         return GXMETAL_ERROR_NONE;
     }
     if (left < 0) {
@@ -290,15 +325,18 @@ static uint32_t gxmetal_metal_clear(GXMetalMetalRenderer *renderer,
         packet->payload + GXMETAL_CLEAR_COLOR_B_OFFSET);
     components[3] = gxmetal_metal_load_float(
         packet->payload + GXMETAL_CLEAR_COLOR_A_OFFSET);
+    depth = gxmetal_metal_load_float(
+        packet->payload + GXMETAL_CLEAR_DEPTH_OFFSET);
     color = MTLClearColorMake(components[0], components[1], components[2],
                               components[3]);
     if (left == 0 && top == 0 && right == (int32_t)context->width &&
         bottom == (int32_t)context->height) {
-        return gxmetal_metal_ensure_encoder(renderer, context, 1, color) ?
+        return gxmetal_metal_ensure_encoder(renderer, context, flags, color,
+                                             depth) ?
             GXMETAL_ERROR_NONE : GXMETAL_ERROR_RENDERER;
     }
     if (!gxmetal_metal_ensure_encoder(renderer, context, 0,
-                                      MTLClearColorMake(0, 0, 0, 1))) {
+                                      MTLClearColorMake(0, 0, 0, 1), 1.0)) {
         return GXMETAL_ERROR_RENDERER;
     }
     memset(vertices, 0, sizeof(vertices));
@@ -307,6 +345,7 @@ static uint32_t gxmetal_metal_clear(GXMetalMetalRenderer *renderer,
     vertices[0].y = vertices[1].y = (float)top;
     vertices[2].y = vertices[3].y = (float)bottom;
     for (i = 0; i < 4; i++) {
+        vertices[i].z = depth;
         vertices[i].r = components[0];
         vertices[i].g = components[1];
         vertices[i].b = components[2];
@@ -323,8 +362,21 @@ static uint32_t gxmetal_metal_clear(GXMetalMetalRenderer *renderer,
         atIndex:0];
     [context->encoder setVertexBytes:&viewport length:sizeof(viewport)
         atIndex:1];
-    [context->encoder drawPrimitives:MTLPrimitiveTypeTriangleStrip
-        vertexStart:0 vertexCount:4];
+    if (flags & GXMETAL_CLEAR_COLOR) {
+        [context->encoder setRenderPipelineState:renderer->clear_pipeline];
+        [context->encoder setDepthStencilState:
+            renderer->depth_states[GXMETAL_Z_TRUE][0]];
+        [context->encoder drawPrimitives:MTLPrimitiveTypeTriangleStrip
+            vertexStart:0 vertexCount:4];
+    }
+    if (flags & GXMETAL_CLEAR_DEPTH) {
+        [context->encoder setRenderPipelineState:
+            renderer->depth_clear_pipeline];
+        [context->encoder setDepthStencilState:
+            renderer->depth_states[GXMETAL_Z_TRUE][1]];
+        [context->encoder drawPrimitives:MTLPrimitiveTypeTriangleStrip
+            vertexStart:0 vertexCount:4];
+    }
     scissor.x = 0;
     scissor.y = 0;
     scissor.width = context->width;
@@ -339,11 +391,13 @@ static int gxmetal_metal_read_vertex(const GXMetalMetalContext *context,
 {
     vertex->x = gxmetal_metal_load_float(source + GXMETAL_VERTEX_X_OFFSET);
     vertex->y = gxmetal_metal_load_float(source + GXMETAL_VERTEX_Y_OFFSET);
+    vertex->z = gxmetal_metal_load_float(source + GXMETAL_VERTEX_Z_OFFSET);
     vertex->r = gxmetal_metal_load_float(source + GXMETAL_VERTEX_R_OFFSET);
     vertex->g = gxmetal_metal_load_float(source + GXMETAL_VERTEX_G_OFFSET);
     vertex->b = gxmetal_metal_load_float(source + GXMETAL_VERTEX_B_OFFSET);
     vertex->a = gxmetal_metal_load_float(source + GXMETAL_VERTEX_A_OFFSET);
     return isfinite(vertex->x) && isfinite(vertex->y) &&
+           isfinite(vertex->z) && vertex->z >= 0.0f && vertex->z <= 1.0f &&
            isfinite(vertex->r) && isfinite(vertex->g) &&
            isfinite(vertex->b) && isfinite(vertex->a) &&
            vertex->x >= 0.0f && vertex->x <= (float)context->width &&
@@ -412,7 +466,7 @@ static uint32_t gxmetal_metal_draw(GXMetalMetalRenderer *renderer,
     }
 
     if (!gxmetal_metal_ensure_encoder(renderer, context, 0,
-                                      MTLClearColorMake(0, 0, 0, 1))) {
+                                      MTLClearColorMake(0, 0, 0, 1), 1.0)) {
         if (draw_vertices != vertices) {
             free(draw_vertices);
         }
@@ -421,6 +475,13 @@ static uint32_t gxmetal_metal_draw(GXMetalMetalRenderer *renderer,
     }
     viewport.width = (float)context->width;
     viewport.height = (float)context->height;
+    [context->encoder setRenderPipelineState:
+        renderer->pipelines[context->blend <= GXMETAL_BLEND_INTERPOLATE ?
+                            context->blend : GXMETAL_BLEND_INTERPOLATE]];
+    [context->encoder setDepthStencilState:
+        renderer->depth_states[context->z_function <= GXMETAL_Z_FALSE ?
+                               context->z_function : GXMETAL_Z_NONE]
+                              [context->z_write != 0]];
     [context->encoder setVertexBytes:draw_vertices
         length:(NSUInteger)draw_count * sizeof(*draw_vertices) atIndex:0];
     [context->encoder setVertexBytes:&viewport
@@ -505,6 +566,119 @@ static uint32_t gxmetal_metal_present(GXMetalMetalRenderer *renderer,
     return GXMETAL_ERROR_NONE;
 }
 
+static MTLCompareFunction gxmetal_metal_compare(uint32_t function)
+{
+    switch (function) {
+    case GXMETAL_Z_LT:    return MTLCompareFunctionLess;
+    case GXMETAL_Z_EQ:    return MTLCompareFunctionEqual;
+    case GXMETAL_Z_LE:    return MTLCompareFunctionLessEqual;
+    case GXMETAL_Z_GT:    return MTLCompareFunctionGreater;
+    case GXMETAL_Z_NE:    return MTLCompareFunctionNotEqual;
+    case GXMETAL_Z_GE:    return MTLCompareFunctionGreaterEqual;
+    case GXMETAL_Z_TRUE:  return MTLCompareFunctionAlways;
+    case GXMETAL_Z_FALSE: return MTLCompareFunctionNever;
+    case GXMETAL_Z_NONE:
+    default:              return MTLCompareFunctionAlways;
+    }
+}
+
+static id<MTLRenderPipelineState> gxmetal_metal_make_pipeline(
+    GXMetalMetalRenderer *renderer, id<MTLFunction> vertex,
+    id<MTLFunction> fragment, uint32_t blend, int color_write,
+    NSError **error)
+{
+    MTLRenderPipelineDescriptor *descriptor =
+        [[MTLRenderPipelineDescriptor alloc] init];
+    MTLRenderPipelineColorAttachmentDescriptor *attachment;
+    id<MTLRenderPipelineState> pipeline;
+
+    descriptor.vertexFunction = vertex;
+    descriptor.fragmentFunction = fragment;
+    descriptor.colorAttachments[0].pixelFormat = MTLPixelFormatRGBA8Unorm;
+    descriptor.depthAttachmentPixelFormat = MTLPixelFormatDepth32Float;
+    attachment = descriptor.colorAttachments[0];
+    attachment.writeMask = color_write ? MTLColorWriteMaskAll :
+                                         MTLColorWriteMaskNone;
+    if (blend <= GXMETAL_BLEND_INTERPOLATE) {
+        attachment.blendingEnabled = YES;
+        attachment.rgbBlendOperation = MTLBlendOperationAdd;
+        attachment.alphaBlendOperation = MTLBlendOperationAdd;
+        attachment.sourceRGBBlendFactor =
+            blend == GXMETAL_BLEND_PREMULTIPLY ? MTLBlendFactorOne :
+                                                MTLBlendFactorSourceAlpha;
+        attachment.destinationRGBBlendFactor =
+            MTLBlendFactorOneMinusSourceAlpha;
+        attachment.sourceAlphaBlendFactor = MTLBlendFactorOne;
+        attachment.destinationAlphaBlendFactor =
+            MTLBlendFactorOneMinusSourceAlpha;
+    }
+    pipeline = [renderer->device
+        newRenderPipelineStateWithDescriptor:descriptor error:error];
+    [descriptor release];
+    return pipeline;
+}
+
+static int gxmetal_metal_make_depth_states(GXMetalMetalRenderer *renderer)
+{
+    uint32_t function;
+    uint32_t write;
+
+    for (function = GXMETAL_Z_NONE; function <= GXMETAL_Z_FALSE; function++) {
+        for (write = 0; write < 2; write++) {
+            MTLDepthStencilDescriptor *descriptor =
+                [[MTLDepthStencilDescriptor alloc] init];
+            descriptor.depthCompareFunction = gxmetal_metal_compare(function);
+            descriptor.depthWriteEnabled = write != 0 &&
+                                           function != GXMETAL_Z_NONE;
+            renderer->depth_states[function][write] = [renderer->device
+                newDepthStencilStateWithDescriptor:descriptor];
+            [descriptor release];
+            if (renderer->depth_states[function][write] == nil) {
+                return 0;
+            }
+        }
+    }
+    return 1;
+}
+
+static uint32_t gxmetal_metal_set_state(GXMetalMetalContext *context,
+                                        const GXMetalPacketView *packet)
+{
+    uint32_t tag = gxmetal_load_le32(
+        packet->payload + GXMETAL_STATE_TAG_OFFSET);
+    uint32_t type = gxmetal_load_le32(
+        packet->payload + GXMETAL_STATE_TYPE_OFFSET);
+    uint32_t value = gxmetal_load_le32(
+        packet->payload + GXMETAL_STATE_VALUE_OFFSET);
+
+    if (type != GXMETAL_STATE_UINT32) {
+        return GXMETAL_ERROR_NONE;
+    }
+    switch (tag) {
+    case GXMETAL_STATE_Z_FUNCTION:
+        if (value > GXMETAL_Z_FALSE) {
+            return GXMETAL_ERROR_BAD_PACKET;
+        }
+        context->z_function = value;
+        break;
+    case GXMETAL_STATE_Z_BUFFER_MASK:
+        if (value > 1) {
+            return GXMETAL_ERROR_BAD_PACKET;
+        }
+        context->z_write = value;
+        break;
+    case GXMETAL_STATE_BLEND:
+        if (value > GXMETAL_BLEND_OPENGL) {
+            return GXMETAL_ERROR_BAD_PACKET;
+        }
+        context->blend = value;
+        break;
+    default:
+        break;
+    }
+    return GXMETAL_ERROR_NONE;
+}
+
 GXMetalMetalRenderer *gxmetal_metal_create(void *framebuffer,
                                             uint32_t framebuffer_bytes)
 {
@@ -512,8 +686,8 @@ GXMetalMetalRenderer *gxmetal_metal_create(void *framebuffer,
     id<MTLLibrary> library;
     id<MTLFunction> vertex;
     id<MTLFunction> fragment;
-    MTLRenderPipelineDescriptor *descriptor;
     NSError *error = nil;
+    uint32_t i;
 
     if (framebuffer == NULL || framebuffer_bytes == 0) {
         return NULL;
@@ -541,17 +715,22 @@ GXMetalMetalRenderer *gxmetal_metal_create(void *framebuffer,
     }
     vertex = [library newFunctionWithName:@"gxmetal_vertex"];
     fragment = [library newFunctionWithName:@"gxmetal_fragment"];
-    descriptor = [[MTLRenderPipelineDescriptor alloc] init];
-    descriptor.vertexFunction = vertex;
-    descriptor.fragmentFunction = fragment;
-    descriptor.colorAttachments[0].pixelFormat = MTLPixelFormatRGBA8Unorm;
-    renderer->pipeline = [renderer->device
-        newRenderPipelineStateWithDescriptor:descriptor error:&error];
-    [descriptor release];
+    for (i = 0; i < 3; i++) {
+        renderer->pipelines[i] = gxmetal_metal_make_pipeline(
+            renderer, vertex, fragment, i, 1, &error);
+    }
+    renderer->depth_clear_pipeline = gxmetal_metal_make_pipeline(
+        renderer, vertex, fragment, UINT32_MAX, 0, &error);
+    renderer->clear_pipeline = gxmetal_metal_make_pipeline(
+        renderer, vertex, fragment, UINT32_MAX, 1, &error);
     [vertex release];
     [fragment release];
     [library release];
-    if (renderer->pipeline == nil) {
+    if (renderer->pipelines[0] == nil || renderer->pipelines[1] == nil ||
+        renderer->pipelines[2] == nil ||
+        renderer->clear_pipeline == nil ||
+        renderer->depth_clear_pipeline == nil ||
+        !gxmetal_metal_make_depth_states(renderer)) {
         fprintf(stderr, "GXMetal: cannot create Metal pipeline: %s\n",
                 error.localizedDescription.UTF8String);
         gxmetal_metal_destroy(renderer);
@@ -562,11 +741,23 @@ GXMetalMetalRenderer *gxmetal_metal_create(void *framebuffer,
 
 void gxmetal_metal_destroy(GXMetalMetalRenderer *renderer)
 {
+    uint32_t i;
+
     if (renderer == NULL) {
         return;
     }
     gxmetal_metal_reset(renderer);
-    [renderer->pipeline release];
+    for (i = 0; i < 3; i++) {
+        [renderer->pipelines[i] release];
+    }
+    [renderer->clear_pipeline release];
+    [renderer->depth_clear_pipeline release];
+    for (i = 0; i < 9; i++) {
+        uint32_t write;
+        for (write = 0; write < 2; write++) {
+            [renderer->depth_states[i][write] release];
+        }
+    }
     [renderer->command_queue release];
     [renderer->device release];
     free(renderer);
@@ -620,7 +811,7 @@ uint32_t gxmetal_metal_dispatch(void *opaque,
         case GXMETAL_OP_PRESENT:
             return gxmetal_metal_present(renderer, context);
         case GXMETAL_OP_SET_STATE:
-            return GXMETAL_ERROR_NONE;
+            return gxmetal_metal_set_state(context, packet);
         case GXMETAL_OP_CLEAR:
             return gxmetal_metal_clear(renderer, context, packet);
         case GXMETAL_OP_DRAW_GOURAUD:

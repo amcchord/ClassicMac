@@ -169,6 +169,36 @@ enum GXMetalStateValueType {
     GXMETAL_STATE_RESOURCE = 2
 };
 
+/* RAVE state tags and values used by the host without depending on Mac headers. */
+enum GXMetalStateTag {
+    GXMETAL_STATE_Z_FUNCTION   = 0,
+    GXMETAL_STATE_BLEND        = 9,
+    GXMETAL_STATE_PERSPECTIVE_Z = 10,
+    GXMETAL_STATE_TEXTURE_FILTER = 11,
+    GXMETAL_STATE_TEXTURE_OP   = 12,
+    GXMETAL_STATE_TEXTURE      = 13,
+    GXMETAL_STATE_Z_BUFFER_MASK = 28,
+    GXMETAL_STATE_DONT_SWAP    = 32
+};
+
+enum GXMetalZFunction {
+    GXMETAL_Z_NONE  = 0,
+    GXMETAL_Z_LT    = 1,
+    GXMETAL_Z_EQ    = 2,
+    GXMETAL_Z_LE    = 3,
+    GXMETAL_Z_GT    = 4,
+    GXMETAL_Z_NE    = 5,
+    GXMETAL_Z_GE    = 6,
+    GXMETAL_Z_TRUE  = 7,
+    GXMETAL_Z_FALSE = 8
+};
+
+enum GXMetalBlendMode {
+    GXMETAL_BLEND_PREMULTIPLY = 0,
+    GXMETAL_BLEND_INTERPOLATE = 1,
+    GXMETAL_BLEND_OPENGL      = 2
+};
+
 /*
  * Fixed payload offsets. All signed coordinates use two's-complement int32;
  * floating-point values are IEEE-754 binary32 transported as little-endian

@@ -14,17 +14,21 @@ a diagnostic fault. The existing VGA NDRV publishes the Expansion Manager's
 logical BAR mappings through the Name Registry, allowing the `tnsl` to connect
 without guessing physical PCI addresses.
 
-On macOS, QEMU now executes direct-color, single-buffer Gouraud points, lines,
-strips, fans, triangles, and clipped color clears in a native Metal render
-pipeline. A frame is batched in one Metal command buffer, then `PRESENT` copies
-the completed texture into the guest's big-endian RGB555 or 32-bit VGA surface.
+On macOS, QEMU now executes direct-color Gouraud points, lines, strips, fans,
+triangles, clipped color/depth clears, all RAVE depth comparisons and depth
+write masking, interpolated or premultiplied alpha, and double-buffer swaps in a
+native Metal render pipeline. A frame is batched in one Metal command buffer,
+then `PRESENT` copies the completed texture into the guest's big-endian RGB555
+or 32-bit VGA surface.
 The device advertises `GXMETAL_FEATURE_METAL` only when that backend initializes
 successfully. The bounded, deterministic CPU rasterizer remains the fallback on
 other hosts and the correctness oracle for Metal.
 
-Contexts requiring Z, double buffering, textures, or unsupported pixel formats
-still return `kQANotSupported`, allowing RAVE to select Apple's software
-renderer instead of accepting a partially implemented path.
+Contexts requiring textures or unsupported pixel formats still return
+`kQANotSupported`, allowing RAVE to select Apple's software renderer instead of
+accepting a partially implemented path. Hosts without Metal likewise decline Z
+and double-buffer contexts because the CPU renderer intentionally remains a
+small Gouraud correctness oracle.
 
 ## Transport contract
 
@@ -60,8 +64,9 @@ would wrap. Fence completion is reported by sequence number.
 
 Run the protocol, queue, guest-producer, renderer, and complete first-triangle
 pipeline tests on the host. macOS additionally compiles the Objective-C backend
-with strict warnings and verifies a real Metal triangle plus clipped clear by
-reading back the resulting guest-format framebuffer:
+with strict warnings and verifies real Metal triangles, clipped clears, depth
+ordering, alpha blending, and a double-buffer presentation by reading back the
+resulting guest-format framebuffer:
 
 ```sh
 make -C gxmetal test

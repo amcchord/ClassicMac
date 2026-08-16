@@ -153,7 +153,11 @@ bool gxmetal_qemu_init(GXMetalQemuState *state, Object *owner,
     state->metal = gxmetal_metal_create(framebuffer, framebuffer_bytes);
     state->features = GXMETAL_FEATURE_GOURAUD | GXMETAL_FEATURE_FENCE;
     if (state->metal != NULL) {
-        state->features |= GXMETAL_FEATURE_METAL;
+        state->features |= GXMETAL_FEATURE_METAL |
+                           GXMETAL_FEATURE_Z16 |
+                           GXMETAL_FEATURE_BLEND |
+                           GXMETAL_FEATURE_DOUBLE_BUFFER |
+                           GXMETAL_FEATURE_SCISSOR;
     } else {
         state->features |= GXMETAL_FEATURE_TRACE;
     }
