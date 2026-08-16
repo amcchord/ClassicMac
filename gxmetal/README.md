@@ -17,22 +17,26 @@ without guessing physical PCI addresses.
 On macOS, QEMU now executes direct-color Gouraud points, lines, strips, fans,
 triangles, clipped color/depth clears, all RAVE depth comparisons and depth
 write masking, interpolated or premultiplied alpha, and double-buffer swaps in a
-native Metal render pipeline. A frame is batched in one Metal command buffer,
-then `PRESENT` copies the completed texture into the guest's big-endian RGB555
-or 32-bit VGA surface.
+native Metal render pipeline. The PowerPC engine also creates, uploads, binds,
+and destroys RGB555, ARGB1555, ARGB4444, RGB32, and ARGB32 textures. Metal
+provides perspective-correct sampling, repeat/clamp addressing, nearest,
+bilinear, and trilinear mip filtering, plus RAVE decal, modulation, and
+highlight texture operations. A frame is batched in one Metal command buffer,
+then `PRESENT` copies the completed image into the guest's big-endian RGB555 or
+32-bit VGA surface.
 The device advertises `GXMETAL_FEATURE_METAL` only when that backend initializes
 successfully. The bounded, deterministic CPU rasterizer remains the fallback on
 other hosts and the correctness oracle for Metal.
 
-Contexts requiring textures or unsupported pixel formats still return
+Contexts requiring unsupported pixel formats or deep Z still return
 `kQANotSupported`, allowing RAVE to select Apple's software renderer instead of
-accepting a partially implemented path. Hosts without Metal likewise decline Z
-and double-buffer contexts because the CPU renderer intentionally remains a
-small Gouraud correctness oracle.
+accepting a partially implemented path. Hosts without Metal likewise decline
+texture, Z, and double-buffer contexts because the CPU renderer intentionally
+remains a small Gouraud correctness oracle.
 
 ## Transport contract
 
-The version 1.0 wire contract is defined in
+The backward-compatible version 1.1 wire contract is defined in
 `protocol/gxmetal_protocol.h`. All registers and shared-memory packets are
 little-endian. Packet sizes are multiples of 16 bytes, packets never cross the
 end of the circular command ring, and offsets in commands refer only to the
@@ -65,8 +69,9 @@ would wrap. Fence completion is reported by sequence number.
 Run the protocol, queue, guest-producer, renderer, and complete first-triangle
 pipeline tests on the host. macOS additionally compiles the Objective-C backend
 with strict warnings and verifies real Metal triangles, clipped clears, depth
-ordering, alpha blending, and a double-buffer presentation by reading back the
-resulting guest-format framebuffer:
+ordering, alpha blending, a double-buffer presentation, and a four-color
+big-endian texture upload/sample/destroy cycle by reading back the resulting
+guest-format framebuffer:
 
 ```sh
 make -C gxmetal test

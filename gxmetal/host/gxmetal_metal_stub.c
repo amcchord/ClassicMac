@@ -3,10 +3,14 @@
 #include "gxmetal_metal.h"
 
 GXMetalMetalRenderer *gxmetal_metal_create(void *framebuffer,
-                                            uint32_t framebuffer_bytes)
+                                            uint32_t framebuffer_bytes,
+                                            void *shared,
+                                            uint32_t shared_bytes)
 {
     (void)framebuffer;
     (void)framebuffer_bytes;
+    (void)shared;
+    (void)shared_bytes;
     return NULL;
 }
 

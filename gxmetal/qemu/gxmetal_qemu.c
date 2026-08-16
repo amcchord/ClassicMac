@@ -150,12 +150,14 @@ bool gxmetal_qemu_init(GXMetalQemuState *state, Object *owner,
     framebuffer = memory_region_get_ram_ptr(framebuffer_region);
     state->framebuffer_region = framebuffer_region;
     gxmetal_renderer_init(&state->renderer, framebuffer, framebuffer_bytes);
-    state->metal = gxmetal_metal_create(framebuffer, framebuffer_bytes);
+    state->metal = gxmetal_metal_create(framebuffer, framebuffer_bytes,
+                                         shared, GXMETAL_SHARED_BYTES);
     state->features = GXMETAL_FEATURE_GOURAUD | GXMETAL_FEATURE_FENCE;
     if (state->metal != NULL) {
         state->features |= GXMETAL_FEATURE_METAL |
                            GXMETAL_FEATURE_Z16 |
                            GXMETAL_FEATURE_BLEND |
+                           GXMETAL_FEATURE_TEXTURE |
                            GXMETAL_FEATURE_DOUBLE_BUFFER |
                            GXMETAL_FEATURE_SCISSOR;
     } else {

@@ -15,6 +15,7 @@
 #include <string.h>
 
 #define GXMETAL_METAL_MAX_CONTEXTS 32u
+#define GXMETAL_METAL_MAX_RESOURCES 256u
 
 typedef struct GXMetalMetalVertex {
     float x;
@@ -31,6 +32,41 @@ typedef struct GXMetalMetalViewport {
     float height;
 } GXMetalMetalViewport;
 
+typedef struct GXMetalMetalTextureVertex {
+    float x;
+    float y;
+    float z;
+    float inv_w;
+    float r;
+    float g;
+    float b;
+    float a;
+    float u_over_w;
+    float v_over_w;
+    float kd_r;
+    float kd_g;
+    float kd_b;
+    float ks_r;
+    float ks_g;
+    float ks_b;
+} GXMetalMetalTextureVertex;
+
+_Static_assert(sizeof(GXMetalMetalTextureVertex) ==
+               GXMETAL_TEXTURE_VERTEX_BYTES,
+               "Metal texture vertex must match the wire layout");
+
+typedef struct GXMetalMetalResource {
+    uint32_t id;
+    uint32_t width;
+    uint32_t height;
+    uint32_t row_bytes;
+    uint32_t pixel_format;
+    uint32_t flags;
+    uint32_t levels;
+    int active;
+    id<MTLTexture> texture;
+} GXMetalMetalResource;
+
 typedef struct GXMetalMetalContext {
     uint32_t id;
     uint32_t width;
@@ -42,6 +78,9 @@ typedef struct GXMetalMetalContext {
     uint32_t z_function;
     uint32_t z_write;
     uint32_t blend;
+    uint32_t texture_id;
+    uint32_t texture_filter;
+    uint32_t texture_op;
     int active;
     int committed;
     id<MTLTexture> texture;
@@ -53,13 +92,18 @@ typedef struct GXMetalMetalContext {
 struct GXMetalMetalRenderer {
     uint8_t *framebuffer;
     uint32_t framebuffer_bytes;
+    uint8_t *shared;
+    uint32_t shared_bytes;
     id<MTLDevice> device;
     id<MTLCommandQueue> command_queue;
     id<MTLRenderPipelineState> pipelines[3];
+    id<MTLRenderPipelineState> texture_pipelines[3];
     id<MTLRenderPipelineState> clear_pipeline;
     id<MTLRenderPipelineState> depth_clear_pipeline;
     id<MTLDepthStencilState> depth_states[9][2];
+    id<MTLSamplerState> samplers[3][2];
     GXMetalMetalContext contexts[GXMETAL_METAL_MAX_CONTEXTS];
+    GXMetalMetalResource resources[GXMETAL_METAL_MAX_RESOURCES];
 };
 
 static NSString *const kGXMetalShaderSource = @
@@ -80,6 +124,52 @@ static NSString *const kGXMetalShaderSource = @
     "}\n"
     "fragment float4 gxmetal_fragment(GXOut in [[stage_in]]) {\n"
     "  return clamp(in.color, 0.0, 1.0);\n"
+    "}\n"
+    "struct GXTextureVertex {\n"
+    "  float x; float y; float z; float invW;\n"
+    "  float r; float g; float b; float a;\n"
+    "  float uOverW; float vOverW;\n"
+    "  float kd_r; float kd_g; float kd_b;\n"
+    "  float ks_r; float ks_g; float ks_b;\n"
+    "};\n"
+    "struct GXTextureOut {\n"
+    "  float4 position [[position]]; float4 color; float2 uv;\n"
+    "  float3 kd; float3 ks;\n"
+    "};\n"
+    "vertex GXTextureOut gxmetal_texture_vertex(\n"
+    "    const device GXTextureVertex *vertices [[buffer(0)]],\n"
+    "    constant GXViewport &viewport [[buffer(1)]],\n"
+    "    uint index [[vertex_id]]) {\n"
+    "  GXTextureVertex v = vertices[index];\n"
+    "  float safeInvW = max(v.invW, 0.000001);\n"
+    "  float clipW = 1.0 / safeInvW;\n"
+    "  float ndcX = v.x / viewport.width * 2.0 - 1.0;\n"
+    "  float ndcY = 1.0 - v.y / viewport.height * 2.0;\n"
+    "  GXTextureOut out;\n"
+    "  out.position = float4(ndcX * clipW, ndcY * clipW,\n"
+    "                        v.z * clipW, clipW);\n"
+    "  out.color = float4(v.r, v.g, v.b, v.a);\n"
+    "  out.uv = float2(v.uOverW, v.vOverW) / safeInvW;\n"
+    "  out.kd = float3(v.kd_r, v.kd_g, v.kd_b);\n"
+    "  out.ks = float3(v.ks_r, v.ks_g, v.ks_b);\n"
+    "  return out;\n"
+    "}\n"
+    "fragment float4 gxmetal_texture_fragment(\n"
+    "    GXTextureOut in [[stage_in]],\n"
+    "    texture2d<float> image [[texture(0)]],\n"
+    "    sampler imageSampler [[sampler(0)]],\n"
+    "    constant uint &operation [[buffer(0)]]) {\n"
+    "  float4 texel = image.sample(imageSampler, in.uv);\n"
+    "  float4 result = texel;\n"
+    "  if ((operation & 4u) != 0u) {\n"
+    "    result.rgb = mix(in.color.rgb, texel.rgb, texel.a);\n"
+    "    result.a = in.color.a;\n"
+    "  } else {\n"
+    "    result.a *= in.color.a;\n"
+    "  }\n"
+    "  if ((operation & 1u) != 0u) result.rgb *= in.kd;\n"
+    "  if ((operation & 2u) != 0u) result.rgb += in.ks;\n"
+    "  return clamp(result, 0.0, 1.0);\n"
     "}\n";
 
 static float gxmetal_metal_load_float(const uint8_t *bytes)
@@ -113,6 +203,34 @@ static GXMetalMetalContext *gxmetal_metal_find_context(
         }
     }
     return NULL;
+}
+
+static GXMetalMetalResource *gxmetal_metal_find_resource(
+    GXMetalMetalRenderer *renderer, uint32_t id)
+{
+    uint32_t i;
+    for (i = 0; i < GXMETAL_METAL_MAX_RESOURCES; i++) {
+        if (renderer->resources[i].active &&
+            renderer->resources[i].id == id) {
+            return &renderer->resources[i];
+        }
+    }
+    return NULL;
+}
+
+static uint32_t gxmetal_metal_resource_bytes_per_pixel(uint32_t format)
+{
+    switch (format) {
+    case GXMETAL_PIXEL_RGB555:
+    case GXMETAL_PIXEL_ARGB1555:
+    case GXMETAL_PIXEL_ARGB4444:
+        return 2;
+    case GXMETAL_PIXEL_ARGB8888:
+    case GXMETAL_PIXEL_RGB8888:
+        return 4;
+    default:
+        return 0;
+    }
 }
 
 static void gxmetal_metal_release_frame(GXMetalMetalContext *context)
@@ -271,6 +389,216 @@ static uint32_t gxmetal_metal_context_create(
     context->z_write = 1;
     context->blend = GXMETAL_BLEND_INTERPOLATE;
     context->active = 1;
+    return GXMETAL_ERROR_NONE;
+}
+
+static uint32_t gxmetal_metal_resource_create(
+    GXMetalMetalRenderer *renderer, const GXMetalPacketView *packet)
+{
+    GXMetalMetalResource *resource = NULL;
+    MTLTextureDescriptor *descriptor;
+    uint32_t bytes_per_pixel;
+    uint32_t max_levels = 1;
+    uint32_t level_width;
+    uint32_t level_height;
+    uint32_t i;
+
+    if (renderer->shared == NULL ||
+        gxmetal_metal_find_resource(renderer, gxmetal_load_le32(
+            packet->payload + GXMETAL_RESOURCE_ID_OFFSET)) != NULL) {
+        return GXMETAL_ERROR_BAD_RESOURCE;
+    }
+    for (i = 0; i < GXMETAL_METAL_MAX_RESOURCES; i++) {
+        if (!renderer->resources[i].active) {
+            resource = &renderer->resources[i];
+            break;
+        }
+    }
+    if (resource == NULL) {
+        return GXMETAL_ERROR_BAD_RESOURCE;
+    }
+    resource->id = gxmetal_load_le32(
+        packet->payload + GXMETAL_RESOURCE_ID_OFFSET);
+    resource->width = gxmetal_load_le32(
+        packet->payload + GXMETAL_RESOURCE_WIDTH_OFFSET);
+    resource->height = gxmetal_load_le32(
+        packet->payload + GXMETAL_RESOURCE_HEIGHT_OFFSET);
+    resource->row_bytes = gxmetal_load_le32(
+        packet->payload + GXMETAL_RESOURCE_ROW_BYTES_OFFSET);
+    resource->pixel_format = gxmetal_load_le32(
+        packet->payload + GXMETAL_RESOURCE_PIXEL_FORMAT_OFFSET);
+    resource->flags = gxmetal_load_le32(
+        packet->payload + GXMETAL_RESOURCE_FLAGS_OFFSET);
+    resource->levels = gxmetal_load_le32(
+        packet->payload + GXMETAL_RESOURCE_LEVELS_OFFSET);
+    bytes_per_pixel = gxmetal_metal_resource_bytes_per_pixel(
+        resource->pixel_format);
+    level_width = resource->width;
+    level_height = resource->height;
+    while (level_width > 1 || level_height > 1) {
+        level_width = level_width > 1 ? level_width >> 1 : 1;
+        level_height = level_height > 1 ? level_height >> 1 : 1;
+        max_levels++;
+    }
+    if (bytes_per_pixel == 0 || resource->width > GXMETAL_MAX_DIMENSION ||
+        resource->height > GXMETAL_MAX_DIMENSION || resource->levels == 0 ||
+        resource->levels > max_levels ||
+        (resource->flags & ~GXMETAL_RESOURCE_FLIP_ORIGIN) != 0 ||
+        resource->row_bytes < resource->width * bytes_per_pixel) {
+        memset(resource, 0, sizeof(*resource));
+        return GXMETAL_ERROR_BAD_RESOURCE;
+    }
+    descriptor = [[MTLTextureDescriptor alloc] init];
+    descriptor.textureType = MTLTextureType2D;
+    descriptor.pixelFormat = MTLPixelFormatRGBA8Unorm;
+    descriptor.width = resource->width;
+    descriptor.height = resource->height;
+    descriptor.mipmapLevelCount = resource->levels;
+    descriptor.usage = MTLTextureUsageShaderRead;
+    descriptor.storageMode = MTLStorageModeShared;
+    resource->texture = [renderer->device newTextureWithDescriptor:descriptor];
+    [descriptor release];
+    if (resource->texture == nil) {
+        memset(resource, 0, sizeof(*resource));
+        return GXMETAL_ERROR_RENDERER;
+    }
+    resource->active = 1;
+    return GXMETAL_ERROR_NONE;
+}
+
+static void gxmetal_metal_convert_pixel(uint32_t format,
+                                        const uint8_t *source,
+                                        uint8_t *destination)
+{
+    uint16_t value;
+
+    switch (format) {
+    case GXMETAL_PIXEL_RGB555:
+        value = (uint16_t)((uint16_t)source[0] << 8 | source[1]);
+        destination[0] = (uint8_t)(((value >> 10) & 31) * 255 / 31);
+        destination[1] = (uint8_t)(((value >> 5) & 31) * 255 / 31);
+        destination[2] = (uint8_t)((value & 31) * 255 / 31);
+        destination[3] = 255;
+        break;
+    case GXMETAL_PIXEL_ARGB1555:
+        value = (uint16_t)((uint16_t)source[0] << 8 | source[1]);
+        destination[0] = (uint8_t)(((value >> 10) & 31) * 255 / 31);
+        destination[1] = (uint8_t)(((value >> 5) & 31) * 255 / 31);
+        destination[2] = (uint8_t)((value & 31) * 255 / 31);
+        destination[3] = (value & 0x8000) ? 255 : 0;
+        break;
+    case GXMETAL_PIXEL_ARGB4444:
+        value = (uint16_t)((uint16_t)source[0] << 8 | source[1]);
+        destination[0] = (uint8_t)(((value >> 8) & 15) * 17);
+        destination[1] = (uint8_t)(((value >> 4) & 15) * 17);
+        destination[2] = (uint8_t)((value & 15) * 17);
+        destination[3] = (uint8_t)(((value >> 12) & 15) * 17);
+        break;
+    case GXMETAL_PIXEL_ARGB8888:
+        destination[0] = source[1];
+        destination[1] = source[2];
+        destination[2] = source[3];
+        destination[3] = source[0];
+        break;
+    case GXMETAL_PIXEL_RGB8888:
+        destination[0] = source[1];
+        destination[1] = source[2];
+        destination[2] = source[3];
+        destination[3] = 255;
+        break;
+    default:
+        memset(destination, 0, 4);
+        break;
+    }
+}
+
+static uint32_t gxmetal_metal_resource_upload(
+    GXMetalMetalRenderer *renderer, const GXMetalPacketView *packet)
+{
+    GXMetalMetalResource *resource = gxmetal_metal_find_resource(
+        renderer, gxmetal_load_le32(packet->payload +
+                                    GXMETAL_UPLOAD_RESOURCE_ID_OFFSET));
+    uint32_t level = gxmetal_load_le32(
+        packet->payload + GXMETAL_UPLOAD_LEVEL_OFFSET);
+    uint32_t offset = gxmetal_load_le32(
+        packet->payload + GXMETAL_UPLOAD_SHARED_OFFSET_OFFSET);
+    uint32_t length = gxmetal_load_le32(
+        packet->payload + GXMETAL_UPLOAD_LENGTH_OFFSET);
+    uint32_t row_bytes = gxmetal_load_le32(
+        packet->payload + GXMETAL_UPLOAD_ROW_BYTES_OFFSET);
+    uint32_t width = gxmetal_load_le32(
+        packet->payload + GXMETAL_UPLOAD_WIDTH_OFFSET);
+    uint32_t height = gxmetal_load_le32(
+        packet->payload + GXMETAL_UPLOAD_HEIGHT_OFFSET);
+    uint32_t expected_width;
+    uint32_t expected_height;
+    uint32_t bytes_per_pixel;
+    uint8_t *converted;
+    uint32_t x;
+    uint32_t y;
+
+    if (resource == NULL || level >= resource->levels ||
+        renderer->shared == NULL ||
+        !gxmetal_shared_range_valid(offset, length, renderer->shared_bytes,
+                                    GXMETAL_PACKET_ALIGNMENT)) {
+        return GXMETAL_ERROR_BAD_RESOURCE;
+    }
+    expected_width = resource->width >> level;
+    expected_height = resource->height >> level;
+    if (expected_width == 0) {
+        expected_width = 1;
+    }
+    if (expected_height == 0) {
+        expected_height = 1;
+    }
+    bytes_per_pixel = gxmetal_metal_resource_bytes_per_pixel(
+        resource->pixel_format);
+    if (width != expected_width || height != expected_height ||
+        row_bytes < width * bytes_per_pixel ||
+        (uint64_t)row_bytes * height > length) {
+        return GXMETAL_ERROR_BAD_RESOURCE;
+    }
+    converted = malloc((size_t)width * height * 4);
+    if (converted == NULL) {
+        return GXMETAL_ERROR_RENDERER;
+    }
+    for (y = 0; y < height; y++) {
+        uint32_t source_y =
+            (resource->flags & GXMETAL_RESOURCE_FLIP_ORIGIN) ?
+                height - y - 1 : y;
+        const uint8_t *source = renderer->shared + offset +
+                                source_y * row_bytes;
+        for (x = 0; x < width; x++) {
+            gxmetal_metal_convert_pixel(resource->pixel_format,
+                source + x * bytes_per_pixel,
+                converted + ((size_t)y * width + x) * 4);
+        }
+    }
+    [resource->texture replaceRegion:MTLRegionMake2D(0, 0, width, height)
+        mipmapLevel:level withBytes:converted bytesPerRow:width * 4];
+    free(converted);
+    return GXMETAL_ERROR_NONE;
+}
+
+static uint32_t gxmetal_metal_resource_destroy(
+    GXMetalMetalRenderer *renderer, const GXMetalPacketView *packet)
+{
+    GXMetalMetalResource *resource = gxmetal_metal_find_resource(
+        renderer, gxmetal_load_le32(packet->payload +
+                                    GXMETAL_DESTROY_RESOURCE_ID_OFFSET));
+    uint32_t i;
+
+    if (resource == NULL) {
+        return GXMETAL_ERROR_BAD_RESOURCE;
+    }
+    for (i = 0; i < GXMETAL_METAL_MAX_CONTEXTS; i++) {
+        if (renderer->contexts[i].active &&
+            renderer->contexts[i].texture_id == resource->id) {
+            renderer->contexts[i].texture_id = 0;
+        }
+    }
+    [resource->texture release];
+    memset(resource, 0, sizeof(*resource));
     return GXMETAL_ERROR_NONE;
 }
 
@@ -495,6 +823,130 @@ static uint32_t gxmetal_metal_draw(GXMetalMetalRenderer *renderer,
     return GXMETAL_ERROR_NONE;
 }
 
+static int gxmetal_metal_read_texture_vertex(
+    const GXMetalMetalContext *context, const uint8_t *source,
+    GXMetalMetalTextureVertex *vertex)
+{
+    float values[16];
+    uint32_t i;
+
+    for (i = 0; i < 16; i++) {
+        values[i] = gxmetal_metal_load_float(source + i * 4);
+        if (!isfinite(values[i])) {
+            return 0;
+        }
+    }
+    memcpy(vertex, values, sizeof(values));
+    return vertex->x >= 0.0f && vertex->x <= (float)context->width &&
+           vertex->y >= 0.0f && vertex->y <= (float)context->height &&
+           vertex->z >= 0.0f && vertex->z <= 1.0f &&
+           vertex->inv_w > 0.0f;
+}
+
+static uint32_t gxmetal_metal_draw_textured(
+    GXMetalMetalRenderer *renderer, GXMetalMetalContext *context,
+    const GXMetalPacketView *packet)
+{
+    const uint8_t *source = packet->payload + GXMETAL_DRAW_VERTICES_OFFSET;
+    GXMetalMetalResource *resource = gxmetal_metal_find_resource(
+        renderer, context->texture_id);
+    GXMetalMetalTextureVertex *vertices;
+    GXMetalMetalTextureVertex *draw_vertices;
+    GXMetalMetalViewport viewport;
+    MTLPrimitiveType metal_primitive;
+    uint32_t primitive = gxmetal_load_le32(
+        packet->payload + GXMETAL_DRAW_PRIMITIVE_OFFSET);
+    uint32_t count = gxmetal_load_le32(
+        packet->payload + GXMETAL_DRAW_VERTEX_COUNT_OFFSET);
+    uint32_t draw_count = count;
+    uint32_t filter = context->texture_filter <= GXMETAL_TEXTURE_FILTER_BEST ?
+        context->texture_filter : GXMETAL_TEXTURE_FILTER_FAST;
+    uint32_t shrink = (context->texture_op & GXMETAL_TEXTURE_SHRINK) != 0;
+    uint32_t i;
+
+    if (resource == NULL) {
+        return GXMETAL_ERROR_BAD_RESOURCE;
+    }
+    vertices = malloc((size_t)count * sizeof(*vertices));
+    if (vertices == NULL) {
+        return GXMETAL_ERROR_RENDERER;
+    }
+    for (i = 0; i < count; i++) {
+        if (!gxmetal_metal_read_texture_vertex(
+                context, source + i * GXMETAL_TEXTURE_VERTEX_BYTES,
+                &vertices[i])) {
+            free(vertices);
+            return GXMETAL_ERROR_BAD_PACKET;
+        }
+    }
+    draw_vertices = vertices;
+    switch (primitive) {
+    case GXMETAL_PRIMITIVE_POINT:
+        metal_primitive = MTLPrimitiveTypePoint;
+        break;
+    case GXMETAL_PRIMITIVE_LINE:
+        metal_primitive = MTLPrimitiveTypeLine;
+        break;
+    case GXMETAL_PRIMITIVE_TRIANGLE:
+        metal_primitive = MTLPrimitiveTypeTriangle;
+        break;
+    case GXMETAL_PRIMITIVE_TRIANGLE_STRIP:
+        metal_primitive = MTLPrimitiveTypeTriangleStrip;
+        break;
+    case GXMETAL_PRIMITIVE_TRIANGLE_FAN:
+        draw_count = (count - 2) * 3;
+        draw_vertices = malloc((size_t)draw_count * sizeof(*draw_vertices));
+        if (draw_vertices == NULL) {
+            free(vertices);
+            return GXMETAL_ERROR_RENDERER;
+        }
+        for (i = 0; i < count - 2; i++) {
+            draw_vertices[i * 3] = vertices[0];
+            draw_vertices[i * 3 + 1] = vertices[i + 1];
+            draw_vertices[i * 3 + 2] = vertices[i + 2];
+        }
+        metal_primitive = MTLPrimitiveTypeTriangle;
+        break;
+    default:
+        free(vertices);
+        return GXMETAL_ERROR_BAD_PACKET;
+    }
+    if (!gxmetal_metal_ensure_encoder(renderer, context, 0,
+                                      MTLClearColorMake(0, 0, 0, 1), 1.0)) {
+        if (draw_vertices != vertices) {
+            free(draw_vertices);
+        }
+        free(vertices);
+        return GXMETAL_ERROR_RENDERER;
+    }
+    viewport.width = (float)context->width;
+    viewport.height = (float)context->height;
+    [context->encoder setRenderPipelineState:
+        renderer->texture_pipelines[
+            context->blend <= GXMETAL_BLEND_INTERPOLATE ?
+            context->blend : GXMETAL_BLEND_INTERPOLATE]];
+    [context->encoder setDepthStencilState:
+        renderer->depth_states[context->z_function <= GXMETAL_Z_FALSE ?
+                               context->z_function : GXMETAL_Z_NONE]
+                              [context->z_write != 0]];
+    [context->encoder setVertexBytes:draw_vertices
+        length:(NSUInteger)draw_count * sizeof(*draw_vertices) atIndex:0];
+    [context->encoder setVertexBytes:&viewport length:sizeof(viewport)
+        atIndex:1];
+    [context->encoder setFragmentTexture:resource->texture atIndex:0];
+    [context->encoder setFragmentSamplerState:
+        renderer->samplers[filter][shrink] atIndex:0];
+    [context->encoder setFragmentBytes:&context->texture_op
+        length:sizeof(context->texture_op) atIndex:0];
+    [context->encoder drawPrimitives:metal_primitive vertexStart:0
+        vertexCount:draw_count];
+    if (draw_vertices != vertices) {
+        free(draw_vertices);
+    }
+    free(vertices);
+    return GXMETAL_ERROR_NONE;
+}
+
 static uint8_t gxmetal_metal_to_u8(uint8_t value)
 {
     return value;
@@ -651,6 +1103,13 @@ static uint32_t gxmetal_metal_set_state(GXMetalMetalContext *context,
     uint32_t value = gxmetal_load_le32(
         packet->payload + GXMETAL_STATE_VALUE_OFFSET);
 
+    if (tag == GXMETAL_STATE_TEXTURE) {
+        if (type != GXMETAL_STATE_RESOURCE) {
+            return GXMETAL_ERROR_BAD_PACKET;
+        }
+        context->texture_id = value;
+        return GXMETAL_ERROR_NONE;
+    }
     if (type != GXMETAL_STATE_UINT32) {
         return GXMETAL_ERROR_NONE;
     }
@@ -673,6 +1132,15 @@ static uint32_t gxmetal_metal_set_state(GXMetalMetalContext *context,
         }
         context->blend = value;
         break;
+    case GXMETAL_STATE_TEXTURE_FILTER:
+        if (value > GXMETAL_TEXTURE_FILTER_BEST) {
+            return GXMETAL_ERROR_BAD_PACKET;
+        }
+        context->texture_filter = value;
+        break;
+    case GXMETAL_STATE_TEXTURE_OP:
+        context->texture_op = value;
+        break;
     default:
         break;
     }
@@ -680,12 +1148,16 @@ static uint32_t gxmetal_metal_set_state(GXMetalMetalContext *context,
 }
 
 GXMetalMetalRenderer *gxmetal_metal_create(void *framebuffer,
-                                            uint32_t framebuffer_bytes)
+                                            uint32_t framebuffer_bytes,
+                                            void *shared,
+                                            uint32_t shared_bytes)
 {
     GXMetalMetalRenderer *renderer;
     id<MTLLibrary> library;
     id<MTLFunction> vertex;
     id<MTLFunction> fragment;
+    id<MTLFunction> texture_vertex;
+    id<MTLFunction> texture_fragment;
     NSError *error = nil;
     uint32_t i;
 
@@ -698,6 +1170,8 @@ GXMetalMetalRenderer *gxmetal_metal_create(void *framebuffer,
     }
     renderer->framebuffer = framebuffer;
     renderer->framebuffer_bytes = framebuffer_bytes;
+    renderer->shared = shared;
+    renderer->shared_bytes = shared_bytes;
     renderer->device = [MTLCreateSystemDefaultDevice() retain];
     if (renderer->device == nil) {
         free(renderer);
@@ -715,9 +1189,14 @@ GXMetalMetalRenderer *gxmetal_metal_create(void *framebuffer,
     }
     vertex = [library newFunctionWithName:@"gxmetal_vertex"];
     fragment = [library newFunctionWithName:@"gxmetal_fragment"];
+    texture_vertex = [library newFunctionWithName:@"gxmetal_texture_vertex"];
+    texture_fragment = [library
+        newFunctionWithName:@"gxmetal_texture_fragment"];
     for (i = 0; i < 3; i++) {
         renderer->pipelines[i] = gxmetal_metal_make_pipeline(
             renderer, vertex, fragment, i, 1, &error);
+        renderer->texture_pipelines[i] = gxmetal_metal_make_pipeline(
+            renderer, texture_vertex, texture_fragment, i, 1, &error);
     }
     renderer->depth_clear_pipeline = gxmetal_metal_make_pipeline(
         renderer, vertex, fragment, UINT32_MAX, 0, &error);
@@ -725,16 +1204,43 @@ GXMetalMetalRenderer *gxmetal_metal_create(void *framebuffer,
         renderer, vertex, fragment, UINT32_MAX, 1, &error);
     [vertex release];
     [fragment release];
+    [texture_vertex release];
+    [texture_fragment release];
     [library release];
     if (renderer->pipelines[0] == nil || renderer->pipelines[1] == nil ||
         renderer->pipelines[2] == nil ||
+        renderer->texture_pipelines[0] == nil ||
+        renderer->texture_pipelines[1] == nil ||
+        renderer->texture_pipelines[2] == nil ||
         renderer->clear_pipeline == nil ||
-        renderer->depth_clear_pipeline == nil ||
         !gxmetal_metal_make_depth_states(renderer)) {
         fprintf(stderr, "GXMetal: cannot create Metal pipeline: %s\n",
                 error.localizedDescription.UTF8String);
         gxmetal_metal_destroy(renderer);
         return NULL;
+    }
+    for (i = 0; i < 3; i++) {
+        uint32_t shrink;
+        for (shrink = 0; shrink < 2; shrink++) {
+            MTLSamplerDescriptor *sampler =
+                [[MTLSamplerDescriptor alloc] init];
+            sampler.minFilter = i == GXMETAL_TEXTURE_FILTER_FAST ?
+                MTLSamplerMinMagFilterNearest : MTLSamplerMinMagFilterLinear;
+            sampler.magFilter = i == GXMETAL_TEXTURE_FILTER_FAST ?
+                MTLSamplerMinMagFilterNearest : MTLSamplerMinMagFilterLinear;
+            sampler.mipFilter = i == GXMETAL_TEXTURE_FILTER_BEST ?
+                MTLSamplerMipFilterLinear : MTLSamplerMipFilterNearest;
+            sampler.sAddressMode = shrink ? MTLSamplerAddressModeClampToEdge :
+                                            MTLSamplerAddressModeRepeat;
+            sampler.tAddressMode = sampler.sAddressMode;
+            renderer->samplers[i][shrink] = [renderer->device
+                newSamplerStateWithDescriptor:sampler];
+            [sampler release];
+            if (renderer->samplers[i][shrink] == nil) {
+                gxmetal_metal_destroy(renderer);
+                return NULL;
+            }
+        }
     }
     return renderer;
 }
@@ -749,6 +1255,9 @@ void gxmetal_metal_destroy(GXMetalMetalRenderer *renderer)
     gxmetal_metal_reset(renderer);
     for (i = 0; i < 3; i++) {
         [renderer->pipelines[i] release];
+        [renderer->texture_pipelines[i] release];
+        [renderer->samplers[i][0] release];
+        [renderer->samplers[i][1] release];
     }
     [renderer->clear_pipeline release];
     [renderer->depth_clear_pipeline release];
@@ -774,6 +1283,13 @@ void gxmetal_metal_reset(GXMetalMetalRenderer *renderer)
             gxmetal_metal_release_context(&renderer->contexts[i]);
         }
     }
+    for (i = 0; i < GXMETAL_METAL_MAX_RESOURCES; i++) {
+        if (renderer->resources[i].active) {
+            [renderer->resources[i].texture release];
+            memset(&renderer->resources[i], 0,
+                   sizeof(renderer->resources[i]));
+        }
+    }
 }
 
 uint32_t gxmetal_metal_dispatch(void *opaque,
@@ -785,6 +1301,15 @@ uint32_t gxmetal_metal_dispatch(void *opaque,
     @autoreleasepool {
         if (packet->opcode == GXMETAL_OP_CONTEXT_CREATE) {
             return gxmetal_metal_context_create(renderer, packet);
+        }
+        if (packet->opcode == GXMETAL_OP_TEXTURE_CREATE) {
+            return gxmetal_metal_resource_create(renderer, packet);
+        }
+        if (packet->opcode == GXMETAL_OP_TEXTURE_UPLOAD) {
+            return gxmetal_metal_resource_upload(renderer, packet);
+        }
+        if (packet->opcode == GXMETAL_OP_TEXTURE_DESTROY) {
+            return gxmetal_metal_resource_destroy(renderer, packet);
         }
         context = gxmetal_metal_find_context(renderer, packet->context_id);
         if (context == NULL) {
@@ -816,6 +1341,8 @@ uint32_t gxmetal_metal_dispatch(void *opaque,
             return gxmetal_metal_clear(renderer, context, packet);
         case GXMETAL_OP_DRAW_GOURAUD:
             return gxmetal_metal_draw(renderer, context, packet);
+        case GXMETAL_OP_DRAW_TEXTURED:
+            return gxmetal_metal_draw_textured(renderer, context, packet);
         default:
             return GXMETAL_ERROR_BAD_OPCODE;
         }
