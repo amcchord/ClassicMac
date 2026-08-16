@@ -81,6 +81,8 @@ typedef struct GXMetalMetalContext {
     uint32_t texture_id;
     uint32_t texture_filter;
     uint32_t texture_op;
+    uint32_t texture_wrap_u;
+    uint32_t texture_wrap_v;
     int active;
     int committed;
     id<MTLTexture> texture;
@@ -101,7 +103,7 @@ struct GXMetalMetalRenderer {
     id<MTLRenderPipelineState> clear_pipeline;
     id<MTLRenderPipelineState> depth_clear_pipeline;
     id<MTLDepthStencilState> depth_states[9][2];
-    id<MTLSamplerState> samplers[3][2];
+    id<MTLSamplerState> samplers[3][4];
     GXMetalMetalContext contexts[GXMETAL_METAL_MAX_CONTEXTS];
     GXMetalMetalResource resources[GXMETAL_METAL_MAX_RESOURCES];
 };
@@ -861,11 +863,15 @@ static uint32_t gxmetal_metal_draw_textured(
     uint32_t draw_count = count;
     uint32_t filter = context->texture_filter <= GXMETAL_TEXTURE_FILTER_BEST ?
         context->texture_filter : GXMETAL_TEXTURE_FILTER_FAST;
-    uint32_t shrink = (context->texture_op & GXMETAL_TEXTURE_SHRINK) != 0;
+    uint32_t address_mode = context->texture_wrap_u |
+                            (context->texture_wrap_v << 1);
     uint32_t i;
 
     if (resource == NULL) {
         return GXMETAL_ERROR_BAD_RESOURCE;
+    }
+    if (context->texture_op & GXMETAL_TEXTURE_SHRINK) {
+        address_mode = 3;
     }
     vertices = malloc((size_t)count * sizeof(*vertices));
     if (vertices == NULL) {
@@ -935,7 +941,7 @@ static uint32_t gxmetal_metal_draw_textured(
         atIndex:1];
     [context->encoder setFragmentTexture:resource->texture atIndex:0];
     [context->encoder setFragmentSamplerState:
-        renderer->samplers[filter][shrink] atIndex:0];
+        renderer->samplers[filter][address_mode] atIndex:0];
     [context->encoder setFragmentBytes:&context->texture_op
         length:sizeof(context->texture_op) atIndex:0];
     [context->encoder drawPrimitives:metal_primitive vertexStart:0
@@ -1141,6 +1147,18 @@ static uint32_t gxmetal_metal_set_state(GXMetalMetalContext *context,
     case GXMETAL_STATE_TEXTURE_OP:
         context->texture_op = value;
         break;
+    case GXMETAL_STATE_TEXTURE_WRAP_U:
+        if (value > GXMETAL_TEXTURE_WRAP_CLAMP) {
+            return GXMETAL_ERROR_BAD_PACKET;
+        }
+        context->texture_wrap_u = value;
+        break;
+    case GXMETAL_STATE_TEXTURE_WRAP_V:
+        if (value > GXMETAL_TEXTURE_WRAP_CLAMP) {
+            return GXMETAL_ERROR_BAD_PACKET;
+        }
+        context->texture_wrap_v = value;
+        break;
     default:
         break;
     }
@@ -1220,8 +1238,8 @@ GXMetalMetalRenderer *gxmetal_metal_create(void *framebuffer,
         return NULL;
     }
     for (i = 0; i < 3; i++) {
-        uint32_t shrink;
-        for (shrink = 0; shrink < 2; shrink++) {
+        uint32_t address_mode;
+        for (address_mode = 0; address_mode < 4; address_mode++) {
             MTLSamplerDescriptor *sampler =
                 [[MTLSamplerDescriptor alloc] init];
             sampler.minFilter = i == GXMETAL_TEXTURE_FILTER_FAST ?
@@ -1230,13 +1248,14 @@ GXMetalMetalRenderer *gxmetal_metal_create(void *framebuffer,
                 MTLSamplerMinMagFilterNearest : MTLSamplerMinMagFilterLinear;
             sampler.mipFilter = i == GXMETAL_TEXTURE_FILTER_BEST ?
                 MTLSamplerMipFilterLinear : MTLSamplerMipFilterNearest;
-            sampler.sAddressMode = shrink ? MTLSamplerAddressModeClampToEdge :
-                                            MTLSamplerAddressModeRepeat;
-            sampler.tAddressMode = sampler.sAddressMode;
-            renderer->samplers[i][shrink] = [renderer->device
+            sampler.sAddressMode = (address_mode & 1) ?
+                MTLSamplerAddressModeClampToEdge : MTLSamplerAddressModeRepeat;
+            sampler.tAddressMode = (address_mode & 2) ?
+                MTLSamplerAddressModeClampToEdge : MTLSamplerAddressModeRepeat;
+            renderer->samplers[i][address_mode] = [renderer->device
                 newSamplerStateWithDescriptor:sampler];
             [sampler release];
-            if (renderer->samplers[i][shrink] == nil) {
+            if (renderer->samplers[i][address_mode] == nil) {
                 gxmetal_metal_destroy(renderer);
                 return NULL;
             }
@@ -1256,8 +1275,12 @@ void gxmetal_metal_destroy(GXMetalMetalRenderer *renderer)
     for (i = 0; i < 3; i++) {
         [renderer->pipelines[i] release];
         [renderer->texture_pipelines[i] release];
-        [renderer->samplers[i][0] release];
-        [renderer->samplers[i][1] release];
+        {
+            uint32_t address_mode;
+            for (address_mode = 0; address_mode < 4; address_mode++) {
+                [renderer->samplers[i][address_mode] release];
+            }
+        }
     }
     [renderer->clear_pipeline release];
     [renderer->depth_clear_pipeline release];

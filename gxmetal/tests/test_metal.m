@@ -257,6 +257,10 @@ static void test_metal_texture_upload_and_sampling(void)
     CHECK(dispatch(renderer, packet, 48) == GXMETAL_ERROR_NONE);
     set_int_state(renderer, packet, 3, GXMETAL_STATE_TEXTURE_FILTER,
                   GXMETAL_TEXTURE_FILTER_FAST);
+    set_int_state(renderer, packet, 3, GXMETAL_STATE_TEXTURE_WRAP_U,
+                  GXMETAL_TEXTURE_WRAP_CLAMP);
+    set_int_state(renderer, packet, 3, GXMETAL_STATE_TEXTURE_WRAP_V,
+                  GXMETAL_TEXTURE_WRAP_CLAMP);
     make_packet(packet, GXMETAL_OP_SET_STATE, 32, 3);
     payload = packet + 16;
     gxmetal_store_le32(payload + GXMETAL_STATE_TAG_OFFSET,
