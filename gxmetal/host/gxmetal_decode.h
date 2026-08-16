@@ -6,7 +6,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "../protocol/gxmetal_protocol.h"
+#include "gxmetal_protocol.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -38,6 +38,8 @@ GXMetalDecodeResult gxmetal_ring_advance(uint32_t position,
                                          uint32_t packet_bytes,
                                          uint32_t ring_bytes,
                                          uint32_t *next_position);
+uint32_t gxmetal_validate_packet(const GXMetalPacketView *packet,
+                                 uint32_t shared_bytes);
 int gxmetal_shared_range_valid(uint32_t offset, uint32_t length,
                                uint32_t shared_bytes, uint32_t alignment);
 const char *gxmetal_decode_result_string(GXMetalDecodeResult result);

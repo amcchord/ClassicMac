@@ -26,6 +26,7 @@ QEMU_REPO="${QEMU_REPO:-https://gitlab.com/qemu-project/qemu.git}"
 QEMU_TAG="${QEMU_TAG:-v11.0.2}"
 QFB_DIR="$ROOT_DIR/qfb"
 POWERMAC_DIR="$ROOT_DIR/powermac"
+GXMETAL_DIR="$ROOT_DIR/gxmetal"
 
 # Tracked files modified by the qfb and screamer integration patches (reset
 # before re-applying).
@@ -301,6 +302,19 @@ git -C "$QEMU_DIR" apply "$PPCVID_DIR/vga-hardware-cursor.patch" || die "Failed 
 # dirty bitmap for shared surfaces. This removes the repeated TCG write traps
 # that dominate framebuffer-heavy QuickDraw workloads.
 git -C "$QEMU_DIR" apply "$PPCVID_DIR/vga-fast-scanout.patch" || die "Failed to apply vga fast-scanout patch"
+
+# GXMetal's RAVE transport extends std-VGA with a validated command queue in a
+# separate shared PCI BAR. The initial QEMU backend deliberately advertises
+# only trace/fence support; raster feature bits arrive with the Metal backend.
+log "Installing GXMetal command transport"
+cp "$GXMETAL_DIR/protocol/gxmetal_protocol.h" "$QEMU_DIR/hw/display/gxmetal_protocol.h"
+cp "$GXMETAL_DIR/host/gxmetal_decode.h" "$QEMU_DIR/hw/display/gxmetal_decode.h"
+cp "$GXMETAL_DIR/host/gxmetal_decode.c" "$QEMU_DIR/hw/display/gxmetal_decode.c"
+cp "$GXMETAL_DIR/host/gxmetal_queue.h" "$QEMU_DIR/hw/display/gxmetal_queue.h"
+cp "$GXMETAL_DIR/host/gxmetal_queue.c" "$QEMU_DIR/hw/display/gxmetal_queue.c"
+cp "$GXMETAL_DIR/qemu/gxmetal_qemu.h" "$QEMU_DIR/hw/display/gxmetal_qemu.h"
+cp "$GXMETAL_DIR/qemu/gxmetal_qemu.c" "$QEMU_DIR/hw/display/gxmetal_qemu.c"
+git -C "$QEMU_DIR" apply "$GXMETAL_DIR/qemu-integration.patch" || die "Failed to apply GXMetal integration patch"
 if [ -f "$PPCVID_DIR/qemu_vga.ndrv" ]; then
   cp "$PPCVID_DIR/qemu_vga.ndrv" "$QEMU_DIR/pc-bios/qemu_vga.ndrv"
 else
@@ -401,6 +415,13 @@ if "$QEMU_PPC_BIN" -device VGA,help 2>&1 | grep -q "untracked-vram"; then
 else
   die "VGA untracked-vram property missing from the ppc build"
 fi
+if "$QEMU_PPC_BIN" -device VGA,help 2>&1 | grep -q "gxmetal"; then
+  printf '    OK  GXMetal command transport (ppc)\n'
+else
+  die "VGA gxmetal property missing from the ppc build"
+fi
+"$PYTHON_BIN" "$GXMETAL_DIR/tests/test_qemu_transport.py" "$QEMU_PPC_BIN" || \
+  die "GXMetal QEMU realization tests failed"
 if "$QEMU_PPC_BIN" -device macio-ide,help 2>&1 | grep -q "dma-completion-delay-ns"; then
   printf '    OK  MacIO IDE DMA completion delay (ppc)\n'
 else

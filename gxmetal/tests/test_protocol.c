@@ -118,6 +118,49 @@ static void test_shared_ranges(void)
                                       GXMETAL_SHARED_BYTES, 16));
     CHECK(!gxmetal_shared_range_valid(GXMETAL_UPLOAD_OFFSET, 16,
                                       GXMETAL_SHARED_BYTES, 3));
+    CHECK(!gxmetal_shared_range_valid(GXMETAL_UPLOAD_OFFSET, 0,
+                                      GXMETAL_SHARED_BYTES, 16));
+}
+
+static void test_semantic_validation(void)
+{
+    uint8_t packet[128];
+    GXMetalPacketView view;
+
+    make_packet(packet, GXMETAL_OP_DRAW_GOURAUD, sizeof(packet), 2, 9);
+    gxmetal_store_le32(packet + 16 + GXMETAL_DRAW_PRIMITIVE_OFFSET,
+                       GXMETAL_PRIMITIVE_TRIANGLE);
+    gxmetal_store_le32(packet + 16 + GXMETAL_DRAW_VERTEX_COUNT_OFFSET, 3);
+    gxmetal_store_le32(packet + 16 + GXMETAL_DRAW_VERTEX_STRIDE_OFFSET,
+                       GXMETAL_GOURAUD_VERTEX_BYTES);
+    CHECK(gxmetal_decode_packet(packet, sizeof(packet), &view) ==
+          GXMETAL_DECODE_OK);
+    CHECK(gxmetal_validate_packet(&view, GXMETAL_SHARED_BYTES) ==
+          GXMETAL_ERROR_NONE);
+
+    gxmetal_store_le32(packet + 16 + GXMETAL_DRAW_VERTEX_COUNT_OFFSET, 4);
+    CHECK(gxmetal_validate_packet(&view, GXMETAL_SHARED_BYTES) ==
+          GXMETAL_ERROR_BAD_PACKET);
+
+    make_packet(packet, GXMETAL_OP_TEXTURE_UPLOAD, 48, 0, 1);
+    gxmetal_store_le32(packet + 16 + GXMETAL_UPLOAD_RESOURCE_ID_OFFSET, 1);
+    gxmetal_store_le32(packet + 16 + GXMETAL_UPLOAD_SHARED_OFFSET_OFFSET,
+                       GXMETAL_UPLOAD_OFFSET);
+    gxmetal_store_le32(packet + 16 + GXMETAL_UPLOAD_LENGTH_OFFSET, 64);
+    gxmetal_store_le32(packet + 16 + GXMETAL_UPLOAD_ROW_BYTES_OFFSET, 16);
+    gxmetal_store_le32(packet + 16 + GXMETAL_UPLOAD_WIDTH_OFFSET, 4);
+    gxmetal_store_le32(packet + 16 + GXMETAL_UPLOAD_HEIGHT_OFFSET, 4);
+    CHECK(gxmetal_decode_packet(packet, 48, &view) == GXMETAL_DECODE_OK);
+    CHECK(gxmetal_validate_packet(&view, GXMETAL_SHARED_BYTES) ==
+          GXMETAL_ERROR_NONE);
+    gxmetal_store_le32(packet + 16 + GXMETAL_UPLOAD_SHARED_OFFSET_OFFSET,
+                       GXMETAL_RING_OFFSET);
+    CHECK(gxmetal_validate_packet(&view, GXMETAL_SHARED_BYTES) ==
+          GXMETAL_ERROR_BAD_RESOURCE);
+
+    make_packet(packet, GXMETAL_OP_TEXTURE_UPLOAD, 16, 0, 1);
+    CHECK(gxmetal_decode_packet(packet, 16, &view) ==
+          GXMETAL_DECODE_BAD_SIZE);
 }
 
 int main(void)
@@ -127,6 +170,7 @@ int main(void)
     test_rejected_packets();
     test_ring_boundaries();
     test_shared_ranges();
+    test_semantic_validation();
 
     if (failures != 0) {
         fprintf(stderr, "GXMetal protocol: %u failure(s)\n", failures);

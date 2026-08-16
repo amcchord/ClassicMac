@@ -6,11 +6,14 @@ Mac OS 8.5, 8.6, and 9. The guest batches rendering commands for a QEMU device;
 the host will execute those commands with Metal and present through the existing
 Power Mac display.
 
-This directory currently establishes the protocol and a fail-closed engine
-skeleton. The skeleton registers with RAVE when its shared library is loaded,
-but `QAEngineCheckDevice` returns `kQANotSupported` until the QEMU transport is
-available. Apple's software renderer therefore remains the automatic fallback
-during incremental development.
+This directory currently contains the protocol, a fail-closed engine skeleton,
+and the first QEMU transport milestone. ClassicMac starts its Power Mac with
+`VGA.gxmetal=on`; QEMU then realizes the control registers and shared PCI BAR,
+validates queued packets, completes fences, and latches malformed input as a
+diagnostic fault. The host deliberately advertises only trace/fence support at
+this stage. The engine therefore continues to return `kQANotSupported` instead
+of claiming a drawing context before rasterization is implemented, leaving
+Apple's software renderer as the automatic fallback.
 
 ## Transport contract
 
@@ -62,6 +65,16 @@ its `tnsl` Finder type and `cfrg` resource survive transfer to an HFS volume.
 The build also verifies that the PEF loader header contains a CFM initialization
 entry (rather than an application main entry) and that the entry descriptor
 invokes `QARegisterEngine`.
+
+Build the patched QEMU binaries and black-box test the GXMetal PCI layout:
+
+```sh
+scripts/build-qemu.sh
+```
+
+The build checks that the PowerPC VGA device accepts the `gxmetal` property,
+that BAR2 remains a 4 KiB register aperture, that the prefetchable GXMetal BAR4
+is 4 MiB, and that invalid configurations fail realization.
 
 ## Versioning and safety
 

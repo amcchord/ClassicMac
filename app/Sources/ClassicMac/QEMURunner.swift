@@ -479,6 +479,11 @@ final class QEMUManager: ObservableObject {
         // avoiding framebuffer redraws for pointer motion. Older guest drivers
         // ignore the advertised feature and keep their software cursor.
         args += ["-global", "VGA.hardware-cursor=on"]
+        // GXMetal exposes a versioned QuickDraw 3D RAVE command queue through
+        // the VGA device. The guest engine still checks the advertised feature
+        // bits before claiming a context, so unfinished or unsupported drawing
+        // paths continue through the system software renderer.
+        args += ["-global", "VGA.gxmetal=on"]
         // Cached host I/O can complete a MacIO DBDMA command before classic
         // Mac OS has armed its synchronous wait. Keep the final descriptor
         // active for 1 ms so IDE and DBDMA completion arrive after the guest
