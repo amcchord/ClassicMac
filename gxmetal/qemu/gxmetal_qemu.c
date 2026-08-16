@@ -1,9 +1,9 @@
 /*
  * GXMetal paravirtual command transport for QEMU std-VGA.
  *
- * The initial backend is intentionally a validated trace sink. It advertises
- * queue/fence diagnostics but no raster features, so a guest drawing engine
- * cannot mistake protocol bring-up for working acceleration.
+ * The initial backend includes the portable reference rasterizer. It provides
+ * deterministic bring-up and conformance coverage before commands are routed
+ * through the Metal implementation.
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
@@ -14,15 +14,20 @@
 
 #include "gxmetal_qemu.h"
 
-static uint32_t gxmetal_trace_dispatch(void *opaque,
-                                       const GXMetalPacketView *packet)
+static uint32_t gxmetal_render_dispatch(void *opaque,
+                                        const GXMetalPacketView *packet)
 {
     GXMetalQemuState *state = opaque;
+    uint32_t error;
 
-    /* Semantic validation was completed by GXMetalQueue before dispatch. */
-    (void)state;
-    (void)packet;
-    return GXMETAL_ERROR_NONE;
+    error = gxmetal_renderer_dispatch(&state->renderer, packet);
+    if (error == GXMETAL_ERROR_NONE &&
+        (packet->opcode == GXMETAL_OP_CLEAR ||
+         packet->opcode == GXMETAL_OP_DRAW_GOURAUD)) {
+        memory_region_set_dirty(state->framebuffer_region, 0,
+                                state->renderer.framebuffer_bytes);
+    }
+    return error;
 }
 
 static uint64_t gxmetal_register_read(void *opaque, hwaddr address,
@@ -119,11 +124,18 @@ static void gxmetal_qemu_system_reset(void *opaque)
     gxmetal_qemu_reset(opaque);
 }
 
-bool gxmetal_qemu_init(GXMetalQemuState *state, Object *owner, Error **errp)
+bool gxmetal_qemu_init(GXMetalQemuState *state, Object *owner,
+                       MemoryRegion *framebuffer_region,
+                       uint32_t framebuffer_bytes, Error **errp)
 {
     uint8_t *shared;
+    uint8_t *framebuffer;
 
     memset(state, 0, sizeof(*state));
+    if (framebuffer_region == NULL || framebuffer_bytes == 0) {
+        error_setg(errp, "GXMetal requires a framebuffer memory region");
+        return false;
+    }
     if (!memory_region_init_ram(&state->shared, owner, "gxmetal.shared",
                                 GXMETAL_SHARED_BYTES, errp)) {
         return false;
@@ -131,10 +143,14 @@ bool gxmetal_qemu_init(GXMetalQemuState *state, Object *owner, Error **errp)
     shared = memory_region_get_ram_ptr(&state->shared);
     memset(shared, 0, GXMETAL_SHARED_BYTES);
 
-    state->features = GXMETAL_FEATURE_FENCE | GXMETAL_FEATURE_TRACE;
+    framebuffer = memory_region_get_ram_ptr(framebuffer_region);
+    state->framebuffer_region = framebuffer_region;
+    gxmetal_renderer_init(&state->renderer, framebuffer, framebuffer_bytes);
+    state->features = GXMETAL_FEATURE_GOURAUD | GXMETAL_FEATURE_FENCE |
+                      GXMETAL_FEATURE_TRACE;
     gxmetal_queue_init(&state->queue, shared, GXMETAL_SHARED_BYTES,
                        GXMETAL_RING_OFFSET, GXMETAL_RING_BYTES,
-                       gxmetal_trace_dispatch, state);
+                       gxmetal_render_dispatch, state);
     memory_region_init_io(&state->registers, owner, &gxmetal_register_ops,
                           state, "gxmetal.registers",
                           GXMETAL_REGISTER_BYTES);
@@ -145,4 +161,5 @@ bool gxmetal_qemu_init(GXMetalQemuState *state, Object *owner, Error **errp)
 void gxmetal_qemu_reset(GXMetalQemuState *state)
 {
     gxmetal_queue_reset(&state->queue);
+    gxmetal_renderer_reset(&state->renderer);
 }

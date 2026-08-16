@@ -27,4 +27,8 @@ make -C "$GUEST_DIR" \
 [ -f "$GUEST_DIR/bin/GXMetal.bin" ] || die "GXMetal.bin was not produced"
 python3 "$ROOT_DIR/gxmetal/tools/pef_set_init.py" \
     --verify "$GUEST_DIR/bin/GXMetal.pef"
+for symbol in QARegisterEngine QARegisterDrawMethod RegistryEntrySearch; do
+    strings "$GUEST_DIR/bin/GXMetal.pef" | grep -F "$symbol" >/dev/null ||
+        die "GXMetal PEF is missing required import $symbol"
+done
 file "$GUEST_DIR/bin/GXMetal.bin"

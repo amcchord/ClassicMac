@@ -32,12 +32,13 @@ diff --git a/hw/display/vga-pci.c b/hw/display/vga-pci.c
      /* vga + console init */
      if (!vga_common_init(s, OBJECT(dev), errp)) {
          return;
-@@ -495,6 +506,17 @@ static void pci_std_vga_realize(PCIDevice *dev, Error **errp)
+@@ -495,6 +506,18 @@ static void pci_std_vga_realize(PCIDevice *dev, Error **errp)
                                       qext, edid, d->host_resize,
                                       d->hardware_cursor);
  
 +        if (d->gxmetal_enabled) {
-+            if (!gxmetal_qemu_init(&d->gxmetal, OBJECT(dev), errp)) {
++            if (!gxmetal_qemu_init(&d->gxmetal, OBJECT(dev), &s->vram,
++                                   s->vram_size, errp)) {
 +                return;
 +            }
 +            memory_region_add_subregion(&d->mmio,
@@ -61,7 +62,7 @@ diff --git a/hw/display/vga-pci.c b/hw/display/vga-pci.c
 diff --git a/hw/display/meson.build b/hw/display/meson.build
 --- a/hw/display/meson.build
 +++ b/hw/display/meson.build
-@@ -16,7 +16,12 @@ system_ss.add(when: 'CONFIG_SSD0303', if_true: files('ssd0303.c'))
+@@ -16,7 +16,13 @@ system_ss.add(when: 'CONFIG_SSD0303', if_true: files('ssd0303.c'))
  system_ss.add(when: 'CONFIG_SSD0323', if_true: files('ssd0323.c'))
  system_ss.add(when: 'CONFIG_XEN_BUS', if_true: files('xenfb.c'))
  
@@ -70,6 +71,7 @@ diff --git a/hw/display/meson.build b/hw/display/meson.build
 +  'vga-pci.c',
 +  'gxmetal_decode.c',
 +  'gxmetal_queue.c',
++  'gxmetal_renderer.c',
 +  'gxmetal_qemu.c',
 +))
  system_ss.add(when: 'CONFIG_VGA_ISA', if_true: files('vga-isa.c'))

@@ -50,6 +50,72 @@ DriverDescription TheDriverDescription = {
  */
 DriverGlobal	gDriverGlobal;
 
+static UInt32 GXMetalReadRegister(UInt32 offset)
+{
+	volatile UInt32 *address;
+	UInt32 value;
+
+	address = (volatile UInt32 *)((UInt32)GLOBAL.boardRegAddress +
+		GXMETAL_BAR2_REGISTER_OFFSET + offset);
+	value = EndianSwap32Bit(*address);
+	SynchronizeIO();
+	return value;
+}
+
+static void GXMetalUnpublishTransport(void)
+{
+	if (GLOBAL.gxmetalAvailable)
+		(void)RegistryPropertyDelete(&GLOBAL.deviceEntry,
+			GXMETAL_REGISTRY_PROPERTY);
+	GLOBAL.gxmetalAvailable = false;
+}
+
+static void GXMetalPublishTransport(void)
+{
+	GXMetalRegistryInfo info;
+	UInt32 version;
+	OSStatus status;
+
+	GLOBAL.gxmetalAvailable = false;
+	if (GLOBAL.boardGXMetalAddress == NULL ||
+		GLOBAL.boardGXMetalMappedSize < GXMETAL_SHARED_BYTES ||
+		GLOBAL.boardRegMappedSize < GXMETAL_BAR2_REGISTER_OFFSET +
+			GXMETAL_REGISTER_BYTES ||
+		GXMetalReadRegister(GXMETAL_REG_MAGIC) != GXMETAL_PROTOCOL_MAGIC)
+		return;
+
+	version = GXMetalReadRegister(GXMETAL_REG_VERSION);
+	if ((version >> 16) != GXMETAL_PROTOCOL_VERSION_MAJOR ||
+		GXMetalReadRegister(GXMETAL_REG_REGISTER_BYTES) <
+			GXMETAL_REGISTER_BYTES ||
+		GXMetalReadRegister(GXMETAL_REG_SHARED_BYTES) !=
+			GXMETAL_SHARED_BYTES)
+		return;
+
+	info.magic = GXMETAL_PROTOCOL_MAGIC;
+	info.version = GXMETAL_REGISTRY_VERSION;
+	info.registers_address = (UInt32)GLOBAL.boardRegAddress +
+		GXMETAL_BAR2_REGISTER_OFFSET;
+	info.registers_bytes = GXMETAL_REGISTER_BYTES;
+	info.shared_address = (UInt32)GLOBAL.boardGXMetalAddress;
+	info.shared_bytes = GLOBAL.boardGXMetalMappedSize;
+	info.framebuffer_address = (UInt32)GLOBAL.boardFBAddress;
+	info.framebuffer_bytes = GLOBAL.boardFBMappedSize;
+
+	(void)RegistryPropertyDelete(&GLOBAL.deviceEntry,
+		GXMETAL_REGISTRY_PROPERTY);
+	status = RegistryPropertyCreate(&GLOBAL.deviceEntry,
+		GXMETAL_REGISTRY_PROPERTY, &info, sizeof(info));
+	if (status == noErr) {
+		GLOBAL.gxmetalAvailable = true;
+		lprintf("GXMetal transport published (BAR4 %08lX, %lu bytes)\n",
+			(UInt32)GLOBAL.boardGXMetalAddress,
+			(UInt32)GLOBAL.boardGXMetalMappedSize);
+	} else {
+		lprintf("GXMetal registry publish returned %d\n", status);
+	}
+}
+
 /*
  * DoDriverIO
  *
@@ -215,6 +281,15 @@ DriverInitializeCmd( AddressSpaceID addressSpaceID, DriverInitInfoPtr driverInit
 	lprintf("boardRegAddress %08lX boardRegMappedSize %08lX\n", 
 			GLOBAL.boardRegAddress, GLOBAL.boardRegMappedSize);
 
+	/* BAR4 is optional so the video driver remains compatible with stock
+	 * QEMU. When present, publish its logical mapping for the GXMetal RAVE
+	 * engine after the core video device has initialized. */
+	GLOBAL.boardGXMetalAddress = GetDeviceBARAddress(&GLOBAL.deviceEntry,
+											QEMU_PCI_VIDEO_GXMETAL_REG,
+											&GLOBAL.boardGXMetalMappedSize,
+											NULL);
+	GLOBAL.gxmetalAvailable = false;
+
 
 	lprintf("Enabling memory space..\n");
 	status = EnablePCIMemorySpace(&GLOBAL.deviceEntry);
@@ -226,6 +301,7 @@ DriverInitializeCmd( AddressSpaceID addressSpaceID, DriverInitInfoPtr driverInit
 	status = QemuVga_Init();
 	if (status != noErr)
 		goto bail;
+	GXMetalPublishTransport();
 	
 bail:
 	DBG(lprintf("Driver init result: %d\n", status));
@@ -300,6 +376,7 @@ DriverSupersededCmd( DriverSupersededInfoPtr driverSupersededInfoPtr, Boolean ca
 	 * requests, this will loop on all per-request records.
 	 */
 	 
+	GXMetalUnpublishTransport();
 	QemuVga_Exit();
 
 	RegistryEntryIDDispose( &GLOBAL.deviceEntry );

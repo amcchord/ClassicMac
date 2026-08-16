@@ -42,6 +42,7 @@ extern "C" {
 #define GXMETAL_PACKET_ALIGNMENT          16u
 #define GXMETAL_PACKET_HEADER_BYTES       16u
 #define GXMETAL_MAX_PACKET_BYTES          UINT32_C(0x00040000)
+#define GXMETAL_MAX_DIMENSION             UINT32_C(0x00004000)
 #define GXMETAL_RESET_KEY                 GXMETAL_PROTOCOL_MAGIC
 
 /* Register offsets relative to BAR2 + GXMETAL_BAR2_REGISTER_OFFSET. */

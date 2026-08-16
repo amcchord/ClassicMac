@@ -188,7 +188,11 @@ uint32_t gxmetal_validate_packet(const GXMetalPacketView *packet,
         if (packet->packet_bytes != GXMETAL_CONTEXT_CREATE_PACKET_BYTES ||
             packet->context_id == 0 ||
             gxmetal_load_le32(payload + GXMETAL_CONTEXT_WIDTH_OFFSET) == 0 ||
+            gxmetal_load_le32(payload + GXMETAL_CONTEXT_WIDTH_OFFSET) >
+                GXMETAL_MAX_DIMENSION ||
             gxmetal_load_le32(payload + GXMETAL_CONTEXT_HEIGHT_OFFSET) == 0 ||
+            gxmetal_load_le32(payload + GXMETAL_CONTEXT_HEIGHT_OFFSET) >
+                GXMETAL_MAX_DIMENSION ||
             gxmetal_load_le32(payload + GXMETAL_CONTEXT_ROW_BYTES_OFFSET) == 0 ||
             !gxmetal_draw_pixel_format_valid(gxmetal_load_le32(
                 payload + GXMETAL_CONTEXT_PIXEL_FORMAT_OFFSET))) {

@@ -6,18 +6,21 @@ ROOT_DIR := ../..
 RINCLUDES ?= $(ROOT_DIR)/vendor/Retro68-build/toolchain/universal/RIncludes
 
 CFLAGS := -std=gnu99 -Os -fPIC -Wall -Wextra -Werror \
-          -Wno-multichar -ffunction-sections -fdata-sections
+          -Wno-multichar -ffunction-sections -fdata-sections \
+          -Isrc -Iinclude -I../protocol
 LDFLAGS := -shared -Wl,-e,GXMetalCFMInitialize \
            -Wl,-bE:src/GXMetal.exp -Wl,--gc-sections \
            -Wl,--gc-keep-exported
-LIBS := -lQuickDraw3DRAVELib
+LIBS := -lQuickDraw3DRAVELib -lNameRegistryLib -lInterfaceLib
 
 all: bin/GXMetal.bin
 
-bin/GXMetal.xcoff: src/GXMetalEngine.c src/GXMetal.exp \
+bin/GXMetal.xcoff: src/GXMetalEngine.c src/GXMetalTransport.c \
+                   src/GXMetalTransport.h include/GXMetalRegistry.h src/GXMetal.exp \
                    ../protocol/gxmetal_protocol.h GNUmakefile
 	@mkdir -p bin
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ src/GXMetalEngine.c $(LIBS)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ \
+		src/GXMetalEngine.c src/GXMetalTransport.c $(LIBS)
 
 bin/GXMetal.pef: bin/GXMetal.xcoff
 	$(MAKEPEF) -o $@ $<

@@ -6,14 +6,20 @@ Mac OS 8.5, 8.6, and 9. The guest batches rendering commands for a QEMU device;
 the host will execute those commands with Metal and present through the existing
 Power Mac display.
 
-This directory currently contains the protocol, a fail-closed engine skeleton,
-and the first QEMU transport milestone. ClassicMac starts its Power Mac with
-`VGA.gxmetal=on`; QEMU then realizes the control registers and shared PCI BAR,
-validates queued packets, completes fences, and latches malformed input as a
-diagnostic fault. The host deliberately advertises only trace/fence support at
-this stage. The engine therefore continues to return `kQANotSupported` instead
-of claiming a drawing context before rasterization is implemented, leaving
-Apple's software renderer as the automatic fallback.
+This directory contains the protocol, the PowerPC RAVE engine, the VGA NDRV
+handoff, and the QEMU transport/reference renderer. ClassicMac starts its Power
+Mac with `VGA.gxmetal=on`; QEMU realizes the control registers and shared PCI
+BAR, validates queued packets, completes fences, and latches malformed input as
+a diagnostic fault. The existing VGA NDRV publishes the Expansion Manager's
+logical BAR mappings through the Name Registry, allowing the `tnsl` to connect
+without guessing physical PCI addresses.
+
+The current reference backend accelerates direct-color, single-buffer Gouraud
+points, lines, strips, fans, and triangles into VGA memory. It is deliberately
+bounded and deterministic so it can serve as the correctness oracle for the
+Metal backend. Contexts requiring Z, double buffering, textures, or unsupported
+pixel formats still return `kQANotSupported`, allowing RAVE to select Apple's
+software renderer instead of accepting a partially implemented path.
 
 ## Transport contract
 
@@ -47,7 +53,8 @@ would wrap. Fence completion is reported by sequence number.
 
 ## Build and test
 
-Run the portable protocol conformance tests on the host:
+Run the portable protocol, queue, guest-producer, renderer, and complete
+first-triangle pipeline tests on the host:
 
 ```sh
 make -C gxmetal test
