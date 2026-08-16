@@ -34,7 +34,7 @@ bin/GXMetal.pef: bin/GXMetal.xcoff
 bin/GXMetal.bin: bin/GXMetal.pef src/GXMetal.r
 	$(REZ) src/GXMetal.r -I$(RINCLUDES) -o $@ \
 		--cc bin/GXMetal.dsk --cc bin/GXMetal --cc bin/%GXMetal.ad \
-		-t tnsl -c GXMT --data bin/GXMetal.pef
+		-t shlb -c tnsl --data bin/GXMetal.pef
 
 bin/GXMetalInstaller.xcoff: apps/GXMetalInstaller.c GNUmakefile
 	@mkdir -p bin

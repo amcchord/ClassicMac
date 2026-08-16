@@ -27,6 +27,12 @@ make -C "$GUEST_DIR" \
 for artifact in GXMetal.bin GXMetalInstaller.bin GXMetalTest.bin; do
     [ -f "$GUEST_DIR/bin/$artifact" ] || die "$artifact was not produced"
 done
+python3 "$ROOT_DIR/gxmetal/tools/verify_macbinary.py" \
+    "$GUEST_DIR/bin/GXMetal.bin" --type shlb --creator tnsl
+python3 "$ROOT_DIR/gxmetal/tools/verify_macbinary.py" \
+    "$GUEST_DIR/bin/GXMetalInstaller.bin" --type APPL --creator GXMT
+python3 "$ROOT_DIR/gxmetal/tools/verify_macbinary.py" \
+    "$GUEST_DIR/bin/GXMetalTest.bin" --type APPL --creator GXMT
 python3 "$ROOT_DIR/gxmetal/tools/pef_set_init.py" \
     --verify "$GUEST_DIR/bin/GXMetal.pef"
 for symbol in QARegisterEngine QARegisterDrawMethod RegistryEntrySearch; do

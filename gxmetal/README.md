@@ -1,10 +1,10 @@
 # GXMetal
 
 GXMetal is a paravirtual QuickDraw 3D RAVE drawing engine for ClassicMac. Its
-PowerPC CFM shared library uses the classic `tnsl` file type expected by RAVE on
-Mac OS 8.5, 8.6, and 9. The guest batches rendering commands for a QEMU device;
-the host will execute those commands with Metal and present through the existing
-Power Mac display.
+PowerPC CFM shared library uses the `shlb` Finder type and `tnsl` creator
+signature that RAVE scans for on Mac OS 8.5, 8.6, and 9. The guest batches
+rendering commands for a QEMU device; the host executes those commands with
+Metal and presents through the existing Power Mac display.
 
 This directory contains the protocol, the PowerPC RAVE engine, the VGA NDRV
 handoff, and the QEMU transport/renderers. ClassicMac starts its Power
@@ -87,9 +87,10 @@ scripts/build-gxmetal.sh
 The build produces `GXMetal.bin`, `GXMetalInstaller.bin`, and
 `GXMetalTest.bin` in `gxmetal/guest/bin`. They are MacBinary files so their PEF
 data forks, `cfrg` resources, and Finder metadata survive transfer to HFS. The
-build verifies that the driver has type `tnsl`, its PEF loader header contains a
-CFM initialization entry (rather than an application main entry), the entry
-descriptor invokes `QARegisterEngine`, and the test app imports the public RAVE
+build verifies that the driver has the exact `shlb`/`tnsl` Finder pair used by
+Apple and ATI RAVE engines, its PEF loader header contains a CFM initialization
+entry (rather than an application main entry), the entry descriptor invokes
+`QARegisterEngine`, and the test app imports the public RAVE
 discovery/context/texture APIs.
 
 `scripts/build-guest-cd.sh` rebuilds those three matching artifacts and places
