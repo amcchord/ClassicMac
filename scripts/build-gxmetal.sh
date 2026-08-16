@@ -24,11 +24,19 @@ make -C "$GUEST_DIR" clean
 make -C "$GUEST_DIR" \
     RINCLUDES="$TOOLCHAIN/universal/RIncludes"
 
-[ -f "$GUEST_DIR/bin/GXMetal.bin" ] || die "GXMetal.bin was not produced"
+for artifact in GXMetal.bin GXMetalInstaller.bin GXMetalTest.bin; do
+    [ -f "$GUEST_DIR/bin/$artifact" ] || die "$artifact was not produced"
+done
 python3 "$ROOT_DIR/gxmetal/tools/pef_set_init.py" \
     --verify "$GUEST_DIR/bin/GXMetal.pef"
 for symbol in QARegisterEngine QARegisterDrawMethod RegistryEntrySearch; do
     strings "$GUEST_DIR/bin/GXMetal.pef" | grep -F "$symbol" >/dev/null ||
         die "GXMetal PEF is missing required import $symbol"
 done
-file "$GUEST_DIR/bin/GXMetal.bin"
+for symbol in QADeviceGetFirstEngine QADrawContextNew QATextureNew; do
+    strings "$GUEST_DIR/bin/GXMetalTest.pef" | grep -F "$symbol" >/dev/null ||
+        die "GXMetal Test PEF is missing required import $symbol"
+done
+for artifact in GXMetal.bin GXMetalInstaller.bin GXMetalTest.bin; do
+    file "$GUEST_DIR/bin/$artifact"
+done

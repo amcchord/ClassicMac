@@ -25,6 +25,7 @@ OUT_DIR="$ROOT_DIR/dist"
 OUT_IMAGE="$OUT_DIR/ClassicMacTools.iso"
 VOLUME_NAME="ClassicMac Tools"
 HFS_COPY="$ROOT_DIR/guestcd/hfs-copy.py"
+GXMETAL_BIN_DIR="$ROOT_DIR/gxmetal/guest/bin"
 # 32 MiB: plenty for ~10 MB of expanded tools, and a multiple of the
 # 2048-byte CD sector size.
 IMAGE_BYTES=$((32 * 1024 * 1024))
@@ -41,9 +42,14 @@ RETRO68_BIN="$ROOT_DIR/vendor/Retro68-build/toolchain/bin"
 if [ -x "$RETRO68_BIN/hformat" ]; then
   export PATH="$RETRO68_BIN:$PATH"
 fi
-for tool in hformat hmount humount hcopy hattrib hls; do
+for tool in hformat hmount humount hcopy hattrib hmkdir hls; do
   command -v "$tool" >/dev/null 2>&1 || die "hfsutils tool '$tool' not found. Build the Retro68 toolchain (scripts/build-qfb-rom.sh) or 'brew install hfsutils'."
 done
+
+# GXMetal is built from source for every Tools CD so the installer, RAVE
+# engine, and conformance app can never drift apart.
+log "Building GXMetal guest driver and tools"
+"$ROOT_DIR/scripts/build-gxmetal.sh"
 
 PYTHON_BIN="$(command -v python3 || true)"
 [ -n "$PYTHON_BIN" ] || die "python3 is required to write the Apple Partition Map."
@@ -150,6 +156,14 @@ USB Overdrive 1.4  (Power Mac only, Mac OS 8.5 - 9.2)
 
 On a Quadra (System 7 through Mac OS 8.1), skip USB Overdrive -
 it needs a Power Mac running Mac OS 8.5 or later.
+
+GXMetal  (Power Mac only, Mac OS 8.5 - 9.2)
+   Host-accelerated QuickDraw 3D RAVE for ClassicMac. Open the
+   GXMetal folder and double-click "Install GXMetal". Restart,
+   then run "GXMetal Test". The test must report RAVE discovery,
+   depth, textures, and double-buffer synchronization before you
+   try a game. If acceleration is unavailable or a feature is not
+   supported, RAVE keeps its normal software-renderer fallback.
 EOF
 
 # ---------------------------------------------------------------------------
@@ -212,6 +226,13 @@ hmount "$WORK_IMAGE" >/dev/null
 # Read Me first so it lands at the top of the (unsorted) catalog.
 hcopy -t "$README" ":Read Me"
 hattrib -t TEXT -c ttxt ":Read Me"
+
+# hcopy -m decodes the MacBinary files into native HFS files while retaining
+# the PEF data forks, cfrg resources, and Finder type/creator metadata.
+hmkdir ":GXMetal"
+hcopy -m "$GXMETAL_BIN_DIR/GXMetal.bin" ":GXMetal:GXMetal"
+hcopy -m "$GXMETAL_BIN_DIR/GXMetalInstaller.bin" ":GXMetal:Install GXMetal"
+hcopy -m "$GXMETAL_BIN_DIR/GXMetalTest.bin" ":GXMetal:GXMetal Test"
 
 while IFS=$'\t' read -r name handling md5 url; do
   case "$name" in ''|'#'*) continue ;; esac

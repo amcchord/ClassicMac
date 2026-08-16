@@ -77,18 +77,32 @@ guest-format framebuffer:
 make -C gxmetal test
 ```
 
-Build the PowerPC CFM `tnsl` MacBinary with the existing Retro68 toolchain and
-Apple Universal Interfaces:
+Build the PowerPC CFM `tnsl`, one-click installer, and conformance application
+with the existing Retro68 toolchain and Apple Universal Interfaces:
 
 ```sh
 scripts/build-gxmetal.sh
 ```
 
-The latter produces `gxmetal/guest/bin/GXMetal.bin`. It is a MacBinary file so
-its `tnsl` Finder type and `cfrg` resource survive transfer to an HFS volume.
-The build also verifies that the PEF loader header contains a CFM initialization
-entry (rather than an application main entry) and that the entry descriptor
-invokes `QARegisterEngine`.
+The build produces `GXMetal.bin`, `GXMetalInstaller.bin`, and
+`GXMetalTest.bin` in `gxmetal/guest/bin`. They are MacBinary files so their PEF
+data forks, `cfrg` resources, and Finder metadata survive transfer to HFS. The
+build verifies that the driver has type `tnsl`, its PEF loader header contains a
+CFM initialization entry (rather than an application main entry), the entry
+descriptor invokes `QARegisterEngine`, and the test app imports the public RAVE
+discovery/context/texture APIs.
+
+`scripts/build-guest-cd.sh` rebuilds those three matching artifacts and places
+them in the `GXMetal` folder on the ClassicMac Tools CD. In the guest,
+double-click **Install GXMetal**. It finds the active System Folder, copies both
+forks of `GXMetal` into Extensions using a rollback-safe temporary rename, and
+asks for a restart. After restarting, **GXMetal Test** enumerates the engines
+that RAVE actually registered, selects GXMetal by its gestalt name, exercises a
+Z-buffered and double-buffered render with Gouraud shading, alpha blending, and
+an uploaded texture, waits on the host fence, then validates red, blue, and
+blended-purple pixels directly in the guest framebuffer. A missing device or
+host feature fails the test explicitly and remains eligible for Apple's normal
+software RAVE fallback.
 
 Build the patched QEMU binaries and black-box test the GXMetal PCI layout:
 
