@@ -1,13 +1,13 @@
-GXMetal 1.7 beta 4 for Mac OS 9
-================================
+GXMetal 1.8.0 for Mac OS 9
+==========================
 
 GXMetal is ClassicMac's host-accelerated QuickDraw 3D RAVE engine. It lets
 compatible Power Mac games send 3D work to Metal on the host Mac while keeping
 Apple Software RAVE available as a safe fallback.
 
-This beta is fully tested on Mac OS 9.2.2. Mac OS 8.5 and 8.6 support is still
-being validated and will receive another pass when updated system images are
-available.
+This release is fully tested on Mac OS 9.2.2. Mac OS 8.5 and 8.6 support is
+still being validated and will receive another pass when updated system
+images are available.
 
 INSTALL OR UPDATE
 -----------------
@@ -57,8 +57,8 @@ game files are not changed by the host accelerator.
 TESTED GAME
 -----------
 
-Nanosaur is the primary real-game test. Beta 4 has been exercised through its
-title screen and extended gameplay with textures, depth, clipping, fog, water,
-alpha effects, camera movement, and other dinosaurs. Rendering bugs should be
-reported with a screenshot, the Mac OS version, display resolution and color
-depth, and whether GXMetal Test passes.
+Nanosaur is the primary real-game test. GXMetal 1.8.0 has been exercised
+through its title screen and extended gameplay with textures, depth, clipping,
+fog, water, alpha effects, camera movement, and other dinosaurs. Rendering
+bugs should be reported with a screenshot, the Mac OS version, display
+resolution and color depth, and whether GXMetal Test passes.

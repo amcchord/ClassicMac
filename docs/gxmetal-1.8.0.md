@@ -1,4 +1,4 @@
-# GXMetal in ClassicMac 1.7.0 beta 4
+# GXMetal in ClassicMac 1.8.0
 
 ## What changed
 
@@ -9,7 +9,7 @@ RAVE calls into bounded packets in a shared PCI command queue. QEMU validates
 the packets, preserves their ordering with fences, and renders accepted work
 through Metal on the host.
 
-The beta ships the driver, the **GXMetal Startup** companion, **Install
+The release ships the driver, the **GXMetal Startup** companion, **Install
 GXMetal**, and **GXMetal Test** together in the GXMetal folder on the ClassicMac
 Tools CD. The driver and tools share a simple classic extension puzzle-piece
 icon with a metal M. The companion displays that M in the normal Mac OS startup
@@ -50,8 +50,8 @@ the minimal contiguous span that covers that rectangle.
 
 The conformance application runs the same deterministic 120-frame mixed
 texture/Gouraud workload through GXMetal and through an independently selected
-non-GXMetal RAVE engine. Launched from the exact Developer ID-signed beta 4
-application—not a loose development binary—it recorded:
+non-GXMetal RAVE engine. Launched from exact Developer ID-signed release
+candidates—not loose development binaries—it recorded:
 
 | Signed-bundle run | GXMetal | Apple Software RAVE | Ratio |
 | --- | ---: | ---: | ---: |
@@ -80,7 +80,7 @@ rectangle preservation, direct VRAM presentation, and forced CPU fallback.
 
 The Mac OS 9 application independently proves actual RAVE discovery and checks
 red, blue, blended, rejected, fogged, bitmap, clipped, scalar-orientation, and
-batched-orientation pixels in VRAM before benchmarking. The beta 4 candidate
+batched-orientation pixels in VRAM before benchmarking. The 1.8.0 candidate
 passed that suite and selected the direct Metal-to-VRAM path in the real QEMU
 process.
 

@@ -27,9 +27,9 @@ resource 'BNDL' (128, purgeable) {
 };
 
 resource 'vers' (1) {
-    1, 7, beta, 4, verUS,
-    "1.7 beta 4",
-    "Install GXMetal 1.7 beta 4"
+    1, 8, release, 0, verUS,
+    "1.8.0",
+    "Install GXMetal 1.8.0"
 };
 
 resource 'cfrg' (0) {
