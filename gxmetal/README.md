@@ -160,6 +160,19 @@ The build checks that the PowerPC VGA device accepts the `gxmetal` property,
 that BAR2 remains a 4 KiB register aperture, that the prefetchable GXMetal BAR4
 is 4 MiB, and that invalid configurations fail realization.
 
+On macOS, validate the exact Developer ID-signed application against a supplied
+Mac OS 9 disk without modifying the source image:
+
+```sh
+scripts/test-gxmetal-os9.sh /path/to/mac-os-9-disk.img
+```
+
+The harness verifies the bundle, APFS-clones (or copies) the disk, extracts the
+matching driver and test application from the bundle's own Tools CD, installs
+them only into the clone, boots the bundled GXMetal-capable QEMU, and reads the
+flushed PASS/FAIL record back from the clone. It retains the temporary directory
+and final screenshot as auditable evidence.
+
 ## Versioning and safety
 
 The high 16 bits of `GXMETAL_REG_VERSION` are the incompatible major version;

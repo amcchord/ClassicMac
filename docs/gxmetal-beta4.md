@@ -45,14 +45,14 @@ texture/Gouraud workload through GXMetal and through an independently selected
 non-GXMetal RAVE engine. Launched from the exact Developer ID-signed beta 4
 application—not a loose development binary—it recorded:
 
-| Engine | Guest-measured time |
-| --- | ---: |
-| GXMetal | 51,325 microseconds |
-| Apple Software RAVE | 530,436 microseconds |
-| Ratio | **10.33x** |
+| Signed-bundle run | GXMetal | Apple Software RAVE | Ratio |
+| --- | ---: | ---: | ---: |
+| Candidate validation | 51,325 microseconds | 530,436 microseconds | **10.33x** |
+| Disposable-clone harness rerun | 66,724 microseconds | 546,868 microseconds | **8.19x** |
+| Source-immutability harness rerun | 64,905 microseconds | 547,114 microseconds | **8.42x** |
 
 This is a focused RAVE workload rather than a promise that every game will run
-10.33x faster. A game also spends time in simulation, sound, file access, and
+8.19–10.33x faster. A game also spends time in simulation, sound, file access, and
 PowerPC code outside RAVE. The result proves that the driver was discovered,
 the complete guest-to-host path ran, the software fallback remained usable,
 and the accelerated portion was materially faster under matched guest-side
@@ -73,6 +73,14 @@ red, blue, blended, rejected, fogged, bitmap, clipped, scalar-orientation, and
 batched-orientation pixels in VRAM before benchmarking. The beta 4 candidate
 passed that suite and selected the direct Metal-to-VRAM path in the real QEMU
 process.
+
+`scripts/test-gxmetal-os9.sh` makes that signed-bundle check repeatable. It
+never attaches or writes the supplied OS 9 image: it creates a disposable
+clone, installs the exact driver and test application extracted from the
+signed bundle's Tools CD, boots the bundled QEMU headlessly, verifies that the
+source image's size and modification time did not change, and preserves the
+guest result plus a final screenshot for inspection. Its two clean reruns
+produced the final two results in the table above.
 
 GXMetal declines unsupported framebuffer formats, deep-Z requests, complex
 QuickDraw regions, missing host features, incompatible protocol versions, and

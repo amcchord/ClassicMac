@@ -23,10 +23,10 @@
 - A full 640x480 RGB555 present now marks 614,400 bytes of VRAM dirty instead
   of the complete 64 MiB aperture, a 109.23x reduction. Partial presents mark
   only their clipped contiguous span.
-- The repeatable 120-frame Mac OS 9 mixed texture/Gouraud conformance workload
-  completed in 51,325 microseconds through GXMetal versus 530,436 microseconds
-  through Apple Software RAVE when launched from the exact Developer ID-signed
-  beta application: 10.33x.
+- Three runs of the 120-frame Mac OS 9 mixed texture/Gouraud conformance workload
+  from the exact Developer ID-signed beta application measured 10.33x, 8.19x,
+  and 8.42x versus Apple Software RAVE. The slower observed run completed in
+  66,724 microseconds through GXMetal versus 546,868 microseconds through software.
 
 ### Fixed
 
