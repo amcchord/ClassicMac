@@ -83,6 +83,20 @@ static void set_int_state(GXMetalMetalRenderer *renderer, uint8_t *packet,
     CHECK(dispatch(renderer, packet, 32) == GXMETAL_ERROR_NONE);
 }
 
+static void set_float_state(GXMetalMetalRenderer *renderer, uint8_t *packet,
+                            uint32_t context, uint32_t tag, float value)
+{
+    uint8_t *payload;
+
+    make_packet(packet, GXMETAL_OP_SET_STATE, 32, context);
+    payload = packet + 16;
+    gxmetal_store_le32(payload + GXMETAL_STATE_TAG_OFFSET, tag);
+    gxmetal_store_le32(payload + GXMETAL_STATE_TYPE_OFFSET,
+                       GXMETAL_STATE_FLOAT32);
+    store_float(payload + GXMETAL_STATE_VALUE_OFFSET, value);
+    CHECK(dispatch(renderer, packet, 32) == GXMETAL_ERROR_NONE);
+}
+
 static void test_metal_triangle(void)
 {
     uint8_t framebuffer[64 * 64 * 2] = {0};
@@ -321,6 +335,51 @@ static void test_metal_texture_upload_and_sampling(void)
     CHECK(framebuffer_pixel(framebuffer, 48, 16) == 0x7fff);
     CHECK(framebuffer_pixel(framebuffer, 16, 48) == 0x7c00);
     CHECK(framebuffer_pixel(framebuffer, 48, 48) == 0x03e0);
+
+    /* Nanosaur uses depth fog on textured terrain. Render the same quad into
+     * blue linear fog: its lower-left red texel becomes half-red/half-blue. */
+    set_float_state(renderer, packet, 3, GXMETAL_STATE_FOG_COLOR_A, 1.0f);
+    set_float_state(renderer, packet, 3, GXMETAL_STATE_FOG_COLOR_R, 0.0f);
+    set_float_state(renderer, packet, 3, GXMETAL_STATE_FOG_COLOR_G, 0.0f);
+    set_float_state(renderer, packet, 3, GXMETAL_STATE_FOG_COLOR_B, 1.0f);
+    set_float_state(renderer, packet, 3, GXMETAL_STATE_FOG_START, 0.0f);
+    set_float_state(renderer, packet, 3, GXMETAL_STATE_FOG_END, 1.0f);
+    set_int_state(renderer, packet, 3, GXMETAL_STATE_FOG_MODE,
+                  GXMETAL_FOG_LINEAR);
+    make_packet(packet, GXMETAL_OP_BEGIN_FRAME, 32, 3);
+    CHECK(dispatch(renderer, packet, 32) == GXMETAL_ERROR_NONE);
+    make_packet(packet, GXMETAL_OP_CLEAR, 64, 3);
+    payload = packet + 16;
+    gxmetal_store_le32(payload + GXMETAL_CLEAR_FLAGS_OFFSET,
+                       GXMETAL_CLEAR_COLOR);
+    store_float(payload + GXMETAL_CLEAR_COLOR_A_OFFSET, 1.0f);
+    gxmetal_store_le32(payload + GXMETAL_CLEAR_RECT_OFFSET +
+                       GXMETAL_RECT_RIGHT_OFFSET, 64);
+    gxmetal_store_le32(payload + GXMETAL_CLEAR_RECT_OFFSET +
+                       GXMETAL_RECT_BOTTOM_OFFSET, 64);
+    CHECK(dispatch(renderer, packet, 64) == GXMETAL_ERROR_NONE);
+    make_packet(packet, GXMETAL_OP_DRAW_TEXTURED, 416, 3);
+    payload = packet + 16;
+    gxmetal_store_le32(payload + GXMETAL_DRAW_PRIMITIVE_OFFSET,
+                       GXMETAL_PRIMITIVE_TRIANGLE);
+    gxmetal_store_le32(payload + GXMETAL_DRAW_VERTEX_COUNT_OFFSET, 6);
+    gxmetal_store_le32(payload + GXMETAL_DRAW_VERTEX_STRIDE_OFFSET, 64);
+    vertices = payload + GXMETAL_DRAW_VERTICES_OFFSET;
+    set_texture_vertex(vertices + 0 * 64, 0, 0, 0, 0);
+    set_texture_vertex(vertices + 1 * 64, 64, 0, 1, 0);
+    set_texture_vertex(vertices + 2 * 64, 0, 64, 0, 1);
+    set_texture_vertex(vertices + 3 * 64, 64, 0, 1, 0);
+    set_texture_vertex(vertices + 4 * 64, 64, 64, 1, 1);
+    set_texture_vertex(vertices + 5 * 64, 0, 64, 0, 1);
+    CHECK(dispatch(renderer, packet, 416) == GXMETAL_ERROR_NONE);
+    make_packet(packet, GXMETAL_OP_END_FRAME, 32, 3);
+    CHECK(dispatch(renderer, packet, 32) == GXMETAL_ERROR_NONE);
+    make_packet(packet, GXMETAL_OP_PRESENT, 32, 3);
+    CHECK(dispatch(renderer, packet, 32) == GXMETAL_ERROR_NONE);
+    CHECK(((framebuffer_pixel(framebuffer, 16, 48) >> 10) & 31) >= 14);
+    CHECK(((framebuffer_pixel(framebuffer, 16, 48) >> 10) & 31) <= 16);
+    CHECK((framebuffer_pixel(framebuffer, 16, 48) & 31) >= 14);
+    CHECK((framebuffer_pixel(framebuffer, 16, 48) & 31) <= 16);
 
     make_packet(packet, GXMETAL_OP_TEXTURE_DESTROY, 32, 0);
     payload = packet + 16;

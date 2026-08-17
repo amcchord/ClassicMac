@@ -55,6 +55,18 @@ _Static_assert(sizeof(GXMetalMetalTextureVertex) ==
                GXMETAL_TEXTURE_VERTEX_BYTES,
                "Metal texture vertex must match the wire layout");
 
+typedef struct GXMetalMetalFog {
+    uint32_t mode_and_padding[4];
+    float color[4];
+    float start;
+    float end;
+    float density;
+    float max_depth;
+} GXMetalMetalFog;
+
+_Static_assert(sizeof(GXMetalMetalFog) == 48,
+               "Metal fog constants must match the shader layout");
+
 typedef struct GXMetalMetalResource {
     uint32_t id;
     uint32_t width;
@@ -83,6 +95,7 @@ typedef struct GXMetalMetalContext {
     uint32_t texture_op;
     uint32_t texture_wrap_u;
     uint32_t texture_wrap_v;
+    GXMetalMetalFog fog;
     int active;
     int committed;
     id<MTLTexture> texture;
@@ -114,6 +127,28 @@ static NSString *const kGXMetalShaderSource = @
     "struct GXVertex { float x; float y; float z; float r; float g; float b; float a; };\n"
     "struct GXViewport { float width; float height; };\n"
     "struct GXOut { float4 position [[position]]; float4 color; };\n"
+    "struct GXFog {\n"
+    "  uint4 modeAndPadding; float4 color;\n"
+    "  float start; float end; float density; float maxDepth;\n"
+    "};\n"
+    "float4 gxmetal_apply_fog(float4 source, float depth,\n"
+    "                         constant GXFog &fog) {\n"
+    "  uint mode = fog.modeAndPadding.x;\n"
+    "  float keep = 1.0;\n"
+    "  if (mode == 1u) {\n"
+    "    keep = source.a;\n"
+    "  } else if (mode == 2u) {\n"
+    "    float range = fog.end - fog.start;\n"
+    "    keep = abs(range) > 0.000001 ?\n"
+    "      (fog.end - depth) / range : (depth <= fog.start ? 1.0 : 0.0);\n"
+    "  } else if (mode == 3u) {\n"
+    "    keep = exp(-max(fog.density, 0.0) * max(depth, 0.0));\n"
+    "  } else if (mode == 4u) {\n"
+    "    float scaled = max(fog.density, 0.0) * max(depth, 0.0);\n"
+    "    keep = exp(-(scaled * scaled));\n"
+    "  }\n"
+    "  return mix(fog.color, source, clamp(keep, 0.0, 1.0));\n"
+    "}\n"
     "vertex GXOut gxmetal_vertex(const device GXVertex *vertices [[buffer(0)]], "
     "                            constant GXViewport &viewport [[buffer(1)]], "
     "                            uint index [[vertex_id]]) {\n"
@@ -124,8 +159,10 @@ static NSString *const kGXMetalShaderSource = @
     "  out.color = float4(v.r, v.g, v.b, v.a);\n"
     "  return out;\n"
     "}\n"
-    "fragment float4 gxmetal_fragment(GXOut in [[stage_in]]) {\n"
-    "  return clamp(in.color, 0.0, 1.0);\n"
+    "fragment float4 gxmetal_fragment(GXOut in [[stage_in]],\n"
+    "    constant GXFog &fog [[buffer(0)]]) {\n"
+    "  return gxmetal_apply_fog(clamp(in.color, 0.0, 1.0),\n"
+    "                           in.position.z, fog);\n"
     "}\n"
     "struct GXTextureVertex {\n"
     "  float x; float y; float z; float invW;\n"
@@ -163,7 +200,8 @@ static NSString *const kGXMetalShaderSource = @
     "    GXTextureOut in [[stage_in]],\n"
     "    texture2d<float> image [[texture(0)]],\n"
     "    sampler imageSampler [[sampler(0)]],\n"
-    "    constant uint &operation [[buffer(0)]]) {\n"
+    "    constant uint &operation [[buffer(0)]],\n"
+    "    constant GXFog &fog [[buffer(1)]]) {\n"
     "  float4 texel = image.sample(imageSampler, in.uv);\n"
     "  float4 result = texel;\n"
     "  if ((operation & 4u) != 0u) {\n"
@@ -174,7 +212,8 @@ static NSString *const kGXMetalShaderSource = @
     "  }\n"
     "  if ((operation & 1u) != 0u) result.rgb *= in.kd;\n"
     "  if ((operation & 2u) != 0u) result.rgb += in.ks;\n"
-    "  return clamp(result, 0.0, 1.0);\n"
+    "  return gxmetal_apply_fog(clamp(result, 0.0, 1.0),\n"
+    "                           in.position.z, fog);\n"
     "}\n";
 
 static float gxmetal_metal_load_float(const uint8_t *bytes)
@@ -393,6 +432,9 @@ static uint32_t gxmetal_metal_context_create(
         GXMETAL_Z_LT : GXMETAL_Z_NONE;
     context->z_write = 1;
     context->blend = GXMETAL_BLEND_INTERPOLATE;
+    context->fog.color[3] = 1.0f;
+    context->fog.end = 1.0f;
+    context->fog.max_depth = 1.0f;
     context->active = 1;
     return GXMETAL_ERROR_NONE;
 }
@@ -816,6 +858,8 @@ static uint32_t gxmetal_metal_draw(GXMetalMetalRenderer *renderer,
         length:(NSUInteger)draw_count * sizeof(*draw_vertices) atIndex:0];
     [context->encoder setVertexBytes:&viewport
         length:sizeof(viewport) atIndex:1];
+    [context->encoder setFragmentBytes:&context->fog
+        length:sizeof(context->fog) atIndex:0];
     [context->encoder drawPrimitives:metal_primitive vertexStart:0
         vertexCount:draw_count];
     if (draw_vertices != vertices) {
@@ -999,6 +1043,8 @@ static uint32_t gxmetal_metal_draw_textured(
         renderer->samplers[filter][address_mode] atIndex:0];
     [context->encoder setFragmentBytes:&context->texture_op
         length:sizeof(context->texture_op) atIndex:0];
+    [context->encoder setFragmentBytes:&context->fog
+        length:sizeof(context->fog) atIndex:1];
     [context->encoder drawPrimitives:metal_primitive vertexStart:0
         vertexCount:draw_count];
     if (draw_vertices != vertices) {
@@ -1171,6 +1217,43 @@ static uint32_t gxmetal_metal_set_state(GXMetalMetalContext *context,
         context->texture_id = value;
         return GXMETAL_ERROR_NONE;
     }
+    if (type == GXMETAL_STATE_FLOAT32) {
+        float float_value = gxmetal_metal_load_float(
+            packet->payload + GXMETAL_STATE_VALUE_OFFSET);
+
+        if (!isfinite(float_value)) {
+            return GXMETAL_ERROR_BAD_PACKET;
+        }
+        switch (tag) {
+        case GXMETAL_STATE_FOG_COLOR_A:
+            context->fog.color[3] = float_value;
+            break;
+        case GXMETAL_STATE_FOG_COLOR_R:
+            context->fog.color[0] = float_value;
+            break;
+        case GXMETAL_STATE_FOG_COLOR_G:
+            context->fog.color[1] = float_value;
+            break;
+        case GXMETAL_STATE_FOG_COLOR_B:
+            context->fog.color[2] = float_value;
+            break;
+        case GXMETAL_STATE_FOG_START:
+            context->fog.start = float_value;
+            break;
+        case GXMETAL_STATE_FOG_END:
+            context->fog.end = float_value;
+            break;
+        case GXMETAL_STATE_FOG_DENSITY:
+            context->fog.density = float_value;
+            break;
+        case GXMETAL_STATE_FOG_MAX_DEPTH:
+            context->fog.max_depth = float_value;
+            break;
+        default:
+            break;
+        }
+        return GXMETAL_ERROR_NONE;
+    }
     if (type != GXMETAL_STATE_UINT32) {
         return GXMETAL_ERROR_NONE;
     }
@@ -1201,6 +1284,12 @@ static uint32_t gxmetal_metal_set_state(GXMetalMetalContext *context,
         break;
     case GXMETAL_STATE_TEXTURE_OP:
         context->texture_op = value;
+        break;
+    case GXMETAL_STATE_FOG_MODE:
+        if (value > GXMETAL_FOG_EXPONENTIAL_SQUARED) {
+            return GXMETAL_ERROR_BAD_PACKET;
+        }
+        context->fog.mode_and_padding[0] = value;
         break;
     case GXMETAL_STATE_TEXTURE_WRAP_U:
         if (value > GXMETAL_TEXTURE_WRAP_CLAMP) {

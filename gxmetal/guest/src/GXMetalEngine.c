@@ -1583,6 +1583,9 @@ static TQAError GXMetalEngineGestalt(TQAGestaltSelector selector,
         if (features & GXMETAL_FEATURE_Z16) {
             value |= kQAOptional_ZBufferMask | kQAOptional_ClearZBuffer;
         }
+        if (features & GXMETAL_FEATURE_FOG_DEPTH) {
+            value |= kQAOptional_FogDepth;
+        }
         break;
     case kQAGestalt_FastFeatures:
         value = kQAFast_Line | kQAFast_Gouraud;
@@ -1591,6 +1594,9 @@ static TQAError GXMetalEngineGestalt(TQAGestaltSelector selector,
         }
         if (features & GXMETAL_FEATURE_TEXTURE) {
             value |= kQAFast_Texture | kQAFast_TextureHQ;
+        }
+        if (features & GXMETAL_FEATURE_FOG_DEPTH) {
+            value |= kQAFast_FogDepth;
         }
         break;
     case kQAGestalt_TextureMemory:

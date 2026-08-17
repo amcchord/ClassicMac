@@ -346,7 +346,8 @@ enum GXMetalExpectedPixel {
     kGXMetalPixelRed,
     kGXMetalPixelBlue,
     kGXMetalPixelPurple,
-    kGXMetalPixelGreen
+    kGXMetalPixelGreen,
+    kGXMetalPixelFogPurple
 };
 
 static Boolean GXMetalPixelMatches(GDHandle graphicsDevice,
@@ -405,8 +406,12 @@ static Boolean GXMetalPixelMatches(GDHandle graphicsDevice,
         return red > maximum / 3 && blue > maximum / 3 &&
                green < maximum / 3;
     }
-    return green > maximum * 2 / 3 &&
-           red < maximum / 3 && blue < maximum / 3;
+    if (expected == kGXMetalPixelGreen) {
+        return green > maximum * 2 / 3 &&
+               red < maximum / 3 && blue < maximum / 3;
+    }
+    return red > maximum / 6 && red < maximum * 2 / 5 &&
+           blue > maximum * 3 / 5 && green < maximum / 5;
 }
 
 static TQAError GXMetalRenderPattern(TQADrawContext *context,
@@ -433,6 +438,7 @@ static TQAError GXMetalRenderPattern(TQADrawContext *context,
     TQAVGouraud nearTriangle[3];
     TQAVGouraud blendBase[3];
     TQAVGouraud blendOverlay[3];
+    TQAVGouraud fogTriangle[3];
     TQAVGouraud bitmapVertex;
     TQAVTexture texturedQuad[4];
     unsigned long flags[4] = {0, 0, 0, 0};
@@ -495,6 +501,12 @@ static TQAError GXMetalRenderPattern(TQADrawContext *context,
                                      1.0f, 0.0f, 0.0f, 0.5f);
     blendOverlay[2] = GXMetalGouraud(190.0f, 208.0f, 0.10f,
                                      1.0f, 0.0f, 0.0f, 0.5f);
+    fogTriangle[0] = GXMetalGouraud(210.0f, 232.0f, 0.75f,
+                                    1.0f, 0.0f, 0.0f, 1.0f);
+    fogTriangle[1] = GXMetalGouraud(240.0f, 200.0f, 0.75f,
+                                    1.0f, 0.0f, 0.0f, 1.0f);
+    fogTriangle[2] = GXMetalGouraud(270.0f, 232.0f, 0.75f,
+                                    1.0f, 0.0f, 0.0f, 1.0f);
 
     texturedQuad[0] = GXMetalTextureVertex(178.0f, 38.0f, 0.30f,
                                             0.0f, 0.0f);
@@ -525,6 +537,16 @@ static TQAError GXMetalRenderPattern(TQADrawContext *context,
     QADrawVTexture(context, 4, kQAVertexMode_Strip,
                    texturedQuad, flags);
     QADrawBitmap(context, &bitmapVertex, bitmap);
+    QASetFloat(context, kQATag_FogColor_a, 1.0f);
+    QASetFloat(context, kQATag_FogColor_r, 0.0f);
+    QASetFloat(context, kQATag_FogColor_g, 0.0f);
+    QASetFloat(context, kQATag_FogColor_b, 1.0f);
+    QASetFloat(context, kQATag_FogStart, 0.0f);
+    QASetFloat(context, kQATag_FogEnd, 1.0f);
+    QASetInt(context, kQATag_FogMode, kQAFogMode_Linear);
+    QADrawTriGouraud(context, &fogTriangle[0], &fogTriangle[1],
+                     &fogTriangle[2], kQATriFlags_None);
+    QASetInt(context, kQATag_FogMode, kQAFogMode_None);
     error = QARenderEnd(context, &dirty);
     if (error == kQANoErr) {
         error = QASync(context);
@@ -549,7 +571,11 @@ static TQAError GXMetalRenderPattern(TQADrawContext *context,
          !GXMetalPixelMatches(graphicsDevice,
                               deviceRect->left + 319,
                               deviceRect->top + 221,
-                              kGXMetalPixelGreen))) {
+                              kGXMetalPixelGreen) ||
+         !GXMetalPixelMatches(graphicsDevice,
+                              deviceRect->left + 240,
+                              deviceRect->top + 218,
+                              kGXMetalPixelFogPurple))) {
         error = kQAError;
     }
     QABitmapDelete(engine, bitmap);
@@ -880,13 +906,13 @@ int main(void)
     }
     requiredFeatures = kQAOptional_Texture | kQAOptional_TextureHQ |
                        kQAOptional_Blend | kQAOptional_ClearDrawBuffer |
-                       kQAOptional_ClearZBuffer;
+                       kQAOptional_ClearZBuffer | kQAOptional_FogDepth;
     if ((optionalFeatures & requiredFeatures) != requiredFeatures ||
         (optionalFeatures2 & kQAOptional2_SwapBuffers) == 0) {
         GXMetalRecordResult("FAIL: incomplete RAVE feature set");
         DisposeWindow(window);
         GXMetalShowResult(false,
-            "GXMetal registered, but the host did not expose the complete depth, blend, texture, and double-buffer feature set.");
+            "GXMetal registered, but the host did not expose the complete depth, fog, blend, texture, and double-buffer feature set.");
         QAExit();
         return 1;
     }
