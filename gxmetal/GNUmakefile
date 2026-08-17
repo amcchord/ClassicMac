@@ -7,6 +7,7 @@ PROTOCOL_TEST := $(BUILD_DIR)/test_protocol
 QUEUE_TEST := $(BUILD_DIR)/test_queue
 GUEST_TRANSPORT_TEST := $(BUILD_DIR)/test_guest_transport
 RENDERER_TEST := $(BUILD_DIR)/test_renderer
+DIRTY_TEST := $(BUILD_DIR)/test_dirty
 PIPELINE_TEST := $(BUILD_DIR)/test_pipeline
 HOST_OS := $(shell uname -s)
 ifeq ($(HOST_OS),Darwin)
@@ -42,6 +43,13 @@ $(RENDERER_TEST): tests/test_renderer.c host/gxmetal_renderer.c \
 	$(HOST_CC) $(HOST_CFLAGS) -o $@ tests/test_renderer.c \
 		host/gxmetal_renderer.c host/gxmetal_decode.c -lm
 
+$(DIRTY_TEST): tests/test_dirty.c host/gxmetal_dirty.c \
+               host/gxmetal_dirty.h host/gxmetal_decode.c \
+               host/gxmetal_decode.h protocol/gxmetal_protocol.h
+	@mkdir -p $(BUILD_DIR)
+	$(HOST_CC) $(HOST_CFLAGS) -o $@ tests/test_dirty.c \
+		host/gxmetal_dirty.c host/gxmetal_decode.c
+
 $(PIPELINE_TEST): tests/test_pipeline.c guest/src/GXMetalTransport.c \
                   guest/src/GXMetalTransport.h host/gxmetal_queue.c \
                   host/gxmetal_queue.h host/gxmetal_renderer.c \
@@ -61,11 +69,12 @@ $(BUILD_DIR)/test_metal: tests/test_metal.m host/gxmetal_metal.m \
 		-framework Foundation -framework Metal
 
 test: $(PROTOCOL_TEST) $(QUEUE_TEST) $(GUEST_TRANSPORT_TEST) \
-      $(RENDERER_TEST) $(PIPELINE_TEST) $(METAL_TEST)
+      $(RENDERER_TEST) $(DIRTY_TEST) $(PIPELINE_TEST) $(METAL_TEST)
 	$(PROTOCOL_TEST)
 	$(QUEUE_TEST)
 	$(GUEST_TRANSPORT_TEST)
 	$(RENDERER_TEST)
+	$(DIRTY_TEST)
 	$(PIPELINE_TEST)
 	$(if $(METAL_TEST),$(METAL_TEST),@true)
 	python3 tests/test_pef_set_init.py

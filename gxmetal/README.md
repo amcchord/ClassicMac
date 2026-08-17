@@ -30,7 +30,12 @@ cutout texture borders. Rectangular QuickDraw regions and RAVE scissor state
 are intersected in Metal; complex regions decline GXMetal so RAVE can select a
 software engine. A frame is batched in one Metal command buffer, then `PRESENT`
 copies only the dirty rectangle inside the immutable context clip into the
-guest's big-endian RGB555 or 32-bit VGA surface.
+guest's big-endian RGB555 or 32-bit VGA surface. The QEMU bridge mirrors only
+validated context-layout metadata and marks the minimal contiguous VRAM span
+covering that presented rectangle dirty once per frame; it no longer dirties
+the entire VGA aperture for every clear and draw packet. With the default
+64 MiB aperture, a full 640x480 RGB555 present now dirties 614,400 bytes rather
+than 67,108,864 bytes (109.23x fewer), and partial presents reduce it further.
 The device advertises `GXMETAL_FEATURE_METAL` only when that backend initializes
 successfully. The bounded, deterministic CPU rasterizer remains the fallback on
 other hosts and the correctness oracle for Metal.
@@ -82,7 +87,9 @@ Both Gouraud and post-texture-operation alpha testing are asserted. The texture
 test uses an asymmetric image to catch vertical-origin regressions, then repeats
 the draw through linear depth fog. A separate clip test proves immutable
 context clipping, mutable scissoring, untouched framebuffer preservation, and
-dirty-rectangle-only presentation. Every result is read back from the
+dirty-rectangle-only presentation. A host-independent scanout test proves
+clipped, padded-row, offset, empty, destroyed, reset, and malformed-context
+dirty-range behavior. Every result is read back from the
 guest-format framebuffer:
 
 ```sh

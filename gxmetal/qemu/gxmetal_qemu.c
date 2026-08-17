@@ -17,6 +17,8 @@ static uint32_t gxmetal_render_dispatch(void *opaque,
                                         const GXMetalPacketView *packet)
 {
     GXMetalQemuState *state = opaque;
+    GXMetalDirtyRange dirty_range;
+    GXMetalDirtyResult dirty_result;
     uint32_t error;
 
     if (state->metal != NULL) {
@@ -24,14 +26,31 @@ static uint32_t gxmetal_render_dispatch(void *opaque,
     } else {
         error = gxmetal_renderer_dispatch(&state->renderer, packet);
     }
-    if (error == GXMETAL_ERROR_NONE &&
-        (packet->opcode == GXMETAL_OP_CLEAR ||
-         packet->opcode == GXMETAL_OP_DRAW_GOURAUD ||
-         packet->opcode == GXMETAL_OP_PRESENT)) {
+    if (error != GXMETAL_ERROR_NONE) {
+        return error;
+    }
+
+    gxmetal_dirty_observe_success(&state->dirty, packet);
+    if (state->metal != NULL) {
+        if (packet->opcode == GXMETAL_OP_PRESENT) {
+            dirty_result = gxmetal_dirty_present_range(
+                &state->dirty, packet, &dirty_range);
+            if (dirty_result == GXMETAL_DIRTY_RANGE) {
+                memory_region_set_dirty(state->framebuffer_region,
+                                        dirty_range.offset,
+                                        dirty_range.length);
+            } else if (dirty_result == GXMETAL_DIRTY_FALLBACK) {
+                memory_region_set_dirty(state->framebuffer_region, 0,
+                                        state->renderer.framebuffer_bytes);
+            }
+        }
+    } else if (packet->opcode == GXMETAL_OP_CLEAR ||
+               packet->opcode == GXMETAL_OP_DRAW_GOURAUD) {
+        /* The portable oracle renders directly into guest VRAM. */
         memory_region_set_dirty(state->framebuffer_region, 0,
                                 state->renderer.framebuffer_bytes);
     }
-    return error;
+    return GXMETAL_ERROR_NONE;
 }
 
 static uint64_t gxmetal_register_read(void *opaque, hwaddr address,
@@ -150,6 +169,7 @@ bool gxmetal_qemu_init(GXMetalQemuState *state, Object *owner,
     framebuffer = memory_region_get_ram_ptr(framebuffer_region);
     state->framebuffer_region = framebuffer_region;
     gxmetal_renderer_init(&state->renderer, framebuffer, framebuffer_bytes);
+    gxmetal_dirty_init(&state->dirty, framebuffer_bytes);
     state->metal = gxmetal_metal_create(framebuffer, framebuffer_bytes,
                                          shared, GXMETAL_SHARED_BYTES);
     state->features = GXMETAL_FEATURE_GOURAUD | GXMETAL_FEATURE_FENCE;
@@ -179,6 +199,7 @@ bool gxmetal_qemu_init(GXMetalQemuState *state, Object *owner,
 void gxmetal_qemu_reset(GXMetalQemuState *state)
 {
     gxmetal_queue_reset(&state->queue);
+    gxmetal_dirty_reset(&state->dirty);
     gxmetal_metal_reset(state->metal);
     gxmetal_renderer_reset(&state->renderer);
 }
