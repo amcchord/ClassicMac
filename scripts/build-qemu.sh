@@ -298,9 +298,10 @@ git -C "$QEMU_DIR" apply "$PPCVID_DIR/vga-packed-depths.patch" || die "Failed to
 # QEXT host-composited cursor channel used by the bundled PowerPC NDRV. This
 # keeps pointer movement out of the guest framebuffer and Cocoa scanout path.
 git -C "$QEMU_DIR" apply "$PPCVID_DIR/vga-hardware-cursor.patch" || die "Failed to apply vga hardware-cursor patch"
-# Share big-endian 15/16-bpp VRAM directly with Cocoa and stop clearing VGA's
-# dirty bitmap for shared surfaces. This removes the repeated TCG write traps
-# that dominate framebuffer-heavy QuickDraw workloads.
+# Share Cocoa-compatible 32-bpp VRAM directly and stop clearing VGA's dirty
+# bitmap only for genuinely shared surfaces. Big-endian RGB555/RGB565 keep
+# QEMU's converted shadow path because Core Graphics cannot safely consume the
+# Pixman layouts directly.
 git -C "$QEMU_DIR" apply "$PPCVID_DIR/vga-fast-scanout.patch" || die "Failed to apply vga fast-scanout patch"
 
 # GXMetal's RAVE transport extends std-VGA with a validated command queue in a

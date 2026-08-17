@@ -728,7 +728,7 @@ GraphicsCoreGetVideoParams(VDVideoParametersInfoRec *videoParams)
 	videoParams->csPageCount = pageCount;
 	lprintf("Video Params says %d pages\n", pageCount);
 	
-	rowBytes = (width * depth + 7) / 8;
+	rowBytes = QemuVga_GetRowBytes(width, depth);
 	(videoParams->csVPBlockPtr)->vpBaseOffset 		= 0;			// For us, it's always 0
 	(videoParams->csVPBlockPtr)->vpBounds.top 		= 0;			// Always 0
 	(videoParams->csVPBlockPtr)->vpBounds.left 		= 0;			// Always 0

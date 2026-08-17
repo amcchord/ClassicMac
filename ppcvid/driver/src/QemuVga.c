@@ -522,6 +522,18 @@ OSStatus QemuVga_GetModeInfo(UInt32 index, UInt32 *width, UInt32 *height)
 	return noErr;
 }
 
+UInt32 QemuVga_GetRowBytes(UInt32 width, UInt32 depth)
+{
+	/*
+	 * DISPI depth 15 is RGB555 stored in a full 16-bit word.  Treating the
+	 * logical color depth as the storage width makes Mac OS advance 15/8
+	 * bytes per pixel while QEMU advances two, visibly skewing every row.
+	 */
+	UInt32 storageDepth = depth == 15 ? 16 : depth;
+
+	return (width * storageDepth + 7) / 8;
+}
+
 OSStatus QemuVga_GetModePages(UInt32 index, UInt32 depth,
 							  UInt32 *pageSize, UInt32 *pageCount)
 {
@@ -531,8 +543,8 @@ OSStatus QemuVga_GetModePages(UInt32 index, UInt32 depth,
 		return paramErr;
 	width = getVMode(index)->width;
 	height = getVMode(index)->height;
-	/* Sub-byte depths (1/2/4) pack several pixels per byte. */
-	pBytes = ((width * depth + 7) / 8) * height;
+	/* Sub-byte depths pack pixels; RGB555 occupies a full 16-bit word. */
+	pBytes = QemuVga_GetRowBytes(width, depth) * height;
 	if (pageSize)
 		*pageSize = pBytes;
 	if (pageCount) {

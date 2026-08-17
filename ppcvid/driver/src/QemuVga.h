@@ -134,6 +134,7 @@ extern OSStatus	QemuVga_GetColorEntry(UInt32 index, RGBColor *color);
 
 extern OSStatus QemuVga_GetModePages(UInt32 index, UInt32 depth,
 									 UInt32 *pageSize, UInt32 *pageCount);
+extern UInt32 QemuVga_GetRowBytes(UInt32 width, UInt32 depth);
 extern OSStatus QemuVga_GetModeInfo(UInt32 index, UInt32 *width, UInt32 *height);
 extern OSStatus QemuVga_SetMode(UInt32 modeIndex, UInt32 depth, UInt32 page);
 

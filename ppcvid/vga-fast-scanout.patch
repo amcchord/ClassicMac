@@ -38,24 +38,11 @@
  }
  
  /*
-@@ -1686,12 +1692,46 @@
+@@ -1686,12 +1692,34 @@
       * endian surfaces for 15bpp and above and byteswapped
       * surfaces for 24bpp and above.
       */
--    format = qemu_default_pixman_format(depth, !byteswap);
-+    /*
-+     * Pixman has no byte-swapped RGB555/RGB565 names.  Use its BGR variants
-+     * as private markers for a big-endian 16-bit shared surface; backends must
-+     * explicitly opt in to these formats before VGA will expose them.  Cocoa
-+     * maps the raw bytes directly with kCGBitmapByteOrder16Big.
-+     */
-+    if (byteswap && depth == 15) {
-+        format = PIXMAN_x1b5g5r5;
-+    } else if (byteswap && depth == 16) {
-+        format = PIXMAN_b5g6r5;
-+    } else {
-+        format = qemu_default_pixman_format(depth, !byteswap);
-+    }
+     format = qemu_default_pixman_format(depth, !byteswap);
      if (format) {
          allocate_surface = !dpy_gfx_check_format(s->con, format)
              || s->force_shadow || force_shadow;
@@ -114,51 +101,3 @@
      DEFINE_PROP_BOOL("hardware-cursor", PCIVGAState, hardware_cursor, false),
      DEFINE_EDID_PROPERTIES(PCIVGAState, edid_info),
  };
---- a/ui/cocoa.m
-+++ b/ui/cocoa.m
-@@ -651,6 +651,7 @@
-         int h = pixman_image_get_height(pixman_image);
-         pixman_format_code_t format = pixman_image_get_format(pixman_image);
-         int bitsPerPixel = PIXMAN_FORMAT_BPP(format);
-+        int bitsPerComponent = DIV_ROUND_UP(bitsPerPixel, 8) * 2;
-         int stride = pixman_image_get_stride(pixman_image);
-         CGBitmapInfo bitmapInfo = kCGBitmapByteOrder32Little |
-                                   kCGImageAlphaNoneSkipFirst;
-@@ -663,6 +664,16 @@
-         if (format == PIXMAN_b8g8r8x8) {
-             bitmapInfo = kCGBitmapByteOrder32Big |
-                          kCGImageAlphaNoneSkipFirst;
-+        } else if (format == PIXMAN_x1b5g5r5) {
-+            /* Private VGA marker for a raw big-endian RGB555 surface. */
-+            bitsPerComponent = 5;
-+            bitmapInfo = kCGBitmapByteOrder16Big |
-+                         kCGImageAlphaNoneSkipFirst;
-+        } else if (format == PIXMAN_b5g6r5) {
-+            /* Private VGA marker for a raw big-endian RGB565 surface. */
-+            bitsPerComponent = 5;
-+            bitmapInfo = kCGBitmapByteOrder16Big |
-+                         kCGImageAlphaNone;
-         }
-         CGDataProviderRef dataProviderRef = CGDataProviderCreateWithData(
-             NULL,
-@@ -673,7 +684,7 @@
-         CGImageRef imageRef = CGImageCreate(
-             w, //width
-             h, //height
--            DIV_ROUND_UP(bitsPerPixel, 8) * 2, //bitsPerComponent
-+            bitsPerComponent, //bitsPerComponent
-             bitsPerPixel, //bitsPerPixel
-             stride, //bytesPerRow
-             colorspace, //colorspace
-@@ -2660,8 +2671,9 @@
-                                    pixman_format_code_t format)
- {
-     (void)dcl;
--    /* drawRect has direct Core Graphics mappings for these 32-bit layouts. */
--    return format == PIXMAN_x8r8g8b8 || format == PIXMAN_b8g8r8x8;
-+    /* drawRect has direct Core Graphics mappings for these layouts. */
-+    return format == PIXMAN_x8r8g8b8 || format == PIXMAN_b8g8r8x8 ||
-+           format == PIXMAN_x1b5g5r5 || format == PIXMAN_b5g6r5;
- }
- 
- static void cocoa_refresh(DisplayChangeListener *dcl)
