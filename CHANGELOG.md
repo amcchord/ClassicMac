@@ -1,5 +1,89 @@
 # Changelog
 
+## 1.7.0 beta 4 — 2026-08-17
+
+### Added
+
+- **GXMetal brings host-accelerated QuickDraw 3D RAVE to Mac OS 9.** Its
+  PowerPC CFM `tnsl` engine batches validated, versioned drawing commands to a
+  paravirtual QEMU device, which renders them with Metal. The matching driver,
+  one-click installer, and conformance/benchmark application ship together on
+  the ClassicMac Tools CD.
+- GXMetal now has a simple classic extension puzzle-piece icon with a metal M.
+  A small 68K startup companion shows it in Mac OS 9's extension row while the
+  RAVE driver retains the `shlb`/`tnsl` identity required for discovery.
+- GXMetal accelerates Gouraud and textured geometry, Z buffering, alpha test
+  and blending, depth fog, rectangular clipping/scissoring, bitmap uploads,
+  double buffering, and the texture formats and sampling modes used by the
+  initial Nanosaur validation target. Unsupported contexts remain available to
+  Apple's software RAVE engine instead of being partially claimed.
+
+### Changed
+
+- GXMetal presents Metal output directly into page-aligned QEMU VRAM with a
+  compute conversion for RGB555, ARGB8888, and RGB8888. A bounded CPU readback
+  path remains automatic for embeddings that cannot share the framebuffer.
+- A full 640x480 RGB555 present now marks 614,400 bytes of VRAM dirty instead
+  of the complete 64 MiB aperture, a 109.23x reduction. Partial presents mark
+  only their clipped contiguous span.
+- Five runs of the 120-frame Mac OS 9 mixed texture/Gouraud conformance
+  workload from exact Developer ID-signed beta applications measured
+  8.19x–14.95x versus Apple Software RAVE. The final supplied-icon release
+  candidate completed in 49,847 microseconds through GXMetal versus 551,304
+  microseconds through software, an 11.05x speedup.
+
+### Fixed
+
+- Corrected the guest-framebuffer stride and visible-mode relationship that
+  produced horizontal bands from Happy Mac through early startup after the
+  1.7 graphics fast path.
+- Preserved RAVE's submitted per-triangle orientation flag as metadata rather
+  than incorrectly discarding flagged triangles, which had removed most of
+  Nanosaur's submitted geometry.
+- Reconstructed RAVE fog distance from `1 / invW` instead of using the
+  normalized Z-buffer coordinate. This fixes Nanosaur scenes that were blended
+  almost entirely to the pale fog color even though their HUD rendered
+  correctly.
+- Made GXMetal updates safe when the previous RAVE library is still open. The
+  installer stages both files, converts old copies to hidden inert rollback
+  files, and the new startup companion removes them on restart, preventing a
+  duplicate engine from remaining in the active Extensions folder.
+
+## 1.7.0 beta 3 — 2026-08-16
+
+### Changed
+
+- **QuickDraw graphics are 56% faster in the controlled MacBench 5
+  comparison.** The signed-beta Graphics baseline of 9,078 increased to a
+  two-run mean of 14,125, with the warm validation run reaching 14,765. The
+  exact notarized release bundle scored 14,457, a 59% gain over the baseline.
+- Power Mac graphics workloads now avoid unnecessary translated-code page
+  walks when framebuffer writes cannot overlap generated code. Ambiguous and
+  cross-page writes continue through QEMU's original locked invalidation path.
+- The small victim-TLB scan retains its existing order and behavior while
+  avoiding a compiler expansion that produced hundreds of outlined helper
+  calls on Apple Silicon.
+
+## 1.7.0 beta 2 — 2026-08-16
+
+### Added
+
+- **PowerPC G4 acceleration for Mac OS 8.6 and 9.** New Power Mac machines use
+  QEMU's 7400 CPU model by default, while a per-machine compatibility switch
+  retains the G3 model required by Mac OS 8.5.
+- **Faster Power Mac display modes.** Power Macs can now start in Thousands or
+  Millions of colors; Thousands is the recommended high-performance mode.
+
+### Changed
+
+- **QuickDraw graphics are 52% faster in the controlled MacBench 5 comparison.**
+  The paired Graphics mean increased from 9,054 on the G3 control to 13,768
+  with the beta's G4 and display acceleration enabled.
+- Power Mac framebuffers scan out directly to the native macOS display path,
+  avoiding repeated TCG dirty-page traps and redundant pixel conversion.
+- The classic Mac cursor is composited by the host instead of being redrawn
+  into guest video memory on every pointer movement.
+
 ## 1.6.1 — 2026-08-15
 
 ### Fixed

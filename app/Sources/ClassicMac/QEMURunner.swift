@@ -439,12 +439,13 @@ final class QEMUManager: ObservableObject {
         // cursor while that device is absolute.
         //
         // Mac OS 8.5 and 8.6 predate the KeyLargo PMU used by QEMU's default
-        // mac99 profile. Use the CUDA/ADB profile and a G3 CPU, matching the
-        // original iMac identity advertised by the bundled OpenBIOS. The ADB
+        // mac99 profile, so all guests use the CUDA/ADB profile. Mac OS 8.6
+        // and 9 can opt into the faster 7400/G4 model; Mac OS 8.5 retains the
+        // original G3 identity advertised by the bundled OpenBIOS. The ADB
         // mouse is also a working captured fallback until the optional Virtio
         // tablet driver loads.
         args += ["-M", "mac99,via=cuda,audiodev=snd0"]
-        args += ["-cpu", "g3"]
+        args += ["-cpu", config.useG4CPU ? "7400" : "g3"]
         args += ["-m", String(config.ramMB)]
         args += ["-L", AppPaths.pcBiosDir.path]
         // right-click-ctrl: deliver right clicks as Control+click so Mac OS
@@ -469,6 +470,20 @@ final class QEMUManager: ObservableObject {
         // bundled qemu_vga.ndrv offer Black & White, 4 and 16 colors in the
         // Monitors control panel alongside 256/thousands/millions.
         args += ["-global", "VGA.packed-lowbpp=on"]
+        // Direct Cocoa scanout does not need QEMU to write-protect and dirty-
+        // track each framebuffer page. Disabling those repeated TCG traps is
+        // particularly important for QuickDraw's framebuffer-heavy BitBlt and
+        // shape operations. Shadowed low-color modes keep normal tracking.
+        args += ["-global", "VGA.untracked-vram=on"]
+        // Move the classic Mac cursor through QEXT and let Cocoa composite it,
+        // avoiding framebuffer redraws for pointer motion. Older guest drivers
+        // ignore the advertised feature and keep their software cursor.
+        args += ["-global", "VGA.hardware-cursor=on"]
+        // GXMetal exposes a versioned QuickDraw 3D RAVE command queue through
+        // the VGA device. The guest engine still checks the advertised feature
+        // bits before claiming a context, so unfinished or unsupported drawing
+        // paths continue through the system software renderer.
+        args += ["-global", "VGA.gxmetal=on"]
         // Cached host I/O can complete a MacIO DBDMA command before classic
         // Mac OS has armed its synchronous wait. Keep the final descriptor
         // active for 1 ms so IDE and DBDMA completion arrive after the guest
@@ -480,10 +495,11 @@ final class QEMUManager: ObservableObject {
         // scripts/build-qemu.sh), the display stays black until the Mac OS
         // boot screen takes over.
         args += ["-prom-env", "output-device=ttya"]
-        // OpenBIOS sizes the framebuffer from -g at boot. Boot depth is
-        // millions of colors; Monitors can switch anywhere from Black &
-        // White up to millions once Mac OS is running (packed-lowbpp).
-        args += ["-g", "\(config.width)x\(config.height)x32"]
+        // OpenBIOS sizes the framebuffer from -g at boot. QEMU's mac99
+        // firmware interface names the classic direct-color modes 15 and 32
+        // bpp; the UI presents those as Thousands and Millions.
+        let powerMacBootDepth = config.depth == ColorDepth.millions.rawValue ? 32 : 15
+        args += ["-g", "\(config.width)x\(config.height)x\(powerMacBootDepth)"]
         args += ["-name", config.name]
 
         // Audio through the screamer at 44.1 kHz. When sound is off, route to

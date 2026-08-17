@@ -38,7 +38,8 @@ HELPERS_DIR="$CONTENTS/Helpers"
 QUADRA_APP="$HELPERS_DIR/Quadra 800.app"
 PPC_APP="$HELPERS_DIR/Power Mac G4.app"
 
-APP_VERSION="${APP_VERSION:-1.6.1}"
+APP_VERSION="${APP_VERSION:-1.7.0}"
+APP_BUILD_VERSION="${APP_BUILD_VERSION:-1.7.4}"
 BUNDLE_ID="com.classicmac.emulator"
 
 log() { printf '\n==> %s\n' "$*"; }
@@ -215,7 +216,7 @@ cat > "$CONTENTS/Info.plist" <<PLIST
 	<key>CFBundleIdentifier</key>
 	<string>$BUNDLE_ID</string>
 	<key>CFBundleVersion</key>
-	<string>$APP_VERSION</string>
+	<string>$APP_BUILD_VERSION</string>
 	<key>CFBundleShortVersionString</key>
 	<string>$APP_VERSION</string>
 	<key>CFBundleExecutable</key>
@@ -295,7 +296,7 @@ write_helper_plist() {
 	<key>CFBundleIdentifier</key>
 	<string>$bundle_id</string>
 	<key>CFBundleVersion</key>
-	<string>$APP_VERSION</string>
+	<string>$APP_BUILD_VERSION</string>
 	<key>CFBundleShortVersionString</key>
 	<string>$APP_VERSION</string>
 	<key>CFBundleExecutable</key>

@@ -26,6 +26,7 @@ QEMU_REPO="${QEMU_REPO:-https://gitlab.com/qemu-project/qemu.git}"
 QEMU_TAG="${QEMU_TAG:-v11.0.2}"
 QFB_DIR="$ROOT_DIR/qfb"
 POWERMAC_DIR="$ROOT_DIR/powermac"
+GXMETAL_DIR="$ROOT_DIR/gxmetal"
 
 # Tracked files modified by the qfb and screamer integration patches (reset
 # before re-applying).
@@ -65,6 +66,8 @@ PATCHED_FILES=(
   hw/misc/macio/cuda.c
   include/hw/misc/macio/cuda.h
   hw/nvram/mac_nvram.c
+  accel/tcg/cputlb.c
+  accel/tcg/tb-maint.c
 )
 SCREAMER_DIR="$ROOT_DIR/screamer"
 PPCVID_DIR="$ROOT_DIR/ppcvid"
@@ -200,6 +203,9 @@ git -C "$QEMU_DIR" apply "$ROOT_DIR/cocoaui/window-presentation.patch" || die "F
 git -C "$QEMU_DIR" apply "$ROOT_DIR/cocoaui/mac-native-menus.patch" || die "Failed to apply ClassicMac native menus patch"
 # Quadra-only floppy image controls for the removable classicvirtio drive.
 git -C "$QEMU_DIR" apply "$ROOT_DIR/cocoaui/floppy-menu.patch" || die "Failed to apply ClassicMac floppy menu patch"
+# Faster 32-bit Power Mac scanout: let Cocoa consume a big-endian framebuffer
+# directly, and poll display updates at roughly the guest's 60 Hz VBL cadence.
+git -C "$QEMU_DIR" apply "$ROOT_DIR/cocoaui/display-performance.patch" || die "Failed to apply Cocoa display performance patch"
 # Allow a VirtIO block device to start empty, exchange raw media while running,
 # and report capacity changes to the guest driver.
 git -C "$QEMU_DIR" apply "$VIRTIO_DIR/virtio-blk-removable.patch" || die "Failed to apply removable VirtIO block patch"
@@ -229,7 +235,13 @@ git -C "$QEMU_DIR" apply "$SCREAMER_DIR/integration.patch" || die "Failed to app
 # by Mac OS 8.5 and 8.6 during early startup.
 log "Installing classic Mac OS 8 Power Mac compatibility fixes"
 git -C "$QEMU_DIR" apply "$POWERMAC_DIR/classic-macos-8.patch" || die "Failed to apply Power Mac compatibility patch"
-
+# Classic Mac graphics workloads write heavily around translated code. Keep a
+# conservative per-page coverage summary so writes outside translated regions
+# avoid walking the page's TB list, while preserving the original locked path
+# for cross-page and otherwise ambiguous cases. Also keep Clang from expanding
+# the small victim-TLB scan into hundreds of outlined helper calls.
+log "Installing TCG graphics-workload fast path"
+git -C "$QEMU_DIR" apply "$POWERMAC_DIR/tcg-graphics-fast-path.patch" || die "Failed to apply TCG graphics fast-path patch"
 # MacIO IDE/DBDMA completion timing: cached host I/O can otherwise complete
 # before classic Mac OS arms its synchronous wait, losing the wakeup and
 # freezing Mac OS 9.2.x Installer mid-copy. This also fixes the ordinary ATA
@@ -283,6 +295,34 @@ git -C "$QEMU_DIR" apply "$PPCVID_DIR/vga-host-resize.patch" || die "Failed to a
 # on top of the host-resize patch (extends its QEXT register block with a
 # feature bitmap the guest driver probes).
 git -C "$QEMU_DIR" apply "$PPCVID_DIR/vga-packed-depths.patch" || die "Failed to apply vga packed-depths patch"
+# QEXT host-composited cursor channel used by the bundled PowerPC NDRV. This
+# keeps pointer movement out of the guest framebuffer and Cocoa scanout path.
+git -C "$QEMU_DIR" apply "$PPCVID_DIR/vga-hardware-cursor.patch" || die "Failed to apply vga hardware-cursor patch"
+# Share Cocoa-compatible 32-bpp VRAM directly and stop clearing VGA's dirty
+# bitmap only for genuinely shared surfaces. Big-endian RGB555/RGB565 keep
+# QEMU's converted shadow path because Core Graphics cannot safely consume the
+# Pixman layouts directly.
+git -C "$QEMU_DIR" apply "$PPCVID_DIR/vga-fast-scanout.patch" || die "Failed to apply vga fast-scanout patch"
+
+# GXMetal's RAVE transport extends std-VGA with a validated command queue in a
+# separate shared PCI BAR. Metal is selected on supported macOS hosts, with the
+# portable reference rasterizer retained as a deterministic fallback.
+log "Installing GXMetal command transport"
+cp "$GXMETAL_DIR/protocol/gxmetal_protocol.h" "$QEMU_DIR/hw/display/gxmetal_protocol.h"
+cp "$GXMETAL_DIR/host/gxmetal_decode.h" "$QEMU_DIR/hw/display/gxmetal_decode.h"
+cp "$GXMETAL_DIR/host/gxmetal_decode.c" "$QEMU_DIR/hw/display/gxmetal_decode.c"
+cp "$GXMETAL_DIR/host/gxmetal_dirty.h" "$QEMU_DIR/hw/display/gxmetal_dirty.h"
+cp "$GXMETAL_DIR/host/gxmetal_dirty.c" "$QEMU_DIR/hw/display/gxmetal_dirty.c"
+cp "$GXMETAL_DIR/host/gxmetal_queue.h" "$QEMU_DIR/hw/display/gxmetal_queue.h"
+cp "$GXMETAL_DIR/host/gxmetal_queue.c" "$QEMU_DIR/hw/display/gxmetal_queue.c"
+cp "$GXMETAL_DIR/host/gxmetal_metal.h" "$QEMU_DIR/hw/display/gxmetal_metal.h"
+cp "$GXMETAL_DIR/host/gxmetal_metal.m" "$QEMU_DIR/hw/display/gxmetal_metal.m"
+cp "$GXMETAL_DIR/host/gxmetal_metal_stub.c" "$QEMU_DIR/hw/display/gxmetal_metal_stub.c"
+cp "$GXMETAL_DIR/host/gxmetal_renderer.h" "$QEMU_DIR/hw/display/gxmetal_renderer.h"
+cp "$GXMETAL_DIR/host/gxmetal_renderer.c" "$QEMU_DIR/hw/display/gxmetal_renderer.c"
+cp "$GXMETAL_DIR/qemu/gxmetal_qemu.h" "$QEMU_DIR/hw/display/gxmetal_qemu.h"
+cp "$GXMETAL_DIR/qemu/gxmetal_qemu.c" "$QEMU_DIR/hw/display/gxmetal_qemu.c"
+git -C "$QEMU_DIR" apply "$GXMETAL_DIR/qemu-integration.patch" || die "Failed to apply GXMetal integration patch"
 if [ -f "$PPCVID_DIR/qemu_vga.ndrv" ]; then
   cp "$PPCVID_DIR/qemu_vga.ndrv" "$QEMU_DIR/pc-bios/qemu_vga.ndrv"
 else
@@ -373,6 +413,29 @@ if "$QEMU_PPC_BIN" -device VGA,help 2>&1 | grep -q "packed-lowbpp"; then
 else
   die "VGA packed-lowbpp property missing from the ppc build"
 fi
+if "$QEMU_PPC_BIN" -device VGA,help 2>&1 | grep -q "hardware-cursor"; then
+  printf '    OK  VGA hardware cursor channel (ppc)\n'
+else
+    die "VGA hardware-cursor property missing from the ppc build"
+fi
+if "$QEMU_PPC_BIN" -device VGA,help 2>&1 | grep -q "untracked-vram"; then
+  printf '    OK  VGA untracked direct scanout (ppc)\n'
+else
+  die "VGA untracked-vram property missing from the ppc build"
+fi
+if "$QEMU_PPC_BIN" -device VGA,help 2>&1 | grep -q "gxmetal"; then
+  printf '    OK  GXMetal command transport (ppc)\n'
+else
+  die "VGA gxmetal property missing from the ppc build"
+fi
+if nm "$QEMU_PPC_BIN" 2>/dev/null | grep "_gxmetal_metal_dispatch" >/dev/null &&
+   otool -L "$QEMU_PPC_BIN" | grep "/Metal.framework/" >/dev/null; then
+  printf '    OK  GXMetal native Metal renderer (ppc)\n'
+else
+  die "GXMetal Metal renderer missing from the ppc build"
+fi
+"$PYTHON_BIN" "$GXMETAL_DIR/tests/test_qemu_transport.py" "$QEMU_PPC_BIN" || \
+  die "GXMetal QEMU realization tests failed"
 if "$QEMU_PPC_BIN" -device macio-ide,help 2>&1 | grep -q "dma-completion-delay-ns"; then
   printf '    OK  MacIO IDE DMA completion delay (ppc)\n'
 else

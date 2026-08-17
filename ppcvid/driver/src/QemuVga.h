@@ -64,6 +64,24 @@
 /* Feature bits in QEMU_EXT_REG_FEATURES (present when QEMU_EXT_REG_SIZE
  * reads at least QEMU_EXT_SIZE_FEATURES). */
 #define QEMU_EXT_FEATURE_PACKED_LOWBPP   0x1
+#define QEMU_EXT_FEATURE_HARDWARE_CURSOR 0x2
+
+/* Host-composited 16x16 ARGB cursor registers. */
+#define QEMU_EXT_REG_CURSOR_WIDTH        0x6
+#define QEMU_EXT_REG_CURSOR_HEIGHT       0x7
+#define QEMU_EXT_REG_CURSOR_HOT_X        0x8
+#define QEMU_EXT_REG_CURSOR_HOT_Y        0x9
+#define QEMU_EXT_REG_CURSOR_X            0xa
+#define QEMU_EXT_REG_CURSOR_Y            0xb
+#define QEMU_EXT_REG_CURSOR_VISIBLE      0xc
+#define QEMU_EXT_REG_CURSOR_COMMAND      0xd
+#define QEMU_EXT_CURSOR_DEFINE           0x1
+#define QEMU_EXT_CURSOR_MOVE             0x2
+#define QEMU_EXT_CURSOR_DATA_REG         (0x100 / 4)
+#define QEMU_EXT_CURSOR_WIDTH            16
+#define QEMU_EXT_CURSOR_HEIGHT           16
+#define QEMU_EXT_CURSOR_PIXELS           (QEMU_EXT_CURSOR_WIDTH * QEMU_EXT_CURSOR_HEIGHT)
+#define QEMU_EXT_SIZE_CURSOR             0x500
 
 /* Smallest resolution we will follow the window down to; matches the QEMU
  * Cocoa window's minimum content size. */
@@ -97,6 +115,8 @@ extern void appendVModeToList(struct _vMode *vMode);
 /* --- Internal APIs */
 
 extern OSStatus	QemuVga_Init();
+extern void		QemuVga_SetCursor(UInt32 *argb);
+extern void		QemuVga_DrawCursor(SInt32 x, SInt32 y, Boolean visible);
 extern OSStatus	QemuVga_Exit();
 
 extern OSStatus	QemuVga_Open();
@@ -114,6 +134,7 @@ extern OSStatus	QemuVga_GetColorEntry(UInt32 index, RGBColor *color);
 
 extern OSStatus QemuVga_GetModePages(UInt32 index, UInt32 depth,
 									 UInt32 *pageSize, UInt32 *pageCount);
+extern UInt32 QemuVga_GetRowBytes(UInt32 width, UInt32 depth);
 extern OSStatus QemuVga_GetModeInfo(UInt32 index, UInt32 *width, UInt32 *height);
 extern OSStatus QemuVga_SetMode(UInt32 modeIndex, UInt32 depth, UInt32 page);
 

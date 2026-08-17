@@ -33,3 +33,7 @@ DerivedData/
 # Local Python/test harness artifacts
 __pycache__/
 tools/os9-install-harness/shots/
+
+# GXMetal native-test and cross-compiled intermediate products
+gxmetal/build/
+gxmetal/guest/bin/

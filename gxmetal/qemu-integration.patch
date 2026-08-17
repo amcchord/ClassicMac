@@ -1,0 +1,83 @@
+diff --git a/hw/display/vga-pci.c b/hw/display/vga-pci.c
+--- a/hw/display/vga-pci.c
++++ b/hw/display/vga-pci.c
+@@ -34,6 +34,7 @@
+ #include "qemu/timer.h"
+ #include "hw/core/loader.h"
+ #include "hw/display/edid.h"
++#include "gxmetal_qemu.h"
+ #include "qom/object.h"
+ #include "hw/acpi/acpi_aml_interface.h"
+ 
+@@ -77,5 +78,9 @@ struct PCIVGAState {
+     uint32_t cursor_argb[PCI_VGA_QEXT_CURSOR_MAX_WIDTH *
+                          PCI_VGA_QEXT_CURSOR_MAX_HEIGHT];
++
++    /* Optional paravirtual QuickDraw 3D RAVE command transport. */
++    bool gxmetal_enabled;
++    GXMetalQemuState gxmetal;
+ };
+ 
+ #define TYPE_PCI_VGA "pci-vga"
+@@ -459,6 +464,12 @@ static void pci_std_vga_realize(PCIDevice *dev, Error **errp)
+     bool qext = false;
+     bool edid = false;
+ 
++    if (d->gxmetal_enabled &&
++        !(d->flags & (1 << PCI_VGA_FLAG_ENABLE_MMIO))) {
++        error_setg(errp, "GXMetal requires the VGA MMIO BAR");
++        return;
++    }
++
+     /* vga + console init */
+     if (!vga_common_init(s, OBJECT(dev), errp)) {
+         return;
+@@ -495,6 +506,18 @@ static void pci_std_vga_realize(PCIDevice *dev, Error **errp)
+                                      qext, edid, d->host_resize,
+                                      d->hardware_cursor);
+ 
++        if (d->gxmetal_enabled) {
++            if (!gxmetal_qemu_init(&d->gxmetal, OBJECT(dev), &s->vram,
++                                   s->vram_size, errp)) {
++                return;
++            }
++            memory_region_add_subregion(&d->mmio,
++                                        GXMETAL_BAR2_REGISTER_OFFSET,
++                                        &d->gxmetal.registers);
++            pci_register_bar(&d->dev, 4, PCI_BASE_ADDRESS_MEM_PREFETCH,
++                             &d->gxmetal.shared);
++        }
++
+         pci_register_bar(&d->dev, 2, PCI_BASE_ADDRESS_SPACE_MEMORY, &d->mmio);
+     }
+ }
+@@ -591,6 +613,7 @@ static const Property vga_pci_properties[] = {
+     DEFINE_PROP_BOOL("packed-lowbpp", PCIVGAState, vga.packed_lowbpp, false),
+     DEFINE_PROP_BOOL("untracked-vram", PCIVGAState, vga.untracked_vram, false),
+     DEFINE_PROP_BOOL("hardware-cursor", PCIVGAState, hardware_cursor, false),
++    DEFINE_PROP_BOOL("gxmetal", PCIVGAState, gxmetal_enabled, false),
+     DEFINE_EDID_PROPERTIES(PCIVGAState, edid_info),
+ };
+ 
+diff --git a/hw/display/meson.build b/hw/display/meson.build
+--- a/hw/display/meson.build
++++ b/hw/display/meson.build
+@@ -16,7 +16,17 @@ system_ss.add(when: 'CONFIG_SSD0303', if_true: files('ssd0303.c'))
+ system_ss.add(when: 'CONFIG_SSD0323', if_true: files('ssd0323.c'))
+ system_ss.add(when: 'CONFIG_XEN_BUS', if_true: files('xenfb.c'))
+ 
+-system_ss.add(when: 'CONFIG_VGA_PCI', if_true: files('vga-pci.c'))
++system_ss.add(when: 'CONFIG_VGA_PCI', if_true: files(
++  'vga-pci.c',
++  'gxmetal_decode.c',
++  'gxmetal_dirty.c',
++  'gxmetal_queue.c',
++  'gxmetal_renderer.c',
++  'gxmetal_qemu.c',
++))
++system_ss.add(when: ['CONFIG_VGA_PCI', pvg],
++  if_true: [files('gxmetal_metal.m'), pvg],
++  if_false: files('gxmetal_metal_stub.c'))
+ system_ss.add(when: 'CONFIG_VGA_ISA', if_true: files('vga-isa.c'))
+ system_ss.add(when: 'CONFIG_VGA_MMIO', if_true: files('vga-mmio.c'))
+ system_ss.add(when: 'CONFIG_VMWARE_VGA', if_true: files('vmware_vga.c'))

@@ -11,23 +11,47 @@ final class QEMURunnerArgumentTests: XCTestCase {
         floppyImagePath: String? = nil,
         toolsCDInserted: Bool = true,
         networking: Bool = true,
+        useG4CPU: Bool = true,
         tabletInput: Bool = true,
+        depth: Int = ColorDepth.thousands.rawValue,
         sharedFolderPath: String? = nil
     ) -> VMConfig {
         VMConfig(
             name: "Argument Test",
             machineFamily: family,
             ramMB: family.defaultRAMMB,
+            depth: depth,
             cdImagePath: cdImagePath,
             bootFromCD: bootFromCD,
             floppyImagePath: floppyImagePath,
             toolsCDInserted: toolsCDInserted,
             networking: networking,
             sound: false,
+            useG4CPU: useG4CPU,
             tabletInput: tabletInput,
             sharedFolderPath: sharedFolderPath,
             bundleURL: URL(fileURLWithPath: "/tmp/argument-test.classic")
         )
+    }
+
+    func testPowerMacGraphicsAccelerationOptionsAndBootDepth() {
+        let thousands = QEMUManager.buildArguments(for: config())
+        let millions = QEMUManager.buildArguments(
+            for: config(depth: ColorDepth.millions.rawValue)
+        )
+
+        XCTAssertTrue(optionValues("-global", in: thousands).contains("VGA.hardware-cursor=on"))
+        XCTAssertTrue(optionValues("-global", in: thousands).contains("VGA.untracked-vram=on"))
+        XCTAssertTrue(optionValues("-global", in: thousands).contains("VGA.gxmetal=on"))
+        XCTAssertEqual(optionValues("-cpu", in: thousands), ["7400"])
+        XCTAssertEqual(optionValues("-g", in: thousands), ["1024x768x15"])
+        XCTAssertEqual(optionValues("-g", in: millions), ["1024x768x32"])
+    }
+
+    func testPowerMacCanRetainG3ForMacOS85Compatibility() {
+        let arguments = QEMUManager.buildArguments(for: config(useG4CPU: false))
+
+        XCTAssertEqual(optionValues("-cpu", in: arguments), ["g3"])
     }
 
     private func optionValues(_ option: String, in arguments: [String]) -> [String] {
@@ -350,7 +374,7 @@ final class QEMURunnerArgumentTests: XCTestCase {
             optionValues("-M", in: arguments),
             ["mac99,via=cuda,audiodev=snd0"]
         )
-        XCTAssertEqual(optionValues("-cpu", in: arguments), ["g3"])
+        XCTAssertEqual(optionValues("-cpu", in: arguments), ["7400"])
         XCTAssertTrue(optionValues("-boot", in: arguments).isEmpty)
         XCTAssertTrue(devices.contains("virtio-tablet-pci"))
         XCTAssertTrue(

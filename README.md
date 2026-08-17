@@ -63,6 +63,13 @@ ClassicMac exists because of years of brilliant work by other engineers. The pat
 - **Self-contained `.classic` machine documents.** Each VM is a single Finder package holding its config, disk, and PRAM. Keep it anywhere, double-click to boot, move it between Macs.
 - **Classic input helpers.** Secondary click opens contextual menus as Control+click, and the scroll wheel becomes arrow-key taps. Toggle both together while the Mac is running with **Mac → Secondary Click and Scrolling**, or turn them off for guests with real drivers (e.g. USB Overdrive).
 - **A guest-additions Tools CD** (StuffIt Expander, Disk Copy, USB Overdrive, Transmit, Lido, patched HD SC Setup...) built from `guestcd/manifest.tsv`, insertable at runtime from the **Mac** menu. The action changes between **Insert “ClassicMac Tools”** and **Eject “ClassicMac Tools”** to match the current state; **Mac → Disc** handles other disc images — everything on the Tools CD is pre-expanded and ready to run.
+- **Experimental GXMetal 3D acceleration on Mac OS 9.** The Tools CD carries a
+  one-click installer for a PowerPC QuickDraw 3D RAVE engine. It batches guest
+  drawing commands to the host, renders them with Metal, and safely leaves
+  unsupported contexts to Apple's software renderer. The included GXMetal
+  Test verifies framebuffer correctness and measures both engines before a
+  game is launched. A classic puzzle-piece M appears in the startup extension
+  row when GXMetal's companion loads.
 - **Native machine control.** Pause / Resume, Restart, and Shut Down from the app, live screen previews in the library, and a "Match Display" button that sizes the Mac to your screen.
 - **Machine window shortcuts that always work.** Control-Option-T hides or restores the title bar for a clean borderless look, Control-Option-F toggles Full Screen, and Control-Option-R matches the Mac screen to the window again. All three keep working even while the emulator has grabbed the keyboard, and they also live in the **View** menu and the machine's Dock icon menu.
 - **Signed, notarized, stapled DMG** for distribution — recipients get a clean Gatekeeper experience even offline.
@@ -73,6 +80,11 @@ ClassicMac exists because of years of brilliant work by other engineers. The pat
 2. Click **+** to create a machine — pick the Quadra 800 (System 7.1–8.1) or Power Mac G4 (Mac OS 8.5–9.2.2), choose disk size, RAM, and resolution.
 3. Attach a Mac OS install CD image and boot from it. Installation media is not bundled — download the classic Mac OS version you want from the [WinWorld operating system library](https://winworldpc.com/library/operating-systems).
 4. Optional: pick a shared folder, or attach a raw floppy image to a Quadra. Both appear on the emulated desktop as writable disks.
+5. To test GXMetal on Mac OS 9, insert **ClassicMac Tools**, open **GXMetal**,
+   run **Install GXMetal**, restart, and run **GXMetal Test**. Proceed to a RAVE
+   game only after the test reports a pass; moving both GXMetal and GXMetal
+   Startup out of Extensions and restarting restores the normal Apple software
+   path.
 
 > [!IMPORTANT]
 > **Installing Mac OS 9?** Initialize the destination with Drive Setup from
@@ -108,15 +120,20 @@ Requirements: an Apple Silicon Mac (M1 or later) running a recent macOS.
 #    patch set, compiles qemu-system-m68k + qemu-system-ppc)
 ./scripts/build-qemu.sh
 
-# 2. Build the SwiftUI app and bundle QEMU + firmware + dylibs into
+# 2. Build the guest-additions Tools CD (cached downloads). This must precede
+#    app bundling so the exact GXMetal driver and installer enter the release.
+./scripts/build-guest-cd.sh
+
+# 3. Build the SwiftUI app and bundle QEMU + firmware + dylibs into
 #    dist/ClassicMac.app (code-signed)
 ./scripts/bundle-qemu.sh
 
-# 3. Optional: build the guest-additions Tools CD (cached downloads)
-./scripts/build-guest-cd.sh
-
-# 4. Optional: notarize and package a distributable disk image
+# 4. Notarize and package a distributable disk image
 ./scripts/make-dmg.sh
+
+# 5. Verify the exact signed/stapled artifact, including versions, Gatekeeper,
+#    the bundled Tools CD, and the GXMetal-enabled Power Mac executable
+./scripts/verify-release.sh dist/ClassicMac.dmg 1.7.0 1.7.4
 ```
 
 All scripts are idempotent and safe to re-run. Building needs the Xcode command line tools and [Homebrew](https://brew.sh).

@@ -130,6 +130,11 @@ struct VMConfig: Codable, Identifiable, Hashable {
     var networking: Bool
     var sound: Bool
 
+    // PowerPC CPU generation. The 7400/G4 model substantially improves
+    // classic QuickDraw and mixed 68K/PowerPC workloads on Mac OS 8.6 and 9.
+    // Mac OS 8.5 predates G4 hardware, so it can retain the G3 model.
+    var useG4CPU: Bool
+
     // Tablet input: use a virtio absolute-pointing device so the mouse moves
     // seamlessly in and out of the VM window without needing to be captured.
     // On by default. When off, the standard relative mouse is used and the
@@ -155,7 +160,7 @@ struct VMConfig: Codable, Identifiable, Hashable {
         case id, name, machineFamily, ramMB, diskImageName, pramImageName, diskSizeGB
         case width, height, depth, useEnhancedFramebuffer, customResolution
         case cdImagePath, bootFromCD, floppyImagePath
-        case networking, sound, sharedFolderPath
+        case networking, sound, useG4CPU, sharedFolderPath
         case classicInputHelpers, tabletInput, toolsCDInserted
     }
 
@@ -175,6 +180,7 @@ struct VMConfig: Codable, Identifiable, Hashable {
          toolsCDInserted: Bool = false,
          networking: Bool = true,
          sound: Bool = true,
+         useG4CPU: Bool = true,
          tabletInput: Bool = true,
          classicInputHelpers: Bool = true,
          sharedFolderPath: String? = nil,
@@ -197,6 +203,7 @@ struct VMConfig: Codable, Identifiable, Hashable {
         self.toolsCDInserted = toolsCDInserted
         self.networking = networking
         self.sound = sound
+        self.useG4CPU = machineFamily == .powerMacG4 && useG4CPU
         self.tabletInput = tabletInput
         self.classicInputHelpers = classicInputHelpers
         self.sharedFolderPath = sharedFolderPath
@@ -241,6 +248,9 @@ struct VMConfig: Codable, Identifiable, Hashable {
         toolsCDInserted = try c.decodeIfPresent(Bool.self, forKey: .toolsCDInserted) ?? false
         networking = try c.decodeIfPresent(Bool.self, forKey: .networking) ?? true
         sound = try c.decodeIfPresent(Bool.self, forKey: .sound) ?? true
+        // Preserve the boot-compatible G3 identity for existing VM packages.
+        // Newly created Power Macs opt into G4 through the regular initializer.
+        useG4CPU = try c.decodeIfPresent(Bool.self, forKey: .useG4CPU) ?? false
         classicInputHelpers = try c.decodeIfPresent(Bool.self, forKey: .classicInputHelpers) ?? true
         tabletInput = try c.decodeIfPresent(Bool.self, forKey: .tabletInput) ?? true
         sharedFolderPath = try c.decodeIfPresent(String.self, forKey: .sharedFolderPath)
@@ -261,6 +271,8 @@ struct VMConfig: Codable, Identifiable, Hashable {
                 ramMB = 896
             }
             useEnhancedFramebuffer = false
+        } else {
+            useG4CPU = false
         }
         width = Self.clampedWidth(width)
         height = Self.clampedHeight(height)
@@ -279,6 +291,11 @@ struct VMConfig: Codable, Identifiable, Hashable {
 
         let validDepths = Set(ColorDepth.allCases.map(\.rawValue))
         if !validDepths.contains(depth) {
+            depth = ColorDepth.thousands.rawValue
+        }
+        if machineFamily == .powerMacG4 &&
+            depth != ColorDepth.thousands.rawValue &&
+            depth != ColorDepth.millions.rawValue {
             depth = ColorDepth.thousands.rawValue
         }
         if machineFamily == .quadra800 && !useEnhancedFramebuffer && width >= 1152 {
@@ -309,11 +326,6 @@ struct VMConfig: Codable, Identifiable, Hashable {
     var previewURL: URL { folder.appendingPathComponent("preview.png") }
 
     var resolutionLabel: String {
-        if machineFamily == .powerMacG4 {
-            // The mac99 display always runs at millions of colors; the stored
-            // depth only applies to the Quadra framebuffers.
-            return "\(width)x\(height)"
-        }
         return "\(width)x\(height)x\(depth)"
     }
 

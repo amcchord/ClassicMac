@@ -1,0 +1,203 @@
+# GXMetal
+
+GXMetal is a paravirtual QuickDraw 3D RAVE drawing engine for ClassicMac. Its
+PowerPC CFM shared library uses the `shlb` Finder type, `tnsl` creator, and
+`tnsl`, `ftag`, and `vers` resources used by shipping hardware engines on Mac
+OS 8.5, 8.6, and 9. The guest batches
+rendering commands for a QEMU device; the host executes those commands with
+Metal and presents through the existing Power Mac display.
+
+This directory contains the protocol, the PowerPC RAVE engine, the VGA NDRV
+handoff, and the QEMU transport/renderers. ClassicMac starts its Power
+Mac with `VGA.gxmetal=on`; QEMU realizes the control registers and shared PCI
+BAR, validates queued packets, completes fences, and latches malformed input as
+a diagnostic fault. The existing VGA NDRV publishes the Expansion Manager's
+logical BAR mappings through the Name Registry, allowing the `tnsl` to connect
+without guessing physical PCI addresses.
+
+On macOS, QEMU now executes direct-color Gouraud points, lines, strips, fans,
+triangles, clipped color/depth clears, all RAVE depth comparisons and depth
+write masking, interpolated or premultiplied alpha, and double-buffer swaps in a
+native Metal render pipeline. The PowerPC engine also creates, uploads, binds,
+and destroys RGB555, ARGB1555, ARGB4444, RGB32, and ARGB32 textures. Metal
+provides perspective-correct sampling, repeat/clamp addressing, nearest,
+bilinear, and trilinear mip filtering, plus RAVE decal, modulation, and
+highlight texture operations. Linear, exponential, and squared-exponential
+RAVE depth fog is applied in both the Gouraud and textured fragment paths. Fog
+distance follows the RAVE contract and is reconstructed from `1 / invW`; the
+normalized Z-buffer coordinate remains independent for hidden-surface removal.
+All seven RAVE alpha comparisons operate on shaded fragment alpha before
+blending and depth writes, supporting masked sprites, foliage, fences, and
+cutout texture borders. GXMetal preserves RAVE's per-triangle backfacing
+orientation flag through scalar and batched draw entry points without treating
+it as a discard request. QuickDraw 3D applies the active backfacing style before
+submission; a submitted triangle must still be rendered by the driver.
+Rectangular QuickDraw regions and RAVE scissor state are intersected
+in Metal; complex regions decline GXMetal so RAVE can select a software engine.
+A frame is batched in one Metal command buffer, then `PRESENT`
+copies only the dirty rectangle inside the immutable context clip into the
+guest's big-endian RGB555 or 32-bit VGA surface. The QEMU bridge mirrors only
+validated context-layout metadata and marks the minimal contiguous VRAM span
+covering that presented rectangle dirty once per frame; it no longer dirties
+the entire VGA aperture for every clear and draw packet. With the default
+64 MiB aperture, a full 640x480 RGB555 present now dirties 614,400 bytes rather
+than 67,108,864 bytes (109.23x fewer), and partial presents reduce it further.
+When QEMU's VRAM is page-aligned, a Metal compute kernel converts the presented
+texture directly into that shared buffer in RGB555, ARGB8888, or RGB8888
+layout. This removes the temporary RGBA allocation, `getBytes` readback, and
+CPU pixel loop from each frame. Unaligned embeddings retain the bounded CPU
+readback path automatically.
+The device advertises `GXMETAL_FEATURE_METAL` only when that backend initializes
+successfully. The bounded, deterministic CPU rasterizer remains the fallback on
+other hosts and the correctness oracle for Metal.
+
+Contexts requiring unsupported pixel formats or deep Z still return
+`kQANotSupported`, allowing RAVE to select Apple's software renderer instead of
+accepting a partially implemented path. Hosts without Metal likewise decline
+texture, Z, and double-buffer contexts because the CPU renderer intentionally
+remains a small Gouraud correctness oracle.
+
+## Transport contract
+
+The backward-compatible version 1.4 wire contract is defined in
+`protocol/gxmetal_protocol.h`. All registers and shared-memory packets are
+little-endian. Packet sizes are multiples of 16 bytes, packets never cross the
+end of the circular command ring, and offsets in commands refer only to the
+upload portion of the GXMetal shared BAR. Guest virtual or physical pointers
+are never accepted by the host.
+
+The existing std-VGA BAR2 has an unused 256-byte range beginning at `0x0b00`.
+GXMetal places its discovery, queue, status, fence, and reset registers there.
+A separate 4 MiB PCI BAR contains a 1 MiB command ring and a bounded upload
+heap. The device is optional: a missing magic value, incompatible major
+version, faulted status, or failed device probe prevents GXMetal from claiming
+a RAVE draw context.
+
+Every packet begins with opcode, header size, total size, context ID, and
+sequence. Context creation identifies a bounded target in VGA BAR0. Frame
+commands carry explicit rectangles. RAVE integer and floating-point state uses
+a typed `SET_STATE` payload, while pointer-valued texture and bitmap state is
+translated to 32-bit GXMetal resource IDs. Gouraud vertices use eight binary32
+values; textured vertices use the exact sixteen-value RAVE layout. Resource
+uploads name only a validated offset and length in the upload heap.
+
+The producer writes complete packets, performs a PowerPC I/O synchronization,
+publishes the producer offset, then rings the doorbell. The host validates the
+entire packet before dispatch and advances the consumer offset only after it
+has consumed the packet. `PAD` consumes the unused tail when the next packet
+would wrap. Fence completion is reported by sequence number.
+
+## Build and test
+
+Run the protocol, queue, guest-producer, renderer, and complete first-triangle
+pipeline tests on the host. macOS additionally compiles the Objective-C backend
+with strict warnings and verifies real Metal triangles, clipped clears, depth
+ordering, alpha blending, alpha rejection before depth writes, a double-buffer
+presentation, and a four-color big-endian texture upload/sample/destroy cycle.
+Both Gouraud and post-texture-operation alpha testing are asserted. The texture
+test uses an asymmetric image to catch vertical-origin regressions, then repeats
+the draw through linear depth fog with deliberately different normalized Z and
+reciprocal-W distance values. Gouraud and textured backface cases prove
+that orientation-flagged triangles still update framebuffer and depth state, while
+protocol tests reject unknown draw flags. A separate clip test proves immutable
+context clipping, mutable scissoring, untouched framebuffer preservation, and
+dirty-rectangle-only presentation. A host-independent scanout test proves
+clipped, padded-row, offset, empty, destroyed, reset, and malformed-context
+dirty-range behavior. The Metal test also forces both direct and fallback
+present selection and validates the direct kernel's three guest framebuffer
+formats plus partial-rectangle preservation. Every result is read back from the
+guest-format framebuffer:
+
+```sh
+make -C gxmetal test
+```
+
+Build the PowerPC CFM `tnsl`, one-click installer, and conformance application
+with the existing Retro68 toolchain and Apple Universal Interfaces:
+
+```sh
+scripts/build-gxmetal.sh
+```
+
+The RGBA icon master lives at `guest/art/GXMetalIcon-master.png`.
+`tools/build_icon_resources.py` crops its alpha silhouette and deterministically
+generates the tracked `guest/src/GXMetalIcon.r` with 32- and 16-pixel 8-bit,
+4-bit, and monochrome classic icon members. Regenerate it with a Pillow-enabled
+Python when the master artwork changes:
+
+```sh
+python3 gxmetal/tools/build_icon_resources.py \
+  gxmetal/guest/art/GXMetalIcon-master.png \
+  gxmetal/guest/src/GXMetalIcon.r
+```
+
+The build produces `GXMetal.bin`, `GXMetalStartup.bin`,
+`GXMetalInstaller.bin`, and `GXMetalTest.bin` in `gxmetal/guest/bin`. They are
+MacBinary files so their PEF data forks, resource forks, and Finder metadata
+survive transfer to HFS. `GXMetalStartup.bin` is a small 68K `INIT` companion:
+Mac OS 9 does not execute an `INIT` embedded in the required `shlb`/`tnsl` RAVE
+library, so the companion displays GXMetal's puzzle-piece M in the normal
+startup extension row. The build verifies the driver's complete RAVE/CFM
+discovery resources and initialization descriptor, the companion's executable
+`INIT` and icon family, and the test app's public RAVE imports.
+
+`scripts/build-guest-cd.sh` rebuilds those four matching artifacts and places
+them in the `GXMetal` folder on the ClassicMac Tools CD. In the guest,
+double-click **Install GXMetal**. It finds the active System Folder and stages
+both forks of the driver and startup companion before changing anything. On an
+update, the already-loaded old files are renamed, made invisible, and changed
+to an inert non-extension Finder type before the new pair takes their canonical
+names. The new startup companion deletes those rollback copies during the
+required restart, so a second RAVE driver cannot be rediscovered. After
+restarting, **GXMetal Test** enumerates the engines
+that RAVE actually registered, selects GXMetal by its gestalt name, exercises a
+Z-buffered and double-buffered render with Gouraud shading, alpha blending,
+alpha testing, depth fog, an uploaded texture, and a partially clipped uploaded
+bitmap inside a rectangular QuickDraw clip; waits on the host fence; then
+validates red, blue, blended-purple, alpha-rejected green, preserved clipped
+pixels, fogged-purple, bitmap-green, and scalar and batched orientation-flagged
+red pixels directly in the guest framebuffer. It also
+requires a deliberately complex region to return
+`kQANotSupported`. A missing device or host feature fails the test explicitly
+and remains eligible for Apple's normal software RAVE fallback.
+The same app then runs a fixed 120-frame mixed texture/Gouraud workload first
+through GXMetal and then through an independently selected non-GXMetal engine.
+It records both microsecond totals and the fixed-point speedup in
+`System Folder:Preferences:GXMetal Test Results`, proving that the software
+fallback remains usable while producing a repeatable guest-level performance
+comparison.
+
+Build the patched QEMU binaries and black-box test the GXMetal PCI layout:
+
+```sh
+scripts/build-qemu.sh
+```
+
+The build checks that the PowerPC VGA device accepts the `gxmetal` property,
+that BAR2 remains a 4 KiB register aperture, that the prefetchable GXMetal BAR4
+is 4 MiB, and that invalid configurations fail realization.
+
+On macOS, validate the exact Developer ID-signed application against a supplied
+Mac OS 9 disk without modifying the source image:
+
+```sh
+scripts/test-gxmetal-os9.sh /path/to/mac-os-9-disk.img
+```
+
+The harness verifies the bundle, APFS-clones (or copies) the disk, extracts the
+matching driver, startup companion, and test application from the bundle's own
+Tools CD, installs them only into the clone, boots the bundled GXMetal-capable
+QEMU, and reads the flushed PASS/FAIL record back from the clone. It retains the
+temporary directory and final screenshot as auditable evidence.
+
+## Versioning and safety
+
+The high 16 bits of `GXMETAL_REG_VERSION` are the incompatible major version;
+the low 16 bits add backward-compatible functionality. Every optional rendering
+path also has a feature bit. Unknown opcodes, malformed sizes, ring crossings,
+and out-of-range uploads fault the queue instead of being interpreted.
+
+Device loss and protocol faults are surfaced at the next RAVE synchronization
+boundary. New contexts then fail cleanly, allowing applications and RAVE to use
+the software engine; no GXMetal path writes outside the dedicated shared BAR or
+the active VGA framebuffer bounds.

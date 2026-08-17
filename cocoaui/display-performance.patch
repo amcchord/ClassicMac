@@ -1,0 +1,84 @@
+diff --git a/ui/cocoa.m b/ui/cocoa.m
+index 54b835f..7edc2bc 100644
+--- a/ui/cocoa.m
++++ b/ui/cocoa.m
+@@ -69,6 +69,9 @@
+ #define UC_CTRL_KEY "\xe2\x8c\x83"
+ #define UC_ALT_KEY "\xe2\x8c\xa5"
+ 
++/* Keep screen updates close to the classic Mac's 60 Hz VBL cadence. */
++#define COCOA_REFRESH_INTERVAL_MS 17
++
+ typedef struct {
+     int width;
+     int height;
+@@ -82,6 +85,8 @@ static void cocoa_update(DisplayChangeListener *dcl,
+ static void cocoa_switch(DisplayChangeListener *dcl,
+                          DisplaySurface *surface);
+ 
++static bool cocoa_gfx_check_format(DisplayChangeListener *dcl,
++                                   pixman_format_code_t format);
+ static void cocoa_refresh(DisplayChangeListener *dcl);
+ static void cocoa_mouse_set(DisplayChangeListener *dcl, int x, int y, bool on);
+ static void cocoa_cursor_define(DisplayChangeListener *dcl, QEMUCursor *cursor);
+@@ -90,11 +95,13 @@ static void cocoa_switch(DisplayChangeListener *dcl,
+     .dpy_name          = "cocoa",
+     .dpy_gfx_update = cocoa_update,
+     .dpy_gfx_switch = cocoa_switch,
++    .dpy_gfx_check_format = cocoa_gfx_check_format,
+     .dpy_refresh = cocoa_refresh,
+     .dpy_mouse_set = cocoa_mouse_set,
+     .dpy_cursor_define = cocoa_cursor_define,
+ };
+ static DisplayChangeListener dcl = {
++    .update_interval = COCOA_REFRESH_INTERVAL_MS,
+     .ops = &dcl_ops,
+ };
+ static QKbdState *kbd;
+@@ -642,8 +649,21 @@ - (void) drawRect:(NSRect) rect
+     } else {
+         int w = pixman_image_get_width(pixman_image);
+         int h = pixman_image_get_height(pixman_image);
+-        int bitsPerPixel = PIXMAN_FORMAT_BPP(pixman_image_get_format(pixman_image));
++        pixman_format_code_t format = pixman_image_get_format(pixman_image);
++        int bitsPerPixel = PIXMAN_FORMAT_BPP(format);
+         int stride = pixman_image_get_stride(pixman_image);
++        CGBitmapInfo bitmapInfo = kCGBitmapByteOrder32Little |
++                                  kCGImageAlphaNoneSkipFirst;
++
++        /*
++         * QEMU can expose a big-endian 32-bit guest framebuffer directly as
++         * PIXMAN_b8g8r8x8. Tell Core Graphics about that byte order instead
++         * of making VGA convert every pixel into a little-endian shadow.
++         */
++        if (format == PIXMAN_b8g8r8x8) {
++            bitmapInfo = kCGBitmapByteOrder32Big |
++                         kCGImageAlphaNoneSkipFirst;
++        }
+         CGDataProviderRef dataProviderRef = CGDataProviderCreateWithData(
+             NULL,
+             pixman_image_get_data(pixman_image),
+@@ -657,7 +677,7 @@ - (void) drawRect:(NSRect) rect
+             bitsPerPixel, //bitsPerPixel
+             stride, //bytesPerRow
+             colorspace, //colorspace
+-            kCGBitmapByteOrder32Little | kCGImageAlphaNoneSkipFirst, //bitmapInfo
++            bitmapInfo, //bitmapInfo
+             dataProviderRef, //provider
+             NULL, //decode
+             0, //interpolate
+@@ -2636,6 +2656,14 @@ static void cocoa_switch(DisplayChangeListener *dcl,
+     });
+ }
+ 
++static bool cocoa_gfx_check_format(DisplayChangeListener *dcl,
++                                   pixman_format_code_t format)
++{
++    (void)dcl;
++    /* drawRect has direct Core Graphics mappings for these 32-bit layouts. */
++    return format == PIXMAN_x8r8g8b8 || format == PIXMAN_b8g8r8x8;
++}
++
+ static void cocoa_refresh(DisplayChangeListener *dcl)
+ {
+     NSAutoreleasePool * pool = [[NSAutoreleasePool alloc] init];

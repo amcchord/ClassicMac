@@ -78,6 +78,33 @@ UInt32 QemuVga_ReadExt(UInt32 reg)
 	return ExtReadL(reg);
 }
 
+void QemuVga_SetCursor(UInt32 *argb)
+{
+	UInt32 i;
+
+	if (!GLOBAL.hardwareCursorAvail)
+		return;
+
+	for (i = 0; i < QEMU_EXT_CURSOR_PIXELS; i++)
+		ExtWriteL(QEMU_EXT_CURSOR_DATA_REG + i, argb[i]);
+	ExtWriteL(QEMU_EXT_REG_CURSOR_WIDTH, QEMU_EXT_CURSOR_WIDTH);
+	ExtWriteL(QEMU_EXT_REG_CURSOR_HEIGHT, QEMU_EXT_CURSOR_HEIGHT);
+	ExtWriteL(QEMU_EXT_REG_CURSOR_HOT_X, 0);
+	ExtWriteL(QEMU_EXT_REG_CURSOR_HOT_Y, 0);
+	ExtWriteL(QEMU_EXT_REG_CURSOR_COMMAND, QEMU_EXT_CURSOR_DEFINE);
+}
+
+void QemuVga_DrawCursor(SInt32 x, SInt32 y, Boolean visible)
+{
+	if (!GLOBAL.hardwareCursorAvail)
+		return;
+
+	ExtWriteL(QEMU_EXT_REG_CURSOR_X, (UInt32)x);
+	ExtWriteL(QEMU_EXT_REG_CURSOR_Y, (UInt32)y);
+	ExtWriteL(QEMU_EXT_REG_CURSOR_VISIBLE, visible ? 1 : 0);
+	ExtWriteL(QEMU_EXT_REG_CURSOR_COMMAND, QEMU_EXT_CURSOR_MOVE);
+}
+
 static OSStatus VBLTimerProc(void *p1, void *p2);
 static void QemuVga_PollHostResize(void);
 
@@ -315,6 +342,16 @@ OSStatus QemuVga_Init(void)
 		((ExtReadL(QEMU_EXT_REG_FEATURES) & QEMU_EXT_FEATURE_PACKED_LOWBPP) != 0);
 	if (GLOBAL.lowDepthAvail)
 		lprintf("QEMU packed low-depth modes detected\n");
+	GLOBAL.hardwareCursorAvail =
+		(GLOBAL.boardRegMappedSize >= 0x600 + QEMU_EXT_SIZE_CURSOR) &&
+		(ExtReadL(QEMU_EXT_REG_SIZE) >= QEMU_EXT_SIZE_CURSOR) &&
+		((ExtReadL(QEMU_EXT_REG_FEATURES) & QEMU_EXT_FEATURE_HARDWARE_CURSOR) != 0);
+	GLOBAL.cursorSet = false;
+	GLOBAL.cursorVisible = false;
+	GLOBAL.cursorX = 0;
+	GLOBAL.cursorY = 0;
+	if (GLOBAL.hardwareCursorAvail)
+		lprintf("QEMU hardware cursor detected\n");
 	GLOBAL.numModes = GLOBAL.numBaseModes;
 	if (GLOBAL.hostResizeAvail) {
 		lprintf("QEMU host-resize channel detected\n");
@@ -403,6 +440,8 @@ OSStatus QemuVga_Close(void)
 {
 	lprintf("Closing Driver...\n");
 
+	if (GLOBAL.hardwareCursorAvail)
+		QemuVga_DrawCursor(GLOBAL.cursorX, GLOBAL.cursorY, false);
 	GLOBAL.isOpen = false;
 	
 	QemuVga_DisableInterrupts();
@@ -483,6 +522,18 @@ OSStatus QemuVga_GetModeInfo(UInt32 index, UInt32 *width, UInt32 *height)
 	return noErr;
 }
 
+UInt32 QemuVga_GetRowBytes(UInt32 width, UInt32 depth)
+{
+	/*
+	 * DISPI depth 15 is RGB555 stored in a full 16-bit word.  Treating the
+	 * logical color depth as the storage width makes Mac OS advance 15/8
+	 * bytes per pixel while QEMU advances two, visibly skewing every row.
+	 */
+	UInt32 storageDepth = depth == 15 ? 16 : depth;
+
+	return (width * storageDepth + 7) / 8;
+}
+
 OSStatus QemuVga_GetModePages(UInt32 index, UInt32 depth,
 							  UInt32 *pageSize, UInt32 *pageCount)
 {
@@ -492,8 +543,8 @@ OSStatus QemuVga_GetModePages(UInt32 index, UInt32 depth,
 		return paramErr;
 	width = getVMode(index)->width;
 	height = getVMode(index)->height;
-	/* Sub-byte depths (1/2/4) pack several pixels per byte. */
-	pBytes = ((width * depth + 7) / 8) * height;
+	/* Sub-byte depths pack pixels; RGB555 occupies a full 16-bit word. */
+	pBytes = QemuVga_GetRowBytes(width, depth) * height;
 	if (pageSize)
 		*pageSize = pBytes;
 	if (pageCount) {

@@ -1,0 +1,184 @@
+diff --git a/accel/tcg/cputlb.c b/accel/tcg/cputlb.c
+index d6115bbb0a4..20010353ecc 100644
+--- a/accel/tcg/cputlb.c
++++ b/accel/tcg/cputlb.c
+@@ -486,6 +486,11 @@ static void tlb_flush_vtlb_page_mask_locked(CPUState *cpu, int mmu_idx,
+     int k;
+ 
+     assert_cpu_is_self(cpu);
++#if defined(__clang__)
++#pragma clang loop unroll(disable)
++#elif defined(__GNUC__)
++#pragma GCC unroll 1
++#endif
+     for (k = 0; k < CPU_VTLB_SIZE; k++) {
+         if (tlb_flush_entry_mask_locked(&d->vtable[k], page, mask)) {
+             tlb_n_used_entries_dec(cpu, mmu_idx);
+diff --git a/accel/tcg/tb-maint.c b/accel/tcg/tb-maint.c
+index cd7c32361bb..53cc438d22a 100644
+--- a/accel/tcg/tb-maint.c
++++ b/accel/tcg/tb-maint.c
+@@ -188,6 +188,8 @@ static void *l1_map[V_L1_MAX_SIZE];
+ 
+ struct PageDesc {
+     QemuSpin lock;
++    /* Conservative 32-region summary of translated bytes in this page. */
++    uint32_t code_coverage;
+     /* list of TBs intersecting this ram page */
+     uintptr_t first_tb;
+ };
+@@ -196,7 +198,9 @@ void page_table_config_init(void)
+ {
+     uint32_t v_l1_bits;
+ 
++    QEMU_BUILD_BUG_ON(sizeof(PageDesc) != 16);
+     assert(TARGET_PAGE_BITS);
++    assert(TARGET_PAGE_BITS >= 5);
+     /* The bits remaining after N lower levels of page tables.  */
+     v_l1_bits = (L1_MAP_ADDR_SPACE_BITS - TARGET_PAGE_BITS) % V_L2_BITS;
+     if (v_l1_bits < V_L1_MIN_BITS) {
+@@ -671,6 +675,7 @@ static void tb_remove_all_1(int level, void **lp)
+         for (i = 0; i < V_L2_SIZE; ++i) {
+             page_lock(&pd[i]);
+             pd[i].first_tb = (uintptr_t)NULL;
++            pd[i].code_coverage = 0;
+             page_unlock(&pd[i]);
+         }
+     } else {
+@@ -695,6 +700,34 @@ static void tb_remove_all(void)
+  * Add the tb in the target page and protect it if necessary.
+  * Called with @p->lock held.
+  */
++static uint32_t page_coverage_mask(tb_page_addr_t first,
++                                   tb_page_addr_t last)
++{
++    const unsigned shift = TARGET_PAGE_BITS - 5;
++    const tb_page_addr_t page_offset_mask = ~TARGET_PAGE_MASK;
++    unsigned first_region = (first & page_offset_mask) >> shift;
++    unsigned last_region = (last & page_offset_mask) >> shift;
++
++    tcg_debug_assert(((first ^ last) & TARGET_PAGE_MASK) == 0);
++    return (UINT32_MAX << first_region) &
++           (UINT32_MAX >> (31 - last_region));
++}
++
++static uint32_t tb_page_coverage_mask(const TranslationBlock *tb,
++                                      unsigned int n)
++{
++    tb_page_addr_t page0 = tb_page_addr0(tb);
++    tb_page_addr_t first = n == 0 ? page0 : tb_page_addr1(tb);
++    tb_page_addr_t last = page0 + tb->size - 1;
++
++    if (n == 0) {
++        last = MIN(last, first | ~TARGET_PAGE_MASK);
++    } else {
++        last = first + (last & ~TARGET_PAGE_MASK);
++    }
++    return page_coverage_mask(first, last);
++}
++
+ static void tb_page_add(PageDesc *p, TranslationBlock *tb, unsigned int n)
+ {
+     bool page_already_protected;
+@@ -704,6 +737,7 @@ static void tb_page_add(PageDesc *p, TranslationBlock *tb, unsigned int n)
+     tb->page_next[n] = p->first_tb;
+     page_already_protected = p->first_tb != 0;
+     p->first_tb = (uintptr_t)tb | n;
++    p->code_coverage |= tb_page_coverage_mask(tb, n);
+ 
+     /*
+      * If some code is already present, then the pages are already
+@@ -1108,7 +1142,7 @@ bool tb_invalidate_phys_page_unwind(CPUState *cpu, tb_page_addr_t addr,
+  * (@cpu, @retaddr) may be (NULL, 0) outside of a cpu context,
+  * in which case precise_smc need not be detected.
+  */
+-static void
++static bool
+ tb_invalidate_phys_page_range__locked(CPUState *cpu,
+                                       struct page_collection *pages,
+                                       PageDesc *p, tb_page_addr_t start,
+@@ -1119,6 +1153,7 @@ tb_invalidate_phys_page_range__locked(CPUState *cpu,
+     PageForEachNext n;
+     bool current_tb_modified = false;
+     TranslationBlock *current_tb = NULL;
++    TranslationBlock *deferred_current_tb = NULL;
+ 
+     /* Range may not cross a page. */
+     tcg_debug_assert(((start ^ last) & TARGET_PAGE_MASK) == 0);
+@@ -1144,8 +1179,22 @@ tb_invalidate_phys_page_range__locked(CPUState *cpu,
+             tb_last = tb_start + (tb_last & ~TARGET_PAGE_MASK);
+         }
+         if (!(tb_last < start || tb_start > last)) {
++            if (pages == NULL) {
++                tb_page_addr_t page0 = tb_page_addr0(tb);
++                tb_page_addr_t page1 = tb_page_addr1(tb);
++
++                if (page1 != -1 &&
++                    ((page0 ^ page1) & TARGET_PAGE_MASK) != 0) {
++                    return false;
++                }
++            }
+             if (unlikely(current_tb == tb) &&
+                 (tb_cflags(current_tb) & CF_COUNT_MASK) != 1) {
++                if (pages == NULL) {
++                    /* Keep it discoverable until no fallback remains. */
++                    deferred_current_tb = tb;
++                    continue;
++                }
+                 /*
+                  * If we are modifying the current TB, we must stop
+                  * its execution. We could be more precise by checking
+@@ -1160,17 +1209,29 @@ tb_invalidate_phys_page_range__locked(CPUState *cpu,
+         }
+     }
+ 
++    if (deferred_current_tb) {
++        current_tb_modified = true;
++        cpu_restore_state_from_tb(cpu, deferred_current_tb, retaddr);
++        tb_phys_invalidate__locked(deferred_current_tb);
++    }
++
+     /* if no code remaining, no need to continue to use slow writes */
+     if (!p->first_tb) {
++        p->code_coverage = 0;
+         tlb_unprotect_code(start);
+     }
+ 
+     if (unlikely(current_tb_modified)) {
+-        page_collection_unlock(pages);
++        if (pages) {
++            page_collection_unlock(pages);
++        } else {
++            page_unlock(p);
++        }
+         /* Force execution of one insn next time.  */
+         cpu->cflags_next_tb = 1 | CF_NOIRQ | curr_cflags(cpu);
+         cpu_loop_exit_noexc(cpu);
+     }
++    return true;
+ }
+ 
+ /*
+@@ -1218,6 +1279,22 @@ void tb_invalidate_phys_range_fast(CPUState *cpu, ram_addr_t start,
+ 
+     if (p) {
+         ram_addr_t last = start + len - 1;
++        tb_page_addr_t index = start >> TARGET_PAGE_BITS;
++
++        if ((last >> TARGET_PAGE_BITS) == index) {
++            page_lock(p);
++            if (!(p->code_coverage & page_coverage_mask(start, last))) {
++                page_unlock(p);
++                return;
++            }
++            if (tb_invalidate_phys_page_range__locked(cpu, NULL, p,
++                                                      start, last, ra)) {
++                page_unlock(p);
++                return;
++            }
++            page_unlock(p);
++        }
++
+         struct page_collection *pages = page_collection_lock(start, last);
+ 
+         tb_invalidate_phys_page_range__locked(cpu, pages, p,

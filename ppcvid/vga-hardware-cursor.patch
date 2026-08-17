@@ -1,0 +1,257 @@
+diff --git a/hw/display/vga-pci.c b/hw/display/vga-pci.c
+index c5fc1fd..06c75b6 100644
+--- a/hw/display/vga-pci.c
++++ b/hw/display/vga-pci.c
+@@ -64,6 +64,18 @@ struct PCIVGAState {
+     uint32_t host_req_height;
+     uint32_t host_req_serial;
+     GraphicHwOps host_resize_ops;
++
++    /* Optional QEXT hardware cursor, composited by the display frontend. */
++    bool hardware_cursor;
++    uint32_t cursor_width;
++    uint32_t cursor_height;
++    int32_t cursor_hot_x;
++    int32_t cursor_hot_y;
++    int32_t cursor_x;
++    int32_t cursor_y;
++    bool cursor_visible;
++    uint32_t cursor_argb[PCI_VGA_QEXT_CURSOR_MAX_WIDTH *
++                         PCI_VGA_QEXT_CURSOR_MAX_HEIGHT];
+ };
+ 
+ #define TYPE_PCI_VGA "pci-vga"
+@@ -187,7 +199,8 @@ static uint64_t pci_vga_qext_resize_read(void *ptr, hwaddr addr,
+ 
+     switch (addr) {
+     case PCI_VGA_QEXT_REG_SIZE:
+-        return PCI_VGA_QEXT_SIZE_FEATURES;
++        return d->hardware_cursor ?
++            PCI_VGA_QEXT_SIZE_CURSOR : PCI_VGA_QEXT_SIZE_FEATURES;
+     case PCI_VGA_QEXT_REG_REQ_WIDTH:
+         return d->host_req_width;
+     case PCI_VGA_QEXT_REG_REQ_HEIGHT:
+@@ -195,7 +208,9 @@ static uint64_t pci_vga_qext_resize_read(void *ptr, hwaddr addr,
+     case PCI_VGA_QEXT_REG_REQ_SERIAL:
+         return d->host_req_serial;
+     case PCI_VGA_QEXT_REG_FEATURES:
+-        return s->packed_lowbpp ? PCI_VGA_QEXT_FEATURE_PACKED_LOWBPP : 0;
++        return (s->packed_lowbpp ? PCI_VGA_QEXT_FEATURE_PACKED_LOWBPP : 0) |
++               (d->hardware_cursor ?
++                    PCI_VGA_QEXT_FEATURE_HARDWARE_CURSOR : 0);
+     default:
+         return pci_vga_qext_read(ptr, addr, size);
+     }
+@@ -218,6 +233,95 @@ static void pci_vga_qext_write(void *ptr, hwaddr addr,
+     }
+ }
+ 
++static uint32_t pci_vga_cursor_argb_to_rgba(uint32_t argb)
++{
++    /* QEXT is AARRGGBB; QEMUCursor is stored as little-endian R,G,B,A. */
++    return (argb & 0xff00ff00) |
++           ((argb & 0x00ff0000) >> 16) |
++           ((argb & 0x000000ff) << 16);
++}
++
++static void pci_vga_qext_define_cursor(PCIVGAState *d)
++{
++    QEMUCursor *cursor;
++    uint32_t x, y;
++
++    if (!d->hardware_cursor || d->cursor_width == 0 ||
++        d->cursor_height == 0 ||
++        d->cursor_width > PCI_VGA_QEXT_CURSOR_MAX_WIDTH ||
++        d->cursor_height > PCI_VGA_QEXT_CURSOR_MAX_HEIGHT) {
++        return;
++    }
++
++    cursor = cursor_alloc(d->cursor_width, d->cursor_height);
++    if (!cursor) {
++        return;
++    }
++    cursor->hot_x = d->cursor_hot_x;
++    cursor->hot_y = d->cursor_hot_y;
++    for (y = 0; y < d->cursor_height; y++) {
++        for (x = 0; x < d->cursor_width; x++) {
++            cursor->data[y * d->cursor_width + x] =
++                pci_vga_cursor_argb_to_rgba(
++                    d->cursor_argb[y * PCI_VGA_QEXT_CURSOR_MAX_WIDTH + x]);
++        }
++    }
++    dpy_cursor_define(d->vga.con, cursor);
++    cursor_unref(cursor);
++    dpy_mouse_set(d->vga.con, d->cursor_x, d->cursor_y,
++                  d->cursor_visible);
++}
++
++static void pci_vga_qext_resize_write(void *ptr, hwaddr addr,
++                                      uint64_t val, unsigned size)
++{
++    VGACommonState *s = ptr;
++    PCIVGAState *d = container_of(s, PCIVGAState, vga);
++
++    if (d->hardware_cursor &&
++        addr >= PCI_VGA_QEXT_CURSOR_DATA &&
++        addr < PCI_VGA_QEXT_SIZE_CURSOR) {
++        d->cursor_argb[(addr - PCI_VGA_QEXT_CURSOR_DATA) / 4] = val;
++        return;
++    }
++
++    switch (addr) {
++    case PCI_VGA_QEXT_REG_CURSOR_WIDTH:
++        d->cursor_width = val;
++        break;
++    case PCI_VGA_QEXT_REG_CURSOR_HEIGHT:
++        d->cursor_height = val;
++        break;
++    case PCI_VGA_QEXT_REG_CURSOR_HOT_X:
++        d->cursor_hot_x = val;
++        break;
++    case PCI_VGA_QEXT_REG_CURSOR_HOT_Y:
++        d->cursor_hot_y = val;
++        break;
++    case PCI_VGA_QEXT_REG_CURSOR_X:
++        d->cursor_x = val;
++        break;
++    case PCI_VGA_QEXT_REG_CURSOR_Y:
++        d->cursor_y = val;
++        break;
++    case PCI_VGA_QEXT_REG_CURSOR_VISIBLE:
++        d->cursor_visible = val != 0;
++        break;
++    case PCI_VGA_QEXT_REG_CURSOR_COMMAND:
++        if (val & PCI_VGA_QEXT_CURSOR_DEFINE) {
++            pci_vga_qext_define_cursor(d);
++        }
++        if (val & PCI_VGA_QEXT_CURSOR_MOVE) {
++            dpy_mouse_set(s->con, d->cursor_x, d->cursor_y,
++                          d->cursor_visible);
++        }
++        break;
++    default:
++        pci_vga_qext_write(ptr, addr, val, size);
++        break;
++    }
++}
++
+ static bool vga_get_big_endian_fb(Object *obj, Error **errp)
+ {
+     PCIVGAState *d = PCI_VGA(PCI_DEVICE(obj));
+@@ -242,7 +346,7 @@ static const MemoryRegionOps pci_vga_qext_ops = {
+ 
+ static const MemoryRegionOps pci_vga_qext_resize_ops = {
+     .read = pci_vga_qext_resize_read,
+-    .write = pci_vga_qext_write,
++    .write = pci_vga_qext_resize_write,
+     .valid.min_access_size = 4,
+     .valid.max_access_size = 4,
+     .endianness = DEVICE_LITTLE_ENDIAN,
+@@ -253,7 +357,7 @@ void pci_std_vga_mmio_region_init(VGACommonState *s,
+                                   MemoryRegion *parent,
+                                   MemoryRegion *subs,
+                                   bool qext, bool edid,
+-                                  bool host_resize)
++                                  bool host_resize, bool hardware_cursor)
+ {
+     PCIVGAState *d = container_of(s, PCIVGAState, vga);
+ 
+@@ -268,10 +372,11 @@ void pci_std_vga_mmio_region_init(VGACommonState *s,
+                                 &subs[1]);
+ 
+     if (qext) {
+-        if (host_resize) {
++        if (host_resize || hardware_cursor) {
+             memory_region_init_io(&subs[2], owner, &pci_vga_qext_resize_ops,
+                                   s, "qemu extended regs",
+-                                  PCI_VGA_QEXT_SIZE_FEATURES);
++                                  hardware_cursor ? PCI_VGA_QEXT_SIZE_CURSOR :
++                                                    PCI_VGA_QEXT_SIZE_FEATURES);
+         } else {
+             memory_region_init_io(&subs[2], owner, &pci_vga_qext_ops, s,
+                                   "qemu extended regs", PCI_VGA_QEXT_SIZE);
+@@ -383,7 +488,8 @@ static void pci_std_vga_realize(PCIDevice *dev, Error **errp)
+             edid = true;
+         }
+         pci_std_vga_mmio_region_init(s, OBJECT(dev), &d->mmio, d->mrs,
+-                                     qext, edid, d->host_resize);
++                                     qext, edid, d->host_resize,
++                                     d->hardware_cursor);
+ 
+         pci_register_bar(&d->dev, 2, PCI_BASE_ADDRESS_SPACE_MEMORY, &d->mmio);
+     }
+@@ -414,7 +520,7 @@ static void pci_secondary_vga_realize(PCIDevice *dev, Error **errp)
+         edid = true;
+     }
+     pci_std_vga_mmio_region_init(s, OBJECT(dev), &d->mmio, d->mrs, qext, edid,
+-                                 false);
++                                 false, false);
+ 
+     pci_register_bar(&d->dev, 0, PCI_BASE_ADDRESS_MEM_PREFETCH, &s->vram);
+     pci_register_bar(&d->dev, 2, PCI_BASE_ADDRESS_SPACE_MEMORY, &d->mmio);
+@@ -458,6 +564,7 @@ static const Property vga_pci_properties[] = {
+                     PCIVGAState, flags, PCI_VGA_FLAG_ENABLE_EDID, true),
+     DEFINE_PROP_BOOL("host-resize", PCIVGAState, host_resize, false),
+     DEFINE_PROP_BOOL("packed-lowbpp", PCIVGAState, vga.packed_lowbpp, false),
++    DEFINE_PROP_BOOL("hardware-cursor", PCIVGAState, hardware_cursor, false),
+     DEFINE_EDID_PROPERTIES(PCIVGAState, edid_info),
+ };
+ 
+diff --git a/hw/display/vga_int.h b/hw/display/vga_int.h
+index 0bf5177..ab83f96 100644
+--- a/hw/display/vga_int.h
++++ b/hw/display/vga_int.h
+@@ -206,7 +206,7 @@ void pci_std_vga_mmio_region_init(VGACommonState *s,
+                                   MemoryRegion *parent,
+                                   MemoryRegion *subs,
+                                   bool qext, bool edid,
+-                                  bool host_resize);
++                                  bool host_resize, bool hardware_cursor);
+ 
+ void build_vga_aml(AcpiDevAmlIf *adev, Aml *scope);
+ #endif
+diff --git a/hw/display/virtio-vga.c b/hw/display/virtio-vga.c
+index eb606be..4b68a07 100644
+--- a/hw/display/virtio-vga.c
++++ b/hw/display/virtio-vga.c
+@@ -169,7 +169,7 @@ static void virtio_vga_base_realize(VirtIOPCIProxy *vpci_dev, Error **errp)
+ 
+     /* add stdvga mmio regions */
+     pci_std_vga_mmio_region_init(vga, OBJECT(vvga), &vpci_dev->modern_bar,
+-                                 vvga->vga_mrs, true, false, false);
++                                 vvga->vga_mrs, true, false, false, false);
+ 
+     vga->con = g->scanout[0].con;
+     graphic_console_set_hwops(vga->con, &virtio_vga_base_ops, vvga);
+diff --git a/include/hw/display/bochs-vbe.h b/include/hw/display/bochs-vbe.h
+index bbaf590..6f43e28 100644
+--- a/include/hw/display/bochs-vbe.h
++++ b/include/hw/display/bochs-vbe.h
+@@ -88,5 +88,27 @@
+ #define PCI_VGA_QEXT_REG_FEATURES     (5 * 4)
+ /* packed linear 1/2/4 bpp indexed modes (packed-lowbpp=on) */
+ #define  PCI_VGA_QEXT_FEATURE_PACKED_LOWBPP  0x1
++/* host-composited 16x16 ARGB cursor (hardware-cursor=on) */
++#define  PCI_VGA_QEXT_FEATURE_HARDWARE_CURSOR 0x2
++
++/*
++ * Hardware cursor registers and sprite memory. The guest stages a 16x16
++ * big-endian ARGB image at CURSOR_DATA, then commits either a definition or
++ * a position/visibility update. The expanded region still fits inside BAR2.
++ */
++#define PCI_VGA_QEXT_REG_CURSOR_WIDTH   (6 * 4)
++#define PCI_VGA_QEXT_REG_CURSOR_HEIGHT  (7 * 4)
++#define PCI_VGA_QEXT_REG_CURSOR_HOT_X   (8 * 4)
++#define PCI_VGA_QEXT_REG_CURSOR_HOT_Y   (9 * 4)
++#define PCI_VGA_QEXT_REG_CURSOR_X       (10 * 4)
++#define PCI_VGA_QEXT_REG_CURSOR_Y       (11 * 4)
++#define PCI_VGA_QEXT_REG_CURSOR_VISIBLE (12 * 4)
++#define PCI_VGA_QEXT_REG_CURSOR_COMMAND (13 * 4)
++#define  PCI_VGA_QEXT_CURSOR_DEFINE     0x1
++#define  PCI_VGA_QEXT_CURSOR_MOVE       0x2
++#define PCI_VGA_QEXT_CURSOR_DATA        0x100
++#define PCI_VGA_QEXT_CURSOR_MAX_WIDTH   16
++#define PCI_VGA_QEXT_CURSOR_MAX_HEIGHT  16
++#define PCI_VGA_QEXT_SIZE_CURSOR        0x500
+ 
+ #endif /* HW_DISPLAY_BOCHS_VBE_H */
