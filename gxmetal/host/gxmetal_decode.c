@@ -142,6 +142,7 @@ static uint32_t gxmetal_validate_draw(const GXMetalPacketView *packet,
     uint32_t primitive;
     uint32_t count;
     uint32_t stride;
+    uint32_t flags;
     uint64_t expected;
 
     if (packet->payload_bytes < GXMETAL_DRAW_HEADER_BYTES) {
@@ -153,9 +154,13 @@ static uint32_t gxmetal_validate_draw(const GXMetalPacketView *packet,
                               GXMETAL_DRAW_VERTEX_COUNT_OFFSET);
     stride = gxmetal_load_le32(packet->payload +
                                GXMETAL_DRAW_VERTEX_STRIDE_OFFSET);
+    flags = gxmetal_load_le32(packet->payload + GXMETAL_DRAW_FLAGS_OFFSET);
     expected = GXMETAL_PACKET_HEADER_BYTES + GXMETAL_DRAW_HEADER_BYTES +
                (uint64_t)count * vertex_bytes;
     if (stride != vertex_bytes ||
+        (flags & ~GXMETAL_DRAW_FLAGS_VALID) != 0 ||
+        (flags != GXMETAL_DRAW_NONE &&
+         primitive != GXMETAL_PRIMITIVE_TRIANGLE) ||
         !gxmetal_primitive_count_valid(primitive, count) ||
         expected != packet->packet_bytes || expected > GXMETAL_MAX_PACKET_BYTES) {
         return GXMETAL_ERROR_BAD_PACKET;

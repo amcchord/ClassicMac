@@ -1088,7 +1088,6 @@ static void GXMetalDrawVGouraud(const TQADrawContext *drawContext,
     GXMetalDrawState *state = GXMetalGetState(drawContext);
     uint32_t primitive;
     unsigned long i;
-    (void)flags;
 
     if (state == NULL || vertices == NULL || nVertices == 0) {
         return;
@@ -1101,12 +1100,48 @@ static void GXMetalDrawVGouraud(const TQADrawContext *drawContext,
         primitive = GXMETAL_PRIMITIVE_LINE;
         break;
     case kQAVertexMode_Tri:
+        if (nVertices % 3 != 0) {
+            state->failed = 1;
+            return;
+        }
+        if (flags != NULL) {
+            for (i = 0; i < nVertices; i += 3) {
+                (void)GXMetalEmitGouraud(
+                    state, GXMETAL_PRIMITIVE_TRIANGLE, 3, &vertices[i],
+                    (uint32_t)flags[i / 3]);
+            }
+            return;
+        }
         primitive = GXMETAL_PRIMITIVE_TRIANGLE;
         break;
     case kQAVertexMode_Strip:
+        if (flags != NULL) {
+            TQAVGouraud triangle[3];
+            for (i = 0; i + 2 < nVertices; i++) {
+                triangle[0] = vertices[i + (i & 1)];
+                triangle[1] = vertices[i + ((i & 1) == 0)];
+                triangle[2] = vertices[i + 2];
+                (void)GXMetalEmitGouraud(
+                    state, GXMETAL_PRIMITIVE_TRIANGLE, 3, triangle,
+                    (uint32_t)flags[i]);
+            }
+            return;
+        }
         primitive = GXMETAL_PRIMITIVE_TRIANGLE_STRIP;
         break;
     case kQAVertexMode_Fan:
+        if (flags != NULL) {
+            TQAVGouraud triangle[3];
+            triangle[0] = vertices[0];
+            for (i = 0; i + 2 < nVertices; i++) {
+                triangle[1] = vertices[i + 1];
+                triangle[2] = vertices[i + 2];
+                (void)GXMetalEmitGouraud(
+                    state, GXMETAL_PRIMITIVE_TRIANGLE, 3, triangle,
+                    (uint32_t)flags[i]);
+            }
+            return;
+        }
         primitive = GXMETAL_PRIMITIVE_TRIANGLE_FAN;
         break;
     case kQAVertexMode_Polyline:
@@ -1131,7 +1166,6 @@ static void GXMetalDrawVTexture(const TQADrawContext *drawContext,
     GXMetalDrawState *state = GXMetalGetState(drawContext);
     uint32_t primitive;
     unsigned long i;
-    (void)flags;
 
     if (state == NULL || vertices == NULL || nVertices == 0) {
         return;
@@ -1144,12 +1178,48 @@ static void GXMetalDrawVTexture(const TQADrawContext *drawContext,
         primitive = GXMETAL_PRIMITIVE_LINE;
         break;
     case kQAVertexMode_Tri:
+        if (nVertices % 3 != 0) {
+            state->failed = 1;
+            return;
+        }
+        if (flags != NULL) {
+            for (i = 0; i < nVertices; i += 3) {
+                (void)GXMetalEmitTexture(
+                    state, GXMETAL_PRIMITIVE_TRIANGLE, 3, &vertices[i],
+                    (uint32_t)flags[i / 3]);
+            }
+            return;
+        }
         primitive = GXMETAL_PRIMITIVE_TRIANGLE;
         break;
     case kQAVertexMode_Strip:
+        if (flags != NULL) {
+            TQAVTexture triangle[3];
+            for (i = 0; i + 2 < nVertices; i++) {
+                triangle[0] = vertices[i + (i & 1)];
+                triangle[1] = vertices[i + ((i & 1) == 0)];
+                triangle[2] = vertices[i + 2];
+                (void)GXMetalEmitTexture(
+                    state, GXMETAL_PRIMITIVE_TRIANGLE, 3, triangle,
+                    (uint32_t)flags[i]);
+            }
+            return;
+        }
         primitive = GXMETAL_PRIMITIVE_TRIANGLE_STRIP;
         break;
     case kQAVertexMode_Fan:
+        if (flags != NULL) {
+            TQAVTexture triangle[3];
+            triangle[0] = vertices[0];
+            for (i = 0; i + 2 < nVertices; i++) {
+                triangle[1] = vertices[i + 1];
+                triangle[2] = vertices[i + 2];
+                (void)GXMetalEmitTexture(
+                    state, GXMETAL_PRIMITIVE_TRIANGLE, 3, triangle,
+                    (uint32_t)flags[i]);
+            }
+            return;
+        }
         primitive = GXMETAL_PRIMITIVE_TRIANGLE_FAN;
         break;
     case kQAVertexMode_Polyline:

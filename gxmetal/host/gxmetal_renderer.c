@@ -381,12 +381,18 @@ static uint32_t gxmetal_render_gouraud(GXMetalRenderer *renderer,
                                        GXMetalRenderContext *context,
                                        const GXMetalPacketView *packet)
 {
+    uint32_t flags = gxmetal_load_le32(
+        packet->payload + GXMETAL_DRAW_FLAGS_OFFSET);
     uint32_t primitive = gxmetal_load_le32(
         packet->payload + GXMETAL_DRAW_PRIMITIVE_OFFSET);
     uint32_t count = gxmetal_load_le32(
         packet->payload + GXMETAL_DRAW_VERTEX_COUNT_OFFSET);
     const uint8_t *vertices = packet->payload + GXMETAL_DRAW_VERTICES_OFFSET;
     uint32_t i;
+
+    if ((flags & GXMETAL_DRAW_BACKFACING) != 0) {
+        return GXMETAL_ERROR_NONE;
+    }
 
     if (primitive == GXMETAL_PRIMITIVE_POINT) {
         for (i = 0; i < count; i++) {

@@ -116,6 +116,7 @@ static void set_float_state(GXMetalMetalRenderer *renderer, uint8_t *packet,
 static void test_metal_triangle(void)
 {
     uint8_t framebuffer[64 * 64 * 2] = {0};
+    uint8_t control[64];
     uint8_t packet[128];
     uint8_t *payload;
     uint8_t *vertices;
@@ -161,6 +162,20 @@ static void test_metal_triangle(void)
     store_float(vertices + GXMETAL_VERTEX_INV_W_OFFSET, NAN);
     set_vertex(vertices + 32, 56.0f, 8.0f, 0.0f, 1.0f, 0.0f);
     set_vertex(vertices + 64, 32.0f, 56.0f, 0.0f, 0.0f, 1.0f);
+    gxmetal_store_le32(payload + GXMETAL_DRAW_FLAGS_OFFSET,
+                       GXMETAL_DRAW_BACKFACING);
+    CHECK(dispatch(renderer, packet, 128) == GXMETAL_ERROR_NONE);
+
+    make_packet(control, GXMETAL_OP_END_FRAME, 32, 1);
+    CHECK(dispatch(renderer, control, 32) == GXMETAL_ERROR_NONE);
+    present_rect(renderer, control, 1, 0, 0, 64, 64);
+    CHECK(framebuffer[(16 * 64 + 16) * 2] == 0x00 &&
+          framebuffer[(16 * 64 + 16) * 2 + 1] == 0x1f);
+
+    make_packet(control, GXMETAL_OP_BEGIN_FRAME, 32, 1);
+    CHECK(dispatch(renderer, control, 32) == GXMETAL_ERROR_NONE);
+    gxmetal_store_le32(payload + GXMETAL_DRAW_FLAGS_OFFSET,
+                       GXMETAL_DRAW_NONE);
     CHECK(dispatch(renderer, packet, 128) == GXMETAL_ERROR_NONE);
 
     make_packet(packet, GXMETAL_OP_CLEAR, 64, 1);
@@ -243,6 +258,7 @@ static uint16_t framebuffer_pixel(const uint8_t *framebuffer,
 static void test_metal_texture_upload_and_sampling(void)
 {
     uint8_t framebuffer[64 * 64 * 2] = {0};
+    uint8_t control[64];
     uint8_t packet[416];
     uint8_t *shared = calloc(1, GXMETAL_SHARED_BYTES);
     uint8_t *payload;
@@ -338,6 +354,20 @@ static void test_metal_texture_upload_and_sampling(void)
     /* QuickDraw 3D is allowed to leave RGB undefined unless Decal is active.
      * This mirrors the first textured triangle observed from Nanosaur. */
     poison_unused_texture_color(vertices + 1 * 64);
+    gxmetal_store_le32(payload + GXMETAL_DRAW_FLAGS_OFFSET,
+                       GXMETAL_DRAW_BACKFACING);
+    CHECK(dispatch(renderer, packet, 416) == GXMETAL_ERROR_NONE);
+    make_packet(control, GXMETAL_OP_END_FRAME, 32, 3);
+    CHECK(dispatch(renderer, control, 32) == GXMETAL_ERROR_NONE);
+    present_rect(renderer, control, 3, 0, 0, 64, 64);
+
+    CHECK(framebuffer_pixel(framebuffer, 16, 16) == 0x0000);
+    CHECK(framebuffer_pixel(framebuffer, 48, 48) == 0x0000);
+
+    make_packet(control, GXMETAL_OP_BEGIN_FRAME, 32, 3);
+    CHECK(dispatch(renderer, control, 32) == GXMETAL_ERROR_NONE);
+    gxmetal_store_le32(payload + GXMETAL_DRAW_FLAGS_OFFSET,
+                       GXMETAL_DRAW_NONE);
     CHECK(dispatch(renderer, packet, 416) == GXMETAL_ERROR_NONE);
     make_packet(packet, GXMETAL_OP_END_FRAME, 32, 3);
     CHECK(dispatch(renderer, packet, 32) == GXMETAL_ERROR_NONE);

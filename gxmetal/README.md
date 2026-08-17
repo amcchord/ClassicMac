@@ -26,9 +26,13 @@ highlight texture operations. Linear, exponential, and squared-exponential
 RAVE depth fog is applied in both the Gouraud and textured fragment paths.
 All seven RAVE alpha comparisons operate on shaded fragment alpha before
 blending and depth writes, supporting masked sprites, foliage, fences, and
-cutout texture borders. Rectangular QuickDraw regions and RAVE scissor state
-are intersected in Metal; complex regions decline GXMetal so RAVE can select a
-software engine. A frame is batched in one Metal command buffer, then `PRESENT`
+cutout texture borders. GXMetal preserves RAVE's per-triangle backfacing flag
+through scalar and batched draw entry points and removes flagged triangles in
+both Metal and the CPU fallback. This matches QuickDraw 3D's backface-removal
+contract and prevents hidden model faces from sampling unused texture-atlas
+padding. Rectangular QuickDraw regions and RAVE scissor state are intersected
+in Metal; complex regions decline GXMetal so RAVE can select a software engine.
+A frame is batched in one Metal command buffer, then `PRESENT`
 copies only the dirty rectangle inside the immutable context clip into the
 guest's big-endian RGB555 or 32-bit VGA surface. The QEMU bridge mirrors only
 validated context-layout metadata and marks the minimal contiguous VRAM span
@@ -85,7 +89,9 @@ ordering, alpha blending, alpha rejection before depth writes, a double-buffer
 presentation, and a four-color big-endian texture upload/sample/destroy cycle.
 Both Gouraud and post-texture-operation alpha testing are asserted. The texture
 test uses an asymmetric image to catch vertical-origin regressions, then repeats
-the draw through linear depth fog. A separate clip test proves immutable
+the draw through linear depth fog. Gouraud and textured backface cases prove
+that flagged triangles leave the framebuffer and depth state untouched, while
+protocol tests reject unknown draw flags. A separate clip test proves immutable
 context clipping, mutable scissoring, untouched framebuffer preservation, and
 dirty-rectangle-only presentation. A host-independent scanout test proves
 clipped, padded-row, offset, empty, destroyed, reset, and malformed-context

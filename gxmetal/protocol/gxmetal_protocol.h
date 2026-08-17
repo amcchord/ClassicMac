@@ -316,6 +316,13 @@ enum GXMetalResourceFlag {
 #define GXMETAL_GOURAUD_VERTEX_BYTES              32u
 #define GXMETAL_TEXTURE_VERTEX_BYTES              64u
 
+/* RAVE triangle attributes applying to every triangle in a draw packet. */
+enum {
+    GXMETAL_DRAW_NONE          = 0,
+    GXMETAL_DRAW_BACKFACING    = 1u << 0,
+    GXMETAL_DRAW_FLAGS_VALID   = GXMETAL_DRAW_BACKFACING
+};
+
 /* Both vertex forms start with x, y, z, invW, r, g, b, a. */
 #define GXMETAL_VERTEX_X_OFFSET                    0u
 #define GXMETAL_VERTEX_Y_OFFSET                    4u

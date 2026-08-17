@@ -138,6 +138,17 @@ static void test_semantic_validation(void)
     CHECK(gxmetal_validate_packet(&view, GXMETAL_SHARED_BYTES) ==
           GXMETAL_ERROR_NONE);
 
+    gxmetal_store_le32(packet + 16 + GXMETAL_DRAW_FLAGS_OFFSET,
+                       GXMETAL_DRAW_BACKFACING);
+    CHECK(gxmetal_validate_packet(&view, GXMETAL_SHARED_BYTES) ==
+          GXMETAL_ERROR_NONE);
+    gxmetal_store_le32(packet + 16 + GXMETAL_DRAW_FLAGS_OFFSET,
+                       GXMETAL_DRAW_FLAGS_VALID << 1);
+    CHECK(gxmetal_validate_packet(&view, GXMETAL_SHARED_BYTES) ==
+          GXMETAL_ERROR_BAD_PACKET);
+    gxmetal_store_le32(packet + 16 + GXMETAL_DRAW_FLAGS_OFFSET,
+                       GXMETAL_DRAW_NONE);
+
     gxmetal_store_le32(packet + 16 + GXMETAL_DRAW_VERTEX_COUNT_OFFSET, 4);
     CHECK(gxmetal_validate_packet(&view, GXMETAL_SHARED_BYTES) ==
           GXMETAL_ERROR_BAD_PACKET);
