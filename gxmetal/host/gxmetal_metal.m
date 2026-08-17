@@ -151,7 +151,10 @@ static NSString *const kGXMetalShaderSource = @
     "  out.position = float4(ndcX * clipW, ndcY * clipW,\n"
     "                        v.z * clipW, clipW);\n"
     "  out.color = float4(v.r, v.g, v.b, v.a);\n"
-    "  out.uv = float2(v.uOverW, v.vOverW) / safeInvW;\n"
+    /* RAVE texture coordinates use the lower edge as V=0, whereas Metal
+     * normalized texture coordinates use the upper edge.  Flip V before
+     * perspective interpolation while preserving the u/w, v/w wire form. */
+    "  out.uv = float2(v.uOverW, v.invW - v.vOverW) / safeInvW;\n"
     "  out.kd = float3(v.kd_r, v.kd_g, v.kd_b);\n"
     "  out.ks = float3(v.ks_r, v.ks_g, v.ks_b);\n"
     "  return out;\n"
@@ -829,20 +832,75 @@ static int gxmetal_metal_read_texture_vertex(
     const GXMetalMetalContext *context, const uint8_t *source,
     GXMetalMetalTextureVertex *vertex)
 {
-    float values[16];
-    uint32_t i;
+    uint32_t texture_op = context->texture_op;
 
-    for (i = 0; i < 16; i++) {
-        values[i] = gxmetal_metal_load_float(source + i * 4);
-        if (!isfinite(values[i])) {
+    memset(vertex, 0, sizeof(*vertex));
+    vertex->x = gxmetal_metal_load_float(
+        source + GXMETAL_VERTEX_X_OFFSET);
+    vertex->y = gxmetal_metal_load_float(
+        source + GXMETAL_VERTEX_Y_OFFSET);
+    vertex->z = gxmetal_metal_load_float(
+        source + GXMETAL_VERTEX_Z_OFFSET);
+    vertex->inv_w = gxmetal_metal_load_float(
+        source + GXMETAL_VERTEX_INV_W_OFFSET);
+    vertex->a = gxmetal_metal_load_float(
+        source + GXMETAL_VERTEX_A_OFFSET);
+    vertex->u_over_w = gxmetal_metal_load_float(
+        source + GXMETAL_VERTEX_U_OVER_W_OFFSET);
+    vertex->v_over_w = gxmetal_metal_load_float(
+        source + GXMETAL_VERTEX_V_OVER_W_OFFSET);
+
+    if (!isfinite(vertex->x) || !isfinite(vertex->y) ||
+        !isfinite(vertex->z) || !isfinite(vertex->inv_w) ||
+        !isfinite(vertex->a) || !isfinite(vertex->u_over_w) ||
+        !isfinite(vertex->v_over_w) || vertex->z < 0.0f ||
+        vertex->z > 1.0f || vertex->inv_w <= 0.0f) {
+        return 0;
+    }
+
+    /* RAVE only requires color, diffuse, and specular components when the
+     * corresponding texture operation consumes them. QuickDraw 3D leaves
+     * the other fields undefined, so never validate or forward those bytes.
+     * Metal will clip finite screen coordinates outside the draw context. */
+    vertex->r = vertex->g = vertex->b = 1.0f;
+    vertex->kd_r = vertex->kd_g = vertex->kd_b = 1.0f;
+    if (texture_op & GXMETAL_TEXTURE_DECAL) {
+        vertex->r = gxmetal_metal_load_float(
+            source + GXMETAL_VERTEX_R_OFFSET);
+        vertex->g = gxmetal_metal_load_float(
+            source + GXMETAL_VERTEX_G_OFFSET);
+        vertex->b = gxmetal_metal_load_float(
+            source + GXMETAL_VERTEX_B_OFFSET);
+        if (!isfinite(vertex->r) || !isfinite(vertex->g) ||
+            !isfinite(vertex->b)) {
             return 0;
         }
     }
-    memcpy(vertex, values, sizeof(values));
-    return vertex->x >= 0.0f && vertex->x <= (float)context->width &&
-           vertex->y >= 0.0f && vertex->y <= (float)context->height &&
-           vertex->z >= 0.0f && vertex->z <= 1.0f &&
-           vertex->inv_w > 0.0f;
+    if (texture_op & GXMETAL_TEXTURE_MODULATE) {
+        vertex->kd_r = gxmetal_metal_load_float(
+            source + GXMETAL_VERTEX_KD_R_OFFSET);
+        vertex->kd_g = gxmetal_metal_load_float(
+            source + GXMETAL_VERTEX_KD_G_OFFSET);
+        vertex->kd_b = gxmetal_metal_load_float(
+            source + GXMETAL_VERTEX_KD_B_OFFSET);
+        if (!isfinite(vertex->kd_r) || !isfinite(vertex->kd_g) ||
+            !isfinite(vertex->kd_b)) {
+            return 0;
+        }
+    }
+    if (texture_op & GXMETAL_TEXTURE_HIGHLIGHT) {
+        vertex->ks_r = gxmetal_metal_load_float(
+            source + GXMETAL_VERTEX_KS_R_OFFSET);
+        vertex->ks_g = gxmetal_metal_load_float(
+            source + GXMETAL_VERTEX_KS_G_OFFSET);
+        vertex->ks_b = gxmetal_metal_load_float(
+            source + GXMETAL_VERTEX_KS_B_OFFSET);
+        if (!isfinite(vertex->ks_r) || !isfinite(vertex->ks_g) ||
+            !isfinite(vertex->ks_b)) {
+            return 0;
+        }
+    }
+    return 1;
 }
 
 static uint32_t gxmetal_metal_draw_textured(

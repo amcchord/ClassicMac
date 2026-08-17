@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 
 #include "gxmetal_metal.h"
 
@@ -193,6 +194,13 @@ static void set_texture_vertex(uint8_t *bytes, float x, float y,
     }
 }
 
+static void poison_unused_texture_color(uint8_t *bytes)
+{
+    store_float(bytes + GXMETAL_VERTEX_R_OFFSET, NAN);
+    store_float(bytes + GXMETAL_VERTEX_G_OFFSET, NAN);
+    store_float(bytes + GXMETAL_VERTEX_B_OFFSET, NAN);
+}
+
 static uint16_t framebuffer_pixel(const uint8_t *framebuffer,
                                   uint32_t x, uint32_t y)
 {
@@ -296,16 +304,21 @@ static void test_metal_texture_upload_and_sampling(void)
     set_texture_vertex(vertices + 3 * 64, 64, 0, 1, 0);
     set_texture_vertex(vertices + 4 * 64, 64, 64, 1, 1);
     set_texture_vertex(vertices + 5 * 64, 0, 64, 0, 1);
+    /* QuickDraw 3D is allowed to leave RGB undefined unless Decal is active.
+     * This mirrors the first textured triangle observed from Nanosaur. */
+    poison_unused_texture_color(vertices + 1 * 64);
     CHECK(dispatch(renderer, packet, 416) == GXMETAL_ERROR_NONE);
     make_packet(packet, GXMETAL_OP_END_FRAME, 32, 3);
     CHECK(dispatch(renderer, packet, 32) == GXMETAL_ERROR_NONE);
     make_packet(packet, GXMETAL_OP_PRESENT, 32, 3);
     CHECK(dispatch(renderer, packet, 32) == GXMETAL_ERROR_NONE);
 
-    CHECK(framebuffer_pixel(framebuffer, 16, 16) == 0x7c00);
-    CHECK(framebuffer_pixel(framebuffer, 48, 16) == 0x03e0);
-    CHECK(framebuffer_pixel(framebuffer, 16, 48) == 0x001f);
-    CHECK(framebuffer_pixel(framebuffer, 48, 48) == 0x7fff);
+    /* RAVE defines V=0 at the lower edge of an ordinary top-down image.
+     * Metal defines V=0 at the upper edge, so the host must invert V. */
+    CHECK(framebuffer_pixel(framebuffer, 16, 16) == 0x001f);
+    CHECK(framebuffer_pixel(framebuffer, 48, 16) == 0x7fff);
+    CHECK(framebuffer_pixel(framebuffer, 16, 48) == 0x7c00);
+    CHECK(framebuffer_pixel(framebuffer, 48, 48) == 0x03e0);
 
     make_packet(packet, GXMETAL_OP_TEXTURE_DESTROY, 32, 0);
     payload = packet + 16;
