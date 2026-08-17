@@ -26,9 +26,11 @@ highlight texture operations. Linear, exponential, and squared-exponential
 RAVE depth fog is applied in both the Gouraud and textured fragment paths.
 All seven RAVE alpha comparisons operate on shaded fragment alpha before
 blending and depth writes, supporting masked sprites, foliage, fences, and
-cutout texture borders. A frame is batched in one Metal command buffer, then
-`PRESENT` copies the
-completed image into the guest's big-endian RGB555 or 32-bit VGA surface.
+cutout texture borders. Rectangular QuickDraw regions and RAVE scissor state
+are intersected in Metal; complex regions decline GXMetal so RAVE can select a
+software engine. A frame is batched in one Metal command buffer, then `PRESENT`
+copies only the dirty rectangle inside the immutable context clip into the
+guest's big-endian RGB555 or 32-bit VGA surface.
 The device advertises `GXMETAL_FEATURE_METAL` only when that backend initializes
 successfully. The bounded, deterministic CPU rasterizer remains the fallback on
 other hosts and the correctness oracle for Metal.
@@ -41,7 +43,7 @@ remains a small Gouraud correctness oracle.
 
 ## Transport contract
 
-The backward-compatible version 1.3 wire contract is defined in
+The backward-compatible version 1.4 wire contract is defined in
 `protocol/gxmetal_protocol.h`. All registers and shared-memory packets are
 little-endian. Packet sizes are multiples of 16 bytes, packets never cross the
 end of the circular command ring, and offsets in commands refer only to the
@@ -78,7 +80,9 @@ ordering, alpha blending, alpha rejection before depth writes, a double-buffer
 presentation, and a four-color big-endian texture upload/sample/destroy cycle.
 Both Gouraud and post-texture-operation alpha testing are asserted. The texture
 test uses an asymmetric image to catch vertical-origin regressions, then repeats
-the draw through linear depth fog. Every result is read back from the
+the draw through linear depth fog. A separate clip test proves immutable
+context clipping, mutable scissoring, untouched framebuffer preservation, and
+dirty-rectangle-only presentation. Every result is read back from the
 guest-format framebuffer:
 
 ```sh
@@ -109,9 +113,11 @@ asks for a restart. After restarting, **GXMetal Test** enumerates the engines
 that RAVE actually registered, selects GXMetal by its gestalt name, exercises a
 Z-buffered and double-buffered render with Gouraud shading, alpha blending,
 alpha testing, depth fog, an uploaded texture, and a partially clipped uploaded
-bitmap; waits on the host fence; then validates red, blue, blended-purple,
-alpha-rejected green, fogged-purple, and bitmap-green pixels directly in the
-guest framebuffer. A missing device or host feature fails the test explicitly
+bitmap inside a rectangular QuickDraw clip; waits on the host fence; then
+validates red, blue, blended-purple, alpha-rejected green, preserved clipped
+pixels, fogged-purple, and bitmap-green pixels directly in the guest
+framebuffer. It also requires a deliberately complex region to return
+`kQANotSupported`. A missing device or host feature fails the test explicitly
 and remains eligible for Apple's normal software RAVE fallback.
 The same app then runs a fixed 120-frame mixed texture/Gouraud workload first
 through GXMetal and then through an independently selected non-GXMetal engine.

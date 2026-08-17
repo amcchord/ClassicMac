@@ -4,21 +4,21 @@
 
 /* Mac OS 9's installed hardware engines are shlb/tnsl shared libraries with
  * all three of these metadata records. The ftag mirrors the system-generated
- * fragment tag: format 2, version 1.3 final, Str29 "GXMetal", engine class 1. */
+ * fragment tag: format 2, version 1.4 final, Str29 "GXMetal", engine class 1. */
 data 'tnsl' (0) {
     $"0000"
 };
 
 data 'ftag' (0) {
-    $"0201 3080 0007 4758 4D65 7461 6C00"
+    $"0201 4080 0007 4758 4D65 7461 6C00"
     $"0000 0000 0000 0000 0000 0000 0000 0000"
     $"0000 0000 0000 0100"
 };
 
 resource 'vers' (1) {
-    1, 3, release, 0, verUS,
-    "1.3",
-    "GXMetal 1.3"
+    1, 4, release, 0, verUS,
+    "1.4",
+    "GXMetal 1.4"
 };
 
 resource 'cfrg' (0) {

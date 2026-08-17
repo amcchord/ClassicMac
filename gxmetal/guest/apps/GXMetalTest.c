@@ -600,6 +600,10 @@ static TQAError GXMetalRenderPattern(TQADrawContext *context,
          !GXMetalPixelMatches(graphicsDevice,
                               deviceRect->left + 295,
                               deviceRect->top + 207,
+                              kGXMetalPixelGreen) ||
+         !GXMetalPixelMatches(graphicsDevice,
+                              deviceRect->left + 160,
+                              deviceRect->top + 4,
                               kGXMetalPixelGreen))) {
         error = kQAError;
     }
@@ -767,7 +771,7 @@ static void GXMetalBuildPassResult(char *result, size_t resultCapacity,
     const char *end = result + resultCapacity - 1;
 
     GXMetalAppendText(&cursor, end,
-        "PASS: RAVE discovery depth blend alpha-test texture bitmap present double-buffer framebuffer gx_us=");
+        "PASS: RAVE discovery depth blend alpha-test clip texture bitmap dirty-present double-buffer framebuffer gx_us=");
     GXMetalAppendDecimal(&cursor, end, gxMetalMicroseconds);
     GXMetalAppendText(&cursor, end, " sw_us=");
     GXMetalAppendDecimal(&cursor, end, softwareMicroseconds);
@@ -803,12 +807,20 @@ int main(void)
         12, 'G', 'X', 'M', 'e', 't', 'a', 'l', ' ', 'T', 'e', 's', 't'
     };
     Rect windowRect;
+    Rect localRect;
     WindowPtr window;
+    RGBColor green = {0, 0xffff, 0};
     TQADevice device;
+    TQAClip clip;
+    TQAClip complexClip;
+    RgnHandle clipRegion = NULL;
+    RgnHandle complexRegion = NULL;
+    RgnHandle complexPart = NULL;
     TQAEngine *engine;
     CFragConnectionID diagnosticConnection = NULL;
     TQARect deviceRect;
     TQADrawContext *context = NULL;
+    TQADrawContext *unexpectedContext = NULL;
     unsigned long optionalFeatures = 0;
     unsigned long optionalFeatures2 = 0;
     unsigned long requiredFeatures;
@@ -947,14 +959,62 @@ int main(void)
     deviceRect.right = windowRect.right;
     deviceRect.top = windowRect.top;
     deviceRect.bottom = windowRect.bottom;
-    error = QADrawContextNew(&device, &deviceRect, NULL, engine,
-                             kQAContext_DoubleBuffer, &context);
+    SetRect(&localRect, 0, 0, GXMETAL_WIDTH, GXMETAL_HEIGHT);
+    RGBForeColor(&green);
+    PaintRect(&localRect);
+    ForeColor(blackColor);
+    complexRegion = NewRgn();
+    complexPart = NewRgn();
+    if (complexRegion == NULL || complexPart == NULL) {
+        error = kQAOutOfMemory;
+    } else {
+        SetRectRgn(complexRegion, (short)windowRect.left,
+                   (short)windowRect.top, (short)(windowRect.left + 16),
+                   (short)(windowRect.top + 16));
+        SetRectRgn(complexPart, (short)(windowRect.left + 32),
+                   (short)windowRect.top, (short)(windowRect.left + 48),
+                   (short)(windowRect.top + 16));
+        UnionRgn(complexRegion, complexPart, complexRegion);
+        memset(&complexClip, 0, sizeof(complexClip));
+        complexClip.clipType = kQAClipRgn;
+        complexClip.clip.clipRgn = complexRegion;
+        error = QADrawContextNew(&device, &deviceRect, &complexClip, engine,
+                                 kQAContext_DoubleBuffer,
+                                 &unexpectedContext);
+        if (unexpectedContext != NULL) {
+            QADrawContextDelete(unexpectedContext);
+            unexpectedContext = NULL;
+        }
+        error = error == kQANotSupported ? kQANoErr : kQAError;
+    }
+    if (complexPart != NULL) {
+        DisposeRgn(complexPart);
+    }
+    if (complexRegion != NULL) {
+        DisposeRgn(complexRegion);
+    }
+    clipRegion = NewRgn();
+    if (error == kQANoErr && clipRegion == NULL) {
+        error = kQAOutOfMemory;
+    } else if (error == kQANoErr) {
+        SetRectRgn(clipRegion, (short)windowRect.left,
+                   (short)(windowRect.top + 8), (short)windowRect.right,
+                   (short)windowRect.bottom);
+        memset(&clip, 0, sizeof(clip));
+        clip.clipType = kQAClipRgn;
+        clip.clip.clipRgn = clipRegion;
+        error = QADrawContextNew(&device, &deviceRect, &clip, engine,
+                                 kQAContext_DoubleBuffer, &context);
+    }
     if (error == kQANoErr) {
         error = GXMetalRenderPattern(context, engine,
                                      device.device.gDevice, &deviceRect);
     }
     if (context != NULL) {
         QADrawContextDelete(context);
+    }
+    if (clipRegion != NULL) {
+        DisposeRgn(clipRegion);
     }
     if (error != kQANoErr) {
         GXMetalRecordResult("FAIL: accelerated render or framebuffer check");

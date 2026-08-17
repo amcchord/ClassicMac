@@ -314,7 +314,8 @@ static uint32_t gxmetal_render_context_create(GXMetalRenderer *renderer,
     last_byte = (uint64_t)context->framebuffer_offset +
         (uint64_t)(context->height - 1) * context->row_bytes +
         (uint64_t)context->width * bytes_per_pixel;
-    if (bytes_per_pixel == 0 ||
+    if ((context->flags & ~GXMETAL_CONTEXT_NO_DITHER) != 0 ||
+        bytes_per_pixel == 0 ||
         context->row_bytes <
             (uint64_t)context->width * bytes_per_pixel ||
         last_byte > renderer->framebuffer_bytes) {

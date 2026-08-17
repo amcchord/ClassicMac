@@ -103,6 +103,14 @@ typedef struct GXMetalMetalContext {
     uint32_t texture_op;
     uint32_t texture_wrap_u;
     uint32_t texture_wrap_v;
+    uint32_t clip_left;
+    uint32_t clip_top;
+    uint32_t clip_right;
+    uint32_t clip_bottom;
+    uint32_t scissor_left;
+    uint32_t scissor_top;
+    uint32_t scissor_right;
+    uint32_t scissor_bottom;
     GXMetalMetalFog fog;
     GXMetalMetalAlphaTest alpha_test;
     int active;
@@ -390,6 +398,39 @@ static int gxmetal_metal_ensure_encoder(GXMetalMetalRenderer *renderer,
     return 1;
 }
 
+static int gxmetal_metal_effective_scissor(
+    const GXMetalMetalContext *context, MTLScissorRect *scissor)
+{
+    uint32_t left = context->clip_left > context->scissor_left ?
+        context->clip_left : context->scissor_left;
+    uint32_t top = context->clip_top > context->scissor_top ?
+        context->clip_top : context->scissor_top;
+    uint32_t right = context->clip_right < context->scissor_right ?
+        context->clip_right : context->scissor_right;
+    uint32_t bottom = context->clip_bottom < context->scissor_bottom ?
+        context->clip_bottom : context->scissor_bottom;
+
+    if (left >= right || top >= bottom) {
+        return 0;
+    }
+    scissor->x = left;
+    scissor->y = top;
+    scissor->width = right - left;
+    scissor->height = bottom - top;
+    return 1;
+}
+
+static int gxmetal_metal_apply_scissor(GXMetalMetalContext *context)
+{
+    MTLScissorRect scissor;
+
+    if (!gxmetal_metal_effective_scissor(context, &scissor)) {
+        return 0;
+    }
+    [context->encoder setScissorRect:scissor];
+    return 1;
+}
+
 static uint32_t gxmetal_metal_context_create(
     GXMetalMetalRenderer *renderer, const GXMetalPacketView *packet)
 {
@@ -424,11 +465,35 @@ static uint32_t gxmetal_metal_context_create(
         packet->payload + GXMETAL_CONTEXT_FRAMEBUFFER_OFFSET);
     context->flags = gxmetal_load_le32(
         packet->payload + GXMETAL_CONTEXT_FLAGS_OFFSET);
+    if ((context->flags & GXMETAL_CONTEXT_RECT_CLIP) != 0) {
+        uint32_t left_top = gxmetal_load_le32(
+            packet->payload + GXMETAL_CONTEXT_CLIP_LEFT_TOP_OFFSET);
+        uint32_t right_bottom = gxmetal_load_le32(
+            packet->payload + GXMETAL_CONTEXT_CLIP_RIGHT_BOTTOM_OFFSET);
+
+        context->clip_left = left_top & UINT32_C(0xffff);
+        context->clip_top = left_top >> 16;
+        context->clip_right = right_bottom & UINT32_C(0xffff);
+        context->clip_bottom = right_bottom >> 16;
+    } else {
+        context->clip_right = context->width;
+        context->clip_bottom = context->height;
+    }
+    context->scissor_right = context->width;
+    context->scissor_bottom = context->height;
     bytes_per_pixel = gxmetal_metal_bytes_per_pixel(context->pixel_format);
     end = (uint64_t)context->framebuffer_offset +
           (uint64_t)(context->height - 1) * context->row_bytes +
           (uint64_t)context->width * bytes_per_pixel;
-    if (bytes_per_pixel == 0 ||
+    if ((context->flags & ~(GXMETAL_CONTEXT_Z16 |
+                            GXMETAL_CONTEXT_DOUBLE_BUFFER |
+                            GXMETAL_CONTEXT_NO_DITHER |
+                            GXMETAL_CONTEXT_RECT_CLIP)) != 0 ||
+        context->clip_left > context->clip_right ||
+        context->clip_top > context->clip_bottom ||
+        context->clip_right > context->width ||
+        context->clip_bottom > context->height ||
+        bytes_per_pixel == 0 ||
         context->row_bytes < (uint64_t)context->width * bytes_per_pixel ||
         end > renderer->framebuffer_bytes) {
         memset(context, 0, sizeof(*context));
@@ -693,6 +758,7 @@ static uint32_t gxmetal_metal_clear(GXMetalMetalRenderer *renderer,
     GXMetalMetalViewport viewport;
     MTLClearColor color;
     MTLScissorRect scissor;
+    MTLScissorRect effective_scissor;
     GXMetalMetalFog no_fog = {0};
     GXMetalMetalAlphaTest no_alpha_test = {GXMETAL_ALPHA_TEST_NONE, 0.0f};
     float components[4];
@@ -717,7 +783,24 @@ static uint32_t gxmetal_metal_clear(GXMetalMetalRenderer *renderer,
     if (left > right || top > bottom) {
         return GXMETAL_ERROR_BAD_PACKET;
     }
-    if (left == right || top == bottom) {
+    if (!gxmetal_metal_effective_scissor(context, &effective_scissor)) {
+        return GXMETAL_ERROR_NONE;
+    }
+    if (left < (int32_t)effective_scissor.x) {
+        left = (int32_t)effective_scissor.x;
+    }
+    if (top < (int32_t)effective_scissor.y) {
+        top = (int32_t)effective_scissor.y;
+    }
+    if (right > (int32_t)(effective_scissor.x +
+                          effective_scissor.width)) {
+        right = (int32_t)(effective_scissor.x + effective_scissor.width);
+    }
+    if (bottom > (int32_t)(effective_scissor.y +
+                           effective_scissor.height)) {
+        bottom = (int32_t)(effective_scissor.y + effective_scissor.height);
+    }
+    if (left >= right || top >= bottom) {
         return GXMETAL_ERROR_NONE;
     }
     components[0] = gxmetal_metal_load_float(
@@ -784,11 +867,7 @@ static uint32_t gxmetal_metal_clear(GXMetalMetalRenderer *renderer,
         [context->encoder drawPrimitives:MTLPrimitiveTypeTriangleStrip
             vertexStart:0 vertexCount:4];
     }
-    scissor.x = 0;
-    scissor.y = 0;
-    scissor.width = context->width;
-    scissor.height = context->height;
-    [context->encoder setScissorRect:scissor];
+    [context->encoder setScissorRect:effective_scissor];
     return GXMETAL_ERROR_NONE;
 }
 
@@ -876,6 +955,13 @@ static uint32_t gxmetal_metal_draw(GXMetalMetalRenderer *renderer,
         }
         free(vertices);
         return GXMETAL_ERROR_RENDERER;
+    }
+    if (!gxmetal_metal_apply_scissor(context)) {
+        if (draw_vertices != vertices) {
+            free(draw_vertices);
+        }
+        free(vertices);
+        return GXMETAL_ERROR_NONE;
     }
     viewport.width = (float)context->width;
     viewport.height = (float)context->height;
@@ -1058,6 +1144,13 @@ static uint32_t gxmetal_metal_draw_textured(
         free(vertices);
         return GXMETAL_ERROR_RENDERER;
     }
+    if (!gxmetal_metal_apply_scissor(context)) {
+        if (draw_vertices != vertices) {
+            free(draw_vertices);
+        }
+        free(vertices);
+        return GXMETAL_ERROR_NONE;
+    }
     viewport.width = (float)context->width;
     viewport.height = (float)context->height;
     [context->encoder setRenderPipelineState:
@@ -1096,14 +1189,53 @@ static uint8_t gxmetal_metal_to_u8(uint8_t value)
 }
 
 static uint32_t gxmetal_metal_present(GXMetalMetalRenderer *renderer,
-                                      GXMetalMetalContext *context)
+                                      GXMetalMetalContext *context,
+                                      const GXMetalPacketView *packet)
 {
     uint8_t *pixels;
-    uint32_t source_row_bytes = context->width * 4;
+    int32_t left = (int32_t)gxmetal_load_le32(
+        packet->payload + GXMETAL_RECT_LEFT_OFFSET);
+    int32_t top = (int32_t)gxmetal_load_le32(
+        packet->payload + GXMETAL_RECT_TOP_OFFSET);
+    int32_t right = (int32_t)gxmetal_load_le32(
+        packet->payload + GXMETAL_RECT_RIGHT_OFFSET);
+    int32_t bottom = (int32_t)gxmetal_load_le32(
+        packet->payload + GXMETAL_RECT_BOTTOM_OFFSET);
+    uint32_t region_width;
+    uint32_t region_height;
+    uint32_t source_row_bytes;
     uint32_t bytes_per_pixel = gxmetal_metal_bytes_per_pixel(
         context->pixel_format);
     uint32_t x;
     uint32_t y;
+
+    if (left > right || top > bottom) {
+        return GXMETAL_ERROR_BAD_PACKET;
+    }
+    if (left < 0) {
+        left = 0;
+    }
+    if (top < 0) {
+        top = 0;
+    }
+    if (right > (int32_t)context->width) {
+        right = (int32_t)context->width;
+    }
+    if (bottom > (int32_t)context->height) {
+        bottom = (int32_t)context->height;
+    }
+    if (left < (int32_t)context->clip_left) {
+        left = (int32_t)context->clip_left;
+    }
+    if (top < (int32_t)context->clip_top) {
+        top = (int32_t)context->clip_top;
+    }
+    if (right > (int32_t)context->clip_right) {
+        right = (int32_t)context->clip_right;
+    }
+    if (bottom > (int32_t)context->clip_bottom) {
+        bottom = (int32_t)context->clip_bottom;
+    }
 
     if (context->command_buffer != nil) {
         if (context->encoder != nil) {
@@ -1124,19 +1256,28 @@ static uint32_t gxmetal_metal_present(GXMetalMetalRenderer *renderer,
         }
     }
 
-    pixels = malloc((size_t)source_row_bytes * context->height);
+    if (left >= right || top >= bottom) {
+        gxmetal_metal_release_frame(context);
+        return GXMETAL_ERROR_NONE;
+    }
+    region_width = (uint32_t)(right - left);
+    region_height = (uint32_t)(bottom - top);
+    source_row_bytes = region_width * 4;
+    pixels = malloc((size_t)source_row_bytes * region_height);
     if (pixels == NULL) {
         gxmetal_metal_release_frame(context);
         return GXMETAL_ERROR_RENDERER;
     }
     [context->texture getBytes:pixels bytesPerRow:source_row_bytes
-        fromRegion:MTLRegionMake2D(0, 0, context->width, context->height)
+        fromRegion:MTLRegionMake2D((NSUInteger)left, (NSUInteger)top,
+                                   region_width, region_height)
         mipmapLevel:0];
-    for (y = 0; y < context->height; y++) {
+    for (y = 0; y < region_height; y++) {
         const uint8_t *source = pixels + y * source_row_bytes;
         uint8_t *destination = renderer->framebuffer +
-            context->framebuffer_offset + y * context->row_bytes;
-        for (x = 0; x < context->width; x++) {
+            context->framebuffer_offset + ((uint32_t)top + y) *
+            context->row_bytes + (uint32_t)left * bytes_per_pixel;
+        for (x = 0; x < region_width; x++) {
             uint8_t r = gxmetal_metal_to_u8(source[x * 4]);
             uint8_t g = gxmetal_metal_to_u8(source[x * 4 + 1]);
             uint8_t b = gxmetal_metal_to_u8(source[x * 4 + 2]);
@@ -1348,6 +1489,22 @@ static uint32_t gxmetal_metal_set_state(GXMetalMetalContext *context,
         }
         context->texture_wrap_v = value;
         break;
+    case GXMETAL_STATE_SCISSOR_LEFT:
+        context->scissor_left = value < context->width ?
+            value : context->width;
+        break;
+    case GXMETAL_STATE_SCISSOR_TOP:
+        context->scissor_top = value < context->height ?
+            value : context->height;
+        break;
+    case GXMETAL_STATE_SCISSOR_RIGHT:
+        context->scissor_right = value < context->width ?
+            value : context->width;
+        break;
+    case GXMETAL_STATE_SCISSOR_BOTTOM:
+        context->scissor_bottom = value < context->height ?
+            value : context->height;
+        break;
     default:
         break;
     }
@@ -1546,7 +1703,7 @@ uint32_t gxmetal_metal_dispatch(void *opaque,
             }
             return GXMETAL_ERROR_NONE;
         case GXMETAL_OP_PRESENT:
-            return gxmetal_metal_present(renderer, context);
+            return gxmetal_metal_present(renderer, context, packet);
         case GXMETAL_OP_SET_STATE:
             return gxmetal_metal_set_state(context, packet);
         case GXMETAL_OP_CLEAR:

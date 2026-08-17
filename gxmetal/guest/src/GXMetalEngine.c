@@ -19,7 +19,7 @@
 
 #define GXMETAL_VENDOR_ID UINT32_C(0x47584d54) /* GXMT */
 #define GXMETAL_ENGINE_ID UINT32_C(0x00000001)
-#define GXMETAL_REVISION  UINT32_C(0x00010300)
+#define GXMETAL_REVISION  UINT32_C(0x00010400)
 #define GXMETAL_STATE_SLOTS 154u
 #define GXMETAL_SYNC_SPINS UINT32_C(10000000)
 #define GXMETAL_TEXTURE_MAGIC UINT32_C(0x47585458) /* GXTX */
@@ -643,6 +643,67 @@ static TQABoolean GXMetalDescribeDevice(const TQADevice *device,
     *framebufferOffset = (uint32_t)(targetAddress -
                                     gRegistry.framebuffer_address);
     return 1;
+}
+
+static TQABoolean GXMetalDescribeClip(const TQAClip *clip,
+                                      const TQARect *rect,
+                                      uint32_t width, uint32_t height,
+                                      uint32_t *left, uint32_t *top,
+                                      uint32_t *right, uint32_t *bottom)
+{
+    RgnHandle region;
+    Rect bounds;
+    int32_t clippedLeft;
+    int32_t clippedTop;
+    int32_t clippedRight;
+    int32_t clippedBottom;
+
+    *left = 0;
+    *top = 0;
+    *right = width;
+    *bottom = height;
+    if (clip == NULL) {
+        return 1;
+    }
+    if (clip->clipType != kQAClipRgn ||
+        (gTransport.features & GXMETAL_FEATURE_RECT_CLIP) == 0) {
+        return 0;
+    }
+    region = clip->clip.clipRgn;
+    if (region == NULL || *region == NULL ||
+        (**region).rgnSize != sizeof(Region)) {
+        return 0;
+    }
+    bounds = (**region).rgnBBox;
+    clippedLeft = bounds.left > rect->left ? bounds.left : rect->left;
+    clippedTop = bounds.top > rect->top ? bounds.top : rect->top;
+    clippedRight = bounds.right < rect->right ? bounds.right : rect->right;
+    clippedBottom = bounds.bottom < rect->bottom ?
+        bounds.bottom : rect->bottom;
+    if (clippedLeft > rect->right) {
+        clippedLeft = rect->right;
+    }
+    if (clippedTop > rect->bottom) {
+        clippedTop = rect->bottom;
+    }
+    if (clippedRight < rect->left) {
+        clippedRight = rect->left;
+    }
+    if (clippedBottom < rect->top) {
+        clippedBottom = rect->top;
+    }
+    if (clippedRight < clippedLeft) {
+        clippedRight = clippedLeft;
+    }
+    if (clippedBottom < clippedTop) {
+        clippedBottom = clippedTop;
+    }
+    *left = (uint32_t)(clippedLeft - rect->left);
+    *top = (uint32_t)(clippedTop - rect->top);
+    *right = (uint32_t)(clippedRight - rect->left);
+    *bottom = (uint32_t)(clippedBottom - rect->top);
+    return *left <= width && *right <= width &&
+           *top <= height && *bottom <= height;
 }
 
 static TQABoolean GXMetalBeginPacket(GXMetalDrawState *state,
@@ -1411,7 +1472,10 @@ static TQAError GXMetalDrawPrivateNew(TQADrawContext *newDrawContext,
     uint8_t *payload;
     TQAError error;
     uint32_t contextFlags = 0;
-    (void)clip;
+    uint32_t clipLeft;
+    uint32_t clipTop;
+    uint32_t clipRight;
+    uint32_t clipBottom;
 
     if (newDrawContext == NULL || !GXMetalTransportAvailable() ||
         (flags & (kQAContext_DeepZ | kQAContext_Cache |
@@ -1428,7 +1492,9 @@ static TQAError GXMetalDrawPrivateNew(TQADrawContext *newDrawContext,
     }
     if (!GXMetalDescribeDevice(device, rect, &state->width, &state->height,
                                &state->row_bytes, &state->pixel_format,
-                               &state->framebuffer_offset)) {
+                               &state->framebuffer_offset) ||
+        !GXMetalDescribeClip(clip, rect, state->width, state->height,
+                             &clipLeft, &clipTop, &clipRight, &clipBottom)) {
         DisposePtr((Ptr)state);
         return kQANotSupported;
     }
@@ -1454,6 +1520,9 @@ static TQAError GXMetalDrawPrivateNew(TQADrawContext *newDrawContext,
     if (flags & kQAContext_NoDither) {
         contextFlags |= GXMETAL_CONTEXT_NO_DITHER;
     }
+    if (clip != NULL) {
+        contextFlags |= GXMETAL_CONTEXT_RECT_CLIP;
+    }
     state->context_flags = contextFlags;
 
     if (!GXMetalBeginPacket(state, GXMETAL_OP_CONTEXT_CREATE,
@@ -1472,6 +1541,10 @@ static TQAError GXMetalDrawPrivateNew(TQADrawContext *newDrawContext,
     gxmetal_store_le32(payload + GXMETAL_CONTEXT_FRAMEBUFFER_OFFSET,
                        state->framebuffer_offset);
     gxmetal_store_le32(payload + GXMETAL_CONTEXT_FLAGS_OFFSET, contextFlags);
+    gxmetal_store_le32(payload + GXMETAL_CONTEXT_CLIP_LEFT_TOP_OFFSET,
+                       clipLeft | (clipTop << 16));
+    gxmetal_store_le32(payload + GXMETAL_CONTEXT_CLIP_RIGHT_BOTTOM_OFFSET,
+                       clipRight | (clipBottom << 16));
     GXMetalCommitPacket(state, &packet);
     if (gxmetal_guest_register_read(state->transport, GXMETAL_REG_STATUS) !=
         GXMETAL_STATUS_READY) {
