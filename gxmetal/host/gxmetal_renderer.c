@@ -112,15 +112,82 @@ static void gxmetal_read_vertex(const uint8_t *bytes,
     vertex->a = gxmetal_load_float(bytes + GXMETAL_VERTEX_A_OFFSET);
 }
 
-static int gxmetal_vertex_valid(const GXMetalRenderContext *context,
-                                const GXMetalFloatVertex *vertex)
+static int gxmetal_vertex_valid(const GXMetalFloatVertex *vertex)
 {
     return isfinite(vertex->x) && isfinite(vertex->y) &&
-           isfinite(vertex->z) && isfinite(vertex->inv_w) &&
+           isfinite(vertex->z) && vertex->z >= 0.0f && vertex->z <= 1.0f &&
            isfinite(vertex->r) && isfinite(vertex->g) &&
-           isfinite(vertex->b) && isfinite(vertex->a) &&
-           vertex->x >= 0.0f && vertex->x <= (float)context->width &&
-           vertex->y >= 0.0f && vertex->y <= (float)context->height;
+           isfinite(vertex->b) && isfinite(vertex->a);
+}
+
+static int gxmetal_clip_parameter(float p, float q, float *minimum,
+                                  float *maximum)
+{
+    float ratio;
+
+    if (p == 0.0f) {
+        return q >= 0.0f;
+    }
+    ratio = q / p;
+    if (p < 0.0f) {
+        if (ratio > *maximum) {
+            return 0;
+        }
+        if (ratio > *minimum) {
+            *minimum = ratio;
+        }
+    } else {
+        if (ratio < *minimum) {
+            return 0;
+        }
+        if (ratio < *maximum) {
+            *maximum = ratio;
+        }
+    }
+    return 1;
+}
+
+static GXMetalFloatVertex gxmetal_lerp_vertex(const GXMetalFloatVertex *a,
+                                               const GXMetalFloatVertex *b,
+                                               float t)
+{
+    GXMetalFloatVertex result = *a;
+
+    result.x = a->x + (b->x - a->x) * t;
+    result.y = a->y + (b->y - a->y) * t;
+    result.z = a->z + (b->z - a->z) * t;
+    result.r = a->r + (b->r - a->r) * t;
+    result.g = a->g + (b->g - a->g) * t;
+    result.b = a->b + (b->b - a->b) * t;
+    result.a = a->a + (b->a - a->a) * t;
+    return result;
+}
+
+static int gxmetal_clip_line(const GXMetalRenderContext *context,
+                             const GXMetalFloatVertex *input0,
+                             const GXMetalFloatVertex *input1,
+                             GXMetalFloatVertex *output0,
+                             GXMetalFloatVertex *output1)
+{
+    float minimum = 0.0f;
+    float maximum = 1.0f;
+    float delta_x = input1->x - input0->x;
+    float delta_y = input1->y - input0->y;
+    float right = (float)context->width - 0.0001f;
+    float bottom = (float)context->height - 0.0001f;
+
+    if (!isfinite(delta_x) || !isfinite(delta_y) ||
+        !gxmetal_clip_parameter(-delta_x, input0->x, &minimum, &maximum) ||
+        !gxmetal_clip_parameter(delta_x, right - input0->x,
+                                &minimum, &maximum) ||
+        !gxmetal_clip_parameter(-delta_y, input0->y, &minimum, &maximum) ||
+        !gxmetal_clip_parameter(delta_y, bottom - input0->y,
+                                &minimum, &maximum)) {
+        return 0;
+    }
+    *output0 = gxmetal_lerp_vertex(input0, input1, minimum);
+    *output1 = gxmetal_lerp_vertex(input0, input1, maximum);
+    return 1;
 }
 
 static float gxmetal_edge(const GXMetalFloatVertex *a,
@@ -325,12 +392,15 @@ static uint32_t gxmetal_render_gouraud(GXMetalRenderer *renderer,
             GXMetalFloatVertex vertex;
             gxmetal_read_vertex(vertices + i * GXMETAL_GOURAUD_VERTEX_BYTES,
                                 &vertex);
-            if (!gxmetal_vertex_valid(context, &vertex)) {
+            if (!gxmetal_vertex_valid(&vertex)) {
                 return GXMETAL_ERROR_BAD_PACKET;
             }
-            gxmetal_write_pixel(renderer, context, (int)floorf(vertex.x),
-                                (int)floorf(vertex.y), vertex.r, vertex.g,
-                                vertex.b, vertex.a);
+            if (vertex.x >= 0.0f && vertex.x < (float)context->width &&
+                vertex.y >= 0.0f && vertex.y < (float)context->height) {
+                gxmetal_write_pixel(renderer, context, (int)floorf(vertex.x),
+                                    (int)floorf(vertex.y), vertex.r, vertex.g,
+                                    vertex.b, vertex.a);
+            }
         }
         return GXMETAL_ERROR_NONE;
     }
@@ -338,15 +408,18 @@ static uint32_t gxmetal_render_gouraud(GXMetalRenderer *renderer,
         for (i = 0; i < count; i += 2) {
             GXMetalFloatVertex v0;
             GXMetalFloatVertex v1;
+            GXMetalFloatVertex clipped0;
+            GXMetalFloatVertex clipped1;
             gxmetal_read_vertex(vertices + i * GXMETAL_GOURAUD_VERTEX_BYTES,
                                 &v0);
             gxmetal_read_vertex(vertices +
                                 (i + 1) * GXMETAL_GOURAUD_VERTEX_BYTES, &v1);
-            if (!gxmetal_vertex_valid(context, &v0) ||
-                !gxmetal_vertex_valid(context, &v1)) {
+            if (!gxmetal_vertex_valid(&v0) || !gxmetal_vertex_valid(&v1)) {
                 return GXMETAL_ERROR_BAD_PACKET;
             }
-            gxmetal_draw_line(renderer, context, &v0, &v1);
+            if (gxmetal_clip_line(context, &v0, &v1, &clipped0, &clipped1)) {
+                gxmetal_draw_line(renderer, context, &clipped0, &clipped1);
+            }
         }
         return GXMETAL_ERROR_NONE;
     }
@@ -368,9 +441,8 @@ static uint32_t gxmetal_render_gouraud(GXMetalRenderer *renderer,
                             &v1);
         gxmetal_read_vertex(vertices + i2 * GXMETAL_GOURAUD_VERTEX_BYTES,
                             &v2);
-        if (!gxmetal_vertex_valid(context, &v0) ||
-            !gxmetal_vertex_valid(context, &v1) ||
-            !gxmetal_vertex_valid(context, &v2)) {
+        if (!gxmetal_vertex_valid(&v0) || !gxmetal_vertex_valid(&v1) ||
+            !gxmetal_vertex_valid(&v2)) {
             return GXMETAL_ERROR_BAD_PACKET;
         }
         gxmetal_draw_triangle(renderer, context, &v0, &v1, &v2);

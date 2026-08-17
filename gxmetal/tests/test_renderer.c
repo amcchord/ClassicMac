@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 
 #include "gxmetal_renderer.h"
 
@@ -93,7 +94,8 @@ static void test_context_clear_and_triangle(void)
     gxmetal_store_le32(packet + 16 + GXMETAL_DRAW_VERTEX_STRIDE_OFFSET,
                        GXMETAL_GOURAUD_VERTEX_BYTES);
     vertices = packet + 16 + GXMETAL_DRAW_VERTICES_OFFSET;
-    set_vertex(vertices, 4.0f, 4.0f, 1.0f, 0.0f, 0.0f);
+    set_vertex(vertices, -4.0f, -4.0f, 1.0f, 0.0f, 0.0f);
+    store_float(vertices + GXMETAL_VERTEX_INV_W_OFFSET, NAN);
     set_vertex(vertices + 32, 28.0f, 4.0f, 0.0f, 1.0f, 0.0f);
     set_vertex(vertices + 64, 16.0f, 28.0f, 0.0f, 0.0f, 1.0f);
     CHECK(dispatch_packet(&renderer, packet, 128) == GXMETAL_ERROR_NONE);
@@ -101,6 +103,19 @@ static void test_context_clear_and_triangle(void)
           framebuffer[(8 * 32 + 8) * 2 + 1] != 0x1f);
     CHECK(framebuffer[(31 * 32 + 31) * 2] == 0x00 &&
           framebuffer[(31 * 32 + 31) * 2 + 1] == 0x1f);
+
+    make_packet(packet, GXMETAL_OP_DRAW_GOURAUD, 96, 1);
+    gxmetal_store_le32(packet + 16 + GXMETAL_DRAW_PRIMITIVE_OFFSET,
+                       GXMETAL_PRIMITIVE_LINE);
+    gxmetal_store_le32(packet + 16 + GXMETAL_DRAW_VERTEX_COUNT_OFFSET, 2);
+    gxmetal_store_le32(packet + 16 + GXMETAL_DRAW_VERTEX_STRIDE_OFFSET,
+                       GXMETAL_GOURAUD_VERTEX_BYTES);
+    vertices = packet + 16 + GXMETAL_DRAW_VERTICES_OFFSET;
+    set_vertex(vertices, -1000000.0f, 30.0f, 1.0f, 0.0f, 0.0f);
+    set_vertex(vertices + 32, 1000000.0f, 30.0f, 1.0f, 0.0f, 0.0f);
+    CHECK(dispatch_packet(&renderer, packet, 96) == GXMETAL_ERROR_NONE);
+    CHECK(framebuffer[(30 * 32 + 0) * 2] == 0x7c);
+    CHECK(framebuffer[(30 * 32 + 31) * 2] == 0x7c);
 }
 
 static void test_rejects_framebuffer_overflow(void)

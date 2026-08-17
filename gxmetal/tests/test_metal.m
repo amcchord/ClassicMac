@@ -126,7 +126,9 @@ static void test_metal_triangle(void)
     gxmetal_store_le32(payload + GXMETAL_DRAW_VERTEX_COUNT_OFFSET, 3);
     gxmetal_store_le32(payload + GXMETAL_DRAW_VERTEX_STRIDE_OFFSET, 32);
     vertices = payload + GXMETAL_DRAW_VERTICES_OFFSET;
-    set_vertex(vertices, 8.0f, 8.0f, 1.0f, 0.0f, 0.0f);
+    set_vertex(vertices, -8.0f, -8.0f, 1.0f, 0.0f, 0.0f);
+    /* invW is undefined for Gouraud vertices unless PerspectiveZ is active. */
+    store_float(vertices + GXMETAL_VERTEX_INV_W_OFFSET, NAN);
     set_vertex(vertices + 32, 56.0f, 8.0f, 0.0f, 1.0f, 0.0f);
     set_vertex(vertices + 64, 32.0f, 56.0f, 0.0f, 0.0f, 1.0f);
     CHECK(dispatch(renderer, packet, 128) == GXMETAL_ERROR_NONE);

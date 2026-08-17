@@ -718,8 +718,7 @@ static uint32_t gxmetal_metal_clear(GXMetalMetalRenderer *renderer,
     return GXMETAL_ERROR_NONE;
 }
 
-static int gxmetal_metal_read_vertex(const GXMetalMetalContext *context,
-                                     const uint8_t *source,
+static int gxmetal_metal_read_vertex(const uint8_t *source,
                                      GXMetalMetalVertex *vertex)
 {
     vertex->x = gxmetal_metal_load_float(source + GXMETAL_VERTEX_X_OFFSET);
@@ -732,9 +731,7 @@ static int gxmetal_metal_read_vertex(const GXMetalMetalContext *context,
     return isfinite(vertex->x) && isfinite(vertex->y) &&
            isfinite(vertex->z) && vertex->z >= 0.0f && vertex->z <= 1.0f &&
            isfinite(vertex->r) && isfinite(vertex->g) &&
-           isfinite(vertex->b) && isfinite(vertex->a) &&
-           vertex->x >= 0.0f && vertex->x <= (float)context->width &&
-           vertex->y >= 0.0f && vertex->y <= (float)context->height;
+           isfinite(vertex->b) && isfinite(vertex->a);
 }
 
 static uint32_t gxmetal_metal_draw(GXMetalMetalRenderer *renderer,
@@ -759,7 +756,7 @@ static uint32_t gxmetal_metal_draw(GXMetalMetalRenderer *renderer,
     }
     for (i = 0; i < count; i++) {
         if (!gxmetal_metal_read_vertex(
-                context, source + i * GXMETAL_GOURAUD_VERTEX_BYTES,
+                source + i * GXMETAL_GOURAUD_VERTEX_BYTES,
                 &vertices[i])) {
             free(vertices);
             return GXMETAL_ERROR_BAD_PACKET;
