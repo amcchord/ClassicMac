@@ -22,11 +22,15 @@ typedef struct GXMetalMetalVertex {
     float x;
     float y;
     float z;
+    float inv_w;
     float r;
     float g;
     float b;
     float a;
 } GXMetalMetalVertex;
+
+_Static_assert(sizeof(GXMetalMetalVertex) == GXMETAL_GOURAUD_VERTEX_BYTES,
+               "Metal Gouraud vertex must match the wire layout");
 
 typedef struct GXMetalMetalViewport {
     float width;
@@ -160,9 +164,10 @@ struct GXMetalMetalRenderer {
 static NSString *const kGXMetalShaderSource = @
     "#include <metal_stdlib>\n"
     "using namespace metal;\n"
-    "struct GXVertex { float x; float y; float z; float r; float g; float b; float a; };\n"
+    "struct GXVertex { float x; float y; float z; float invW; float r; float g; float b; float a; };\n"
     "struct GXViewport { float width; float height; };\n"
-    "struct GXOut { float4 position [[position]]; float4 color; };\n"
+    "struct GXOut { float4 position [[position]]; float4 color;\n"
+    "               float invW [[center_no_perspective]]; };\n"
     "struct GXFog {\n"
     "  uint4 modeAndPadding; float4 color;\n"
     "  float start; float end; float density; float maxDepth;\n"
@@ -206,6 +211,7 @@ static NSString *const kGXMetalShaderSource = @
     "  out.position = float4(v.x / viewport.width * 2.0 - 1.0, "
     "                        1.0 - v.y / viewport.height * 2.0, v.z, 1.0);\n"
     "  out.color = float4(v.r, v.g, v.b, v.a);\n"
+    "  out.invW = v.invW;\n"
     "  return out;\n"
     "}\n"
     "fragment float4 gxmetal_fragment(GXOut in [[stage_in]],\n"
@@ -213,8 +219,11 @@ static NSString *const kGXMetalShaderSource = @
     "    constant GXAlphaTest &alphaTest [[buffer(1)]]) {\n"
     "  float4 result = clamp(in.color, 0.0, 1.0);\n"
     "  if (!gxmetal_alpha_visible(result.a, alphaTest)) discard_fragment();\n"
-    "  return gxmetal_apply_fog(result, in.position.z, fog);\n"
-    "}\n"
+    "  float fogDepth = 1.0 / max(in.invW, 0.000001);\n"
+    "  return gxmetal_apply_fog(result, fogDepth, fog);\n"
+    "}\n";
+
+static NSString *const kGXMetalTextureShaderSource = @
     "struct GXTextureVertex {\n"
     "  float x; float y; float z; float invW;\n"
     "  float r; float g; float b; float a;\n"
@@ -224,7 +233,7 @@ static NSString *const kGXMetalShaderSource = @
     "};\n"
     "struct GXTextureOut {\n"
     "  float4 position [[position]]; float4 color; float2 uv;\n"
-    "  float3 kd; float3 ks;\n"
+    "  float3 kd; float3 ks; float invW [[center_no_perspective]];\n"
     "};\n"
     "vertex GXTextureOut gxmetal_texture_vertex(\n"
     "    const device GXTextureVertex *vertices [[buffer(0)]],\n"
@@ -245,6 +254,7 @@ static NSString *const kGXMetalShaderSource = @
     "  out.uv = float2(v.uOverW, v.invW - v.vOverW) / safeInvW;\n"
     "  out.kd = float3(v.kd_r, v.kd_g, v.kd_b);\n"
     "  out.ks = float3(v.ks_r, v.ks_g, v.ks_b);\n"
+    "  out.invW = v.invW;\n"
     "  return out;\n"
     "}\n"
     "fragment float4 gxmetal_texture_fragment(\n"
@@ -266,7 +276,8 @@ static NSString *const kGXMetalShaderSource = @
     "  if ((operation & 2u) != 0u) result.rgb += in.ks;\n"
     "  result = clamp(result, 0.0, 1.0);\n"
     "  if (!gxmetal_alpha_visible(result.a, alphaTest)) discard_fragment();\n"
-    "  return gxmetal_apply_fog(result, in.position.z, fog);\n"
+    "  float fogDepth = 1.0 / max(in.invW, 0.000001);\n"
+    "  return gxmetal_apply_fog(result, fogDepth, fog);\n"
     "}\n";
 
 static NSString *const kGXMetalPresentShaderSource = @
@@ -923,18 +934,25 @@ static uint32_t gxmetal_metal_clear(GXMetalMetalRenderer *renderer,
     return GXMETAL_ERROR_NONE;
 }
 
-static int gxmetal_metal_read_vertex(const uint8_t *source,
+static int gxmetal_metal_read_vertex(const GXMetalMetalContext *context,
+                                     const uint8_t *source,
                                      GXMetalMetalVertex *vertex)
 {
     vertex->x = gxmetal_metal_load_float(source + GXMETAL_VERTEX_X_OFFSET);
     vertex->y = gxmetal_metal_load_float(source + GXMETAL_VERTEX_Y_OFFSET);
     vertex->z = gxmetal_metal_load_float(source + GXMETAL_VERTEX_Z_OFFSET);
+    vertex->inv_w = 1.0f;
+    if (context->fog.mode_and_padding[0] >= GXMETAL_FOG_LINEAR) {
+        vertex->inv_w = gxmetal_metal_load_float(
+            source + GXMETAL_VERTEX_INV_W_OFFSET);
+    }
     vertex->r = gxmetal_metal_load_float(source + GXMETAL_VERTEX_R_OFFSET);
     vertex->g = gxmetal_metal_load_float(source + GXMETAL_VERTEX_G_OFFSET);
     vertex->b = gxmetal_metal_load_float(source + GXMETAL_VERTEX_B_OFFSET);
     vertex->a = gxmetal_metal_load_float(source + GXMETAL_VERTEX_A_OFFSET);
     return isfinite(vertex->x) && isfinite(vertex->y) &&
            isfinite(vertex->z) && vertex->z >= 0.0f && vertex->z <= 1.0f &&
+           isfinite(vertex->inv_w) && vertex->inv_w > 0.0f &&
            isfinite(vertex->r) && isfinite(vertex->g) &&
            isfinite(vertex->b) && isfinite(vertex->a);
 }
@@ -960,7 +978,7 @@ static uint32_t gxmetal_metal_draw(GXMetalMetalRenderer *renderer,
         return GXMETAL_ERROR_RENDERER;
     }
     for (i = 0; i < count; i++) {
-        if (!gxmetal_metal_read_vertex(
+        if (!gxmetal_metal_read_vertex(context,
                 source + i * GXMETAL_GOURAUD_VERTEX_BYTES,
                 &vertices[i])) {
             free(vertices);
@@ -1697,7 +1715,8 @@ GXMetalMetalRenderer *gxmetal_metal_create(void *framebuffer,
             options:MTLResourceStorageModeShared
             deallocator:nil];
     }
-    shader_source = [kGXMetalShaderSource
+    shader_source = [[kGXMetalShaderSource
+        stringByAppendingString:kGXMetalTextureShaderSource]
         stringByAppendingString:kGXMetalPresentShaderSource];
     library = [renderer->device newLibraryWithSource:shader_source
               options:nil error:&error];

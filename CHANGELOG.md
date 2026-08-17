@@ -24,9 +24,9 @@
   of the complete 64 MiB aperture, a 109.23x reduction. Partial presents mark
   only their clipped contiguous span.
 - The repeatable 120-frame Mac OS 9 mixed texture/Gouraud conformance workload
-  completed in 49,977 microseconds through GXMetal versus 612,007 microseconds
+  completed in 51,325 microseconds through GXMetal versus 530,436 microseconds
   through Apple Software RAVE when launched from the exact Developer ID-signed
-  beta application: 12.24x.
+  beta application: 10.33x.
 
 ### Fixed
 
@@ -36,6 +36,10 @@
 - Preserved RAVE's submitted per-triangle orientation flag as metadata rather
   than incorrectly discarding flagged triangles, which had removed most of
   Nanosaur's submitted geometry.
+- Reconstructed RAVE fog distance from `1 / invW` instead of using the
+  normalized Z-buffer coordinate. This fixes Nanosaur scenes that were blended
+  almost entirely to the pale fog color even though their HUD rendered
+  correctly.
 
 ## 1.7.0 beta 3 — 2026-08-16
 

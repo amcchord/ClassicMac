@@ -47,12 +47,12 @@ application—not a loose development binary—it recorded:
 
 | Engine | Guest-measured time |
 | --- | ---: |
-| GXMetal | 49,977 microseconds |
-| Apple Software RAVE | 612,007 microseconds |
-| Ratio | **12.24x** |
+| GXMetal | 51,325 microseconds |
+| Apple Software RAVE | 530,436 microseconds |
+| Ratio | **10.33x** |
 
 This is a focused RAVE workload rather than a promise that every game will run
-12.24x faster. A game also spends time in simulation, sound, file access, and
+10.33x faster. A game also spends time in simulation, sound, file access, and
 PowerPC code outside RAVE. The result proves that the driver was discovered,
 the complete guest-to-host path ran, the software fallback remained usable,
 and the accelerated portion was materially faster under matched guest-side
@@ -90,6 +90,21 @@ its active style; it is not a request for the driver to discard the triangle.
 Treating it as culling removed 1,697 of 2,061 captured draws. GXMetal now
 preserves the flag through scalar and batched entry points while rendering the
 submitted triangles, with host and Mac OS 9 regression coverage for that rule.
+
+The same captured game traffic exposed a separate depth-fog mismatch. RAVE
+defines fog distance as `1 / invW`, independently of the normalized Z-buffer
+coordinate. Nanosaur submits linear fog from 0.4 to 1.0 while much of its
+visible geometry has Z values near 0.9 and reciprocal-W distances below 0.6.
+Using Z therefore blended almost the whole world to the pale fog color. GXMetal
+now interpolates reciprocal W in screen space and reconstructs RAVE fog
+distance per fragment. A deterministic Metal test fixes Z at 0.99 and `invW`
+at 2.0 to prove that the resulting fog depth is 0.5, not 0.99.
+
+An automated Mac OS 9 run of Nanosaur then reached live gameplay in the exact
+Developer ID-signed candidate. The textured player, terrain, vegetation, HUD,
+and map rendered coherently while only the distant horizon reached the fog
+color. The rebuilt in-guest conformance application also passed all framebuffer
+checks and the matched fallback benchmark reported above.
 
 The driver remains experimental while real games broaden the compatibility
 surface. Run GXMetal Test first, keep a copy of the guest disk, and report the

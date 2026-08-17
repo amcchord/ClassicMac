@@ -241,6 +241,17 @@ static void set_texture_vertex(uint8_t *bytes, float x, float y,
     }
 }
 
+static void set_texture_vertex_depth(uint8_t *bytes, float x, float y,
+                                     float z, float inv_w,
+                                     float u, float v)
+{
+    set_texture_vertex(bytes, x, y, u, v);
+    store_float(bytes + GXMETAL_VERTEX_Z_OFFSET, z);
+    store_float(bytes + GXMETAL_VERTEX_INV_W_OFFSET, inv_w);
+    store_float(bytes + GXMETAL_VERTEX_U_OVER_W_OFFSET, u * inv_w);
+    store_float(bytes + GXMETAL_VERTEX_V_OVER_W_OFFSET, v * inv_w);
+}
+
 static void poison_unused_texture_color(uint8_t *bytes)
 {
     store_float(bytes + GXMETAL_VERTEX_R_OFFSET, NAN);
@@ -381,8 +392,9 @@ static void test_metal_texture_upload_and_sampling(void)
     CHECK(framebuffer_pixel(framebuffer, 16, 48) == 0x7c00);
     CHECK(framebuffer_pixel(framebuffer, 48, 48) == 0x03e0);
 
-    /* Nanosaur uses depth fog on textured terrain. Render the same quad into
-     * blue linear fog: its lower-left red texel becomes half-red/half-blue. */
+    /* RAVE defines fog depth as 1/invW, independently of normalized Z.
+     * Nanosaur relies on that distinction: a reciprocal W of 2.0 produces
+     * depth 0.5 even when the depth-buffer coordinate is near 1.0. */
     set_float_state(renderer, packet, 3, GXMETAL_STATE_FOG_COLOR_A, 1.0f);
     set_float_state(renderer, packet, 3, GXMETAL_STATE_FOG_COLOR_R, 0.0f);
     set_float_state(renderer, packet, 3, GXMETAL_STATE_FOG_COLOR_G, 0.0f);
@@ -410,12 +422,12 @@ static void test_metal_texture_upload_and_sampling(void)
     gxmetal_store_le32(payload + GXMETAL_DRAW_VERTEX_COUNT_OFFSET, 6);
     gxmetal_store_le32(payload + GXMETAL_DRAW_VERTEX_STRIDE_OFFSET, 64);
     vertices = payload + GXMETAL_DRAW_VERTICES_OFFSET;
-    set_texture_vertex(vertices + 0 * 64, 0, 0, 0, 0);
-    set_texture_vertex(vertices + 1 * 64, 64, 0, 1, 0);
-    set_texture_vertex(vertices + 2 * 64, 0, 64, 0, 1);
-    set_texture_vertex(vertices + 3 * 64, 64, 0, 1, 0);
-    set_texture_vertex(vertices + 4 * 64, 64, 64, 1, 1);
-    set_texture_vertex(vertices + 5 * 64, 0, 64, 0, 1);
+    set_texture_vertex_depth(vertices + 0 * 64, 0, 0, 0.99f, 2.0f, 0, 0);
+    set_texture_vertex_depth(vertices + 1 * 64, 64, 0, 0.99f, 2.0f, 1, 0);
+    set_texture_vertex_depth(vertices + 2 * 64, 0, 64, 0.99f, 2.0f, 0, 1);
+    set_texture_vertex_depth(vertices + 3 * 64, 64, 0, 0.99f, 2.0f, 1, 0);
+    set_texture_vertex_depth(vertices + 4 * 64, 64, 64, 0.99f, 2.0f, 1, 1);
+    set_texture_vertex_depth(vertices + 5 * 64, 0, 64, 0.99f, 2.0f, 0, 1);
     CHECK(dispatch(renderer, packet, 416) == GXMETAL_ERROR_NONE);
     make_packet(packet, GXMETAL_OP_END_FRAME, 32, 3);
     CHECK(dispatch(renderer, packet, 32) == GXMETAL_ERROR_NONE);

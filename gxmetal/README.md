@@ -23,7 +23,9 @@ and destroys RGB555, ARGB1555, ARGB4444, RGB32, and ARGB32 textures. Metal
 provides perspective-correct sampling, repeat/clamp addressing, nearest,
 bilinear, and trilinear mip filtering, plus RAVE decal, modulation, and
 highlight texture operations. Linear, exponential, and squared-exponential
-RAVE depth fog is applied in both the Gouraud and textured fragment paths.
+RAVE depth fog is applied in both the Gouraud and textured fragment paths. Fog
+distance follows the RAVE contract and is reconstructed from `1 / invW`; the
+normalized Z-buffer coordinate remains independent for hidden-surface removal.
 All seven RAVE alpha comparisons operate on shaded fragment alpha before
 blending and depth writes, supporting masked sprites, foliage, fences, and
 cutout texture borders. GXMetal preserves RAVE's per-triangle backfacing
@@ -94,7 +96,8 @@ ordering, alpha blending, alpha rejection before depth writes, a double-buffer
 presentation, and a four-color big-endian texture upload/sample/destroy cycle.
 Both Gouraud and post-texture-operation alpha testing are asserted. The texture
 test uses an asymmetric image to catch vertical-origin regressions, then repeats
-the draw through linear depth fog. Gouraud and textured backface cases prove
+the draw through linear depth fog with deliberately different normalized Z and
+reciprocal-W distance values. Gouraud and textured backface cases prove
 that orientation-flagged triangles still update framebuffer and depth state, while
 protocol tests reject unknown draw flags. A separate clip test proves immutable
 context clipping, mutable scissoring, untouched framebuffer preservation, and

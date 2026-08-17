@@ -550,6 +550,11 @@ static TQAError GXMetalRenderPattern(TQADrawContext *context,
                                     1.0f, 0.0f, 0.0f, 1.0f);
     fogTriangle[2] = GXMetalGouraud(270.0f, 232.0f, 0.75f,
                                     1.0f, 0.0f, 0.0f, 1.0f);
+    /* RAVE depth fog uses 1/invW, not the normalized Z-buffer coordinate.
+     * Keep the historical 0.75 fog depth while making Z deliberately near. */
+    fogTriangle[0].z = fogTriangle[1].z = fogTriangle[2].z = 0.10f;
+    fogTriangle[0].invW = fogTriangle[1].invW = fogTriangle[2].invW =
+        1.0f / 0.75f;
 
     texturedQuad[0] = GXMetalTextureVertex(178.0f, 38.0f, 0.30f,
                                             0.0f, 0.0f);
