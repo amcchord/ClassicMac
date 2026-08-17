@@ -1,5 +1,41 @@
 # Changelog
 
+## 1.7.0 beta 4 — 2026-08-17
+
+### Added
+
+- **GXMetal brings host-accelerated QuickDraw 3D RAVE to Mac OS 9.** Its
+  PowerPC CFM `tnsl` engine batches validated, versioned drawing commands to a
+  paravirtual QEMU device, which renders them with Metal. The matching driver,
+  one-click installer, and conformance/benchmark application ship together on
+  the ClassicMac Tools CD.
+- GXMetal accelerates Gouraud and textured geometry, Z buffering, alpha test
+  and blending, depth fog, rectangular clipping/scissoring, bitmap uploads,
+  double buffering, and the texture formats and sampling modes used by the
+  initial Nanosaur validation target. Unsupported contexts remain available to
+  Apple's software RAVE engine instead of being partially claimed.
+
+### Changed
+
+- GXMetal presents Metal output directly into page-aligned QEMU VRAM with a
+  compute conversion for RGB555, ARGB8888, and RGB8888. A bounded CPU readback
+  path remains automatic for embeddings that cannot share the framebuffer.
+- A full 640x480 RGB555 present now marks 614,400 bytes of VRAM dirty instead
+  of the complete 64 MiB aperture, a 109.23x reduction. Partial presents mark
+  only their clipped contiguous span.
+- The repeatable 120-frame Mac OS 9 mixed texture/Gouraud conformance workload
+  completed in 48,756 microseconds through GXMetal versus 545,219 microseconds
+  through Apple Software RAVE in the release-candidate host build: 11.18x.
+
+### Fixed
+
+- Corrected the guest-framebuffer stride and visible-mode relationship that
+  produced horizontal bands from Happy Mac through early startup after the
+  1.7 graphics fast path.
+- Preserved RAVE's submitted per-triangle orientation flag as metadata rather
+  than incorrectly discarding flagged triangles, which had removed most of
+  Nanosaur's submitted geometry.
+
 ## 1.7.0 beta 3 — 2026-08-16
 
 ### Changed
