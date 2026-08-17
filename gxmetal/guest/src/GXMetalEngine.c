@@ -1120,7 +1120,11 @@ static TQAVTexture GXMetalBitmapVertex(const TQAVGouraud *source,
     vertex.b = source->b;
     vertex.a = source->a;
     vertex.uOverW = u * vertex.invW;
-    vertex.vOverW = v * vertex.invW;
+    /* QADrawBitmap places image row zero at the top of the destination.
+     * Textured RAVE primitives use a lower-left V origin, so compensate in
+     * these engine-generated vertices before the Metal shader performs the
+     * normal RAVE-to-Metal origin conversion. */
+    vertex.vOverW = (1.0f - v) * vertex.invW;
     vertex.kd_r = source->r;
     vertex.kd_g = source->g;
     vertex.kd_b = source->b;

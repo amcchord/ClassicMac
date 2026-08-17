@@ -419,8 +419,8 @@ static TQAError GXMetalRenderPattern(TQADrawContext *context,
         0xff0000ffUL, 0xffffffffUL
     };
     static unsigned long bitmapPixels[16] = {
-        0xff00ff00UL, 0xff00ff00UL, 0xff00ff00UL, 0xff00ff00UL,
-        0xff00ff00UL, 0xff00ff00UL, 0xff00ff00UL, 0xff00ff00UL,
+        0xffff0000UL, 0xffff0000UL, 0xffff0000UL, 0xffff0000UL,
+        0xffff0000UL, 0xffff0000UL, 0xffff0000UL, 0xffff0000UL,
         0xff00ff00UL, 0xff00ff00UL, 0xff00ff00UL, 0xff00ff00UL,
         0xff00ff00UL, 0xff00ff00UL, 0xff00ff00UL, 0xff00ff00UL
     };
@@ -536,7 +536,7 @@ static TQAError GXMetalRenderPattern(TQADrawContext *context,
                               kGXMetalPixelRed) ||
          !GXMetalPixelMatches(graphicsDevice,
                               deviceRect->left + 200,
-                              deviceRect->top + 160,
+                              deviceRect->top + 60,
                               kGXMetalPixelBlue) ||
          !GXMetalPixelMatches(graphicsDevice,
                               deviceRect->left + 160,
@@ -545,6 +545,10 @@ static TQAError GXMetalRenderPattern(TQADrawContext *context,
          !GXMetalPixelMatches(graphicsDevice,
                               deviceRect->left + 319,
                               deviceRect->top + 219,
+                              kGXMetalPixelRed) ||
+         !GXMetalPixelMatches(graphicsDevice,
+                              deviceRect->left + 319,
+                              deviceRect->top + 221,
                               kGXMetalPixelGreen))) {
         error = kQAError;
     }
