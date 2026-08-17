@@ -18,6 +18,12 @@ GXMetalMetalRenderer *gxmetal_metal_create(void *framebuffer,
                                             void *shared,
                                             uint32_t shared_bytes);
 void gxmetal_metal_destroy(GXMetalMetalRenderer *renderer);
+int gxmetal_metal_direct_present_available(
+    const GXMetalMetalRenderer *renderer);
+uint64_t gxmetal_metal_direct_present_count(
+    const GXMetalMetalRenderer *renderer);
+uint64_t gxmetal_metal_fallback_present_count(
+    const GXMetalMetalRenderer *renderer);
 void gxmetal_metal_reset(GXMetalMetalRenderer *renderer);
 uint32_t gxmetal_metal_dispatch(void *opaque,
                                 const GXMetalPacketView *packet);

@@ -13,6 +13,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #define GXMETAL_METAL_MAX_CONTEXTS 32u
 #define GXMETAL_METAL_MAX_RESOURCES 256u
@@ -75,6 +76,20 @@ typedef struct GXMetalMetalAlphaTest {
 _Static_assert(sizeof(GXMetalMetalAlphaTest) == 8,
                "Metal alpha-test constants must match the shader layout");
 
+typedef struct GXMetalMetalPresent {
+    uint32_t framebuffer_offset;
+    uint32_t row_bytes;
+    uint32_t pixel_format;
+    uint32_t left;
+    uint32_t top;
+    uint32_t width;
+    uint32_t height;
+    uint32_t reserved;
+} GXMetalMetalPresent;
+
+_Static_assert(sizeof(GXMetalMetalPresent) == 32,
+               "Metal present constants must match the shader layout");
+
 typedef struct GXMetalMetalResource {
     uint32_t id;
     uint32_t width;
@@ -126,12 +141,16 @@ struct GXMetalMetalRenderer {
     uint32_t framebuffer_bytes;
     uint8_t *shared;
     uint32_t shared_bytes;
+    uint64_t direct_present_count;
+    uint64_t fallback_present_count;
     id<MTLDevice> device;
     id<MTLCommandQueue> command_queue;
     id<MTLRenderPipelineState> pipelines[3];
     id<MTLRenderPipelineState> texture_pipelines[3];
     id<MTLRenderPipelineState> clear_pipeline;
     id<MTLRenderPipelineState> depth_clear_pipeline;
+    id<MTLComputePipelineState> present_pipeline;
+    id<MTLBuffer> framebuffer_buffer;
     id<MTLDepthStencilState> depth_states[9][2];
     id<MTLSamplerState> samplers[3][4];
     GXMetalMetalContext contexts[GXMETAL_METAL_MAX_CONTEXTS];
@@ -248,6 +267,38 @@ static NSString *const kGXMetalShaderSource = @
     "  result = clamp(result, 0.0, 1.0);\n"
     "  if (!gxmetal_alpha_visible(result.a, alphaTest)) discard_fragment();\n"
     "  return gxmetal_apply_fog(result, in.position.z, fog);\n"
+    "}\n";
+
+static NSString *const kGXMetalPresentShaderSource = @
+    "struct GXPresent {\n"
+    "  uint framebufferOffset; uint rowBytes; uint pixelFormat; uint left;\n"
+    "  uint top; uint width; uint height; uint reserved;\n"
+    "};\n"
+    "kernel void gxmetal_present(\n"
+    "    texture2d<float, access::read> image [[texture(0)]],\n"
+    "    device uchar *framebuffer [[buffer(0)]],\n"
+    "    constant GXPresent &present [[buffer(1)]],\n"
+    "    uint2 position [[thread_position_in_grid]]) {\n"
+    "  if (position.x >= present.width || position.y >= present.height) return;\n"
+    "  uint x = present.left + position.x;\n"
+    "  uint y = present.top + position.y;\n"
+    "  float4 color = clamp(image.read(uint2(x, y)), 0.0, 1.0);\n"
+    "  uchar4 rgba = uchar4(color * 255.0 + 0.5);\n"
+    "  uint bytesPerPixel = present.pixelFormat == 1u ? 2u : 4u;\n"
+    "  uint offset = present.framebufferOffset + y * present.rowBytes +\n"
+    "                x * bytesPerPixel;\n"
+    "  if (present.pixelFormat == 1u) {\n"
+    "    uint packed = ((uint(rgba.r) >> 3) << 10) |\n"
+    "                  ((uint(rgba.g) >> 3) << 5) |\n"
+    "                  (uint(rgba.b) >> 3);\n"
+    "    framebuffer[offset] = uchar(packed >> 8);\n"
+    "    framebuffer[offset + 1] = uchar(packed);\n"
+    "  } else {\n"
+    "    framebuffer[offset] = present.pixelFormat == 2u ? rgba.a : 0;\n"
+    "    framebuffer[offset + 1] = rgba.r;\n"
+    "    framebuffer[offset + 2] = rgba.g;\n"
+    "    framebuffer[offset + 3] = rgba.b;\n"
+    "  }\n"
     "}\n";
 
 static float gxmetal_metal_load_float(const uint8_t *bytes)
@@ -503,7 +554,8 @@ static uint32_t gxmetal_metal_context_create(
     descriptor = [MTLTextureDescriptor
         texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA8Unorm
         width:context->width height:context->height mipmapped:NO];
-    descriptor.usage = MTLTextureUsageRenderTarget;
+    descriptor.usage = MTLTextureUsageRenderTarget |
+                       MTLTextureUsageShaderRead;
     descriptor.storageMode = MTLStorageModeShared;
     context->texture = [renderer->device newTextureWithDescriptor:descriptor];
     descriptor = [MTLTextureDescriptor
@@ -1188,6 +1240,83 @@ static uint8_t gxmetal_metal_to_u8(uint8_t value)
     return value;
 }
 
+static int gxmetal_metal_wait_render(GXMetalMetalContext *context)
+{
+    if (context->command_buffer == nil) {
+        return 1;
+    }
+    [context->command_buffer waitUntilCompleted];
+    if (context->command_buffer.status == MTLCommandBufferStatusError) {
+        fprintf(stderr, "GXMetal: Metal command buffer failed: %s\n",
+                context->command_buffer.error.localizedDescription.UTF8String);
+        return 0;
+    }
+    return 1;
+}
+
+static int gxmetal_metal_present_direct(GXMetalMetalRenderer *renderer,
+                                        GXMetalMetalContext *context,
+                                        uint32_t left, uint32_t top,
+                                        uint32_t width, uint32_t height)
+{
+    GXMetalMetalPresent present;
+    id<MTLCommandBuffer> command_buffer;
+    id<MTLComputeCommandEncoder> encoder;
+    NSUInteger thread_width;
+    NSUInteger thread_height;
+
+    if (!gxmetal_metal_direct_present_available(renderer)) {
+        return 0;
+    }
+    memset(&present, 0, sizeof(present));
+    present.framebuffer_offset = context->framebuffer_offset;
+    present.row_bytes = context->row_bytes;
+    present.pixel_format = context->pixel_format;
+    present.left = left;
+    present.top = top;
+    present.width = width;
+    present.height = height;
+
+    command_buffer = [[renderer->command_queue commandBuffer] retain];
+    if (command_buffer == nil) {
+        return 0;
+    }
+    encoder = [[command_buffer computeCommandEncoder] retain];
+    if (encoder == nil) {
+        [command_buffer release];
+        return 0;
+    }
+    [encoder setComputePipelineState:renderer->present_pipeline];
+    [encoder setTexture:context->texture atIndex:0];
+    [encoder setBuffer:renderer->framebuffer_buffer offset:0 atIndex:0];
+    [encoder setBytes:&present length:sizeof(present) atIndex:1];
+    thread_width = renderer->present_pipeline.threadExecutionWidth;
+    if (thread_width == 0) {
+        thread_width = 1;
+    }
+    thread_height = renderer->present_pipeline.maxTotalThreadsPerThreadgroup /
+                    thread_width;
+    if (thread_height == 0) {
+        thread_height = 1;
+    } else if (thread_height > 16) {
+        thread_height = 16;
+    }
+    [encoder dispatchThreads:MTLSizeMake(width, height, 1)
+        threadsPerThreadgroup:MTLSizeMake(thread_width, thread_height, 1)];
+    [encoder endEncoding];
+    [encoder release];
+    [command_buffer commit];
+    [command_buffer waitUntilCompleted];
+    if (command_buffer.status == MTLCommandBufferStatusError) {
+        fprintf(stderr, "GXMetal: direct Metal present failed: %s\n",
+                command_buffer.error.localizedDescription.UTF8String);
+        [command_buffer release];
+        return 0;
+    }
+    [command_buffer release];
+    return 1;
+}
+
 static uint32_t gxmetal_metal_present(GXMetalMetalRenderer *renderer,
                                       GXMetalMetalContext *context,
                                       const GXMetalPacketView *packet)
@@ -1247,21 +1376,34 @@ static uint32_t gxmetal_metal_present(GXMetalMetalRenderer *renderer,
             [context->command_buffer commit];
             context->committed = 1;
         }
-        [context->command_buffer waitUntilCompleted];
-        if (context->command_buffer.status == MTLCommandBufferStatusError) {
-            fprintf(stderr, "GXMetal: Metal command buffer failed: %s\n",
-                    context->command_buffer.error.localizedDescription.UTF8String);
-            gxmetal_metal_release_frame(context);
-            return GXMETAL_ERROR_RENDERER;
-        }
     }
 
     if (left >= right || top >= bottom) {
+        if (!gxmetal_metal_wait_render(context)) {
+            gxmetal_metal_release_frame(context);
+            return GXMETAL_ERROR_RENDERER;
+        }
         gxmetal_metal_release_frame(context);
         return GXMETAL_ERROR_NONE;
     }
     region_width = (uint32_t)(right - left);
     region_height = (uint32_t)(bottom - top);
+    if (gxmetal_metal_present_direct(renderer, context,
+                                     (uint32_t)left, (uint32_t)top,
+                                     region_width, region_height)) {
+        renderer->direct_present_count++;
+        if (!gxmetal_metal_wait_render(context)) {
+            gxmetal_metal_release_frame(context);
+            return GXMETAL_ERROR_RENDERER;
+        }
+        gxmetal_metal_release_frame(context);
+        return GXMETAL_ERROR_NONE;
+    }
+    if (!gxmetal_metal_wait_render(context)) {
+        gxmetal_metal_release_frame(context);
+        return GXMETAL_ERROR_RENDERER;
+    }
+    renderer->fallback_present_count++;
     source_row_bytes = region_width * 4;
     pixels = malloc((size_t)source_row_bytes * region_height);
     if (pixels == NULL) {
@@ -1522,7 +1664,10 @@ GXMetalMetalRenderer *gxmetal_metal_create(void *framebuffer,
     id<MTLFunction> fragment;
     id<MTLFunction> texture_vertex;
     id<MTLFunction> texture_fragment;
+    id<MTLFunction> present_function;
+    NSString *shader_source;
     NSError *error = nil;
+    long page_size;
     uint32_t i;
 
     if (framebuffer == NULL || framebuffer_bytes == 0) {
@@ -1542,7 +1687,19 @@ GXMetalMetalRenderer *gxmetal_metal_create(void *framebuffer,
         return NULL;
     }
     renderer->command_queue = [renderer->device newCommandQueue];
-    library = [renderer->device newLibraryWithSource:kGXMetalShaderSource
+    page_size = sysconf(_SC_PAGESIZE);
+    if (page_size > 0 &&
+        ((uintptr_t)framebuffer % (uintptr_t)page_size) == 0 &&
+        (framebuffer_bytes % (uint32_t)page_size) == 0) {
+        renderer->framebuffer_buffer = [renderer->device
+            newBufferWithBytesNoCopy:framebuffer
+            length:framebuffer_bytes
+            options:MTLResourceStorageModeShared
+            deallocator:nil];
+    }
+    shader_source = [kGXMetalShaderSource
+        stringByAppendingString:kGXMetalPresentShaderSource];
+    library = [renderer->device newLibraryWithSource:shader_source
               options:nil error:&error];
     if (library == nil || renderer->command_queue == nil) {
         fprintf(stderr, "GXMetal: cannot initialize Metal: %s\n",
@@ -1556,6 +1713,7 @@ GXMetalMetalRenderer *gxmetal_metal_create(void *framebuffer,
     texture_vertex = [library newFunctionWithName:@"gxmetal_texture_vertex"];
     texture_fragment = [library
         newFunctionWithName:@"gxmetal_texture_fragment"];
+    present_function = [library newFunctionWithName:@"gxmetal_present"];
     for (i = 0; i < 3; i++) {
         renderer->pipelines[i] = gxmetal_metal_make_pipeline(
             renderer, vertex, fragment, i, 1, &error);
@@ -1566,10 +1724,16 @@ GXMetalMetalRenderer *gxmetal_metal_create(void *framebuffer,
         renderer, vertex, fragment, UINT32_MAX, 0, &error);
     renderer->clear_pipeline = gxmetal_metal_make_pipeline(
         renderer, vertex, fragment, UINT32_MAX, 1, &error);
+    if (present_function != nil) {
+        renderer->present_pipeline = [renderer->device
+            newComputePipelineStateWithFunction:present_function
+            error:&error];
+    }
     [vertex release];
     [fragment release];
     [texture_vertex release];
     [texture_fragment release];
+    [present_function release];
     [library release];
     if (renderer->pipelines[0] == nil || renderer->pipelines[1] == nil ||
         renderer->pipelines[2] == nil ||
@@ -1630,6 +1794,8 @@ void gxmetal_metal_destroy(GXMetalMetalRenderer *renderer)
     }
     [renderer->clear_pipeline release];
     [renderer->depth_clear_pipeline release];
+    [renderer->present_pipeline release];
+    [renderer->framebuffer_buffer release];
     for (i = 0; i < 9; i++) {
         uint32_t write;
         for (write = 0; write < 2; write++) {
@@ -1639,6 +1805,25 @@ void gxmetal_metal_destroy(GXMetalMetalRenderer *renderer)
     [renderer->command_queue release];
     [renderer->device release];
     free(renderer);
+}
+
+int gxmetal_metal_direct_present_available(
+    const GXMetalMetalRenderer *renderer)
+{
+    return renderer != NULL && renderer->present_pipeline != nil &&
+           renderer->framebuffer_buffer != nil;
+}
+
+uint64_t gxmetal_metal_direct_present_count(
+    const GXMetalMetalRenderer *renderer)
+{
+    return renderer != NULL ? renderer->direct_present_count : 0;
+}
+
+uint64_t gxmetal_metal_fallback_present_count(
+    const GXMetalMetalRenderer *renderer)
+{
+    return renderer != NULL ? renderer->fallback_present_count : 0;
 }
 
 void gxmetal_metal_reset(GXMetalMetalRenderer *renderer)

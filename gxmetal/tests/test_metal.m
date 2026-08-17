@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include <unistd.h>
 
 #include "gxmetal_metal.h"
 
@@ -705,6 +706,151 @@ static void test_metal_rect_clip_scissor_and_dirty_present(void)
     gxmetal_metal_destroy(renderer);
 }
 
+static void test_metal_direct_present_formats(void)
+{
+    uint8_t packet[128];
+    uint8_t *payload;
+    uint8_t *framebuffer;
+    uint8_t *unaligned_allocation;
+    uint8_t *unaligned_framebuffer;
+    GXMetalMetalRenderer *renderer;
+    long page_size = sysconf(_SC_PAGESIZE);
+    size_t framebuffer_bytes;
+    uint32_t format;
+
+    CHECK(page_size > 0);
+    if (page_size <= 0) {
+        return;
+    }
+    unaligned_allocation = malloc((size_t)page_size * 2 + 1);
+    CHECK(unaligned_allocation != NULL);
+    if (unaligned_allocation == NULL) {
+        return;
+    }
+    unaligned_framebuffer = unaligned_allocation;
+    if (((uintptr_t)unaligned_framebuffer % (uintptr_t)page_size) == 0) {
+        unaligned_framebuffer++;
+    }
+    renderer = gxmetal_metal_create(unaligned_framebuffer,
+                                     (uint32_t)page_size, NULL, 0);
+    if (renderer != NULL) {
+        CHECK(!gxmetal_metal_direct_present_available(renderer));
+        memset(unaligned_framebuffer, 0, (size_t)page_size);
+        make_packet(packet, GXMETAL_OP_CONTEXT_CREATE, 48, 19);
+        payload = packet + 16;
+        gxmetal_store_le32(payload + GXMETAL_CONTEXT_WIDTH_OFFSET, 8);
+        gxmetal_store_le32(payload + GXMETAL_CONTEXT_HEIGHT_OFFSET, 8);
+        gxmetal_store_le32(payload + GXMETAL_CONTEXT_ROW_BYTES_OFFSET, 16);
+        gxmetal_store_le32(payload + GXMETAL_CONTEXT_PIXEL_FORMAT_OFFSET,
+                           GXMETAL_PIXEL_RGB555);
+        CHECK(dispatch(renderer, packet, 48) == GXMETAL_ERROR_NONE);
+        make_packet(packet, GXMETAL_OP_BEGIN_FRAME, 32, 19);
+        CHECK(dispatch(renderer, packet, 32) == GXMETAL_ERROR_NONE);
+        make_packet(packet, GXMETAL_OP_CLEAR, 64, 19);
+        payload = packet + 16;
+        gxmetal_store_le32(payload + GXMETAL_CLEAR_FLAGS_OFFSET,
+                           GXMETAL_CLEAR_COLOR);
+        store_float(payload + GXMETAL_CLEAR_COLOR_R_OFFSET, 1.0f);
+        store_float(payload + GXMETAL_CLEAR_COLOR_A_OFFSET, 1.0f);
+        gxmetal_store_le32(payload + GXMETAL_CLEAR_RECT_OFFSET +
+                           GXMETAL_RECT_RIGHT_OFFSET, 8);
+        gxmetal_store_le32(payload + GXMETAL_CLEAR_RECT_OFFSET +
+                           GXMETAL_RECT_BOTTOM_OFFSET, 8);
+        CHECK(dispatch(renderer, packet, 64) == GXMETAL_ERROR_NONE);
+        make_packet(packet, GXMETAL_OP_END_FRAME, 32, 19);
+        CHECK(dispatch(renderer, packet, 32) == GXMETAL_ERROR_NONE);
+        present_rect(renderer, packet, 19, 0, 0, 8, 8);
+        CHECK(unaligned_framebuffer[(4 * 8 + 4) * 2] == 0x7c);
+        CHECK(unaligned_framebuffer[(4 * 8 + 4) * 2 + 1] == 0x00);
+        CHECK(gxmetal_metal_direct_present_count(renderer) == 0);
+        CHECK(gxmetal_metal_fallback_present_count(renderer) == 1);
+        gxmetal_metal_destroy(renderer);
+    }
+    free(unaligned_allocation);
+
+    framebuffer_bytes = (64u * 64u * 4u + (size_t)page_size - 1) /
+                        (size_t)page_size * (size_t)page_size;
+    framebuffer = NULL;
+    CHECK(posix_memalign((void **)&framebuffer, (size_t)page_size,
+                         framebuffer_bytes) == 0);
+    if (framebuffer == NULL) {
+        return;
+    }
+    renderer = gxmetal_metal_create(framebuffer,
+                                     (uint32_t)framebuffer_bytes,
+                                     NULL, 0);
+    if (renderer == NULL) {
+        free(framebuffer);
+        return;
+    }
+    CHECK(gxmetal_metal_direct_present_available(renderer));
+    if (!gxmetal_metal_direct_present_available(renderer)) {
+        gxmetal_metal_destroy(renderer);
+        free(framebuffer);
+        return;
+    }
+
+    for (format = GXMETAL_PIXEL_RGB555;
+         format <= GXMETAL_PIXEL_RGB8888; format++) {
+        uint32_t context = 20 + format;
+        uint32_t bytes_per_pixel = format == GXMETAL_PIXEL_RGB555 ? 2 : 4;
+        uint32_t row_bytes = 64 * bytes_per_pixel;
+        uint32_t offset = 12 * row_bytes + 12 * bytes_per_pixel;
+
+        memset(framebuffer, 0x5a, framebuffer_bytes);
+        make_packet(packet, GXMETAL_OP_CONTEXT_CREATE, 48, context);
+        payload = packet + 16;
+        gxmetal_store_le32(payload + GXMETAL_CONTEXT_WIDTH_OFFSET, 64);
+        gxmetal_store_le32(payload + GXMETAL_CONTEXT_HEIGHT_OFFSET, 64);
+        gxmetal_store_le32(payload + GXMETAL_CONTEXT_ROW_BYTES_OFFSET,
+                           row_bytes);
+        gxmetal_store_le32(payload + GXMETAL_CONTEXT_PIXEL_FORMAT_OFFSET,
+                           format);
+        CHECK(dispatch(renderer, packet, 48) == GXMETAL_ERROR_NONE);
+
+        make_packet(packet, GXMETAL_OP_BEGIN_FRAME, 32, context);
+        CHECK(dispatch(renderer, packet, 32) == GXMETAL_ERROR_NONE);
+        make_packet(packet, GXMETAL_OP_CLEAR, 64, context);
+        payload = packet + 16;
+        gxmetal_store_le32(payload + GXMETAL_CLEAR_FLAGS_OFFSET,
+                           GXMETAL_CLEAR_COLOR);
+        store_float(payload + GXMETAL_CLEAR_COLOR_R_OFFSET, 1.0f);
+        store_float(payload + GXMETAL_CLEAR_COLOR_B_OFFSET, 1.0f);
+        store_float(payload + GXMETAL_CLEAR_COLOR_A_OFFSET, 0.5f);
+        gxmetal_store_le32(payload + GXMETAL_CLEAR_RECT_OFFSET +
+                           GXMETAL_RECT_RIGHT_OFFSET, 64);
+        gxmetal_store_le32(payload + GXMETAL_CLEAR_RECT_OFFSET +
+                           GXMETAL_RECT_BOTTOM_OFFSET, 64);
+        CHECK(dispatch(renderer, packet, 64) == GXMETAL_ERROR_NONE);
+        make_packet(packet, GXMETAL_OP_END_FRAME, 32, context);
+        CHECK(dispatch(renderer, packet, 32) == GXMETAL_ERROR_NONE);
+        present_rect(renderer, packet, context, 8, 10, 32, 40);
+
+        CHECK(framebuffer[0] == 0x5a);
+        if (format == GXMETAL_PIXEL_RGB555) {
+            CHECK(framebuffer[offset] == 0x7c);
+            CHECK(framebuffer[offset + 1] == 0x1f);
+        } else if (format == GXMETAL_PIXEL_ARGB8888) {
+            CHECK(framebuffer[offset] == 0x80);
+            CHECK(framebuffer[offset + 1] == 0xff);
+            CHECK(framebuffer[offset + 2] == 0x00);
+            CHECK(framebuffer[offset + 3] == 0xff);
+        } else {
+            CHECK(framebuffer[offset] == 0x00);
+            CHECK(framebuffer[offset + 1] == 0xff);
+            CHECK(framebuffer[offset + 2] == 0x00);
+            CHECK(framebuffer[offset + 3] == 0xff);
+        }
+
+        make_packet(packet, GXMETAL_OP_CONTEXT_DESTROY, 16, context);
+        CHECK(dispatch(renderer, packet, 16) == GXMETAL_ERROR_NONE);
+    }
+    CHECK(gxmetal_metal_direct_present_count(renderer) == 3);
+    CHECK(gxmetal_metal_fallback_present_count(renderer) == 0);
+    gxmetal_metal_destroy(renderer);
+    free(framebuffer);
+}
+
 int main(void)
 {
     @autoreleasepool {
@@ -712,6 +858,7 @@ int main(void)
         test_metal_depth_blend_and_double_buffer();
         test_metal_texture_upload_and_sampling();
         test_metal_rect_clip_scissor_and_dirty_present();
+        test_metal_direct_present_formats();
     }
     if (failures != 0) {
         fprintf(stderr, "GXMetal Metal: %u failure(s)\n", failures);

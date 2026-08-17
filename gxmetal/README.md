@@ -40,6 +40,11 @@ covering that presented rectangle dirty once per frame; it no longer dirties
 the entire VGA aperture for every clear and draw packet. With the default
 64 MiB aperture, a full 640x480 RGB555 present now dirties 614,400 bytes rather
 than 67,108,864 bytes (109.23x fewer), and partial presents reduce it further.
+When QEMU's VRAM is page-aligned, a Metal compute kernel converts the presented
+texture directly into that shared buffer in RGB555, ARGB8888, or RGB8888
+layout. This removes the temporary RGBA allocation, `getBytes` readback, and
+CPU pixel loop from each frame. Unaligned embeddings retain the bounded CPU
+readback path automatically.
 The device advertises `GXMETAL_FEATURE_METAL` only when that backend initializes
 successfully. The bounded, deterministic CPU rasterizer remains the fallback on
 other hosts and the correctness oracle for Metal.
@@ -95,7 +100,9 @@ protocol tests reject unknown draw flags. A separate clip test proves immutable
 context clipping, mutable scissoring, untouched framebuffer preservation, and
 dirty-rectangle-only presentation. A host-independent scanout test proves
 clipped, padded-row, offset, empty, destroyed, reset, and malformed-context
-dirty-range behavior. Every result is read back from the
+dirty-range behavior. The Metal test also forces both direct and fallback
+present selection and validates the direct kernel's three guest framebuffer
+formats plus partial-rectangle preservation. Every result is read back from the
 guest-format framebuffer:
 
 ```sh
