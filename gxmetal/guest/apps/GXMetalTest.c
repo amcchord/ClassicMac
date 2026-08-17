@@ -7,6 +7,7 @@
 #include <Quickdraw.h>
 #include <RAVE.h>
 #include <TextEdit.h>
+#include <Timer.h>
 #include <Windows.h>
 
 #include <string.h>
@@ -22,6 +23,8 @@ extern void QAExit(void);
 #define GXMETAL_ALERT_ID 128
 #define GXMETAL_WIDTH 320
 #define GXMETAL_HEIGHT 220
+#define GXMETAL_BENCHMARK_FRAMES 120
+#define GXMETAL_BENCHMARK_WARMUP_FRAMES 4
 
 static const unsigned char kGXMetalResultName[] = {
     20, 'G', 'X', 'M', 'e', 't', 'a', 'l', ' ', 'T', 'e', 's', 't', ' ',
@@ -105,20 +108,30 @@ static void GXMetalShowResult(Boolean success, const char *message)
     }
 }
 
+static Boolean GXMetalGetEngineName(const TQAEngine *engine,
+                                    char *name, size_t capacity)
+{
+    unsigned long length = 0;
+
+    if (engine == NULL || name == NULL || capacity == 0) {
+        return false;
+    }
+    memset(name, 0, capacity);
+    return QAEngineGestalt(engine, kQAGestalt_ASCIINameLength,
+                           &length) == kQANoErr &&
+           length < capacity &&
+           QAEngineGestalt(engine, kQAGestalt_ASCIIName,
+                           name) == kQANoErr;
+}
+
 static TQAEngine *GXMetalFindEngine(const TQADevice *device)
 {
     TQAEngine *engine = QADeviceGetFirstEngine(device);
 
     while (engine != NULL) {
         char name[64];
-        unsigned long length = 0;
 
-        memset(name, 0, sizeof(name));
-        if (QAEngineGestalt(engine, kQAGestalt_ASCIINameLength,
-                            &length) == kQANoErr &&
-            length < sizeof(name) &&
-            QAEngineGestalt(engine, kQAGestalt_ASCIIName,
-                            name) == kQANoErr &&
+        if (GXMetalGetEngineName(engine, name, sizeof(name)) &&
             strcmp(name, "GXMetal") == 0) {
             return engine;
         }
@@ -238,6 +251,21 @@ static void GXMetalAppendHex(char **cursor, const char *end, uint32_t value)
 
     for (shift = 28; shift >= 0 && *cursor < end; shift -= 4) {
         *(*cursor)++ = digits[(value >> shift) & 0xf];
+    }
+}
+
+static void GXMetalAppendDecimal(char **cursor, const char *end,
+                                 uint64_t value)
+{
+    char digits[24];
+    int count = 0;
+
+    do {
+        digits[count++] = (char)('0' + value % 10);
+        value /= 10;
+    } while (value != 0 && count < (int)sizeof(digits));
+    while (count > 0 && *cursor < end) {
+        *(*cursor)++ = digits[--count];
     }
 }
 
@@ -525,6 +553,195 @@ static TQAError GXMetalRenderPattern(TQADrawContext *context,
     return error;
 }
 
+static TQAError GXMetalBenchmarkFrame(TQADrawContext *context,
+                                      TQATexture *texture,
+                                      unsigned long frame)
+{
+    TQARect dirty = {0, GXMETAL_WIDTH, 0, GXMETAL_HEIGHT};
+    unsigned long flags[4] = {0, 0, 0, 0};
+    int primitive;
+    TQAError error;
+
+    QASetFloat(context, kQATag_ColorBG_r, 0.01f);
+    QASetFloat(context, kQATag_ColorBG_g, 0.01f);
+    QASetFloat(context, kQATag_ColorBG_b, 0.02f);
+    QASetFloat(context, kQATag_ColorBG_a, 1.0f);
+    QASetInt(context, kQATag_ZFunction, kQAZFunction_LT);
+    QASetInt(context, kQATag_ZBufferMask, kQAZBufferMask_Enable);
+    QASetInt(context, kQATag_Blend, kQABlend_Interpolate);
+    QASetPtr(context, kQATag_Texture, texture);
+    QASetInt(context, kQATag_TextureFilter, kQATextureFilter_Fast);
+    QASetInt(context, kQATag_TextureOp, kQATextureOp_None);
+    QASetInt(context, kQATagGL_TextureWrapU, kQAGL_Repeat);
+    QASetInt(context, kQATagGL_TextureWrapV, kQAGL_Repeat);
+
+    QARenderStart(context, &dirty, NULL);
+    for (primitive = 0; primitive < 24; primitive++) {
+        TQAVTexture quad[4];
+        TQAVGouraud triangle[3];
+        float left = (float)((primitive % 6) * 52 +
+                             ((frame + primitive) & 7));
+        float top = (float)((primitive / 6) * 52 +
+                            ((frame + primitive * 3) & 7));
+        float right = left + 44.0f;
+        float bottom = top + 44.0f;
+        float red = (float)((primitive * 5) & 15) / 15.0f;
+        float green = (float)((primitive * 9) & 15) / 15.0f;
+        float blue = (float)((primitive * 13) & 15) / 15.0f;
+
+        quad[0] = GXMetalTextureVertex(left, top, 0.55f, 0.0f, 0.0f);
+        quad[1] = GXMetalTextureVertex(right, top, 0.55f, 2.0f, 0.0f);
+        quad[2] = GXMetalTextureVertex(left, bottom, 0.55f, 0.0f, 2.0f);
+        quad[3] = GXMetalTextureVertex(right, bottom, 0.55f, 2.0f, 2.0f);
+        QADrawVTexture(context, 4, kQAVertexMode_Strip, quad, flags);
+
+        triangle[0] = GXMetalGouraud(left + 4.0f, bottom - 3.0f, 0.20f,
+                                     red, green, blue, 0.72f);
+        triangle[1] = GXMetalGouraud((left + right) * 0.5f,
+                                     top + 3.0f, 0.20f,
+                                     blue, red, green, 0.72f);
+        triangle[2] = GXMetalGouraud(right - 4.0f, bottom - 3.0f, 0.20f,
+                                     green, blue, red, 0.72f);
+        QADrawTriGouraud(context, &triangle[0], &triangle[1],
+                         &triangle[2], kQATriFlags_None);
+    }
+    error = QARenderEnd(context, &dirty);
+    return error == kQANoErr ? QASync(context) : error;
+}
+
+static uint64_t GXMetalMicrosecondValue(const UnsignedWide *time)
+{
+    return ((uint64_t)time->hi << 32) | time->lo;
+}
+
+static TQAError GXMetalBenchmarkEngine(const TQADevice *device,
+                                       const TQARect *deviceRect,
+                                       const TQAEngine *engine,
+                                       uint64_t *elapsedMicroseconds)
+{
+    static unsigned long texturePixels[4] = {
+        0xffff4010UL, 0xff10d040UL,
+        0xff2040ffUL, 0xffffe040UL
+    };
+    TQAImage image;
+    TQATexture *texture = NULL;
+    TQADrawContext *context = NULL;
+    UnsignedWide start;
+    UnsignedWide end;
+    unsigned long frame;
+    TQAError error;
+
+    if (device == NULL || deviceRect == NULL || engine == NULL ||
+        elapsedMicroseconds == NULL) {
+        return kQAParamErr;
+    }
+    image.width = 2;
+    image.height = 2;
+    image.rowBytes = 8;
+    image.pixmap = texturePixels;
+    error = QATextureNew(engine, kQATexture_None, kQAPixel_ARGB32,
+                         &image, &texture);
+    if (error != kQANoErr) {
+        return error;
+    }
+    error = QATextureDetach(engine, texture);
+    if (error == kQANoErr) {
+        error = QADrawContextNew(device, deviceRect, NULL, engine,
+                                 kQAContext_DoubleBuffer, &context);
+    }
+    for (frame = 0;
+         error == kQANoErr && frame < GXMETAL_BENCHMARK_WARMUP_FRAMES;
+         frame++) {
+        error = GXMetalBenchmarkFrame(context, texture, frame);
+    }
+    if (error == kQANoErr) {
+        Microseconds(&start);
+    }
+    for (frame = 0;
+         error == kQANoErr && frame < GXMETAL_BENCHMARK_FRAMES;
+         frame++) {
+        error = GXMetalBenchmarkFrame(context, texture, frame);
+    }
+    if (error == kQANoErr) {
+        Microseconds(&end);
+        *elapsedMicroseconds = GXMetalMicrosecondValue(&end) -
+                               GXMetalMicrosecondValue(&start);
+        if (*elapsedMicroseconds == 0) {
+            error = kQAError;
+        }
+    }
+    if (context != NULL) {
+        QADrawContextDelete(context);
+    }
+    QATextureDelete(engine, texture);
+    return error;
+}
+
+static TQAError GXMetalBenchmarkSoftware(const TQADevice *device,
+                                         const TQARect *deviceRect,
+                                         const TQAEngine *gxMetalEngine,
+                                         uint64_t *elapsedMicroseconds,
+                                         char *engineName,
+                                         size_t engineNameCapacity)
+{
+    TQAEngine *engine = QADeviceGetFirstEngine(device);
+
+    while (engine != NULL) {
+        char name[64];
+
+        if (engine != gxMetalEngine &&
+            GXMetalGetEngineName(engine, name, sizeof(name)) &&
+            strcmp(name, "GXMetal") != 0 &&
+            GXMetalBenchmarkEngine(device, deviceRect, engine,
+                                   elapsedMicroseconds) == kQANoErr) {
+            strncpy(engineName, name, engineNameCapacity - 1);
+            engineName[engineNameCapacity - 1] = '\0';
+            return kQANoErr;
+        }
+        engine = QADeviceGetNextEngine(device, engine);
+    }
+    return kQANotSupported;
+}
+
+static void GXMetalBuildPassResult(char *result, size_t resultCapacity,
+                                   uint64_t gxMetalMicroseconds,
+                                   uint64_t softwareMicroseconds,
+                                   uint64_t speedupTimes100)
+{
+    char *cursor = result;
+    const char *end = result + resultCapacity - 1;
+
+    GXMetalAppendText(&cursor, end,
+        "PASS: RAVE discovery depth blend texture bitmap present double-buffer framebuffer gx_us=");
+    GXMetalAppendDecimal(&cursor, end, gxMetalMicroseconds);
+    GXMetalAppendText(&cursor, end, " sw_us=");
+    GXMetalAppendDecimal(&cursor, end, softwareMicroseconds);
+    GXMetalAppendText(&cursor, end, " speedup_x100=");
+    GXMetalAppendDecimal(&cursor, end, speedupTimes100);
+    *cursor = '\0';
+}
+
+static void GXMetalBuildPassMessage(char *message, size_t messageCapacity,
+                                    const char *softwareEngineName,
+                                    uint64_t speedupTimes100)
+{
+    char *cursor = message;
+    const char *end = message + messageCapacity - 1;
+
+    GXMetalAppendText(&cursor, end,
+        "GXMetal passed automatic RAVE discovery, framebuffer correctness, bitmap drawing, presentation, and fallback. The repeatable mixed texture/Gouraud workload ran ");
+    GXMetalAppendDecimal(&cursor, end, speedupTimes100 / 100);
+    GXMetalAppendText(&cursor, end, ".");
+    if (speedupTimes100 % 100 < 10) {
+        GXMetalAppendText(&cursor, end, "0");
+    }
+    GXMetalAppendDecimal(&cursor, end, speedupTimes100 % 100);
+    GXMetalAppendText(&cursor, end, "x faster than ");
+    GXMetalAppendText(&cursor, end, softwareEngineName);
+    GXMetalAppendText(&cursor, end, ".");
+    *cursor = '\0';
+}
+
 int main(void)
 {
     static const unsigned char kWindowTitle[] = {
@@ -547,6 +764,12 @@ int main(void)
     GXMetalDiagnosticSnapshot diagnosticSnapshot;
     GXMetalDiagnosticSnapshot publishedSnapshot;
     Boolean automaticLoad;
+    uint64_t gxMetalMicroseconds = 0;
+    uint64_t softwareMicroseconds = 0;
+    uint64_t speedupTimes100;
+    char softwareEngineName[64];
+    char passResult[240];
+    char passMessage[256];
 
     GXMetalInitToolbox();
     GXMetalRecordResult("START: GXMetal Test entered main");
@@ -685,9 +908,30 @@ int main(void)
         QAExit();
         return 1;
     }
-    GXMetalRecordResult("PASS: RAVE discovery depth blend texture bitmap present double-buffer framebuffer");
-    GXMetalShowResult(true,
-        "GXMetal passed RAVE discovery plus framebuffer-verified depth, Gouraud, alpha blend, texture and bitmap upload/drawing, presentation, and double-buffer synchronization.");
+    error = GXMetalBenchmarkEngine(&device, &deviceRect, engine,
+                                   &gxMetalMicroseconds);
+    if (error == kQANoErr) {
+        error = GXMetalBenchmarkSoftware(&device, &deviceRect, engine,
+                                         &softwareMicroseconds,
+                                         softwareEngineName,
+                                         sizeof(softwareEngineName));
+    }
+    if (error != kQANoErr || gxMetalMicroseconds == 0) {
+        GXMetalRecordResult("FAIL: GXMetal or software fallback benchmark");
+        DisposeWindow(window);
+        GXMetalShowResult(false,
+            "Framebuffer correctness passed, but the matched GXMetal/software fallback benchmark could not complete.");
+        QAExit();
+        return 1;
+    }
+    speedupTimes100 = softwareMicroseconds * 100 / gxMetalMicroseconds;
+    GXMetalBuildPassResult(passResult, sizeof(passResult),
+                           gxMetalMicroseconds, softwareMicroseconds,
+                           speedupTimes100);
+    GXMetalBuildPassMessage(passMessage, sizeof(passMessage),
+                            softwareEngineName, speedupTimes100);
+    GXMetalRecordResult(passResult);
+    GXMetalShowResult(true, passMessage);
     DisposeWindow(window);
     QAExit();
     return 0;

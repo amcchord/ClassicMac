@@ -105,6 +105,12 @@ an uploaded texture, and a partially clipped uploaded bitmap; waits on the host
 fence; then validates red, blue, blended-purple, and bitmap-green pixels directly
 in the guest framebuffer. A missing device or host feature fails the test
 explicitly and remains eligible for Apple's normal software RAVE fallback.
+The same app then runs a fixed 120-frame mixed texture/Gouraud workload first
+through GXMetal and then through an independently selected non-GXMetal engine.
+It records both microsecond totals and the fixed-point speedup in
+`System Folder:Preferences:GXMetal Test Results`, proving that the software
+fallback remains usable while producing a repeatable guest-level performance
+comparison.
 
 Build the patched QEMU binaries and black-box test the GXMetal PCI layout:
 

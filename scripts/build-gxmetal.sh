@@ -48,7 +48,9 @@ for symbol in QARegisterEngine QARegisterDrawMethod RegistryEntrySearch; do
     strings "$GUEST_DIR/bin/GXMetal.pef" | grep -F "$symbol" >/dev/null ||
         die "GXMetal PEF is missing required import $symbol"
 done
-for symbol in QAInit QAExit QADeviceGetFirstEngine QADrawContextNew QATextureNew QABitmapNew QABitmapDetach QABitmapDelete; do
+for symbol in QAInit QAExit QADeviceGetFirstEngine QADeviceGetNextEngine \
+    QADrawContextNew QATextureNew QATextureDetach QABitmapNew \
+    QABitmapDetach QABitmapDelete Microseconds; do
     strings "$GUEST_DIR/bin/GXMetalTest.pef" | grep -F "$symbol" >/dev/null ||
         die "GXMetal Test PEF is missing required import $symbol"
 done
