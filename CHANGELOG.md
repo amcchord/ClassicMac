@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.8.1 — 2026-08-17
+
+### Changed
+
+- **ClassicMac Tools now mounts automatically and reliably on Mac OS 9.**
+  Power Macs receive the bundled HFS image as a read-only Virtio block volume
+  at cold start, using the proven classicvirtio loader instead of depending on
+  an IDE tray media-change notification that Mac OS 9 accepted but never
+  surfaced to Finder.
+- Existing Power Mac configurations are migrated once to enable the new Tools
+  volume, including 1.8.0 machines whose switch remained off after a failed
+  live insertion. A later explicit off choice remains respected.
+- The Power Mac machine window no longer offers the misleading live Tools CD
+  action. Its settings explain that Tools mounts at startup and that installer
+  CD boots defer it until the next normal hard-disk start. Quadra SCSI Tools CD
+  behavior is unchanged.
+
+### Fixed
+
+- The PowerPC Virtio block NDRV now retries its bounded `diskEvt` notification
+  until File Manager has mounted an auxiliary read-only volume. Previously its
+  single early event could arrive before Finder was ready, leaving an otherwise
+  valid Tools disk invisible.
+
 ## 1.8.0 — 2026-08-17
 
 ### Added

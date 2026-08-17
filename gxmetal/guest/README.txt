@@ -1,4 +1,4 @@
-GXMetal 1.8.0 for Mac OS 9
+GXMetal 1.8.1 for Mac OS 9
 ==========================
 
 GXMetal is ClassicMac's host-accelerated QuickDraw 3D RAVE engine. It lets
@@ -57,7 +57,7 @@ game files are not changed by the host accelerator.
 TESTED GAME
 -----------
 
-Nanosaur is the primary real-game test. GXMetal 1.8.0 has been exercised
+Nanosaur is the primary real-game test. GXMetal 1.8.1 has been exercised
 through its title screen and extended gameplay with textures, depth, clipping,
 fog, water, alpha effects, camera movement, and other dinosaurs. Rendering
 bugs should be reported with a screenshot, the Mac OS version, display

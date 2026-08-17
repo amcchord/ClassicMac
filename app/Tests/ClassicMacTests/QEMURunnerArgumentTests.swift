@@ -122,22 +122,31 @@ final class QEMURunnerArgumentTests: XCTestCase {
         }
     }
 
-    func testPowerMacNormalStartupLoadsRequestedToolsCD() throws {
+    func testPowerMacNormalStartupMountsToolsThroughVirtio() throws {
         try withTemporaryToolsCD {
             let arguments = QEMUManager.buildArguments(for: config(bootFromCD: false))
             let toolsDrive = try XCTUnwrap(
                 optionValues("-drive", in: arguments).first { $0.contains("id=tools0") }
             )
 
-            XCTAssertTrue(
-                toolsDrive.hasPrefix(
-                    "if=ide,index=2,media=cdrom,id=tools0,file="
-                )
+            XCTAssertEqual(
+                toolsDrive,
+                "if=ide,index=2,media=cdrom,id=tools0,readonly=on"
             )
-            XCTAssertTrue(toolsDrive.hasSuffix(",format=raw,readonly=on"))
-            XCTAssertFalse(
+            XCTAssertEqual(
+                optionValues("-blockdev", in: arguments),
+                [
+                    "driver=file,node-name=classicmac-tools-file,filename=\(AppPaths.toolsCD!.path),read-only=on",
+                    "driver=raw,node-name=classicmac-tools,file=classicmac-tools-file,read-only=on"
+                ]
+            )
+            XCTAssertTrue(
                 optionValues("-device", in: arguments)
-                    .contains { $0.contains("classicmac-tools") }
+                    .contains("virtio-blk-pci,drive=classicmac-tools")
+            )
+            XCTAssertTrue(
+                optionValues("-device", in: arguments)
+                    .contains { $0.hasPrefix("loader,addr=0x4000000,file=") }
             )
         }
     }
@@ -197,6 +206,64 @@ final class QEMURunnerArgumentTests: XCTestCase {
             XCTAssertEqual(
                 toolsDrive,
                 "if=ide,index=2,media=cdrom,id=tools0,readonly=on"
+            )
+            XCTAssertFalse(
+                optionValues("-blockdev", in: arguments)
+                    .contains { $0.contains("classicmac-tools") }
+            )
+            XCTAssertFalse(
+                optionValues("-device", in: arguments)
+                    .contains("virtio-blk-pci,drive=classicmac-tools")
+            )
+        }
+    }
+
+    func testPowerMacToolsVirtioMountLoadsNDRVWithoutOtherVirtioFeatures() throws {
+        try withTemporaryToolsCD {
+            let arguments = QEMUManager.buildArguments(
+                for: config(
+                    cdImagePath: nil,
+                    bootFromCD: false,
+                    toolsCDInserted: true,
+                    tabletInput: false,
+                    sharedFolderPath: nil
+                )
+            )
+
+            XCTAssertTrue(
+                optionValues("-device", in: arguments)
+                    .contains("virtio-blk-pci,drive=classicmac-tools")
+            )
+            XCTAssertTrue(
+                optionValues("-device", in: arguments)
+                    .contains { $0.hasPrefix("loader,addr=0x4000000,file=") }
+            )
+            XCTAssertTrue(
+                optionValues("-prom-env", in: arguments)
+                    .contains("boot-command=init-program go")
+            )
+        }
+    }
+
+    func testPowerMacToolsAndSharedFolderUseIndependentVirtioDevices() throws {
+        try withTemporaryToolsCD {
+            let arguments = QEMUManager.buildArguments(
+                for: config(
+                    cdImagePath: nil,
+                    bootFromCD: false,
+                    toolsCDInserted: true,
+                    sharedFolderPath: "/tmp/Shared Test"
+                )
+            )
+            let devices = optionValues("-device", in: arguments)
+
+            XCTAssertTrue(devices.contains("virtio-blk-pci,drive=classicmac-tools"))
+            XCTAssertTrue(
+                devices.contains("virtio-9p-pci,fsdev=share0,mount_tag=Shared Test")
+            )
+            XCTAssertEqual(
+                optionValues("-fsdev", in: arguments),
+                ["local,id=share0,security_model=none,path=/tmp/Shared Test"]
             )
         }
     }

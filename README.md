@@ -62,7 +62,7 @@ ClassicMac exists because of years of brilliant work by other engineers. The pat
 - **Clean, working sound.** The Quadra's Apple Sound Chip is patched to feed silence when idle (no more idle buzz), and the Power Mac gets the screamer (AWACS) device with a screamer-aware OpenBIOS.
 - **Self-contained `.classic` machine documents.** Each VM is a single Finder package holding its config, disk, and PRAM. Keep it anywhere, double-click to boot, move it between Macs.
 - **Classic input helpers.** Secondary click opens contextual menus as Control+click, and the scroll wheel becomes arrow-key taps. Toggle both together while the Mac is running with **Mac → Secondary Click and Scrolling**, or turn them off for guests with real drivers (e.g. USB Overdrive).
-- **A guest-additions Tools CD** (StuffIt Expander, Disk Copy, USB Overdrive, Transmit, Lido, patched HD SC Setup...) built from `guestcd/manifest.tsv`, insertable at runtime from the **Mac** menu. The action changes between **Insert “ClassicMac Tools”** and **Eject “ClassicMac Tools”** to match the current state; **Mac → Disc** handles other disc images — everything on the Tools CD is pre-expanded and ready to run.
+- **A guest-additions Tools volume** (StuffIt Expander, Disk Copy, USB Overdrive, Transmit, Lido, patched HD SC Setup...) built from `guestcd/manifest.tsv`. On Power Macs it mounts automatically at startup as a read-only Virtio disk, using the same guest-driver path as folder sharing instead of unreliable OS 9 IDE hot-plug. Quadras retain the state-aware **Mac → Insert/Eject “ClassicMac Tools”** CD command. Everything is pre-expanded and ready to run.
 - **Experimental GXMetal 3D acceleration on Mac OS 9.** The Tools CD carries a
   one-click installer for a PowerPC QuickDraw 3D RAVE engine. It batches guest
   drawing commands to the host, renders them with Metal, and safely leaves
@@ -80,7 +80,7 @@ ClassicMac exists because of years of brilliant work by other engineers. The pat
 2. Click **+** to create a machine — pick the Quadra 800 (System 7.1–8.1) or Power Mac G4 (Mac OS 8.5–9.2.2), choose disk size, RAM, and resolution.
 3. Attach a Mac OS install CD image and boot from it. Installation media is not bundled — download the classic Mac OS version you want from the [WinWorld operating system library](https://winworldpc.com/library/operating-systems).
 4. Optional: pick a shared folder, or attach a raw floppy image to a Quadra. Both appear on the emulated desktop as writable disks.
-5. To test GXMetal on Mac OS 9, insert **ClassicMac Tools**, open **GXMetal**,
+5. To test GXMetal on Mac OS 9, open the automatically mounted **ClassicMac Tools** disk, then open **GXMetal**,
    run **Install GXMetal**, restart, and run **GXMetal Test**. Proceed to a RAVE
    game only after the test reports a pass; moving both GXMetal and GXMetal
    Startup out of Extensions and restarting restores the normal Apple software
@@ -95,8 +95,9 @@ ClassicMac exists because of years of brilliant work by other engineers. The pat
 > "About 4 minutes remaining," so a frozen partial System Folder is no longer
 > expected or considered a successful install. During a Power Mac CD boot,
 > ClassicMac leaves the Tools tray empty so the selected startup disc boots
-> cleanly; after Finder appears, choose **Mac → Insert “ClassicMac Tools”** if
-> needed.
+> cleanly. Tools stays deferred for that installer boot; after installation,
+> shut down, turn off **Start from disc**, and start the Power Mac normally.
+> The read-only **ClassicMac Tools** volume then mounts automatically.
 
 New machines are created as `.classic` documents (default `~/Documents/ClassicMac/`). Double-click one in Finder to boot it.
 
@@ -133,7 +134,7 @@ Requirements: an Apple Silicon Mac (M1 or later) running a recent macOS.
 
 # 5. Verify the exact signed/stapled artifact, including versions, Gatekeeper,
 #    the bundled Tools CD, and the GXMetal-enabled Power Mac executable
-./scripts/verify-release.sh dist/ClassicMac.dmg 1.8.0 1.8.0
+./scripts/verify-release.sh dist/ClassicMac.dmg 1.8.1 1.8.1
 ```
 
 All scripts are idempotent and safe to re-run. Building needs the Xcode command line tools and [Homebrew](https://brew.sh).

@@ -1,0 +1,76 @@
+diff --git a/device-block.c b/device-block.c
+index 534a97f..014d32e 100644
+--- a/device-block.c
++++ b/device-block.c
+@@ -109,5 +109,6 @@ static OSErr dgDeviceType(struct DriverGestaltParam *pb);
+ static bool claimDevice(short refNum);
+ static void releaseDevice(void);
++static bool mediaIsMounted(void);
+ 
+ enum {
+ 	MAXBUFFERS = 16,
+@@ -120,6 +121,7 @@ static uint32_t pfixedbuf;
+ static int buffers; // more buffers means more fragmentation tolerated
+ static short drvrRefNum;
+ static bool ejectRequested;
++static uint8_t mountRetryCountdown;
+ #if GENERATINGCFM
+ static RegEntryID deviceRegistryEntry;
+ #endif
+@@ -203,9 +205,12 @@ int DriverStart(short refNum) {
+ 	refreshMedia(false);
+ 	installDrive();
+ 	RegisterCleanup(removeDrive);
+-	if (!dqe.writeProt) {
+-		(*GetDCtlEntry(drvrRefNum))->dCtlFlags |= dNeedTimeMask;
+-	}
++	/*
++	 * A read-only auxiliary Virtio disk can be discovered before Finder is
++	 * ready to consume its first diskEvt. Keep accRun enabled so cAccRun can
++	 * retry the mount notification at a bounded rate until a VCB appears.
++	 */
++	(*GetDCtlEntry(drvrRefNum))->dCtlFlags |= dNeedTimeMask;
+ 	PostEvent(diskEvt, dqe.dQDrive);
+ 
+ 	printf("Ready\n");
+@@ -528,6 +533,24 @@ static OSErr sDriveStatus(struct CntrlParam *pb) {
+ }
+ 
+ static OSErr cAccRun(struct CntrlParam *pb) {
++	/*
++	 * Mac OS 9 reliably opens a Virtio startup disk, but may drop the one
++	 * diskEvt posted while an auxiliary read-only device is loading. Repost it
++	 * occasionally until File Manager has mounted this drive. This turns the
++	 * bundled Tools image into a dependable startup volume without flooding
++	 * the event queue.
++	 */
++	if (dqe.writeProt && dqe.diskInPlace && !mediaIsMounted()) {
++		if (mountRetryCountdown == 0) {
++			PostEvent(diskEvt, dqe.dQDrive);
++			mountRetryCountdown = 30;
++		} else {
++			mountRetryCountdown--;
++		}
++	} else {
++		mountRetryCountdown = 0;
++	}
++
+ 	if (!ejectRequested || !dqe.diskInPlace) return noErr;
+ 
+ 	ejectRequested = false;
+@@ -541,6 +566,15 @@ static OSErr cAccRun(struct CntrlParam *pb) {
+ 	return noErr;
+ }
+ 
++static bool mediaIsMounted(void) {
++	for (VCB *vcb=(VCB *)GetVCBQHdr()->qHead;
++		vcb!=NULL && vcb!=(VCB *)-1;
++		vcb=(VCB *)vcb->qLink) {
++		if (vcb->vcbDrvNum == dqe.dQDrive) return true;
++	}
++	return false;
++}
++
+ // When the /chosen "bootpath" property is set to this PCI device,
+ // the following three Driver Gestalt handlers tell the NewWorld ROM
+ // to root from this volume -- without waiting for the ?-floppy to time out.

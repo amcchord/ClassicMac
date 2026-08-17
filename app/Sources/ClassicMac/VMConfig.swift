@@ -121,10 +121,17 @@ struct VMConfig: Codable, Identifiable, Hashable {
     // only available for the Quadra 800.
     var floppyImagePath: String?
 
-    // Start up with the bundled ClassicMac Tools CD in the dedicated second
-    // CD drive. Independent of cdImagePath, so a bootable install disc and
-    // the Tools CD can be mounted at the same time.
+    // Start up with the bundled ClassicMac Tools volume. Power Macs mount it
+    // through a read-only Virtio disk (reliable on Mac OS 9); Quadras retain
+    // the dedicated SCSI CD drive. The persisted key keeps its original name
+    // so existing .classic packages remain compatible.
     var toolsCDInserted: Bool
+
+    // One-time delivery migration. Version 1 moves existing Power Mac VMs to
+    // the reliable startup-mounted Virtio Tools volume. Once the user changes
+    // the switch, this marker preserves that explicit choice on later runs.
+    private var toolsDeliveryVersion: Int
+    private static let currentToolsDeliveryVersion = 1
 
     // Misc
     var networking: Bool
@@ -162,6 +169,7 @@ struct VMConfig: Codable, Identifiable, Hashable {
         case cdImagePath, bootFromCD, floppyImagePath
         case networking, sound, useG4CPU, sharedFolderPath
         case classicInputHelpers, tabletInput, toolsCDInserted
+        case toolsDeliveryVersion
     }
 
     init(id: UUID = UUID(),
@@ -177,7 +185,7 @@ struct VMConfig: Codable, Identifiable, Hashable {
          cdImagePath: String? = nil,
          bootFromCD: Bool = true,
          floppyImagePath: String? = nil,
-         toolsCDInserted: Bool = false,
+         toolsCDInserted: Bool? = nil,
          networking: Bool = true,
          sound: Bool = true,
          useG4CPU: Bool = true,
@@ -200,7 +208,8 @@ struct VMConfig: Codable, Identifiable, Hashable {
         self.cdImagePath = cdImagePath
         self.bootFromCD = bootFromCD
         self.floppyImagePath = machineFamily.supportsFloppyDisk ? floppyImagePath : nil
-        self.toolsCDInserted = toolsCDInserted
+        self.toolsCDInserted = toolsCDInserted ?? (machineFamily == .powerMacG4)
+        self.toolsDeliveryVersion = Self.currentToolsDeliveryVersion
         self.networking = networking
         self.sound = sound
         self.useG4CPU = machineFamily == .powerMacG4 && useG4CPU
@@ -245,7 +254,22 @@ struct VMConfig: Codable, Identifiable, Hashable {
         cdImagePath = try c.decodeIfPresent(String.self, forKey: .cdImagePath)
         bootFromCD = try c.decodeIfPresent(Bool.self, forKey: .bootFromCD) ?? false
         floppyImagePath = try c.decodeIfPresent(String.self, forKey: .floppyImagePath)
-        toolsCDInserted = try c.decodeIfPresent(Bool.self, forKey: .toolsCDInserted) ?? false
+        let savedToolsDeliveryVersion = try c.decodeIfPresent(
+            Int.self,
+            forKey: .toolsDeliveryVersion
+        ) ?? 0
+        toolsCDInserted = try c.decodeIfPresent(
+            Bool.self,
+            forKey: .toolsCDInserted
+        ) ?? (machineFamily == .powerMacG4)
+        // 1.8.0 could save the switch as off after a failed live insertion.
+        // Enable the new reliable delivery path once for those Power Mac VMs.
+        // Encoding the version marker afterward makes future off choices stick.
+        if machineFamily == .powerMacG4 &&
+            savedToolsDeliveryVersion < Self.currentToolsDeliveryVersion {
+            toolsCDInserted = true
+        }
+        toolsDeliveryVersion = Self.currentToolsDeliveryVersion
         networking = try c.decodeIfPresent(Bool.self, forKey: .networking) ?? true
         sound = try c.decodeIfPresent(Bool.self, forKey: .sound) ?? true
         // Preserve the boot-compatible G3 identity for existing VM packages.

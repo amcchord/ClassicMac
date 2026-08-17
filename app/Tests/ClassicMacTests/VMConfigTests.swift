@@ -52,6 +52,7 @@ final class VMConfigTests: XCTestCase {
         XCTAssertEqual(config.depth, ColorDepth.thousands.rawValue)
         XCTAssertEqual(config.resolutionLabel, "1024x768x16")
         XCTAssertTrue(config.useG4CPU)
+        XCTAssertTrue(config.toolsCDInserted)
     }
 
     func testQuadraNeverEnablesPowerPCG4CPU() {
@@ -75,5 +76,48 @@ final class VMConfigTests: XCTestCase {
         )
 
         XCTAssertEqual(candidate.lastPathComponent, "Install 2.iso")
+    }
+
+    func testLegacyPowerMacToolsSettingMigratesOnOnce() throws {
+        let legacy = VMConfig(
+            name: "Power Mac",
+            machineFamily: .powerMacG4,
+            toolsCDInserted: false
+        )
+        let encoded = try JSONEncoder().encode(legacy)
+        var object = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: encoded) as? [String: Any]
+        )
+        object.removeValue(forKey: "toolsDeliveryVersion")
+        object["toolsCDInserted"] = false
+        let legacyData = try JSONSerialization.data(withJSONObject: object)
+
+        let migrated = try JSONDecoder().decode(VMConfig.self, from: legacyData)
+        XCTAssertTrue(migrated.toolsCDInserted)
+
+        var explicitOff = migrated
+        explicitOff.toolsCDInserted = false
+        let roundTrip = try JSONDecoder().decode(
+            VMConfig.self,
+            from: JSONEncoder().encode(explicitOff)
+        )
+        XCTAssertFalse(roundTrip.toolsCDInserted)
+    }
+
+    func testLegacyQuadraToolsSettingIsNotForcedOn() throws {
+        let legacy = VMConfig(
+            name: "Quadra",
+            machineFamily: .quadra800,
+            toolsCDInserted: false
+        )
+        let encoded = try JSONEncoder().encode(legacy)
+        var object = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: encoded) as? [String: Any]
+        )
+        object.removeValue(forKey: "toolsDeliveryVersion")
+        let legacyData = try JSONSerialization.data(withJSONObject: object)
+
+        let migrated = try JSONDecoder().decode(VMConfig.self, from: legacyData)
+        XCTAssertFalse(migrated.toolsCDInserted)
     }
 }
