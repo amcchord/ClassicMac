@@ -1,1 +1,4 @@
 GXMetalEngineGetMethod
+GXMetalCopyDiagnostics
+GXMetalGetDiagnosticStatus
+GXMetalProbeTransport

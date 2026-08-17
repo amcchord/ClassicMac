@@ -35,11 +35,20 @@ python3 "$ROOT_DIR/gxmetal/tools/verify_macbinary.py" \
     "$GUEST_DIR/bin/GXMetalTest.bin" --type APPL --creator GXMT
 python3 "$ROOT_DIR/gxmetal/tools/pef_set_init.py" \
     --verify "$GUEST_DIR/bin/GXMetal.pef"
+DeRez -only tnsl "$GUEST_DIR/bin/GXMetal" | \
+    grep -F "data 'tnsl' (0)" >/dev/null || \
+    die "GXMetal resource fork is missing the RAVE tnsl discovery marker"
+DeRez -only ftag "$GUEST_DIR/bin/GXMetal" | \
+    grep -F "data 'ftag' (0)" >/dev/null || \
+    die "GXMetal resource fork is missing the CFM fragment tag"
+DeRez -only vers "$GUEST_DIR/bin/GXMetal" | \
+    grep -F "data 'vers' (1)" >/dev/null || \
+    die "GXMetal resource fork is missing its fragment version"
 for symbol in QARegisterEngine QARegisterDrawMethod RegistryEntrySearch; do
     strings "$GUEST_DIR/bin/GXMetal.pef" | grep -F "$symbol" >/dev/null ||
         die "GXMetal PEF is missing required import $symbol"
 done
-for symbol in QADeviceGetFirstEngine QADrawContextNew QATextureNew; do
+for symbol in QAInit QAExit QADeviceGetFirstEngine QADrawContextNew QATextureNew QABitmapNew QABitmapDetach QABitmapDelete; do
     strings "$GUEST_DIR/bin/GXMetalTest.pef" | grep -F "$symbol" >/dev/null ||
         die "GXMetal Test PEF is missing required import $symbol"
 done

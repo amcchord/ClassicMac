@@ -14,13 +14,14 @@ LDFLAGS := -shared -Wl,-e,GXMetalCFMInitialize \
 LIBS := -lQuickDraw3DRAVELib -lNameRegistryLib -lInterfaceLib
 
 APP_CFLAGS := -std=gnu99 -Os -Wall -Wextra -Werror -Wno-multichar \
-              -ffunction-sections -fdata-sections
+              -ffunction-sections -fdata-sections -Iinclude
 APP_LDFLAGS := -Wl,--gc-sections
 
 all: bin/GXMetal.bin bin/GXMetalInstaller.bin bin/GXMetalTest.bin
 
 bin/GXMetal.xcoff: src/GXMetalEngine.c src/GXMetalTransport.c \
-                   src/GXMetalTransport.h include/GXMetalRegistry.h src/GXMetal.exp \
+                   src/GXMetalTransport.h include/GXMetalDiagnostics.h \
+                   include/GXMetalRegistry.h src/GXMetal.exp \
                    ../protocol/gxmetal_protocol.h GNUmakefile
 	@mkdir -p bin
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ \
@@ -49,10 +50,10 @@ bin/GXMetalInstaller.bin: bin/GXMetalInstaller.pef apps/GXMetalInstaller.r
 		--cc bin/%GXMetalInstaller.ad -t APPL -c GXMT \
 		--data bin/GXMetalInstaller.pef
 
-bin/GXMetalTest.xcoff: apps/GXMetalTest.c GNUmakefile
+bin/GXMetalTest.xcoff: apps/GXMetalTest.c include/GXMetalDiagnostics.h GNUmakefile
 	@mkdir -p bin
 	$(CC) $(APP_CFLAGS) $(APP_LDFLAGS) -o $@ $< \
-		-lQuickDraw3DRAVELib -lInterfaceLib
+		-lQuickDraw3DRAVELib -lNameRegistryLib -lInterfaceLib
 
 bin/GXMetalTest.pef: bin/GXMetalTest.xcoff
 	$(MAKEPEF) -o $@ $<

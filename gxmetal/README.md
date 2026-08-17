@@ -1,8 +1,9 @@
 # GXMetal
 
 GXMetal is a paravirtual QuickDraw 3D RAVE drawing engine for ClassicMac. Its
-PowerPC CFM shared library uses the `shlb` Finder type and `tnsl` creator
-signature that RAVE scans for on Mac OS 8.5, 8.6, and 9. The guest batches
+PowerPC CFM shared library uses the `shlb` Finder type, `tnsl` creator, and
+`tnsl`, `ftag`, and `vers` resources used by shipping hardware engines on Mac
+OS 8.5, 8.6, and 9. The guest batches
 rendering commands for a QEMU device; the host executes those commands with
 Metal and presents through the existing Power Mac display.
 
@@ -87,11 +88,11 @@ scripts/build-gxmetal.sh
 The build produces `GXMetal.bin`, `GXMetalInstaller.bin`, and
 `GXMetalTest.bin` in `gxmetal/guest/bin`. They are MacBinary files so their PEF
 data forks, `cfrg` resources, and Finder metadata survive transfer to HFS. The
-build verifies that the driver has the exact `shlb`/`tnsl` Finder pair used by
-Apple and ATI RAVE engines, its PEF loader header contains a CFM initialization
+build verifies that the driver has the `shlb`/`tnsl` Finder pair and complete
+RAVE/CFM discovery resources, its PEF loader header contains a CFM initialization
 entry (rather than an application main entry), the entry descriptor invokes
 `QARegisterEngine`, and the test app imports the public RAVE
-discovery/context/texture APIs.
+discovery/context/texture/bitmap APIs.
 
 `scripts/build-guest-cd.sh` rebuilds those three matching artifacts and places
 them in the `GXMetal` folder on the ClassicMac Tools CD. In the guest,
@@ -100,10 +101,10 @@ forks of `GXMetal` into Extensions using a rollback-safe temporary rename, and
 asks for a restart. After restarting, **GXMetal Test** enumerates the engines
 that RAVE actually registered, selects GXMetal by its gestalt name, exercises a
 Z-buffered and double-buffered render with Gouraud shading, alpha blending, and
-an uploaded texture, waits on the host fence, then validates red, blue, and
-blended-purple pixels directly in the guest framebuffer. A missing device or
-host feature fails the test explicitly and remains eligible for Apple's normal
-software RAVE fallback.
+an uploaded texture, and a partially clipped uploaded bitmap; waits on the host
+fence; then validates red, blue, blended-purple, and bitmap-green pixels directly
+in the guest framebuffer. A missing device or host feature fails the test
+explicitly and remains eligible for Apple's normal software RAVE fallback.
 
 Build the patched QEMU binaries and black-box test the GXMetal PCI layout:
 
