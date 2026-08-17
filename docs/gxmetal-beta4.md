@@ -58,7 +58,8 @@ application—not a loose development binary—it recorded:
 | Candidate validation | 51,325 microseconds | 530,436 microseconds | **10.33x** |
 | Disposable-clone harness rerun | 66,724 microseconds | 546,868 microseconds | **8.19x** |
 | Source-immutability harness rerun | 64,905 microseconds | 547,114 microseconds | **8.42x** |
-| Final icon/installer release candidate | 51,251 microseconds | 766,397 microseconds | **14.95x** |
+| Installer/startup integration candidate | 51,251 microseconds | 766,397 microseconds | **14.95x** |
+| Final supplied-icon release candidate | 49,847 microseconds | 551,304 microseconds | **11.05x** |
 
 This is a focused RAVE workload rather than a promise that every game will run
 8.19–14.95x faster. A game also spends time in simulation, sound, file access,
@@ -88,8 +89,10 @@ never attaches or writes the supplied OS 9 image: it creates a disposable
 clone, installs the exact driver, startup companion, and test application
 extracted from the signed bundle's Tools CD, boots the bundled QEMU headlessly,
 verifies that the source image's size and modification time did not change, and
-preserves the guest result plus a final screenshot for inspection. Its three
-clean reruns produced the final three results in the table above.
+preserves the guest result plus a final screenshot for inspection. A separate
+40-frame boot capture from the final candidate also confirms that Mac OS 9
+draws the supplied puzzle-piece M in its normal extension row. Four clean
+harness reruns produced the final four results in the table above.
 
 GXMetal declines unsupported framebuffer formats, deep-Z requests, complex
 QuickDraw regions, missing host features, incompatible protocol versions, and
