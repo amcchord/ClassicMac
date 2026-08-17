@@ -11,10 +11,10 @@ through Metal on the host.
 
 The beta ships the driver, the **GXMetal Startup** companion, **Install
 GXMetal**, and **GXMetal Test** together in the GXMetal folder on the ClassicMac
-Tools CD. The driver and tools share a compact classic extension puzzle-piece
-icon with a beveled metal M. The companion displays that M in the normal Mac OS
-startup row while keeping the actual RAVE library's required `shlb`/`tnsl`
-identity unchanged.
+Tools CD. The driver and tools share a simple classic extension puzzle-piece
+icon with a metal M. The companion displays that M in the normal Mac OS startup
+row while keeping the actual RAVE library's required `shlb`/`tnsl` identity
+unchanged.
 
 The installer stages both forks and the required Finder metadata for both
 files before changing the active Extensions folder. On an update, any loaded

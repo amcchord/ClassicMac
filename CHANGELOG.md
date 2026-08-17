@@ -9,7 +9,7 @@
   paravirtual QEMU device, which renders them with Metal. The matching driver,
   one-click installer, and conformance/benchmark application ship together on
   the ClassicMac Tools CD.
-- GXMetal now has a classic extension puzzle-piece icon with a beveled metal M.
+- GXMetal now has a simple classic extension puzzle-piece icon with a metal M.
   A small 68K startup companion shows it in Mac OS 9's extension row while the
   RAVE driver retains the `shlb`/`tnsl` identity required for discovery.
 - GXMetal accelerates Gouraud and textured geometry, Z buffering, alpha test

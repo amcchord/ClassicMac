@@ -53,6 +53,13 @@ MAC_8BIT_PALETTE = mac_8bit_palette()
 
 def fitted_icon(master: Image.Image, size: int) -> Image.Image:
     """Crop transparent padding and fit the artwork into a classic icon grid."""
+    if master.size == (32, 32):
+        if size == 32:
+            return master.copy()
+        return master.resize((size, size), Image.Resampling.LANCZOS).filter(
+            ImageFilter.UnsharpMask(radius=0.4, percent=90, threshold=3)
+        )
+
     alpha = master.getchannel("A")
     bounds = alpha.point(lambda value: 255 if value >= 16 else 0).getbbox()
     if bounds is None:
