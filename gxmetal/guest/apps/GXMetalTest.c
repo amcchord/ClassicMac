@@ -30,6 +30,10 @@ static const unsigned char kGXMetalResultName[] = {
     20, 'G', 'X', 'M', 'e', 't', 'a', 'l', ' ', 'T', 'e', 's', 't', ' ',
     'R', 'e', 's', 'u', 'l', 't', 's'
 };
+static const unsigned char kGXMetalDiagnosticResultName[] = {
+    26, 'G', 'X', 'M', 'e', 't', 'a', 'l', ' ', 'D', 'i', 'a', 'g', 'n',
+    'o', 's', 't', 'i', 'c', ' ', 'R', 'e', 's', 'u', 'l', 't', 's'
+};
 static const unsigned char kGXMetalExtensionName[] = {
     7, 'G', 'X', 'M', 'e', 't', 'a', 'l'
 };
@@ -71,7 +75,8 @@ static void GXMetalCStringToPascal(const char *source, Str255 destination)
 /* Leave a machine-readable checkpoint in Preferences. Besides making failures
  * diagnosable on a Mac without a debugger, the host validation harness can
  * mount the isolated disk after shutdown and assert the final PASS record. */
-static void GXMetalRecordResult(const char *message)
+static void GXMetalRecordNamedResult(const unsigned char *name,
+                                     const char *message)
 {
     FSSpec result;
     short volume = 0;
@@ -83,7 +88,7 @@ static void GXMetalRecordResult(const char *message)
                    &volume, &directory) != noErr) {
         return;
     }
-    (void)FSMakeFSSpec(volume, directory, kGXMetalResultName, &result);
+    (void)FSMakeFSSpec(volume, directory, name, &result);
     (void)FSpDelete(&result);
     if (FSpCreate(&result, 'GXMT', 'TEXT', smSystemScript) != noErr ||
         FSpOpenDF(&result, fsWrPerm, &refNum) != noErr) {
@@ -92,6 +97,16 @@ static void GXMetalRecordResult(const char *message)
     (void)FSWrite(refNum, &length, message);
     (void)FSClose(refNum);
     (void)FlushVol(NULL, volume);
+}
+
+static void GXMetalRecordResult(const char *message)
+{
+    GXMetalRecordNamedResult(kGXMetalResultName, message);
+}
+
+static void GXMetalRecordDiagnosticResult(const char *message)
+{
+    GXMetalRecordNamedResult(kGXMetalDiagnosticResultName, message);
 }
 
 static void GXMetalShowResult(Boolean success, const char *message)
@@ -273,7 +288,7 @@ static void GXMetalRecordDiagnosticSnapshot(
     const GXMetalDiagnosticSnapshot *snapshot, int32_t probeStatus,
     Boolean automaticLoad)
 {
-    char result[240];
+    char result[512];
     char *cursor = result;
     const char *end = result + sizeof(result) - 1;
 
@@ -291,6 +306,36 @@ static void GXMetalRecordDiagnosticSnapshot(
     GXMETAL_DIAGNOSTIC_FIELD(" mask=", snapshot->method_mask);
     GXMETAL_DIAGNOSTIC_FIELD(" gest=", snapshot->gestalt_count);
     GXMETAL_DIAGNOSTIC_FIELD(" sel=", snapshot->last_gestalt_selector);
+    GXMETAL_DIAGNOSTIC_FIELD(" reject=", snapshot->display_reject_reason);
+    GXMETAL_DIAGNOSTIC_FIELD(" ctxn=", snapshot->draw_private_new_count);
+    GXMETAL_DIAGNOSTIC_FIELD(" flags=", snapshot->context_flags);
+    GXMETAL_DIAGNOSTIC_FIELD(" err=", snapshot->context_error);
+    GXMETAL_DIAGNOSTIC_FIELD(" cw=", snapshot->context_width);
+    GXMETAL_DIAGNOSTIC_FIELD(" ch=", snapshot->context_height);
+    GXMETAL_DIAGNOSTIC_FIELD(" crow=", snapshot->context_row_bytes);
+    GXMETAL_DIAGNOSTIC_FIELD(" fmt=", snapshot->context_pixel_format);
+    GXMETAL_DIAGNOSTIC_FIELD(" off=", snapshot->context_framebuffer_offset);
+    GXMETAL_DIAGNOSTIC_FIELD(" rs=", snapshot->resource_stage);
+    GXMETAL_DIAGNOSTIC_FIELD(" tn=", snapshot->texture_new_count);
+    GXMETAL_DIAGNOSTIC_FIELD(" td=", snapshot->texture_delete_count);
+    GXMETAL_DIAGNOSTIC_FIELD(" ct=", snapshot->color_table_new_count);
+    GXMETAL_DIAGNOSTIC_FIELD(" cd=", snapshot->color_table_delete_count);
+    GXMETAL_DIAGNOSTIC_FIELD(" tb=",
+                             snapshot->texture_bind_color_table_count);
+    GXMETAL_DIAGNOSTIC_FIELD(" tf=", snapshot->last_texture_flags);
+    GXMETAL_DIAGNOSTIC_FIELD(" tp=", snapshot->last_texture_pixel_type);
+    GXMETAL_DIAGNOSTIC_FIELD(" tw=", snapshot->last_texture_width);
+    GXMETAL_DIAGNOSTIC_FIELD(" th=", snapshot->last_texture_height);
+    GXMETAL_DIAGNOSTIC_FIELD(" tl=", snapshot->last_texture_levels);
+    GXMETAL_DIAGNOSTIC_FIELD(" te=",
+                             (uint32_t)snapshot->last_texture_error);
+    GXMETAL_DIAGNOSTIC_FIELD(" cty=", snapshot->last_color_table_type);
+    GXMETAL_DIAGNOSTIC_FIELD(" ctr=",
+                             snapshot->last_color_table_transparent);
+    GXMETAL_DIAGNOSTIC_FIELD(" cte=",
+                             (uint32_t)snapshot->last_color_table_error);
+    GXMETAL_DIAGNOSTIC_FIELD(" tbe=",
+                             (uint32_t)snapshot->last_texture_bind_error);
     GXMETAL_DIAGNOSTIC_FIELD(" fb=", snapshot->registry_framebuffer_address);
     if (snapshot->check_device_count != 0) {
         GXMETAL_DIAGNOSTIC_FIELD(" dev=", snapshot->device_type);
@@ -304,6 +349,7 @@ static void GXMetalRecordDiagnosticSnapshot(
 #undef GXMETAL_DIAGNOSTIC_FIELD
     *cursor = '\0';
     GXMetalRecordResult(result);
+    GXMetalRecordDiagnosticResult(result);
 }
 
 static TQAVGouraud GXMetalGouraud(float x, float y, float z,
@@ -419,9 +465,15 @@ static TQAError GXMetalRenderPattern(TQADrawContext *context,
                                      GDHandle graphicsDevice,
                                      const TQARect *deviceRect)
 {
-    static unsigned long texturePixels[4] = {
-        0xffff0000UL, 0xff00ff00UL,
-        0xff0000ffUL, 0xffffffffUL
+    static unsigned char texturePixels[4] = {
+        1, 2,
+        3, 4
+    };
+    static unsigned long texturePalette[256] = {
+        [1] = 0x00ff0000UL,
+        [2] = 0x0000ff00UL,
+        [3] = 0x000000ffUL,
+        [4] = 0x00ffffffUL
     };
     static unsigned long bitmapPixels[16] = {
         0xffff0000UL, 0xffff0000UL, 0xffff0000UL, 0xffff0000UL,
@@ -432,6 +484,7 @@ static TQAError GXMetalRenderPattern(TQADrawContext *context,
     TQAImage image;
     TQAImage bitmapImage;
     TQATexture *texture = NULL;
+    TQAColorTable *colorTable = NULL;
     TQABitmap *bitmap = NULL;
     TQARect dirty = {0, GXMETAL_WIDTH, 0, GXMETAL_HEIGHT};
     TQAVGouraud farTriangle[3];
@@ -453,11 +506,24 @@ static TQAError GXMetalRenderPattern(TQADrawContext *context,
 
     image.width = 2;
     image.height = 2;
-    image.rowBytes = 8;
+    image.rowBytes = 2;
     image.pixmap = texturePixels;
-    error = QATextureNew(engine, kQATexture_None, kQAPixel_ARGB32,
+    error = QATextureNew(engine, kQATexture_None, kQAPixel_CL8,
                          &image, &texture);
+    if (error == kQANoErr) {
+        error = QAColorTableNew(engine, kQAColorTable_CL8_RGB32,
+                                texturePalette, false, &colorTable);
+    }
+    if (error == kQANoErr) {
+        error = QATextureBindColorTable(engine, texture, colorTable);
+    }
     if (error != kQANoErr) {
+        if (colorTable != NULL) {
+            QAColorTableDelete(engine, colorTable);
+        }
+        if (texture != NULL) {
+            QATextureDelete(engine, texture);
+        }
         return error;
     }
     bitmapImage.width = 4;
@@ -473,6 +539,7 @@ static TQAError GXMetalRenderPattern(TQADrawContext *context,
         if (bitmap != NULL) {
             QABitmapDelete(engine, bitmap);
         }
+        QAColorTableDelete(engine, colorTable);
         QATextureDelete(engine, texture);
         return error;
     }
@@ -682,6 +749,7 @@ static TQAError GXMetalRenderPattern(TQADrawContext *context,
         error = kQAError;
     }
     QABitmapDelete(engine, bitmap);
+    QAColorTableDelete(engine, colorTable);
     QATextureDelete(engine, texture);
     return error;
 }
@@ -897,6 +965,8 @@ int main(void)
     TQADrawContext *unexpectedContext = NULL;
     unsigned long optionalFeatures = 0;
     unsigned long optionalFeatures2 = 0;
+    unsigned long vendorID = 0;
+    unsigned long engineID = 0;
     unsigned long requiredFeatures;
     TQAError error;
     OSErr loadError;
@@ -922,6 +992,23 @@ int main(void)
         return 1;
     }
     GXMetalRecordResult("RAVE: QAInit succeeded");
+    memset(&publishedSnapshot, 0, sizeof(publishedSnapshot));
+    if (GXMetalReadPublishedDiagnostics(&publishedSnapshot)) {
+        GXMetalRecordDiagnosticSnapshot(&publishedSnapshot, -1, true);
+    }
+    /* Always snapshot the live fragment before this app changes any driver
+     * state. This also turns GXMetal Test into a post-crash diagnostic probe
+     * for games which leave the RAVE manager running but unstable. */
+    loadError = GXMetalLoadInstalledExtension(&diagnosticConnection);
+    if (loadError == noErr && diagnosticConnection != NULL) {
+        memset(&diagnosticSnapshot, 0, sizeof(diagnosticSnapshot));
+        if (GXMetalCopyDriverDiagnostics(diagnosticConnection,
+                                         &diagnosticSnapshot) == kQANoErr) {
+            GXMetalRecordDiagnosticSnapshot(&diagnosticSnapshot, -1, true);
+        }
+        CloseConnection(&diagnosticConnection);
+        diagnosticConnection = NULL;
+    }
     SetRect(&windowRect, 70, 58, 70 + GXMETAL_WIDTH,
             58 + GXMETAL_HEIGHT);
     window = NewCWindow(NULL, &windowRect, kWindowTitle, true,
@@ -1008,10 +1095,30 @@ int main(void)
     if (QAEngineGestalt(engine, kQAGestalt_OptionalFeatures,
                         &optionalFeatures) != kQANoErr ||
         QAEngineGestalt(engine, kQAGestalt_OptionalFeatures2,
-                        &optionalFeatures2) != kQANoErr) {
+                        &optionalFeatures2) != kQANoErr ||
+        QAEngineGestalt(engine, kQAGestalt_VendorID,
+                        &vendorID) != kQANoErr ||
+        QAEngineGestalt(engine, kQAGestalt_EngineID,
+                        &engineID) != kQANoErr) {
         GXMetalRecordResult("FAIL: RAVE feature gestalt");
         DisposeWindow(window);
         GXMetalShowResult(false, "GXMetal did not return its RAVE feature set.");
+        QAExit();
+        return 1;
+    }
+    if (vendorID != 1) { /* kQAVendor_ATI */
+        GXMetalRecordResult("FAIL: legacy RAVE vendor compatibility");
+        DisposeWindow(window);
+        GXMetalShowResult(false,
+            "GXMetal did not advertise the ATI-compatible RAVE identity required by legacy game launchers.");
+        QAExit();
+        return 1;
+    }
+    if (engineID != 1) {
+        GXMetalRecordResult("FAIL: GXMetal engine identity");
+        DisposeWindow(window);
+        GXMetalShowResult(false,
+            "GXMetal did not advertise its unique engine identity.");
         QAExit();
         return 1;
     }
