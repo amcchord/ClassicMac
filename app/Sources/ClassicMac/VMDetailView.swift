@@ -446,7 +446,11 @@ struct VMDetailView: View {
                             vm.wrappedValue.machineFamily == .powerMacG4 &&
                             vm.wrappedValue.bootFromCD &&
                             vm.wrappedValue.cdImagePath?.isEmpty == false {
-                            Text("During this Power Mac disc startup, ClassicMac Tools waits until the desktop appears. Then choose Insert “ClassicMac Tools” from the Mac menu.")
+                            Text("ClassicMac Tools waits while this Power Mac starts from an installer disc. Shut down, turn off Start from disc, and start again to mount Tools.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        } else if vm.wrappedValue.machineFamily == .powerMacG4 {
+                            Text("Mounts automatically at startup as a read-only disk using the same reliable Virtio transport as shared folders.")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         } else {

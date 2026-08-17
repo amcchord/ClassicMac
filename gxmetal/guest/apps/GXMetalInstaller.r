@@ -28,8 +28,8 @@ resource 'BNDL' (128, purgeable) {
 
 resource 'vers' (1) {
     1, 8, release, 0, verUS,
-    "1.8.0",
-    "Install GXMetal 1.8.0"
+    "1.8.1",
+    "Install GXMetal 1.8.1"
 };
 
 resource 'cfrg' (0) {

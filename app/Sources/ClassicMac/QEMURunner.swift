@@ -97,11 +97,17 @@ final class QEMUManager: ObservableObject {
         process.arguments = QEMUManager.buildArguments(for: config)
         process.currentDirectoryURL = config.folder
 
-        // Tell the running Mac window where the bundled tools disc lives so
-        // its Mac menu can insert or eject it while the Mac runs.
+        // The Quadra's SCSI CD driver notices live media changes, so publish
+        // the bundled image to its running-window menu. Power Macs receive
+        // Tools through a read-only Virtio disk at startup instead: Mac OS 9's
+        // IDE driver accepts a live QEMU media change but never tells Finder
+        // to mount it, which made the old Insert command look successful while
+        // doing nothing in the guest.
         var environment = ProcessInfo.processInfo.environment
-        if let toolsCD = AppPaths.toolsCD {
+        if config.machineFamily == .quadra800, let toolsCD = AppPaths.toolsCD {
             environment["CLASSICMAC_TOOLS_CD"] = toolsCD.path
+        } else {
+            environment.removeValue(forKey: "CLASSICMAC_TOOLS_CD")
         }
         process.environment = environment
 
@@ -432,7 +438,13 @@ final class QEMUManager: ObservableObject {
         let deferToolsMedia = bootingFromUserCD
         let sharing = config.hasSharedFolder && !bootingFromUserCD
         let tablet = config.tabletInput
-        let needsNdrvLoader = sharing || tablet || bootingFromUserCD
+        // On Power Macs the Tools HFS image is a read-only Virtio block disk.
+        // It uses the same startup NDRV loader as folder sharing and mounts as
+        // a normal desktop volume without relying on IDE hot-plug detection.
+        let toolsViaVirtio = !deferToolsMedia && config.toolsCDInserted &&
+            AppPaths.toolsCD != nil
+        let needsNdrvLoader = sharing || tablet || bootingFromUserCD ||
+            toolsViaVirtio
 
         // Input configuration. QEMU treats whichever pointing device the guest
         // touched last as "the mouse", and the cocoa display only releases the
@@ -555,23 +567,29 @@ final class QEMUManager: ObservableObject {
             ]
         }
 
-        // Put ClassicMac Tools on the Power Mac's optical IDE channel. The
-        // former automatic placement made it the hard disk's IDE slave, which
-        // Mac OS 9 did not treat as its removable CD tray; QEMU accepted menu
-        // media changes, but Finder never saw them. Normally Tools occupies
-        // the primary optical position. When starting from a selected CD, it
-        // moves to the secondary position and stays empty so OpenBIOS boots
-        // that selected disc and the installer starts with only one mounted
-        // CD. Tools can be inserted from the Mac menu afterward.
-        let loadToolsMedia = !deferToolsMedia && config.toolsCDInserted &&
-            AppPaths.toolsCD != nil
+        // Keep the compatibility IDE tray present but empty. Mac OS 9 fails to
+        // notice live changes to this QEMU IDE tray, so the actual Tools image
+        // is exposed below through the reliable Virtio block path instead.
         let toolsDiscIndex = bootingFromUserCD ? 3 : 2
         args += ["-drive", toolsDriveSpec(
             for: config,
             iface: "ide",
             index: toolsDiscIndex,
-            loadMedia: loadToolsMedia
+            loadMedia: false
         )]
+
+        if toolsViaVirtio, let toolsCD = AppPaths.toolsCD {
+            let escapedToolsPath = toolsCD.path
+                .replacingOccurrences(of: ",", with: ",,")
+            args += [
+                "-blockdev",
+                "driver=file,node-name=classicmac-tools-file,filename=\(escapedToolsPath),read-only=on",
+                "-blockdev",
+                "driver=raw,node-name=classicmac-tools,file=classicmac-tools-file,read-only=on",
+                "-device",
+                "virtio-blk-pci,drive=classicmac-tools"
+            ]
+        }
 
         // User-mode networking through the mac99 onboard sungem ethernet.
         if config.networking {

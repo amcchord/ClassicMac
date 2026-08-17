@@ -13,6 +13,7 @@ TOOLCHAIN="$VENDOR_DIR/Retro68-build/toolchain"
 INTERFACES_DIR="$VENDOR_DIR/mpw/InterfacesAndLibraries"
 PATCH_FILE="$ROOT_DIR/classicvirtio/floppy-driver.patch"
 POWER_MAC_PATCH_FILE="$ROOT_DIR/classicvirtio/powermac-boot.patch"
+TOOLS_MOUNT_PATCH_FILE="$ROOT_DIR/classicvirtio/tools-mount.patch"
 DECLROM_OUTPUT_FILE="$ROOT_DIR/shared/declrom"
 NDRV_OUTPUT_FILE="$ROOT_DIR/shared/ndrvloader"
 CLASSICVIRTIO_REPO="${CLASSICVIRTIO_REPO:-https://github.com/elliotnunn/classicvirtio.git}"
@@ -36,6 +37,7 @@ git -C "$SOURCE_DIR" checkout "$CLASSICVIRTIO_COMMIT" -- \
   device-block.c ndrvloader.c transport-ndrv.c
 git -C "$SOURCE_DIR" apply "$PATCH_FILE"
 git -C "$SOURCE_DIR" apply "$POWER_MAC_PATCH_FILE"
+git -C "$SOURCE_DIR" apply "$TOOLS_MOUNT_PATCH_FILE"
 
 [ -x "$TOOLCHAIN/bin/m68k-apple-macos-gcc" ] ||
   die "Retro68 is not built. Run scripts/build-qfb-rom.sh first."

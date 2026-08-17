@@ -8,8 +8,8 @@
 #   scripts/verify-release.sh [app-or-dmg] [short-version] [build-version]
 #
 # Examples:
-#   scripts/verify-release.sh dist/ClassicMac.app 1.8.0 1.8.0
-#   scripts/verify-release.sh dist/ClassicMac.dmg 1.8.0 1.8.0
+#   scripts/verify-release.sh dist/ClassicMac.app 1.8.1 1.8.1
+#   scripts/verify-release.sh dist/ClassicMac.dmg 1.8.1 1.8.1
 
 set -euo pipefail
 

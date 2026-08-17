@@ -38,8 +38,8 @@ HELPERS_DIR="$CONTENTS/Helpers"
 QUADRA_APP="$HELPERS_DIR/Quadra 800.app"
 PPC_APP="$HELPERS_DIR/Power Mac G4.app"
 
-APP_VERSION="${APP_VERSION:-1.8.0}"
-APP_BUILD_VERSION="${APP_BUILD_VERSION:-1.8.0}"
+APP_VERSION="${APP_VERSION:-1.8.1}"
+APP_BUILD_VERSION="${APP_BUILD_VERSION:-1.8.1}"
 BUNDLE_ID="com.classicmac.emulator"
 
 log() { printf '\n==> %s\n' "$*"; }
