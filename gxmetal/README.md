@@ -128,8 +128,9 @@ Z-buffered and double-buffered render with Gouraud shading, alpha blending,
 alpha testing, depth fog, an uploaded texture, and a partially clipped uploaded
 bitmap inside a rectangular QuickDraw clip; waits on the host fence; then
 validates red, blue, blended-purple, alpha-rejected green, preserved clipped
-pixels, fogged-purple, and bitmap-green pixels directly in the guest
-framebuffer. It also requires a deliberately complex region to return
+pixels, fogged-purple, bitmap-green, and scalar and batched-texture
+backface-preserved blue pixels directly in the guest framebuffer. It also
+requires a deliberately complex region to return
 `kQANotSupported`. A missing device or host feature fails the test explicitly
 and remains eligible for Apple's normal software RAVE fallback.
 The same app then runs a fixed 120-frame mixed texture/Gouraud workload first

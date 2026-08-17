@@ -440,9 +440,14 @@ static TQAError GXMetalRenderPattern(TQADrawContext *context,
     TQAVGouraud blendOverlay[3];
     TQAVGouraud alphaBase[3];
     TQAVGouraud alphaRejected[3];
+    TQAVGouraud backfaceGouraudBase[3];
+    TQAVGouraud backfaceGouraudRejected[3];
+    TQAVGouraud backfaceTextureBase[3];
     TQAVGouraud fogTriangle[3];
     TQAVGouraud bitmapVertex;
+    TQAVTexture backfaceTextureRejected[3];
     TQAVTexture texturedQuad[4];
+    unsigned long backfaceFlags[1] = {kQATriFlags_Backfacing};
     unsigned long flags[4] = {0, 0, 0, 0};
     TQAError error;
 
@@ -515,6 +520,30 @@ static TQAError GXMetalRenderPattern(TQADrawContext *context,
                                       1.0f, 0.0f, 0.0f, 0.25f);
     alphaRejected[2] = GXMetalGouraud(310.0f, 215.0f, 0.10f,
                                       1.0f, 0.0f, 0.0f, 0.25f);
+    backfaceGouraudBase[0] = GXMetalGouraud(5.0f, 55.0f, 0.40f,
+                                            0.0f, 0.0f, 1.0f, 1.0f);
+    backfaceGouraudBase[1] = GXMetalGouraud(30.0f, 5.0f, 0.40f,
+                                            0.0f, 0.0f, 1.0f, 1.0f);
+    backfaceGouraudBase[2] = GXMetalGouraud(55.0f, 55.0f, 0.40f,
+                                            0.0f, 0.0f, 1.0f, 1.0f);
+    backfaceGouraudRejected[0] = GXMetalGouraud(5.0f, 55.0f, 0.10f,
+                                                1.0f, 0.0f, 0.0f, 1.0f);
+    backfaceGouraudRejected[1] = GXMetalGouraud(30.0f, 5.0f, 0.10f,
+                                                1.0f, 0.0f, 0.0f, 1.0f);
+    backfaceGouraudRejected[2] = GXMetalGouraud(55.0f, 55.0f, 0.10f,
+                                                1.0f, 0.0f, 0.0f, 1.0f);
+    backfaceTextureBase[0] = GXMetalGouraud(115.0f, 55.0f, 0.40f,
+                                            0.0f, 0.0f, 1.0f, 1.0f);
+    backfaceTextureBase[1] = GXMetalGouraud(140.0f, 5.0f, 0.40f,
+                                            0.0f, 0.0f, 1.0f, 1.0f);
+    backfaceTextureBase[2] = GXMetalGouraud(165.0f, 55.0f, 0.40f,
+                                            0.0f, 0.0f, 1.0f, 1.0f);
+    backfaceTextureRejected[0] = GXMetalTextureVertex(
+        115.0f, 55.0f, 0.10f, 0.0f, 0.0f);
+    backfaceTextureRejected[1] = GXMetalTextureVertex(
+        140.0f, 5.0f, 0.10f, 1.0f, 0.0f);
+    backfaceTextureRejected[2] = GXMetalTextureVertex(
+        165.0f, 55.0f, 0.10f, 0.0f, 1.0f);
     fogTriangle[0] = GXMetalGouraud(210.0f, 232.0f, 0.75f,
                                     1.0f, 0.0f, 0.0f, 1.0f);
     fogTriangle[1] = GXMetalGouraud(240.0f, 200.0f, 0.75f,
@@ -530,7 +559,7 @@ static TQAError GXMetalRenderPattern(TQADrawContext *context,
                                             0.0f, 1.0f);
     texturedQuad[3] = GXMetalTextureVertex(302.0f, 190.0f, 0.30f,
                                             1.0f, 1.0f);
-    bitmapVertex = GXMetalGouraud(318.0f, 218.0f, 0.05f,
+    bitmapVertex = GXMetalGouraud(318.0f, 212.0f, 0.05f,
                                   1.0f, 1.0f, 1.0f, 1.0f);
 
     QARenderStart(context, &dirty, NULL);
@@ -550,11 +579,23 @@ static TQAError GXMetalRenderPattern(TQADrawContext *context,
     QADrawTriGouraud(context, &alphaRejected[0], &alphaRejected[1],
                      &alphaRejected[2], kQATriFlags_None);
     QASetInt(context, kQATag_AlphaTestFunc, kQAAlphaTest_None);
+    QADrawTriGouraud(context, &backfaceGouraudBase[0],
+                     &backfaceGouraudBase[1], &backfaceGouraudBase[2],
+                     kQATriFlags_None);
+    QADrawTriGouraud(context, &backfaceGouraudRejected[0],
+                     &backfaceGouraudRejected[1],
+                     &backfaceGouraudRejected[2],
+                     kQATriFlags_Backfacing);
+    QADrawTriGouraud(context, &backfaceTextureBase[0],
+                     &backfaceTextureBase[1], &backfaceTextureBase[2],
+                     kQATriFlags_None);
     QASetPtr(context, kQATag_Texture, texture);
     QASetInt(context, kQATag_TextureFilter, kQATextureFilter_Fast);
     QASetInt(context, kQATag_TextureOp, kQATextureOp_None);
     QASetInt(context, kQATagGL_TextureWrapU, kQAGL_Clamp);
     QASetInt(context, kQATagGL_TextureWrapV, kQAGL_Clamp);
+    QADrawVTexture(context, 3, kQAVertexMode_Tri,
+                   backfaceTextureRejected, backfaceFlags);
     QADrawVTexture(context, 4, kQAVertexMode_Strip,
                    texturedQuad, flags);
     QADrawBitmap(context, &bitmapVertex, bitmap);
@@ -572,39 +613,67 @@ static TQAError GXMetalRenderPattern(TQADrawContext *context,
     if (error == kQANoErr) {
         error = QASync(context);
     }
-    if (error == kQANoErr &&
-        (!GXMetalPixelMatches(graphicsDevice,
-                              deviceRect->left + 82,
-                              deviceRect->top + 120,
-                              kGXMetalPixelRed) ||
-         !GXMetalPixelMatches(graphicsDevice,
-                              deviceRect->left + 200,
-                              deviceRect->top + 60,
-                              kGXMetalPixelBlue) ||
-         !GXMetalPixelMatches(graphicsDevice,
-                              deviceRect->left + 160,
-                              deviceRect->top + 190,
-                              kGXMetalPixelPurple) ||
-         !GXMetalPixelMatches(graphicsDevice,
-                              deviceRect->left + 319,
-                              deviceRect->top + 219,
-                              kGXMetalPixelRed) ||
-         !GXMetalPixelMatches(graphicsDevice,
-                              deviceRect->left + 319,
-                              deviceRect->top + 221,
-                              kGXMetalPixelGreen) ||
-         !GXMetalPixelMatches(graphicsDevice,
-                              deviceRect->left + 240,
-                              deviceRect->top + 218,
-                              kGXMetalPixelFogPurple) ||
-         !GXMetalPixelMatches(graphicsDevice,
-                              deviceRect->left + 295,
-                              deviceRect->top + 207,
-                              kGXMetalPixelGreen) ||
-         !GXMetalPixelMatches(graphicsDevice,
-                              deviceRect->left + 160,
-                              deviceRect->top + 4,
-                              kGXMetalPixelGreen))) {
+    if (error != kQANoErr) {
+        GXMetalRecordResult("FAIL: accelerated render completion");
+    } else if (!GXMetalPixelMatches(graphicsDevice,
+                                    deviceRect->left + 82,
+                                    deviceRect->top + 120,
+                                    kGXMetalPixelRed)) {
+        GXMetalRecordResult("FAIL: depth ordering pixel");
+        error = kQAError;
+    } else if (!GXMetalPixelMatches(graphicsDevice,
+                                    deviceRect->left + 200,
+                                    deviceRect->top + 60,
+                                    kGXMetalPixelBlue)) {
+        GXMetalRecordResult("FAIL: texture sampling pixel");
+        error = kQAError;
+    } else if (!GXMetalPixelMatches(graphicsDevice,
+                                    deviceRect->left + 160,
+                                    deviceRect->top + 190,
+                                    kGXMetalPixelPurple)) {
+        GXMetalRecordResult("FAIL: alpha blending pixel");
+        error = kQAError;
+    } else if (!GXMetalPixelMatches(graphicsDevice,
+                                    deviceRect->left + 319,
+                                    deviceRect->top + 213,
+                                    kGXMetalPixelRed)) {
+        GXMetalRecordResult("FAIL: bitmap upper pixel");
+        error = kQAError;
+    } else if (!GXMetalPixelMatches(graphicsDevice,
+                                    deviceRect->left + 319,
+                                    deviceRect->top + 215,
+                                    kGXMetalPixelGreen)) {
+        GXMetalRecordResult("FAIL: bitmap lower pixel");
+        error = kQAError;
+    } else if (!GXMetalPixelMatches(graphicsDevice,
+                                    deviceRect->left + 240,
+                                    deviceRect->top + 218,
+                                    kGXMetalPixelFogPurple)) {
+        GXMetalRecordResult("FAIL: depth fog pixel");
+        error = kQAError;
+    } else if (!GXMetalPixelMatches(graphicsDevice,
+                                    deviceRect->left + 295,
+                                    deviceRect->top + 207,
+                                    kGXMetalPixelGreen)) {
+        GXMetalRecordResult("FAIL: alpha rejection pixel");
+        error = kQAError;
+    } else if (!GXMetalPixelMatches(graphicsDevice,
+                                    deviceRect->left + 30,
+                                    deviceRect->top + 35,
+                                    kGXMetalPixelBlue)) {
+        GXMetalRecordResult("FAIL: scalar backface pixel");
+        error = kQAError;
+    } else if (!GXMetalPixelMatches(graphicsDevice,
+                                    deviceRect->left + 140,
+                                    deviceRect->top + 35,
+                                    kGXMetalPixelBlue)) {
+        GXMetalRecordResult("FAIL: batched textured backface pixel");
+        error = kQAError;
+    } else if (!GXMetalPixelMatches(graphicsDevice,
+                                    deviceRect->left + 160,
+                                    deviceRect->top + 4,
+                                    kGXMetalPixelGreen)) {
+        GXMetalRecordResult("FAIL: immutable clip pixel");
         error = kQAError;
     }
     QABitmapDelete(engine, bitmap);
@@ -771,7 +840,7 @@ static void GXMetalBuildPassResult(char *result, size_t resultCapacity,
     const char *end = result + resultCapacity - 1;
 
     GXMetalAppendText(&cursor, end,
-        "PASS: RAVE discovery depth blend alpha-test clip texture bitmap dirty-present double-buffer framebuffer gx_us=");
+        "PASS: RAVE discovery depth blend alpha-test backface clip texture bitmap dirty-present double-buffer framebuffer gx_us=");
     GXMetalAppendDecimal(&cursor, end, gxMetalMicroseconds);
     GXMetalAppendText(&cursor, end, " sw_us=");
     GXMetalAppendDecimal(&cursor, end, softwareMicroseconds);
@@ -1009,6 +1078,8 @@ int main(void)
     if (error == kQANoErr) {
         error = GXMetalRenderPattern(context, engine,
                                      device.device.gDevice, &deviceRect);
+    } else {
+        GXMetalRecordResult("FAIL: accelerated draw context creation");
     }
     if (context != NULL) {
         QADrawContextDelete(context);
@@ -1017,7 +1088,6 @@ int main(void)
         DisposeRgn(clipRegion);
     }
     if (error != kQANoErr) {
-        GXMetalRecordResult("FAIL: accelerated render or framebuffer check");
         DisposeWindow(window);
         GXMetalShowResult(false,
             "GXMetal was selected, but the depth/texture/double-buffer render test did not complete.");
