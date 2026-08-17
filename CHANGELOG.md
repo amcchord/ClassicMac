@@ -9,6 +9,9 @@
   paravirtual QEMU device, which renders them with Metal. The matching driver,
   one-click installer, and conformance/benchmark application ship together on
   the ClassicMac Tools CD.
+- GXMetal now has a classic extension puzzle-piece icon with a beveled metal M.
+  A small 68K startup companion shows it in Mac OS 9's extension row while the
+  RAVE driver retains the `shlb`/`tnsl` identity required for discovery.
 - GXMetal accelerates Gouraud and textured geometry, Z buffering, alpha test
   and blending, depth fog, rectangular clipping/scissoring, bitmap uploads,
   double buffering, and the texture formats and sampling modes used by the
@@ -23,10 +26,11 @@
 - A full 640x480 RGB555 present now marks 614,400 bytes of VRAM dirty instead
   of the complete 64 MiB aperture, a 109.23x reduction. Partial presents mark
   only their clipped contiguous span.
-- Three runs of the 120-frame Mac OS 9 mixed texture/Gouraud conformance workload
-  from the exact Developer ID-signed beta application measured 10.33x, 8.19x,
-  and 8.42x versus Apple Software RAVE. The slower observed run completed in
-  66,724 microseconds through GXMetal versus 546,868 microseconds through software.
+- Four runs of the 120-frame Mac OS 9 mixed texture/Gouraud conformance
+  workload from the exact Developer ID-signed beta application measured
+  8.19x–14.95x versus Apple Software RAVE. The final icon/installer release
+  candidate completed in 51,251 microseconds through GXMetal versus 766,397
+  microseconds through software.
 
 ### Fixed
 
@@ -40,6 +44,10 @@
   normalized Z-buffer coordinate. This fixes Nanosaur scenes that were blended
   almost entirely to the pale fog color even though their HUD rendered
   correctly.
+- Made GXMetal updates safe when the previous RAVE library is still open. The
+  installer stages both files, converts old copies to hidden inert rollback
+  files, and the new startup companion removes them on restart, preventing a
+  duplicate engine from remaining in the active Extensions folder.
 
 ## 1.7.0 beta 3 — 2026-08-16
 

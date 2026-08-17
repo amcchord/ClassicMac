@@ -119,20 +119,37 @@ with the existing Retro68 toolchain and Apple Universal Interfaces:
 scripts/build-gxmetal.sh
 ```
 
-The build produces `GXMetal.bin`, `GXMetalInstaller.bin`, and
-`GXMetalTest.bin` in `gxmetal/guest/bin`. They are MacBinary files so their PEF
-data forks, `cfrg` resources, and Finder metadata survive transfer to HFS. The
-build verifies that the driver has the `shlb`/`tnsl` Finder pair and complete
-RAVE/CFM discovery resources, its PEF loader header contains a CFM initialization
-entry (rather than an application main entry), the entry descriptor invokes
-`QARegisterEngine`, and the test app imports the public RAVE
-discovery/context/texture/bitmap APIs.
+The RGBA icon master lives at `guest/art/GXMetalIcon-master.png`.
+`tools/build_icon_resources.py` crops its alpha silhouette and deterministically
+generates the tracked `guest/src/GXMetalIcon.r` with 32- and 16-pixel 8-bit,
+4-bit, and monochrome classic icon members. Regenerate it with a Pillow-enabled
+Python when the master artwork changes:
 
-`scripts/build-guest-cd.sh` rebuilds those three matching artifacts and places
+```sh
+python3 gxmetal/tools/build_icon_resources.py \
+  gxmetal/guest/art/GXMetalIcon-master.png \
+  gxmetal/guest/src/GXMetalIcon.r
+```
+
+The build produces `GXMetal.bin`, `GXMetalStartup.bin`,
+`GXMetalInstaller.bin`, and `GXMetalTest.bin` in `gxmetal/guest/bin`. They are
+MacBinary files so their PEF data forks, resource forks, and Finder metadata
+survive transfer to HFS. `GXMetalStartup.bin` is a small 68K `INIT` companion:
+Mac OS 9 does not execute an `INIT` embedded in the required `shlb`/`tnsl` RAVE
+library, so the companion displays GXMetal's puzzle-piece M in the normal
+startup extension row. The build verifies the driver's complete RAVE/CFM
+discovery resources and initialization descriptor, the companion's executable
+`INIT` and icon family, and the test app's public RAVE imports.
+
+`scripts/build-guest-cd.sh` rebuilds those four matching artifacts and places
 them in the `GXMetal` folder on the ClassicMac Tools CD. In the guest,
-double-click **Install GXMetal**. It finds the active System Folder, copies both
-forks of `GXMetal` into Extensions using a rollback-safe temporary rename, and
-asks for a restart. After restarting, **GXMetal Test** enumerates the engines
+double-click **Install GXMetal**. It finds the active System Folder and stages
+both forks of the driver and startup companion before changing anything. On an
+update, the already-loaded old files are renamed, made invisible, and changed
+to an inert non-extension Finder type before the new pair takes their canonical
+names. The new startup companion deletes those rollback copies during the
+required restart, so a second RAVE driver cannot be rediscovered. After
+restarting, **GXMetal Test** enumerates the engines
 that RAVE actually registered, selects GXMetal by its gestalt name, exercises a
 Z-buffered and double-buffered render with Gouraud shading, alpha blending,
 alpha testing, depth fog, an uploaded texture, and a partially clipped uploaded
@@ -168,10 +185,10 @@ scripts/test-gxmetal-os9.sh /path/to/mac-os-9-disk.img
 ```
 
 The harness verifies the bundle, APFS-clones (or copies) the disk, extracts the
-matching driver and test application from the bundle's own Tools CD, installs
-them only into the clone, boots the bundled GXMetal-capable QEMU, and reads the
-flushed PASS/FAIL record back from the clone. It retains the temporary directory
-and final screenshot as auditable evidence.
+matching driver, startup companion, and test application from the bundle's own
+Tools CD, installs them only into the clone, boots the bundled GXMetal-capable
+QEMU, and reads the flushed PASS/FAIL record back from the clone. It retains the
+temporary directory and final screenshot as auditable evidence.
 
 ## Versioning and safety
 

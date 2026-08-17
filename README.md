@@ -68,7 +68,8 @@ ClassicMac exists because of years of brilliant work by other engineers. The pat
   drawing commands to the host, renders them with Metal, and safely leaves
   unsupported contexts to Apple's software renderer. The included GXMetal
   Test verifies framebuffer correctness and measures both engines before a
-  game is launched.
+  game is launched. A classic puzzle-piece M appears in the startup extension
+  row when GXMetal's companion loads.
 - **Native machine control.** Pause / Resume, Restart, and Shut Down from the app, live screen previews in the library, and a "Match Display" button that sizes the Mac to your screen.
 - **Machine window shortcuts that always work.** Control-Option-T hides or restores the title bar for a clean borderless look, Control-Option-F toggles Full Screen, and Control-Option-R matches the Mac screen to the window again. All three keep working even while the emulator has grabbed the keyboard, and they also live in the **View** menu and the machine's Dock icon menu.
 - **Signed, notarized, stapled DMG** for distribution — recipients get a clean Gatekeeper experience even offline.
@@ -81,8 +82,9 @@ ClassicMac exists because of years of brilliant work by other engineers. The pat
 4. Optional: pick a shared folder, or attach a raw floppy image to a Quadra. Both appear on the emulated desktop as writable disks.
 5. To test GXMetal on Mac OS 9, insert **ClassicMac Tools**, open **GXMetal**,
    run **Install GXMetal**, restart, and run **GXMetal Test**. Proceed to a RAVE
-   game only after the test reports a pass; moving GXMetal out of Extensions
-   and restarting restores the normal Apple software path.
+   game only after the test reports a pass; moving both GXMetal and GXMetal
+   Startup out of Extensions and restarting restores the normal Apple software
+   path.
 
 > [!IMPORTANT]
 > **Installing Mac OS 9?** Initialize the destination with Drive Setup from

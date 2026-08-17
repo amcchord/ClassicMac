@@ -9,13 +9,21 @@ RAVE calls into bounded packets in a shared PCI command queue. QEMU validates
 the packets, preserves their ordering with fences, and renders accepted work
 through Metal on the host.
 
-The beta ships the driver, **Install GXMetal**, and **GXMetal Test** together in
-the GXMetal folder on the ClassicMac Tools CD. The installer copies both forks
-and the required Finder metadata into the active System Folder. It uses a
-temporary destination and retains the previous driver until replacement
-succeeds, avoiding a half-installed extension. Restarting lets QuickDraw 3D
-discover the new engine. Removing GXMetal from Extensions and restarting
-returns the guest to its normal software configuration.
+The beta ships the driver, the **GXMetal Startup** companion, **Install
+GXMetal**, and **GXMetal Test** together in the GXMetal folder on the ClassicMac
+Tools CD. The driver and tools share a compact classic extension puzzle-piece
+icon with a beveled metal M. The companion displays that M in the normal Mac OS
+startup row while keeping the actual RAVE library's required `shlb`/`tnsl`
+identity unchanged.
+
+The installer stages both forks and the required Finder metadata for both
+files before changing the active Extensions folder. On an update, any loaded
+old copies are renamed and immediately changed to hidden `BINA/GXMT` files with
+the no-INIT flag. That preserves rollback if either replacement fails while
+making the old files undiscoverable as extensions or RAVE engines. The new
+startup companion deletes the inert rollback files during the required
+restart. Removing both GXMetal and GXMetal Startup from Extensions and
+restarting returns the guest to its normal software configuration.
 
 ## Where the speedup comes from
 
@@ -50,13 +58,14 @@ application—not a loose development binary—it recorded:
 | Candidate validation | 51,325 microseconds | 530,436 microseconds | **10.33x** |
 | Disposable-clone harness rerun | 66,724 microseconds | 546,868 microseconds | **8.19x** |
 | Source-immutability harness rerun | 64,905 microseconds | 547,114 microseconds | **8.42x** |
+| Final icon/installer release candidate | 51,251 microseconds | 766,397 microseconds | **14.95x** |
 
 This is a focused RAVE workload rather than a promise that every game will run
-8.19–10.33x faster. A game also spends time in simulation, sound, file access, and
-PowerPC code outside RAVE. The result proves that the driver was discovered,
-the complete guest-to-host path ran, the software fallback remained usable,
-and the accelerated portion was materially faster under matched guest-side
-timing.
+8.19–14.95x faster. A game also spends time in simulation, sound, file access,
+and PowerPC code outside RAVE. The result proves that the driver was
+discovered, the complete guest-to-host path ran, the software fallback
+remained usable, and the accelerated portion was materially faster under
+matched guest-side timing.
 
 ## Correctness and fallback gates
 
@@ -76,11 +85,11 @@ process.
 
 `scripts/test-gxmetal-os9.sh` makes that signed-bundle check repeatable. It
 never attaches or writes the supplied OS 9 image: it creates a disposable
-clone, installs the exact driver and test application extracted from the
-signed bundle's Tools CD, boots the bundled QEMU headlessly, verifies that the
-source image's size and modification time did not change, and preserves the
-guest result plus a final screenshot for inspection. Its two clean reruns
-produced the final two results in the table above.
+clone, installs the exact driver, startup companion, and test application
+extracted from the signed bundle's Tools CD, boots the bundled QEMU headlessly,
+verifies that the source image's size and modification time did not change, and
+preserves the guest result plus a final screenshot for inspection. Its three
+clean reruns produced the final three results in the table above.
 
 GXMetal declines unsupported framebuffer formats, deep-Z requests, complex
 QuickDraw regions, missing host features, incompatible protocol versions, and

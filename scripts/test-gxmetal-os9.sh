@@ -91,13 +91,22 @@ mkdir -p "$SCRATCH/macbinary" "$SCRATCH/guest"
 hmount "$TOOLS_CD" >/dev/null
 HFSUTILS_MOUNTED=1
 hcopy -m ':GXMetal:GXMetal' "$SCRATCH/macbinary/GXMetal.bin"
+hcopy -m ':GXMetal:GXMetal Startup' "$SCRATCH/macbinary/GXMetalStartup.bin"
 hcopy -m ':GXMetal:GXMetal Test' "$SCRATCH/macbinary/GXMetalTest.bin"
 humount >/dev/null
 HFSUTILS_MOUNTED=0
 unar -quiet -output-directory "$SCRATCH/guest" \
   "$SCRATCH/macbinary/GXMetal.bin"
 unar -quiet -output-directory "$SCRATCH/guest" \
+  "$SCRATCH/macbinary/GXMetalStartup.bin"
+unar -quiet -output-directory "$SCRATCH/guest" \
   "$SCRATCH/macbinary/GXMetalTest.bin"
+STARTUP_GUEST_FILE="$SCRATCH/guest/GXMetal Startup"
+if [ ! -e "$STARTUP_GUEST_FILE" ]; then
+  STARTUP_GUEST_FILE="$SCRATCH/guest/GXMetalStartup"
+fi
+[ -e "$STARTUP_GUEST_FILE" ] || \
+  die "GXMetal Startup did not decode from the bundled Tools CD"
 
 attach_disk() {
   local attach_output
@@ -131,6 +140,10 @@ if [ -e "$MOUNT_POINT/System Folder/Extensions/GXMetal" ]; then
   mv "$MOUNT_POINT/System Folder/Extensions/GXMetal" \
     "$BACKUP/GXMetal.previous"
 fi
+if [ -e "$MOUNT_POINT/System Folder/Extensions/GXMetal Startup" ]; then
+  mv "$MOUNT_POINT/System Folder/Extensions/GXMetal Startup" \
+    "$BACKUP/GXMetal Startup.previous"
+fi
 if [ -e "$MOUNT_POINT/System Folder/Startup Items/GXMetal Test" ]; then
   mv "$MOUNT_POINT/System Folder/Startup Items/GXMetal Test" \
     "$BACKUP/GXMetal Test.previous"
@@ -141,6 +154,8 @@ if [ -e "$MOUNT_POINT/System Folder/Preferences/GXMetal Test Results" ]; then
 fi
 ditto "$SCRATCH/guest/GXMetal" \
   "$MOUNT_POINT/System Folder/Extensions/GXMetal"
+ditto "$STARTUP_GUEST_FILE" \
+  "$MOUNT_POINT/System Folder/Extensions/GXMetal Startup"
 ditto "$SCRATCH/guest/GXMetal Test" \
   "$MOUNT_POINT/System Folder/Startup Items/GXMetal Test"
 sync

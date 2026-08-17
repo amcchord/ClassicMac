@@ -26,6 +26,7 @@ OUT_IMAGE="$OUT_DIR/ClassicMacTools.iso"
 VOLUME_NAME="ClassicMac Tools"
 HFS_COPY="$ROOT_DIR/guestcd/hfs-copy.py"
 GXMETAL_BIN_DIR="$ROOT_DIR/gxmetal/guest/bin"
+GXMETAL_README="$ROOT_DIR/gxmetal/guest/README.txt"
 # 32 MiB: plenty for ~10 MB of expanded tools, and a multiple of the
 # 2048-byte CD sector size.
 IMAGE_BYTES=$((32 * 1024 * 1024))
@@ -157,13 +158,14 @@ USB Overdrive 1.4  (Power Mac only, Mac OS 8.5 - 9.2)
 On a Quadra (System 7 through Mac OS 8.1), skip USB Overdrive -
 it needs a Power Mac running Mac OS 8.5 or later.
 
-GXMetal  (Power Mac only, Mac OS 8.5 - 9.2)
+GXMetal 1.7 beta 4  (Power Mac only; tested on Mac OS 9.2.2)
    Host-accelerated QuickDraw 3D RAVE for ClassicMac. Open the
    GXMetal folder and double-click "Install GXMetal". Restart,
-   then run "GXMetal Test". The test must report RAVE discovery,
-   depth, textures, and double-buffer synchronization before you
-   try a game. If acceleration is unavailable or a feature is not
-   supported, RAVE keeps its normal software-renderer fallback.
+   look for the puzzle-piece M icon in the startup extension row, then
+   run "GXMetal Test". The test must report PASS before you try a
+   game. Read the GXMetal folder's Read Me for update, uninstall,
+   recovery, fallback, and troubleshooting instructions. Mac OS 8.5
+   and 8.6 validation will resume with updated system images.
 EOF
 
 # ---------------------------------------------------------------------------
@@ -231,8 +233,11 @@ hattrib -t TEXT -c ttxt ":Read Me"
 # the PEF data forks, cfrg resources, and Finder type/creator metadata.
 hmkdir ":GXMetal"
 hcopy -m "$GXMETAL_BIN_DIR/GXMetal.bin" ":GXMetal:GXMetal"
+hcopy -m "$GXMETAL_BIN_DIR/GXMetalStartup.bin" ":GXMetal:GXMetal Startup"
 hcopy -m "$GXMETAL_BIN_DIR/GXMetalInstaller.bin" ":GXMetal:Install GXMetal"
 hcopy -m "$GXMETAL_BIN_DIR/GXMetalTest.bin" ":GXMetal:GXMetal Test"
+hcopy -t "$GXMETAL_README" ":GXMetal:Read Me"
+hattrib -t TEXT -c ttxt ":GXMetal:Read Me"
 
 while IFS=$'\t' read -r name handling md5 url; do
   case "$name" in ''|'#'*) continue ;; esac
