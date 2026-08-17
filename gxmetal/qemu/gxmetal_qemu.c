@@ -160,7 +160,8 @@ bool gxmetal_qemu_init(GXMetalQemuState *state, Object *owner,
                            GXMETAL_FEATURE_TEXTURE |
                            GXMETAL_FEATURE_DOUBLE_BUFFER |
                            GXMETAL_FEATURE_SCISSOR |
-                           GXMETAL_FEATURE_FOG_DEPTH;
+                           GXMETAL_FEATURE_FOG_DEPTH |
+                           GXMETAL_FEATURE_ALPHA_TEST;
     } else {
         state->features |= GXMETAL_FEATURE_TRACE;
     }

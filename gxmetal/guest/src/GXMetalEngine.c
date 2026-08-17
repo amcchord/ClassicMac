@@ -19,7 +19,7 @@
 
 #define GXMETAL_VENDOR_ID UINT32_C(0x47584d54) /* GXMT */
 #define GXMETAL_ENGINE_ID UINT32_C(0x00000001)
-#define GXMETAL_REVISION  UINT32_C(0x00010100)
+#define GXMETAL_REVISION  UINT32_C(0x00010300)
 #define GXMETAL_STATE_SLOTS 154u
 #define GXMETAL_SYNC_SPINS UINT32_C(10000000)
 #define GXMETAL_TEXTURE_MAGIC UINT32_C(0x47585458) /* GXTX */
@@ -1585,6 +1585,9 @@ static TQAError GXMetalEngineGestalt(TQAGestaltSelector selector,
         }
         if (features & GXMETAL_FEATURE_FOG_DEPTH) {
             value |= kQAOptional_FogDepth;
+        }
+        if (features & GXMETAL_FEATURE_ALPHA_TEST) {
+            value |= kQAOptional_AlphaTest;
         }
         break;
     case kQAGestalt_FastFeatures:

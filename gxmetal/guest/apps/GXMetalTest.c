@@ -438,6 +438,8 @@ static TQAError GXMetalRenderPattern(TQADrawContext *context,
     TQAVGouraud nearTriangle[3];
     TQAVGouraud blendBase[3];
     TQAVGouraud blendOverlay[3];
+    TQAVGouraud alphaBase[3];
+    TQAVGouraud alphaRejected[3];
     TQAVGouraud fogTriangle[3];
     TQAVGouraud bitmapVertex;
     TQAVTexture texturedQuad[4];
@@ -501,6 +503,18 @@ static TQAError GXMetalRenderPattern(TQADrawContext *context,
                                      1.0f, 0.0f, 0.0f, 0.5f);
     blendOverlay[2] = GXMetalGouraud(190.0f, 208.0f, 0.10f,
                                      1.0f, 0.0f, 0.0f, 0.5f);
+    alphaBase[0] = GXMetalGouraud(280.0f, 215.0f, 0.40f,
+                                  0.0f, 1.0f, 0.0f, 1.0f);
+    alphaBase[1] = GXMetalGouraud(295.0f, 195.0f, 0.40f,
+                                  0.0f, 1.0f, 0.0f, 1.0f);
+    alphaBase[2] = GXMetalGouraud(310.0f, 215.0f, 0.40f,
+                                  0.0f, 1.0f, 0.0f, 1.0f);
+    alphaRejected[0] = GXMetalGouraud(280.0f, 215.0f, 0.10f,
+                                      1.0f, 0.0f, 0.0f, 0.25f);
+    alphaRejected[1] = GXMetalGouraud(295.0f, 195.0f, 0.10f,
+                                      1.0f, 0.0f, 0.0f, 0.25f);
+    alphaRejected[2] = GXMetalGouraud(310.0f, 215.0f, 0.10f,
+                                      1.0f, 0.0f, 0.0f, 0.25f);
     fogTriangle[0] = GXMetalGouraud(210.0f, 232.0f, 0.75f,
                                     1.0f, 0.0f, 0.0f, 1.0f);
     fogTriangle[1] = GXMetalGouraud(240.0f, 200.0f, 0.75f,
@@ -529,6 +543,13 @@ static TQAError GXMetalRenderPattern(TQADrawContext *context,
                      &blendBase[2], kQATriFlags_None);
     QADrawTriGouraud(context, &blendOverlay[0], &blendOverlay[1],
                      &blendOverlay[2], kQATriFlags_None);
+    QADrawTriGouraud(context, &alphaBase[0], &alphaBase[1],
+                     &alphaBase[2], kQATriFlags_None);
+    QASetFloat(context, kQATag_AlphaTestRef, 0.5f);
+    QASetInt(context, kQATag_AlphaTestFunc, kQAAlphaTest_GT);
+    QADrawTriGouraud(context, &alphaRejected[0], &alphaRejected[1],
+                     &alphaRejected[2], kQATriFlags_None);
+    QASetInt(context, kQATag_AlphaTestFunc, kQAAlphaTest_None);
     QASetPtr(context, kQATag_Texture, texture);
     QASetInt(context, kQATag_TextureFilter, kQATextureFilter_Fast);
     QASetInt(context, kQATag_TextureOp, kQATextureOp_None);
@@ -575,7 +596,11 @@ static TQAError GXMetalRenderPattern(TQADrawContext *context,
          !GXMetalPixelMatches(graphicsDevice,
                               deviceRect->left + 240,
                               deviceRect->top + 218,
-                              kGXMetalPixelFogPurple))) {
+                              kGXMetalPixelFogPurple) ||
+         !GXMetalPixelMatches(graphicsDevice,
+                              deviceRect->left + 295,
+                              deviceRect->top + 207,
+                              kGXMetalPixelGreen))) {
         error = kQAError;
     }
     QABitmapDelete(engine, bitmap);
@@ -742,7 +767,7 @@ static void GXMetalBuildPassResult(char *result, size_t resultCapacity,
     const char *end = result + resultCapacity - 1;
 
     GXMetalAppendText(&cursor, end,
-        "PASS: RAVE discovery depth blend texture bitmap present double-buffer framebuffer gx_us=");
+        "PASS: RAVE discovery depth blend alpha-test texture bitmap present double-buffer framebuffer gx_us=");
     GXMetalAppendDecimal(&cursor, end, gxMetalMicroseconds);
     GXMetalAppendText(&cursor, end, " sw_us=");
     GXMetalAppendDecimal(&cursor, end, softwareMicroseconds);
@@ -906,13 +931,14 @@ int main(void)
     }
     requiredFeatures = kQAOptional_Texture | kQAOptional_TextureHQ |
                        kQAOptional_Blend | kQAOptional_ClearDrawBuffer |
-                       kQAOptional_ClearZBuffer | kQAOptional_FogDepth;
+                       kQAOptional_ClearZBuffer | kQAOptional_FogDepth |
+                       kQAOptional_AlphaTest;
     if ((optionalFeatures & requiredFeatures) != requiredFeatures ||
         (optionalFeatures2 & kQAOptional2_SwapBuffers) == 0) {
         GXMetalRecordResult("FAIL: incomplete RAVE feature set");
         DisposeWindow(window);
         GXMetalShowResult(false,
-            "GXMetal registered, but the host did not expose the complete depth, fog, blend, texture, and double-buffer feature set.");
+            "GXMetal registered, but the host did not expose the complete depth, fog, alpha-test, blend, texture, and double-buffer feature set.");
         QAExit();
         return 1;
     }

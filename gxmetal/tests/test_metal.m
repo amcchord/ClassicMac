@@ -381,6 +381,53 @@ static void test_metal_texture_upload_and_sampling(void)
     CHECK((framebuffer_pixel(framebuffer, 16, 48) & 31) >= 14);
     CHECK((framebuffer_pixel(framebuffer, 16, 48) & 31) <= 16);
 
+    /* Textured alpha testing uses the post-texture-operation alpha. Vertex
+     * alpha lowers every opaque texel below the reference, so the blue clear
+     * must remain visible across the quad. */
+    set_int_state(renderer, packet, 3, GXMETAL_STATE_FOG_MODE,
+                  GXMETAL_FOG_NONE);
+    set_float_state(renderer, packet, 3,
+                    GXMETAL_STATE_ALPHA_TEST_REFERENCE, 0.5f);
+    set_int_state(renderer, packet, 3,
+                  GXMETAL_STATE_ALPHA_TEST_FUNCTION,
+                  GXMETAL_ALPHA_TEST_GT);
+    make_packet(packet, GXMETAL_OP_BEGIN_FRAME, 32, 3);
+    CHECK(dispatch(renderer, packet, 32) == GXMETAL_ERROR_NONE);
+    make_packet(packet, GXMETAL_OP_CLEAR, 64, 3);
+    payload = packet + 16;
+    gxmetal_store_le32(payload + GXMETAL_CLEAR_FLAGS_OFFSET,
+                       GXMETAL_CLEAR_COLOR);
+    store_float(payload + GXMETAL_CLEAR_COLOR_B_OFFSET, 1.0f);
+    store_float(payload + GXMETAL_CLEAR_COLOR_A_OFFSET, 1.0f);
+    gxmetal_store_le32(payload + GXMETAL_CLEAR_RECT_OFFSET +
+                       GXMETAL_RECT_RIGHT_OFFSET, 64);
+    gxmetal_store_le32(payload + GXMETAL_CLEAR_RECT_OFFSET +
+                       GXMETAL_RECT_BOTTOM_OFFSET, 64);
+    CHECK(dispatch(renderer, packet, 64) == GXMETAL_ERROR_NONE);
+    make_packet(packet, GXMETAL_OP_DRAW_TEXTURED, 416, 3);
+    payload = packet + 16;
+    gxmetal_store_le32(payload + GXMETAL_DRAW_PRIMITIVE_OFFSET,
+                       GXMETAL_PRIMITIVE_TRIANGLE);
+    gxmetal_store_le32(payload + GXMETAL_DRAW_VERTEX_COUNT_OFFSET, 6);
+    gxmetal_store_le32(payload + GXMETAL_DRAW_VERTEX_STRIDE_OFFSET, 64);
+    vertices = payload + GXMETAL_DRAW_VERTICES_OFFSET;
+    set_texture_vertex(vertices + 0 * 64, 0, 0, 0, 0);
+    set_texture_vertex(vertices + 1 * 64, 64, 0, 1, 0);
+    set_texture_vertex(vertices + 2 * 64, 0, 64, 0, 1);
+    set_texture_vertex(vertices + 3 * 64, 64, 0, 1, 0);
+    set_texture_vertex(vertices + 4 * 64, 64, 64, 1, 1);
+    set_texture_vertex(vertices + 5 * 64, 0, 64, 0, 1);
+    for (uint32_t i = 0; i < 6; i++) {
+        store_float(vertices + i * 64 + GXMETAL_VERTEX_A_OFFSET, 0.25f);
+    }
+    CHECK(dispatch(renderer, packet, 416) == GXMETAL_ERROR_NONE);
+    make_packet(packet, GXMETAL_OP_END_FRAME, 32, 3);
+    CHECK(dispatch(renderer, packet, 32) == GXMETAL_ERROR_NONE);
+    make_packet(packet, GXMETAL_OP_PRESENT, 32, 3);
+    CHECK(dispatch(renderer, packet, 32) == GXMETAL_ERROR_NONE);
+    CHECK(framebuffer_pixel(framebuffer, 16, 48) == 0x001f);
+    CHECK(framebuffer_pixel(framebuffer, 48, 16) == 0x001f);
+
     make_packet(packet, GXMETAL_OP_TEXTURE_DESTROY, 32, 0);
     payload = packet + 16;
     gxmetal_store_le32(payload + GXMETAL_DESTROY_RESOURCE_ID_OFFSET, 7);
@@ -447,6 +494,61 @@ static void test_metal_depth_blend_and_double_buffer(void)
     CHECK(((pixel >> 10) & 31) >= 13 && ((pixel >> 10) & 31) <= 17);
     CHECK(((pixel >> 5) & 31) >= 13 && ((pixel >> 5) & 31) <= 17);
     CHECK((pixel & 31) == 0);
+
+    /* Alpha testing happens before blending and depth writes. A rejected
+     * fragment leaves both the blue color and cleared depth untouched. */
+    set_float_state(renderer, packet, 2,
+                    GXMETAL_STATE_ALPHA_TEST_REFERENCE, 0.5f);
+    set_int_state(renderer, packet, 2,
+                  GXMETAL_STATE_ALPHA_TEST_FUNCTION,
+                  GXMETAL_ALPHA_TEST_GT);
+    make_packet(packet, GXMETAL_OP_BEGIN_FRAME, 32, 2);
+    CHECK(dispatch(renderer, packet, 32) == GXMETAL_ERROR_NONE);
+    make_packet(packet, GXMETAL_OP_CLEAR, 64, 2);
+    payload = packet + 16;
+    gxmetal_store_le32(payload + GXMETAL_CLEAR_FLAGS_OFFSET,
+                       GXMETAL_CLEAR_COLOR | GXMETAL_CLEAR_DEPTH);
+    store_float(payload + GXMETAL_CLEAR_COLOR_B_OFFSET, 1.0f);
+    store_float(payload + GXMETAL_CLEAR_COLOR_A_OFFSET, 1.0f);
+    store_float(payload + GXMETAL_CLEAR_DEPTH_OFFSET, 1.0f);
+    gxmetal_store_le32(payload + GXMETAL_CLEAR_RECT_OFFSET +
+                       GXMETAL_RECT_RIGHT_OFFSET, 64);
+    gxmetal_store_le32(payload + GXMETAL_CLEAR_RECT_OFFSET +
+                       GXMETAL_RECT_BOTTOM_OFFSET, 64);
+    CHECK(dispatch(renderer, packet, 64) == GXMETAL_ERROR_NONE);
+    draw_triangle(renderer, packet, 2, 0.20f, 1, 0, 0, 0.25f);
+    make_packet(packet, GXMETAL_OP_END_FRAME, 32, 2);
+    CHECK(dispatch(renderer, packet, 32) == GXMETAL_ERROR_NONE);
+    make_packet(packet, GXMETAL_OP_PRESENT, 32, 2);
+    CHECK(dispatch(renderer, packet, 32) == GXMETAL_ERROR_NONE);
+    pixel = framebuffer_pixel(framebuffer, 32, 24);
+    CHECK(pixel == 0x001f);
+
+    /* The complementary comparison accepts the same fragment. Because the
+     * rejected draw did not update depth, it now blends over blue. */
+    set_int_state(renderer, packet, 2,
+                  GXMETAL_STATE_ALPHA_TEST_FUNCTION,
+                  GXMETAL_ALPHA_TEST_LE);
+    make_packet(packet, GXMETAL_OP_BEGIN_FRAME, 32, 2);
+    CHECK(dispatch(renderer, packet, 32) == GXMETAL_ERROR_NONE);
+    draw_triangle(renderer, packet, 2, 0.20f, 1, 0, 0, 0.25f);
+    make_packet(packet, GXMETAL_OP_END_FRAME, 32, 2);
+    CHECK(dispatch(renderer, packet, 32) == GXMETAL_ERROR_NONE);
+    make_packet(packet, GXMETAL_OP_PRESENT, 32, 2);
+    CHECK(dispatch(renderer, packet, 32) == GXMETAL_ERROR_NONE);
+    pixel = framebuffer_pixel(framebuffer, 32, 24);
+    CHECK(((pixel >> 10) & 31) >= 6 && ((pixel >> 10) & 31) <= 9);
+    CHECK((pixel & 31) >= 22 && (pixel & 31) <= 25);
+
+    make_packet(packet, GXMETAL_OP_SET_STATE, 32, 2);
+    payload = packet + 16;
+    gxmetal_store_le32(payload + GXMETAL_STATE_TAG_OFFSET,
+                       GXMETAL_STATE_ALPHA_TEST_FUNCTION);
+    gxmetal_store_le32(payload + GXMETAL_STATE_TYPE_OFFSET,
+                       GXMETAL_STATE_UINT32);
+    gxmetal_store_le32(payload + GXMETAL_STATE_VALUE_OFFSET,
+                       GXMETAL_ALPHA_TEST_TRUE + 1);
+    CHECK(dispatch(renderer, packet, 32) == GXMETAL_ERROR_BAD_PACKET);
     gxmetal_metal_destroy(renderer);
 }
 

@@ -43,7 +43,8 @@ static void test_probe(void)
 {
     GXMetalGuestTransport transport;
 
-    initialize_device(GXMETAL_FEATURE_FENCE | GXMETAL_FEATURE_GOURAUD);
+    initialize_device(GXMETAL_FEATURE_FENCE | GXMETAL_FEATURE_GOURAUD |
+                      GXMETAL_FEATURE_ALPHA_TEST);
     CHECK(sizeof(GXMetalRegistryInfo) == 32);
     CHECK(gxmetal_guest_transport_connect(
         &transport, registers, sizeof(registers), shared, sizeof(shared),
@@ -51,6 +52,7 @@ static void test_probe(void)
     CHECK(transport.ring_offset == GXMETAL_RING_OFFSET);
     CHECK(transport.ring_bytes == GXMETAL_RING_BYTES);
     CHECK(transport.features & GXMETAL_FEATURE_GOURAUD);
+    CHECK(transport.features & GXMETAL_FEATURE_ALPHA_TEST);
 
     set_register(GXMETAL_REG_VERSION, UINT32_C(0x00020000));
     CHECK(!gxmetal_guest_transport_connect(

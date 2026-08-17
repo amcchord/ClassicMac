@@ -23,8 +23,11 @@ and destroys RGB555, ARGB1555, ARGB4444, RGB32, and ARGB32 textures. Metal
 provides perspective-correct sampling, repeat/clamp addressing, nearest,
 bilinear, and trilinear mip filtering, plus RAVE decal, modulation, and
 highlight texture operations. Linear, exponential, and squared-exponential
-RAVE depth fog is applied in both the Gouraud and textured fragment paths. A
-frame is batched in one Metal command buffer, then `PRESENT` copies the
+RAVE depth fog is applied in both the Gouraud and textured fragment paths.
+All seven RAVE alpha comparisons operate on shaded fragment alpha before
+blending and depth writes, supporting masked sprites, foliage, fences, and
+cutout texture borders. A frame is batched in one Metal command buffer, then
+`PRESENT` copies the
 completed image into the guest's big-endian RGB555 or 32-bit VGA surface.
 The device advertises `GXMETAL_FEATURE_METAL` only when that backend initializes
 successfully. The bounded, deterministic CPU rasterizer remains the fallback on
@@ -38,7 +41,7 @@ remains a small Gouraud correctness oracle.
 
 ## Transport contract
 
-The backward-compatible version 1.2 wire contract is defined in
+The backward-compatible version 1.3 wire contract is defined in
 `protocol/gxmetal_protocol.h`. All registers and shared-memory packets are
 little-endian. Packet sizes are multiples of 16 bytes, packets never cross the
 end of the circular command ring, and offsets in commands refer only to the
@@ -71,11 +74,12 @@ would wrap. Fence completion is reported by sequence number.
 Run the protocol, queue, guest-producer, renderer, and complete first-triangle
 pipeline tests on the host. macOS additionally compiles the Objective-C backend
 with strict warnings and verifies real Metal triangles, clipped clears, depth
-ordering, alpha blending, a double-buffer presentation, and a four-color
-big-endian texture upload/sample/destroy cycle. The texture test uses an
-asymmetric image to catch vertical-origin regressions, then repeats the draw
-through linear depth fog. Every result is read back from the guest-format
-framebuffer:
+ordering, alpha blending, alpha rejection before depth writes, a double-buffer
+presentation, and a four-color big-endian texture upload/sample/destroy cycle.
+Both Gouraud and post-texture-operation alpha testing are asserted. The texture
+test uses an asymmetric image to catch vertical-origin regressions, then repeats
+the draw through linear depth fog. Every result is read back from the
+guest-format framebuffer:
 
 ```sh
 make -C gxmetal test
@@ -104,11 +108,11 @@ forks of `GXMetal` into Extensions using a rollback-safe temporary rename, and
 asks for a restart. After restarting, **GXMetal Test** enumerates the engines
 that RAVE actually registered, selects GXMetal by its gestalt name, exercises a
 Z-buffered and double-buffered render with Gouraud shading, alpha blending,
-depth fog, an uploaded texture, and a partially clipped uploaded bitmap; waits
-on the host fence; then validates red, blue, blended-purple, fogged-purple, and
-bitmap-green pixels directly in the guest framebuffer. A missing device or host
-feature fails the test explicitly and remains eligible for Apple's normal
-software RAVE fallback.
+alpha testing, depth fog, an uploaded texture, and a partially clipped uploaded
+bitmap; waits on the host fence; then validates red, blue, blended-purple,
+alpha-rejected green, fogged-purple, and bitmap-green pixels directly in the
+guest framebuffer. A missing device or host feature fails the test explicitly
+and remains eligible for Apple's normal software RAVE fallback.
 The same app then runs a fixed 120-frame mixed texture/Gouraud workload first
 through GXMetal and then through an independently selected non-GXMetal engine.
 It records both microsecond totals and the fixed-point speedup in

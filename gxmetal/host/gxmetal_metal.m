@@ -67,6 +67,14 @@ typedef struct GXMetalMetalFog {
 _Static_assert(sizeof(GXMetalMetalFog) == 48,
                "Metal fog constants must match the shader layout");
 
+typedef struct GXMetalMetalAlphaTest {
+    uint32_t function;
+    float reference;
+} GXMetalMetalAlphaTest;
+
+_Static_assert(sizeof(GXMetalMetalAlphaTest) == 8,
+               "Metal alpha-test constants must match the shader layout");
+
 typedef struct GXMetalMetalResource {
     uint32_t id;
     uint32_t width;
@@ -96,6 +104,7 @@ typedef struct GXMetalMetalContext {
     uint32_t texture_wrap_u;
     uint32_t texture_wrap_v;
     GXMetalMetalFog fog;
+    GXMetalMetalAlphaTest alpha_test;
     int active;
     int committed;
     id<MTLTexture> texture;
@@ -149,6 +158,19 @@ static NSString *const kGXMetalShaderSource = @
     "  }\n"
     "  return mix(fog.color, source, clamp(keep, 0.0, 1.0));\n"
     "}\n"
+    "struct GXAlphaTest { uint function; float reference; };\n"
+    "bool gxmetal_alpha_visible(float alpha,\n"
+    "                           constant GXAlphaTest &test) {\n"
+    "  switch (test.function) {\n"
+    "    case 1u: return alpha < test.reference;\n"
+    "    case 2u: return alpha == test.reference;\n"
+    "    case 3u: return alpha <= test.reference;\n"
+    "    case 4u: return alpha > test.reference;\n"
+    "    case 5u: return alpha != test.reference;\n"
+    "    case 6u: return alpha >= test.reference;\n"
+    "    default: return true;\n"
+    "  }\n"
+    "}\n"
     "vertex GXOut gxmetal_vertex(const device GXVertex *vertices [[buffer(0)]], "
     "                            constant GXViewport &viewport [[buffer(1)]], "
     "                            uint index [[vertex_id]]) {\n"
@@ -160,9 +182,11 @@ static NSString *const kGXMetalShaderSource = @
     "  return out;\n"
     "}\n"
     "fragment float4 gxmetal_fragment(GXOut in [[stage_in]],\n"
-    "    constant GXFog &fog [[buffer(0)]]) {\n"
-    "  return gxmetal_apply_fog(clamp(in.color, 0.0, 1.0),\n"
-    "                           in.position.z, fog);\n"
+    "    constant GXFog &fog [[buffer(0)]],\n"
+    "    constant GXAlphaTest &alphaTest [[buffer(1)]]) {\n"
+    "  float4 result = clamp(in.color, 0.0, 1.0);\n"
+    "  if (!gxmetal_alpha_visible(result.a, alphaTest)) discard_fragment();\n"
+    "  return gxmetal_apply_fog(result, in.position.z, fog);\n"
     "}\n"
     "struct GXTextureVertex {\n"
     "  float x; float y; float z; float invW;\n"
@@ -201,7 +225,8 @@ static NSString *const kGXMetalShaderSource = @
     "    texture2d<float> image [[texture(0)]],\n"
     "    sampler imageSampler [[sampler(0)]],\n"
     "    constant uint &operation [[buffer(0)]],\n"
-    "    constant GXFog &fog [[buffer(1)]]) {\n"
+    "    constant GXFog &fog [[buffer(1)]],\n"
+    "    constant GXAlphaTest &alphaTest [[buffer(2)]]) {\n"
     "  float4 texel = image.sample(imageSampler, in.uv);\n"
     "  float4 result = texel;\n"
     "  if ((operation & 4u) != 0u) {\n"
@@ -212,8 +237,9 @@ static NSString *const kGXMetalShaderSource = @
     "  }\n"
     "  if ((operation & 1u) != 0u) result.rgb *= in.kd;\n"
     "  if ((operation & 2u) != 0u) result.rgb += in.ks;\n"
-    "  return gxmetal_apply_fog(clamp(result, 0.0, 1.0),\n"
-    "                           in.position.z, fog);\n"
+    "  result = clamp(result, 0.0, 1.0);\n"
+    "  if (!gxmetal_alpha_visible(result.a, alphaTest)) discard_fragment();\n"
+    "  return gxmetal_apply_fog(result, in.position.z, fog);\n"
     "}\n";
 
 static float gxmetal_metal_load_float(const uint8_t *bytes)
@@ -667,6 +693,8 @@ static uint32_t gxmetal_metal_clear(GXMetalMetalRenderer *renderer,
     GXMetalMetalViewport viewport;
     MTLClearColor color;
     MTLScissorRect scissor;
+    GXMetalMetalFog no_fog = {0};
+    GXMetalMetalAlphaTest no_alpha_test = {GXMETAL_ALPHA_TEST_NONE, 0.0f};
     float components[4];
     float depth;
     uint32_t i;
@@ -737,6 +765,10 @@ static uint32_t gxmetal_metal_clear(GXMetalMetalRenderer *renderer,
         atIndex:0];
     [context->encoder setVertexBytes:&viewport length:sizeof(viewport)
         atIndex:1];
+    [context->encoder setFragmentBytes:&no_fog length:sizeof(no_fog)
+        atIndex:0];
+    [context->encoder setFragmentBytes:&no_alpha_test
+        length:sizeof(no_alpha_test) atIndex:1];
     if (flags & GXMETAL_CLEAR_COLOR) {
         [context->encoder setRenderPipelineState:renderer->clear_pipeline];
         [context->encoder setDepthStencilState:
@@ -860,6 +892,8 @@ static uint32_t gxmetal_metal_draw(GXMetalMetalRenderer *renderer,
         length:sizeof(viewport) atIndex:1];
     [context->encoder setFragmentBytes:&context->fog
         length:sizeof(context->fog) atIndex:0];
+    [context->encoder setFragmentBytes:&context->alpha_test
+        length:sizeof(context->alpha_test) atIndex:1];
     [context->encoder drawPrimitives:metal_primitive vertexStart:0
         vertexCount:draw_count];
     if (draw_vertices != vertices) {
@@ -1045,6 +1079,8 @@ static uint32_t gxmetal_metal_draw_textured(
         length:sizeof(context->texture_op) atIndex:0];
     [context->encoder setFragmentBytes:&context->fog
         length:sizeof(context->fog) atIndex:1];
+    [context->encoder setFragmentBytes:&context->alpha_test
+        length:sizeof(context->alpha_test) atIndex:2];
     [context->encoder drawPrimitives:metal_primitive vertexStart:0
         vertexCount:draw_count];
     if (draw_vertices != vertices) {
@@ -1249,6 +1285,9 @@ static uint32_t gxmetal_metal_set_state(GXMetalMetalContext *context,
         case GXMETAL_STATE_FOG_MAX_DEPTH:
             context->fog.max_depth = float_value;
             break;
+        case GXMETAL_STATE_ALPHA_TEST_REFERENCE:
+            context->alpha_test.reference = float_value;
+            break;
         default:
             break;
         }
@@ -1290,6 +1329,12 @@ static uint32_t gxmetal_metal_set_state(GXMetalMetalContext *context,
             return GXMETAL_ERROR_BAD_PACKET;
         }
         context->fog.mode_and_padding[0] = value;
+        break;
+    case GXMETAL_STATE_ALPHA_TEST_FUNCTION:
+        if (value > GXMETAL_ALPHA_TEST_TRUE) {
+            return GXMETAL_ERROR_BAD_PACKET;
+        }
+        context->alpha_test.function = value;
         break;
     case GXMETAL_STATE_TEXTURE_WRAP_U:
         if (value > GXMETAL_TEXTURE_WRAP_CLAMP) {
