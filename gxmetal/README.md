@@ -26,11 +26,11 @@ highlight texture operations. Linear, exponential, and squared-exponential
 RAVE depth fog is applied in both the Gouraud and textured fragment paths.
 All seven RAVE alpha comparisons operate on shaded fragment alpha before
 blending and depth writes, supporting masked sprites, foliage, fences, and
-cutout texture borders. GXMetal preserves RAVE's per-triangle backfacing flag
-through scalar and batched draw entry points and removes flagged triangles in
-both Metal and the CPU fallback. This matches QuickDraw 3D's backface-removal
-contract and prevents hidden model faces from sampling unused texture-atlas
-padding. Rectangular QuickDraw regions and RAVE scissor state are intersected
+cutout texture borders. GXMetal preserves RAVE's per-triangle backfacing
+orientation flag through scalar and batched draw entry points without treating
+it as a discard request. QuickDraw 3D applies the active backfacing style before
+submission; a submitted triangle must still be rendered by the driver.
+Rectangular QuickDraw regions and RAVE scissor state are intersected
 in Metal; complex regions decline GXMetal so RAVE can select a software engine.
 A frame is batched in one Metal command buffer, then `PRESENT`
 copies only the dirty rectangle inside the immutable context clip into the
@@ -90,7 +90,7 @@ presentation, and a four-color big-endian texture upload/sample/destroy cycle.
 Both Gouraud and post-texture-operation alpha testing are asserted. The texture
 test uses an asymmetric image to catch vertical-origin regressions, then repeats
 the draw through linear depth fog. Gouraud and textured backface cases prove
-that flagged triangles leave the framebuffer and depth state untouched, while
+that orientation-flagged triangles still update framebuffer and depth state, while
 protocol tests reject unknown draw flags. A separate clip test proves immutable
 context clipping, mutable scissoring, untouched framebuffer preservation, and
 dirty-rectangle-only presentation. A host-independent scanout test proves
@@ -128,8 +128,8 @@ Z-buffered and double-buffered render with Gouraud shading, alpha blending,
 alpha testing, depth fog, an uploaded texture, and a partially clipped uploaded
 bitmap inside a rectangular QuickDraw clip; waits on the host fence; then
 validates red, blue, blended-purple, alpha-rejected green, preserved clipped
-pixels, fogged-purple, bitmap-green, and scalar and batched-texture
-backface-preserved blue pixels directly in the guest framebuffer. It also
+pixels, fogged-purple, bitmap-green, and scalar and batched orientation-flagged
+red pixels directly in the guest framebuffer. It also
 requires a deliberately complex region to return
 `kQANotSupported`. A missing device or host feature fails the test explicitly
 and remains eligible for Apple's normal software RAVE fallback.

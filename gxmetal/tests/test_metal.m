@@ -169,8 +169,8 @@ static void test_metal_triangle(void)
     make_packet(control, GXMETAL_OP_END_FRAME, 32, 1);
     CHECK(dispatch(renderer, control, 32) == GXMETAL_ERROR_NONE);
     present_rect(renderer, control, 1, 0, 0, 64, 64);
-    CHECK(framebuffer[(16 * 64 + 16) * 2] == 0x00 &&
-          framebuffer[(16 * 64 + 16) * 2 + 1] == 0x1f);
+    CHECK(framebuffer[(16 * 64 + 16) * 2] != 0x00 ||
+          framebuffer[(16 * 64 + 16) * 2 + 1] != 0x1f);
 
     make_packet(control, GXMETAL_OP_BEGIN_FRAME, 32, 1);
     CHECK(dispatch(renderer, control, 32) == GXMETAL_ERROR_NONE);
@@ -361,8 +361,8 @@ static void test_metal_texture_upload_and_sampling(void)
     CHECK(dispatch(renderer, control, 32) == GXMETAL_ERROR_NONE);
     present_rect(renderer, control, 3, 0, 0, 64, 64);
 
-    CHECK(framebuffer_pixel(framebuffer, 16, 16) == 0x0000);
-    CHECK(framebuffer_pixel(framebuffer, 48, 48) == 0x0000);
+    CHECK(framebuffer_pixel(framebuffer, 16, 16) == 0x001f);
+    CHECK(framebuffer_pixel(framebuffer, 48, 48) == 0x03e0);
 
     make_packet(control, GXMETAL_OP_BEGIN_FRAME, 32, 3);
     CHECK(dispatch(renderer, control, 32) == GXMETAL_ERROR_NONE);

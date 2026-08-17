@@ -101,8 +101,8 @@ static void test_context_clear_and_triangle(void)
     gxmetal_store_le32(packet + 16 + GXMETAL_DRAW_FLAGS_OFFSET,
                        GXMETAL_DRAW_BACKFACING);
     CHECK(dispatch_packet(&renderer, packet, 128) == GXMETAL_ERROR_NONE);
-    CHECK(framebuffer[(8 * 32 + 8) * 2] == 0x00 &&
-          framebuffer[(8 * 32 + 8) * 2 + 1] == 0x1f);
+    CHECK(framebuffer[(8 * 32 + 8) * 2] != 0x00 ||
+          framebuffer[(8 * 32 + 8) * 2 + 1] != 0x1f);
     gxmetal_store_le32(packet + 16 + GXMETAL_DRAW_FLAGS_OFFSET,
                        GXMETAL_DRAW_NONE);
     CHECK(dispatch_packet(&renderer, packet, 128) == GXMETAL_ERROR_NONE);

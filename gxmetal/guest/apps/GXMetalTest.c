@@ -441,11 +441,11 @@ static TQAError GXMetalRenderPattern(TQADrawContext *context,
     TQAVGouraud alphaBase[3];
     TQAVGouraud alphaRejected[3];
     TQAVGouraud backfaceGouraudBase[3];
-    TQAVGouraud backfaceGouraudRejected[3];
+    TQAVGouraud backfaceGouraudOriented[3];
     TQAVGouraud backfaceTextureBase[3];
     TQAVGouraud fogTriangle[3];
     TQAVGouraud bitmapVertex;
-    TQAVTexture backfaceTextureRejected[3];
+    TQAVTexture backfaceTextureOriented[3];
     TQAVTexture texturedQuad[4];
     unsigned long backfaceFlags[1] = {kQATriFlags_Backfacing};
     unsigned long flags[4] = {0, 0, 0, 0};
@@ -526,11 +526,11 @@ static TQAError GXMetalRenderPattern(TQADrawContext *context,
                                             0.0f, 0.0f, 1.0f, 1.0f);
     backfaceGouraudBase[2] = GXMetalGouraud(55.0f, 55.0f, 0.40f,
                                             0.0f, 0.0f, 1.0f, 1.0f);
-    backfaceGouraudRejected[0] = GXMetalGouraud(5.0f, 55.0f, 0.10f,
+    backfaceGouraudOriented[0] = GXMetalGouraud(5.0f, 55.0f, 0.10f,
                                                 1.0f, 0.0f, 0.0f, 1.0f);
-    backfaceGouraudRejected[1] = GXMetalGouraud(30.0f, 5.0f, 0.10f,
+    backfaceGouraudOriented[1] = GXMetalGouraud(30.0f, 5.0f, 0.10f,
                                                 1.0f, 0.0f, 0.0f, 1.0f);
-    backfaceGouraudRejected[2] = GXMetalGouraud(55.0f, 55.0f, 0.10f,
+    backfaceGouraudOriented[2] = GXMetalGouraud(55.0f, 55.0f, 0.10f,
                                                 1.0f, 0.0f, 0.0f, 1.0f);
     backfaceTextureBase[0] = GXMetalGouraud(115.0f, 55.0f, 0.40f,
                                             0.0f, 0.0f, 1.0f, 1.0f);
@@ -538,11 +538,11 @@ static TQAError GXMetalRenderPattern(TQADrawContext *context,
                                             0.0f, 0.0f, 1.0f, 1.0f);
     backfaceTextureBase[2] = GXMetalGouraud(165.0f, 55.0f, 0.40f,
                                             0.0f, 0.0f, 1.0f, 1.0f);
-    backfaceTextureRejected[0] = GXMetalTextureVertex(
-        115.0f, 55.0f, 0.10f, 0.0f, 0.0f);
-    backfaceTextureRejected[1] = GXMetalTextureVertex(
-        140.0f, 5.0f, 0.10f, 1.0f, 0.0f);
-    backfaceTextureRejected[2] = GXMetalTextureVertex(
+    backfaceTextureOriented[0] = GXMetalTextureVertex(
+        115.0f, 55.0f, 0.10f, 0.0f, 1.0f);
+    backfaceTextureOriented[1] = GXMetalTextureVertex(
+        140.0f, 5.0f, 0.10f, 0.0f, 1.0f);
+    backfaceTextureOriented[2] = GXMetalTextureVertex(
         165.0f, 55.0f, 0.10f, 0.0f, 1.0f);
     fogTriangle[0] = GXMetalGouraud(210.0f, 232.0f, 0.75f,
                                     1.0f, 0.0f, 0.0f, 1.0f);
@@ -582,9 +582,9 @@ static TQAError GXMetalRenderPattern(TQADrawContext *context,
     QADrawTriGouraud(context, &backfaceGouraudBase[0],
                      &backfaceGouraudBase[1], &backfaceGouraudBase[2],
                      kQATriFlags_None);
-    QADrawTriGouraud(context, &backfaceGouraudRejected[0],
-                     &backfaceGouraudRejected[1],
-                     &backfaceGouraudRejected[2],
+    QADrawTriGouraud(context, &backfaceGouraudOriented[0],
+                     &backfaceGouraudOriented[1],
+                     &backfaceGouraudOriented[2],
                      kQATriFlags_Backfacing);
     QADrawTriGouraud(context, &backfaceTextureBase[0],
                      &backfaceTextureBase[1], &backfaceTextureBase[2],
@@ -595,7 +595,7 @@ static TQAError GXMetalRenderPattern(TQADrawContext *context,
     QASetInt(context, kQATagGL_TextureWrapU, kQAGL_Clamp);
     QASetInt(context, kQATagGL_TextureWrapV, kQAGL_Clamp);
     QADrawVTexture(context, 3, kQAVertexMode_Tri,
-                   backfaceTextureRejected, backfaceFlags);
+                   backfaceTextureOriented, backfaceFlags);
     QADrawVTexture(context, 4, kQAVertexMode_Strip,
                    texturedQuad, flags);
     QADrawBitmap(context, &bitmapVertex, bitmap);
@@ -660,14 +660,14 @@ static TQAError GXMetalRenderPattern(TQADrawContext *context,
     } else if (!GXMetalPixelMatches(graphicsDevice,
                                     deviceRect->left + 30,
                                     deviceRect->top + 35,
-                                    kGXMetalPixelBlue)) {
-        GXMetalRecordResult("FAIL: scalar backface pixel");
+                                    kGXMetalPixelRed)) {
+        GXMetalRecordResult("FAIL: scalar backface orientation pixel");
         error = kQAError;
     } else if (!GXMetalPixelMatches(graphicsDevice,
                                     deviceRect->left + 140,
                                     deviceRect->top + 35,
-                                    kGXMetalPixelBlue)) {
-        GXMetalRecordResult("FAIL: batched textured backface pixel");
+                                    kGXMetalPixelRed)) {
+        GXMetalRecordResult("FAIL: batched textured backface orientation pixel");
         error = kQAError;
     } else if (!GXMetalPixelMatches(graphicsDevice,
                                     deviceRect->left + 160,

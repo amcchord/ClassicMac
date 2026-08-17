@@ -903,11 +903,6 @@ static uint32_t gxmetal_metal_draw(GXMetalMetalRenderer *renderer,
     uint32_t draw_count = count;
     uint32_t i;
 
-    if ((gxmetal_load_le32(packet->payload + GXMETAL_DRAW_FLAGS_OFFSET) &
-         GXMETAL_DRAW_BACKFACING) != 0) {
-        return GXMETAL_ERROR_NONE;
-    }
-
     vertices = malloc((size_t)count * sizeof(*vertices));
     if (vertices == NULL) {
         return GXMETAL_ERROR_RENDERER;
@@ -1090,11 +1085,6 @@ static uint32_t gxmetal_metal_draw_textured(
     uint32_t address_mode = context->texture_wrap_u |
                             (context->texture_wrap_v << 1);
     uint32_t i;
-
-    if ((gxmetal_load_le32(packet->payload + GXMETAL_DRAW_FLAGS_OFFSET) &
-         GXMETAL_DRAW_BACKFACING) != 0) {
-        return GXMETAL_ERROR_NONE;
-    }
 
     if (resource == NULL) {
         return GXMETAL_ERROR_BAD_RESOURCE;
