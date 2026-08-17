@@ -42,16 +42,17 @@ the minimal contiguous span that covers that rectangle.
 
 The conformance application runs the same deterministic 120-frame mixed
 texture/Gouraud workload through GXMetal and through an independently selected
-non-GXMetal RAVE engine. On the beta 4 release-candidate host build it recorded:
+non-GXMetal RAVE engine. Launched from the exact Developer ID-signed beta 4
+application—not a loose development binary—it recorded:
 
 | Engine | Guest-measured time |
 | --- | ---: |
-| GXMetal | 48,756 microseconds |
-| Apple Software RAVE | 545,219 microseconds |
-| Ratio | **11.18x** |
+| GXMetal | 49,977 microseconds |
+| Apple Software RAVE | 612,007 microseconds |
+| Ratio | **12.24x** |
 
 This is a focused RAVE workload rather than a promise that every game will run
-11.18x faster. A game also spends time in simulation, sound, file access, and
+12.24x faster. A game also spends time in simulation, sound, file access, and
 PowerPC code outside RAVE. The result proves that the driver was discovered,
 the complete guest-to-host path ran, the software fallback remained usable,
 and the accelerated portion was materially faster under matched guest-side

@@ -33,7 +33,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-for tool in codesign file plutil shasum spctl xcrun; do
+for tool in cmp codesign file plutil shasum spctl xcrun; do
   command -v "$tool" >/dev/null 2>&1 || die "Required tool not found: $tool"
 done
 [ -e "$TARGET" ] || die "Release target not found: $TARGET"
@@ -74,6 +74,10 @@ for required in "$PLIST" "$PPC_HELPER/Contents/Info.plist" \
   [ -e "$required" ] || die "Required release component is missing: $required"
 done
 [ -s "$TOOLS_CD" ] || die "Bundled ClassicMac Tools CD is empty"
+if [ -f "$ROOT_DIR/dist/ClassicMacTools.iso" ]; then
+  cmp -s "$ROOT_DIR/dist/ClassicMacTools.iso" "$TOOLS_CD" || \
+    die "Bundled Tools CD differs from the freshly built dist image"
+fi
 
 VERSION="$(plutil -extract CFBundleShortVersionString raw "$PLIST")"
 BUILD="$(plutil -extract CFBundleVersion raw "$PLIST")"

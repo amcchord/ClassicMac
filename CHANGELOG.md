@@ -24,8 +24,9 @@
   of the complete 64 MiB aperture, a 109.23x reduction. Partial presents mark
   only their clipped contiguous span.
 - The repeatable 120-frame Mac OS 9 mixed texture/Gouraud conformance workload
-  completed in 48,756 microseconds through GXMetal versus 545,219 microseconds
-  through Apple Software RAVE in the release-candidate host build: 11.18x.
+  completed in 49,977 microseconds through GXMetal versus 612,007 microseconds
+  through Apple Software RAVE when launched from the exact Developer ID-signed
+  beta application: 12.24x.
 
 ### Fixed
 
