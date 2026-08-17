@@ -26,11 +26,11 @@
 - A full 640x480 RGB555 present now marks 614,400 bytes of VRAM dirty instead
   of the complete 64 MiB aperture, a 109.23x reduction. Partial presents mark
   only their clipped contiguous span.
-- Five runs of the 120-frame Mac OS 9 mixed texture/Gouraud conformance
-  workload from exact Developer ID-signed beta applications measured
-  8.19x–14.95x versus Apple Software RAVE. The final supplied-icon release
-  candidate completed in 49,847 microseconds through GXMetal versus 551,304
-  microseconds through software, an 11.05x speedup.
+- Six runs of the 120-frame Mac OS 9 mixed texture/Gouraud conformance
+  workload from exact Developer ID-signed applications measured 8.19x–14.95x
+  versus Apple Software RAVE. The stable 1.8.0 candidate completed in 54,144
+  microseconds through GXMetal versus 709,314 microseconds through software,
+  a 13.10x speedup.
 
 ### Fixed
 
