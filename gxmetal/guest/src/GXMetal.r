@@ -1,6 +1,9 @@
-#include "Processes.r"
 #include "CodeFragments.r"
+#include "Processes.r"
 #include "Types.r"
+
+#define GXMETAL_ICON_RESOURCE_ID -16455
+#include "GXMetalIcon.r"
 
 /* Mac OS 9's installed hardware engines are shlb/tnsl shared libraries with
  * all three of these metadata records. The ftag mirrors the system-generated
@@ -16,9 +19,9 @@ data 'ftag' (0) {
 };
 
 resource 'vers' (1) {
-    1, 4, release, 0, verUS,
-    "1.4",
-    "GXMetal 1.4"
+    1, 7, beta, 4, verUS,
+    "1.7 beta 4",
+    "GXMetal 1.7 beta 4"
 };
 
 resource 'cfrg' (0) {

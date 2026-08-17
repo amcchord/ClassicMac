@@ -1,6 +1,36 @@
 #include "CodeFragments.r"
 #include "Dialogs.r"
+#include "Finder.r"
 #include "Processes.r"
+#include "Types.r"
+
+#define GXMETAL_ICON_RESOURCE_ID 128
+#include "GXMetalIcon.r"
+
+resource 'FREF' (128, purgeable) {
+    'APPL',
+    0,
+    ""
+};
+
+resource 'BNDL' (128, purgeable) {
+    'GXMT',
+    0,
+    {
+        'ICN#', {
+            0, 128
+        },
+        'FREF', {
+            0, 128
+        }
+    }
+};
+
+resource 'vers' (1) {
+    1, 7, beta, 4, verUS,
+    "1.7 beta 4",
+    "GXMetal Test 1.7 beta 4"
+};
 
 resource 'cfrg' (0) {
     {
