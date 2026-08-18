@@ -25,6 +25,7 @@ extern void QAExit(void);
 #define GXMETAL_HEIGHT 220
 #define GXMETAL_BENCHMARK_FRAMES 120
 #define GXMETAL_BENCHMARK_WARMUP_FRAMES 4
+#define GXMETAL_ATI_PIXEL_RGB16 ((TQAImagePixelType)1001)
 
 static const unsigned char kGXMetalResultName[] = {
     20, 'G', 'X', 'M', 'e', 't', 'a', 'l', ' ', 'T', 'e', 's', 't', ' ',
@@ -760,6 +761,130 @@ static TQAError GXMetalRenderPattern(TQADrawContext *context,
     return error;
 }
 
+static void GXMetalFillATITexture(unsigned char pixels[8],
+                                  unsigned char low,
+                                  unsigned char high)
+{
+    int pixel;
+
+    for (pixel = 0; pixel < 4; pixel++) {
+        pixels[pixel * 2] = low;
+        pixels[pixel * 2 + 1] = high;
+    }
+}
+
+static TQAError GXMetalRenderATITextureMutation(
+    TQADrawContext *context, const TQAEngine *engine,
+    GDHandle graphicsDevice, const TQARect *deviceRect)
+{
+    unsigned char staticPixels[8];
+    unsigned char livePixels[8];
+    TQAImage staticImage;
+    TQAImage liveImage;
+    TQATexture *staticTexture = NULL;
+    TQATexture *liveTexture = NULL;
+    TQAVTexture leftQuad[4];
+    TQAVTexture rightQuad[4];
+    unsigned long vertexFlags[4] = {0, 0, 0, 0};
+    TQARect dirty = {0, GXMETAL_WIDTH, 0, GXMETAL_HEIGHT};
+    TQAError error;
+
+    /* ATI type 1001 is a little-endian BGR565 byte stream. */
+    GXMetalFillATITexture(staticPixels, 0x1f, 0x00); /* red */
+    GXMetalFillATITexture(livePixels, 0x1f, 0x00);   /* red */
+    staticImage.width = 2;
+    staticImage.height = 2;
+    staticImage.rowBytes = 4;
+    staticImage.pixmap = staticPixels;
+    liveImage = staticImage;
+    liveImage.pixmap = livePixels;
+
+    error = QATextureNew(engine, kQATexture_None,
+                         GXMETAL_ATI_PIXEL_RGB16,
+                         &staticImage, &staticTexture);
+    if (error == kQANoErr) {
+        error = QATextureNew(engine, kQATexture_NoCopy,
+                             GXMETAL_ATI_PIXEL_RGB16,
+                             &liveImage, &liveTexture);
+    }
+    if (error != kQANoErr) {
+        if (liveTexture != NULL) {
+            QATextureDelete(engine, liveTexture);
+        }
+        if (staticTexture != NULL) {
+            QATextureDelete(engine, staticTexture);
+        }
+        GXMetalRecordResult("FAIL: ATI private texture creation");
+        return error;
+    }
+
+    /* A normal texture must retain its red creation-time upload even after
+     * the caller reuses the source buffer. A NoCopy texture must observe the
+     * green CPU-side mutation before its first draw. */
+    GXMetalFillATITexture(staticPixels, 0x00, 0xf8); /* blue */
+    GXMetalFillATITexture(livePixels, 0xe0, 0x07);   /* green */
+
+    leftQuad[0] = GXMetalTextureVertex(12.0f, 12.0f, 0.5f,
+                                       0.0f, 0.0f);
+    leftQuad[1] = GXMetalTextureVertex(150.0f, 12.0f, 0.5f,
+                                       1.0f, 0.0f);
+    leftQuad[2] = GXMetalTextureVertex(12.0f, 208.0f, 0.5f,
+                                       0.0f, -1.0f);
+    leftQuad[3] = GXMetalTextureVertex(150.0f, 208.0f, 0.5f,
+                                       1.0f, -1.0f);
+    rightQuad[0] = GXMetalTextureVertex(170.0f, 12.0f, 0.5f,
+                                        0.0f, 0.0f);
+    rightQuad[1] = GXMetalTextureVertex(308.0f, 12.0f, 0.5f,
+                                        1.0f, 0.0f);
+    rightQuad[2] = GXMetalTextureVertex(170.0f, 208.0f, 0.5f,
+                                        0.0f, -1.0f);
+    rightQuad[3] = GXMetalTextureVertex(308.0f, 208.0f, 0.5f,
+                                        1.0f, -1.0f);
+
+    QASetFloat(context, kQATag_ColorBG_r, 0.0f);
+    QASetFloat(context, kQATag_ColorBG_g, 0.0f);
+    QASetFloat(context, kQATag_ColorBG_b, 0.0f);
+    QASetFloat(context, kQATag_ColorBG_a, 1.0f);
+    QASetInt(context, kQATag_ZFunction, kQAZFunction_None);
+    QASetInt(context, kQATag_ZBufferMask, kQAZBufferMask_Disable);
+    QASetInt(context, kQATag_Blend, kQABlend_Interpolate);
+    QASetInt(context, kQATag_TextureFilter, kQATextureFilter_Fast);
+    QASetInt(context, kQATag_TextureOp, kQATextureOp_None);
+    QASetInt(context, kQATagGL_TextureWrapU, kQAGL_Clamp);
+    QASetInt(context, kQATagGL_TextureWrapV, kQAGL_Clamp);
+
+    QARenderStart(context, &dirty, NULL);
+    QASetPtr(context, kQATag_Texture, staticTexture);
+    QADrawVTexture(context, 4, kQAVertexMode_Strip,
+                   leftQuad, vertexFlags);
+    QASetPtr(context, kQATag_Texture, liveTexture);
+    QADrawVTexture(context, 4, kQAVertexMode_Strip,
+                   rightQuad, vertexFlags);
+    error = QARenderEnd(context, &dirty);
+    if (error == kQANoErr) {
+        error = QASync(context);
+    }
+    if (error == kQANoErr &&
+        !GXMetalPixelMatches(graphicsDevice,
+                             deviceRect->left + 80,
+                             deviceRect->top + 110,
+                             kGXMetalPixelRed)) {
+        GXMetalRecordResult("FAIL: static ATI texture changed with caller memory");
+        error = kQAError;
+    }
+    if (error == kQANoErr &&
+        !GXMetalPixelMatches(graphicsDevice,
+                             deviceRect->left + 240,
+                             deviceRect->top + 110,
+                             kGXMetalPixelGreen)) {
+        GXMetalRecordResult("FAIL: ATI NoCopy texture did not refresh");
+        error = kQAError;
+    }
+    QATextureDelete(engine, liveTexture);
+    QATextureDelete(engine, staticTexture);
+    return error;
+}
+
 static TQAError GXMetalBenchmarkFrame(TQADrawContext *context,
                                       TQATexture *texture,
                                       unsigned long frame)
@@ -919,7 +1044,7 @@ static void GXMetalBuildPassResult(char *result, size_t resultCapacity,
     const char *end = result + resultCapacity - 1;
 
     GXMetalAppendText(&cursor, end,
-        "PASS: RAVE discovery depth blend alpha-test backface clip texture bitmap dirty-present double-buffer framebuffer gx_us=");
+        "PASS: RAVE discovery depth blend alpha-test backface clip texture ATI-private-nocopy bitmap dirty-present double-buffer framebuffer gx_us=");
     GXMetalAppendDecimal(&cursor, end, gxMetalMicroseconds);
     GXMetalAppendText(&cursor, end, " sw_us=");
     GXMetalAppendDecimal(&cursor, end, softwareMicroseconds);
@@ -936,7 +1061,7 @@ static void GXMetalBuildPassMessage(char *message, size_t messageCapacity,
     const char *end = message + messageCapacity - 1;
 
     GXMetalAppendText(&cursor, end,
-        "GXMetal passed automatic RAVE discovery, framebuffer correctness, bitmap drawing, presentation, and fallback. The repeatable mixed texture/Gouraud workload ran ");
+        "GXMetal passed automatic RAVE discovery, framebuffer correctness, ATI private static/NoCopy texture mutation, bitmap drawing, presentation, and fallback. The repeatable mixed texture/Gouraud workload ran ");
     GXMetalAppendDecimal(&cursor, end, speedupTimes100 / 100);
     GXMetalAppendText(&cursor, end, ".");
     if (speedupTimes100 % 100 < 10) {
@@ -1196,6 +1321,10 @@ int main(void)
     if (error == kQANoErr) {
         error = GXMetalRenderPattern(context, engine,
                                      device.device.gDevice, &deviceRect);
+        if (error == kQANoErr) {
+            error = GXMetalRenderATITextureMutation(
+                context, engine, device.device.gDevice, &deviceRect);
+        }
     } else {
         GXMetalRecordResult("FAIL: accelerated draw context creation");
     }
