@@ -22,7 +22,7 @@ extern "C" {
 
 #define GXMETAL_PROTOCOL_MAGIC            UINT32_C(0x47584d54) /* "GXMT" */
 #define GXMETAL_PROTOCOL_VERSION_MAJOR    1u
-#define GXMETAL_PROTOCOL_VERSION_MINOR    4u
+#define GXMETAL_PROTOCOL_VERSION_MINOR    6u
 #define GXMETAL_PROTOCOL_VERSION \
     ((GXMETAL_PROTOCOL_VERSION_MAJOR << 16) | GXMETAL_PROTOCOL_VERSION_MINOR)
 
@@ -146,7 +146,11 @@ enum GXMetalPixelFormat {
     GXMETAL_PIXEL_ALPHA8  = 5,
     GXMETAL_PIXEL_INDEX8  = 6,
     GXMETAL_PIXEL_ARGB1555 = 7,
-    GXMETAL_PIXEL_ARGB4444 = 8
+    GXMETAL_PIXEL_ARGB4444 = 8,
+    GXMETAL_PIXEL_RGB565 = 9,
+    /* ATI's private Mac RAVE RGB16 surface: little-endian BGR565 words with
+     * a zero-valued transparent color key. */
+    GXMETAL_PIXEL_ATI_BGR565_LE = 10
 };
 
 enum GXMetalPrimitive {

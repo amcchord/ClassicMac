@@ -392,15 +392,95 @@ static void test_metal_texture_upload_and_sampling(void)
     CHECK(framebuffer_pixel(framebuffer, 16, 48) == 0x7c00);
     CHECK(framebuffer_pixel(framebuffer, 48, 48) == 0x03e0);
 
-    /* RAVE defines fog depth as 1/invW, independently of normalized Z.
-     * Nanosaur relies on that distinction: a reciprocal W of 2.0 produces
-     * depth 0.5 even when the depth-buffer coordinate is near 1.0. */
+    /* Carmageddon II's ATI RAVE path reports private pixel type 1001 for
+     * little-endian BGR565 surfaces. Verify byte/channel order and ATI's
+     * zero-valued transparent color key. */
+    memcpy(shared + GXMETAL_UPLOAD_OFFSET,
+           "\x1f\0\xe0\x07\0\0", 6);
+    make_packet(packet, GXMETAL_OP_TEXTURE_CREATE, 48, 0);
+    payload = packet + 16;
+    gxmetal_store_le32(payload + GXMETAL_RESOURCE_ID_OFFSET, 8);
+    gxmetal_store_le32(payload + GXMETAL_RESOURCE_WIDTH_OFFSET, 3);
+    gxmetal_store_le32(payload + GXMETAL_RESOURCE_HEIGHT_OFFSET, 1);
+    gxmetal_store_le32(payload + GXMETAL_RESOURCE_ROW_BYTES_OFFSET, 6);
+    gxmetal_store_le32(payload + GXMETAL_RESOURCE_PIXEL_FORMAT_OFFSET,
+                       GXMETAL_PIXEL_ATI_BGR565_LE);
+    gxmetal_store_le32(payload + GXMETAL_RESOURCE_LEVELS_OFFSET, 1);
+    CHECK(dispatch(renderer, packet, 48) == GXMETAL_ERROR_NONE);
+    make_packet(packet, GXMETAL_OP_TEXTURE_UPLOAD, 48, 0);
+    payload = packet + 16;
+    gxmetal_store_le32(payload + GXMETAL_UPLOAD_RESOURCE_ID_OFFSET, 8);
+    gxmetal_store_le32(payload + GXMETAL_UPLOAD_SHARED_OFFSET_OFFSET,
+                       GXMETAL_UPLOAD_OFFSET);
+    gxmetal_store_le32(payload + GXMETAL_UPLOAD_LENGTH_OFFSET, 6);
+    gxmetal_store_le32(payload + GXMETAL_UPLOAD_ROW_BYTES_OFFSET, 6);
+    gxmetal_store_le32(payload + GXMETAL_UPLOAD_WIDTH_OFFSET, 3);
+    gxmetal_store_le32(payload + GXMETAL_UPLOAD_HEIGHT_OFFSET, 1);
+    CHECK(dispatch(renderer, packet, 48) == GXMETAL_ERROR_NONE);
+    make_packet(packet, GXMETAL_OP_SET_STATE, 32, 3);
+    payload = packet + 16;
+    gxmetal_store_le32(payload + GXMETAL_STATE_TAG_OFFSET,
+                       GXMETAL_STATE_TEXTURE);
+    gxmetal_store_le32(payload + GXMETAL_STATE_TYPE_OFFSET,
+                       GXMETAL_STATE_RESOURCE);
+    gxmetal_store_le32(payload + GXMETAL_STATE_VALUE_OFFSET, 8);
+    CHECK(dispatch(renderer, packet, 32) == GXMETAL_ERROR_NONE);
+    make_packet(packet, GXMETAL_OP_BEGIN_FRAME, 32, 3);
+    CHECK(dispatch(renderer, packet, 32) == GXMETAL_ERROR_NONE);
+    make_packet(packet, GXMETAL_OP_CLEAR, 64, 3);
+    payload = packet + 16;
+    gxmetal_store_le32(payload + GXMETAL_CLEAR_FLAGS_OFFSET,
+                       GXMETAL_CLEAR_COLOR);
+    store_float(payload + GXMETAL_CLEAR_COLOR_A_OFFSET, 1.0f);
+    store_float(payload + GXMETAL_CLEAR_COLOR_B_OFFSET, 1.0f);
+    gxmetal_store_le32(payload + GXMETAL_CLEAR_RECT_OFFSET +
+                       GXMETAL_RECT_RIGHT_OFFSET, 64);
+    gxmetal_store_le32(payload + GXMETAL_CLEAR_RECT_OFFSET +
+                       GXMETAL_RECT_BOTTOM_OFFSET, 64);
+    CHECK(dispatch(renderer, packet, 64) == GXMETAL_ERROR_NONE);
+    make_packet(packet, GXMETAL_OP_DRAW_TEXTURED, 416, 3);
+    payload = packet + 16;
+    gxmetal_store_le32(payload + GXMETAL_DRAW_PRIMITIVE_OFFSET,
+                       GXMETAL_PRIMITIVE_TRIANGLE);
+    gxmetal_store_le32(payload + GXMETAL_DRAW_VERTEX_COUNT_OFFSET, 6);
+    gxmetal_store_le32(payload + GXMETAL_DRAW_VERTEX_STRIDE_OFFSET, 64);
+    vertices = payload + GXMETAL_DRAW_VERTICES_OFFSET;
+    set_texture_vertex(vertices + 0 * 64, 0, 0, 0, 0);
+    set_texture_vertex(vertices + 1 * 64, 64, 0, 1, 0);
+    set_texture_vertex(vertices + 2 * 64, 0, 64, 0, 1);
+    set_texture_vertex(vertices + 3 * 64, 64, 0, 1, 0);
+    set_texture_vertex(vertices + 4 * 64, 64, 64, 1, 1);
+    set_texture_vertex(vertices + 5 * 64, 0, 64, 0, 1);
+    CHECK(dispatch(renderer, packet, 416) == GXMETAL_ERROR_NONE);
+    make_packet(packet, GXMETAL_OP_END_FRAME, 32, 3);
+    CHECK(dispatch(renderer, packet, 32) == GXMETAL_ERROR_NONE);
+    present_rect(renderer, packet, 3, 0, 0, 64, 64);
+    CHECK(framebuffer_pixel(framebuffer, 10, 32) == 0x7c00);
+    CHECK(framebuffer_pixel(framebuffer, 32, 32) == 0x03e0);
+    CHECK(framebuffer_pixel(framebuffer, 54, 32) == 0x001f);
+    make_packet(packet, GXMETAL_OP_TEXTURE_DESTROY, 32, 0);
+    payload = packet + 16;
+    gxmetal_store_le32(payload + GXMETAL_DESTROY_RESOURCE_ID_OFFSET, 8);
+    CHECK(dispatch(renderer, packet, 32) == GXMETAL_ERROR_NONE);
+    make_packet(packet, GXMETAL_OP_SET_STATE, 32, 3);
+    payload = packet + 16;
+    gxmetal_store_le32(payload + GXMETAL_STATE_TAG_OFFSET,
+                       GXMETAL_STATE_TEXTURE);
+    gxmetal_store_le32(payload + GXMETAL_STATE_TYPE_OFFSET,
+                       GXMETAL_STATE_RESOURCE);
+    gxmetal_store_le32(payload + GXMETAL_STATE_VALUE_OFFSET, 7);
+    CHECK(dispatch(renderer, packet, 32) == GXMETAL_ERROR_NONE);
+
+    /* Perspective-Z fog uses 1/invW rather than normalized Z. Nanosaur
+     * relies on that distinction: a reciprocal W of 2.0 produces depth 0.5
+     * even when the depth-buffer coordinate is near 1.0. */
     set_float_state(renderer, packet, 3, GXMETAL_STATE_FOG_COLOR_A, 1.0f);
     set_float_state(renderer, packet, 3, GXMETAL_STATE_FOG_COLOR_R, 0.0f);
     set_float_state(renderer, packet, 3, GXMETAL_STATE_FOG_COLOR_G, 0.0f);
     set_float_state(renderer, packet, 3, GXMETAL_STATE_FOG_COLOR_B, 1.0f);
     set_float_state(renderer, packet, 3, GXMETAL_STATE_FOG_START, 0.0f);
     set_float_state(renderer, packet, 3, GXMETAL_STATE_FOG_END, 1.0f);
+    set_int_state(renderer, packet, 3, GXMETAL_STATE_PERSPECTIVE_Z, 1);
     set_int_state(renderer, packet, 3, GXMETAL_STATE_FOG_MODE,
                   GXMETAL_FOG_LINEAR);
     make_packet(packet, GXMETAL_OP_BEGIN_FRAME, 32, 3);
@@ -436,6 +516,30 @@ static void test_metal_texture_upload_and_sampling(void)
     CHECK(((framebuffer_pixel(framebuffer, 16, 48) >> 10) & 31) <= 16);
     CHECK((framebuffer_pixel(framebuffer, 16, 48) & 31) >= 14);
     CHECK((framebuffer_pixel(framebuffer, 16, 48) & 31) <= 16);
+
+    /* Without perspective-Z, Gouraud invW is undefined and must not affect
+     * fog. A normalized Z of 0.25 keeps 75% red and mixes in 25% blue. */
+    set_int_state(renderer, packet, 3, GXMETAL_STATE_PERSPECTIVE_Z, 0);
+    make_packet(packet, GXMETAL_OP_BEGIN_FRAME, 32, 3);
+    CHECK(dispatch(renderer, packet, 32) == GXMETAL_ERROR_NONE);
+    make_packet(packet, GXMETAL_OP_CLEAR, 64, 3);
+    payload = packet + 16;
+    gxmetal_store_le32(payload + GXMETAL_CLEAR_FLAGS_OFFSET,
+                       GXMETAL_CLEAR_COLOR);
+    store_float(payload + GXMETAL_CLEAR_COLOR_A_OFFSET, 1.0f);
+    gxmetal_store_le32(payload + GXMETAL_CLEAR_RECT_OFFSET +
+                       GXMETAL_RECT_RIGHT_OFFSET, 64);
+    gxmetal_store_le32(payload + GXMETAL_CLEAR_RECT_OFFSET +
+                       GXMETAL_RECT_BOTTOM_OFFSET, 64);
+    CHECK(dispatch(renderer, packet, 64) == GXMETAL_ERROR_NONE);
+    draw_triangle(renderer, packet, 3, 0.25f, 1.0f, 0.0f, 0.0f, 1.0f);
+    make_packet(packet, GXMETAL_OP_END_FRAME, 32, 3);
+    CHECK(dispatch(renderer, packet, 32) == GXMETAL_ERROR_NONE);
+    present_rect(renderer, packet, 3, 0, 0, 64, 64);
+    CHECK(((framebuffer_pixel(framebuffer, 32, 32) >> 10) & 31) >= 22);
+    CHECK(((framebuffer_pixel(framebuffer, 32, 32) >> 10) & 31) <= 24);
+    CHECK((framebuffer_pixel(framebuffer, 32, 32) & 31) >= 7);
+    CHECK((framebuffer_pixel(framebuffer, 32, 32) & 31) <= 9);
 
     /* Textured alpha testing uses the post-texture-operation alpha. Vertex
      * alpha lowers every opaque texel below the reference, so the blue clear

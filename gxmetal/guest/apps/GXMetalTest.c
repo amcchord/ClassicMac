@@ -617,7 +617,7 @@ static TQAError GXMetalRenderPattern(TQADrawContext *context,
                                     1.0f, 0.0f, 0.0f, 1.0f);
     fogTriangle[2] = GXMetalGouraud(270.0f, 232.0f, 0.75f,
                                     1.0f, 0.0f, 0.0f, 1.0f);
-    /* RAVE depth fog uses 1/invW, not the normalized Z-buffer coordinate.
+    /* Perspective-Z fog uses 1/invW, not the normalized Z-buffer coordinate.
      * Keep the historical 0.75 fog depth while making Z deliberately near. */
     fogTriangle[0].z = fogTriangle[1].z = fogTriangle[2].z = 0.10f;
     fogTriangle[0].invW = fogTriangle[1].invW = fogTriangle[2].invW =
@@ -670,6 +670,10 @@ static TQAError GXMetalRenderPattern(TQADrawContext *context,
                    backfaceTextureOriented, backfaceFlags);
     QADrawVTexture(context, 4, kQAVertexMode_Strip,
                    texturedQuad, flags);
+    /* Bitmaps bind their own resource and must not depend on an unrelated
+     * current texture. Carmageddon II exercises this path before binding its
+     * first scene texture. */
+    QASetPtr(context, kQATag_Texture, NULL);
     QADrawBitmap(context, &bitmapVertex, bitmap);
     QASetFloat(context, kQATag_FogColor_a, 1.0f);
     QASetFloat(context, kQATag_FogColor_r, 0.0f);
@@ -677,10 +681,12 @@ static TQAError GXMetalRenderPattern(TQADrawContext *context,
     QASetFloat(context, kQATag_FogColor_b, 1.0f);
     QASetFloat(context, kQATag_FogStart, 0.0f);
     QASetFloat(context, kQATag_FogEnd, 1.0f);
+    QASetInt(context, kQATag_PerspectiveZ, kQAPerspectiveZ_On);
     QASetInt(context, kQATag_FogMode, kQAFogMode_Linear);
     QADrawTriGouraud(context, &fogTriangle[0], &fogTriangle[1],
                      &fogTriangle[2], kQATriFlags_None);
     QASetInt(context, kQATag_FogMode, kQAFogMode_None);
+    QASetInt(context, kQATag_PerspectiveZ, kQAPerspectiveZ_Off);
     error = QARenderEnd(context, &dirty);
     if (error == kQANoErr) {
         error = QASync(context);

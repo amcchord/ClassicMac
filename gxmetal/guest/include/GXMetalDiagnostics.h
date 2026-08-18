@@ -46,7 +46,8 @@ enum GXMetalDisplayRejectReason {
 };
 
 #define GXMETAL_DIAGNOSTIC_MAGIC UINT32_C(0x47584447) /* GXDG */
-#define GXMETAL_DIAGNOSTIC_VERSION UINT32_C(0x00010003)
+#define GXMETAL_DIAGNOSTIC_VERSION UINT32_C(0x0001000a)
+#define GXMETAL_DIAGNOSTIC_PIXEL_TYPES 18u
 #define GXMETAL_DIAGNOSTIC_PROPERTY "AAPL,GXMetalEngineDiagnostic"
 
 typedef struct GXMetalDiagnosticSnapshot {
@@ -131,6 +132,72 @@ typedef struct GXMetalDiagnosticSnapshot {
     uint32_t sync_count;
     uint32_t draw_call_count;
     uint32_t last_draw_method;
+    uint32_t draw_method_mask;
+    uint32_t texture_new_success_by_type[GXMETAL_DIAGNOSTIC_PIXEL_TYPES];
+    uint32_t texture_new_attempt_by_type[GXMETAL_DIAGNOSTIC_PIXEL_TYPES];
+    uint32_t bitmap_new_success_by_type[GXMETAL_DIAGNOSTIC_PIXEL_TYPES];
+    uint32_t bitmap_new_attempt_by_type[GXMETAL_DIAGNOSTIC_PIXEL_TYPES];
+    uint32_t bitmap_new_count;
+    uint32_t bitmap_delete_count;
+    uint32_t bitmap_bind_color_table_count;
+    uint32_t last_bitmap_flags;
+    uint32_t last_bitmap_pixel_type;
+    uint32_t last_bitmap_width;
+    uint32_t last_bitmap_height;
+    int32_t last_bitmap_error;
+    int32_t last_bitmap_bind_error;
+    uint32_t draw_tri_gouraud_count;
+    uint32_t draw_tri_texture_count;
+    uint32_t draw_tri_texture_reject_count;
+    uint32_t draw_bitmap_count;
+    uint32_t draw_bitmap_reject_count;
+    uint32_t current_texture_resource_id;
+    uint32_t current_texture_flags;
+    uint32_t current_texture_pixel_type;
+    uint32_t current_texture_width;
+    uint32_t current_texture_height;
+    uint32_t current_texture_palette_bound;
+    uint32_t current_state_texture_op;
+    uint32_t current_state_texture_filter;
+    uint32_t current_state_blend;
+    uint32_t current_state_z_function;
+    uint32_t current_state_z_buffer_mask;
+    uint32_t current_state_perspective_z;
+    uint32_t current_state_fog_mode;
+    uint32_t current_state_alpha_test;
+    uint32_t current_state_alpha_reference;
+    uint32_t current_state_wrap_u;
+    uint32_t current_state_wrap_v;
+    uint32_t last_texture_vertex_x;
+    uint32_t last_texture_vertex_y;
+    uint32_t last_texture_vertex_z;
+    uint32_t last_texture_vertex_inv_w;
+    uint32_t last_texture_vertex_a;
+    uint32_t last_texture_vertex_u_over_w;
+    uint32_t last_texture_vertex_v_over_w;
+    uint32_t last_texture_vertex_kd_r;
+    uint32_t last_texture_vertex_kd_g;
+    uint32_t last_texture_vertex_kd_b;
+    uint32_t set_texture_count;
+    uint32_t set_texture_null_count;
+    uint32_t set_texture_valid_count;
+    uint32_t set_texture_invalid_count;
+    uint32_t last_set_texture_magic;
+    uint32_t draw_texture_null_state_count;
+    uint32_t draw_texture_null_resource_count;
+    uint32_t draw_texture_invalid_resource_count;
+    uint32_t draw_texture_null_vertex_count;
+    uint32_t draw_texture_unbound_fallback_count;
+    uint32_t last_texture_image_width;
+    uint32_t last_texture_image_height;
+    uint32_t last_texture_image_row_bytes;
+    uint32_t last_texture_image_pixels;
+    uint32_t last_texture_output_pointer;
+    uint32_t private_texture_attempt_count;
+    uint32_t private_texture_success_count;
+    uint32_t private_texture_refresh_check_count;
+    uint32_t private_texture_refresh_upload_count;
+    uint32_t private_texture_refresh_error_count;
 } GXMetalDiagnosticSnapshot;
 
 int32_t GXMetalGetDiagnosticStatus(void);

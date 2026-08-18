@@ -19,7 +19,11 @@ On macOS, QEMU now executes direct-color Gouraud points, lines, strips, fans,
 triangles, clipped color/depth clears, all RAVE depth comparisons and depth
 write masking, interpolated or premultiplied alpha, and double-buffer swaps in a
 native Metal render pipeline. The PowerPC engine also creates, uploads, binds,
-and destroys RGB555, ARGB1555, ARGB4444, RGB32, and ARGB32 textures. Metal
+and destroys RGB555, RGB565, ARGB1555, ARGB4444, RGB32, and ARGB32 textures.
+The ATI compatibility path additionally accepts Carmageddon II's private
+pixel type 1001 as little-endian BGR565 and reproduces its zero-valued
+transparent color key. This is required for correctly colored world textures
+and for overlapping menu/HUD glyph sprites. Metal
 provides perspective-correct sampling, repeat/clamp addressing, nearest,
 bilinear, and trilinear mip filtering, plus RAVE decal, modulation, and
 highlight texture operations. Linear, exponential, and squared-exponential
@@ -59,7 +63,7 @@ remains a small Gouraud correctness oracle.
 
 ## Transport contract
 
-The backward-compatible version 1.4 wire contract is defined in
+The backward-compatible version 1.6 wire contract is defined in
 `protocol/gxmetal_protocol.h`. All registers and shared-memory packets are
 little-endian. Packet sizes are multiples of 16 bytes, packets never cross the
 end of the circular command ring, and offsets in commands refer only to the
@@ -80,6 +84,14 @@ a typed `SET_STATE` payload, while pointer-valued texture and bitmap state is
 translated to 32-bit GXMetal resource IDs. Gouraud vertices use eight binary32
 values; textured vertices use the exact sixteen-value RAVE layout. Resource
 uploads name only a validated offset and length in the upload heap.
+
+The upload heap is a single staging region, so the guest follows every texture
+or bitmap upload with a fence before reusing those bytes. This prevents games
+which build many small UI atlases back-to-back from racing the host and binding
+later pixels to an earlier resource. QuickDraw bitmap draws also suspend any
+locally bound ATI texture while emitting their temporary bitmap resource; ATI
+sprite coordinate conversion therefore cannot leak into a full-screen bitmap
+and collapse it to a scanline.
 
 The producer writes complete packets, performs a PowerPC I/O synchronization,
 publishes the producer offset, then rings the doorbell. The host validates the
@@ -105,8 +117,9 @@ dirty-rectangle-only presentation. A host-independent scanout test proves
 clipped, padded-row, offset, empty, destroyed, reset, and malformed-context
 dirty-range behavior. The Metal test also forces both direct and fallback
 present selection and validates the direct kernel's three guest framebuffer
-formats plus partial-rectangle preservation. Every result is read back from the
-guest-format framebuffer:
+formats plus partial-rectangle preservation. It also verifies ATI's
+little-endian BGR565 channel order and zero color-key blending. Every result is
+read back from the guest-format framebuffer:
 
 ```sh
 make -C gxmetal test

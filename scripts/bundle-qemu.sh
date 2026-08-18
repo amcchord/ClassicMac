@@ -346,7 +346,10 @@ dylibbundler -of -b \
 # them down to a single @executable_path/../Frameworks rpath.
 dedupe_rpaths() {
   local bin="$1"
-  while otool -l "$bin" | grep -q "LC_RPATH"; do
+  # Read otool to EOF. With pipefail, grep -q exits after the first match and
+  # makes otool's SIGPIPE look like a failed condition, so the old loop never
+  # removed dylibbundler's duplicate rpaths.
+  while otool -l "$bin" | grep "LC_RPATH" >/dev/null; do
     local current
     current="$(otool -l "$bin" | awk '/LC_RPATH/{getline; getline; print $2; exit}')"
     install_name_tool -delete_rpath "$current" "$bin" 2>/dev/null || break

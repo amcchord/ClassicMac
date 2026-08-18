@@ -190,6 +190,12 @@ static NSString *const kGXMetalShaderSource = @
     "  }\n"
     "  return mix(fog.color, source, clamp(keep, 0.0, 1.0));\n"
     "}\n"
+    "float gxmetal_fog_depth(float z, float invW,\n"
+    "                        constant GXFog &fog) {\n"
+    "  if (fog.modeAndPadding.y == 0u) return z;\n"
+    "  float depth = 1.0 / max(invW, 0.000001);\n"
+    "  return fog.maxDepth > 0.0 ? min(depth, fog.maxDepth) : depth;\n"
+    "}\n"
     "struct GXAlphaTest { uint function; float reference; };\n"
     "bool gxmetal_alpha_visible(float alpha,\n"
     "                           constant GXAlphaTest &test) {\n"
@@ -219,7 +225,7 @@ static NSString *const kGXMetalShaderSource = @
     "    constant GXAlphaTest &alphaTest [[buffer(1)]]) {\n"
     "  float4 result = clamp(in.color, 0.0, 1.0);\n"
     "  if (!gxmetal_alpha_visible(result.a, alphaTest)) discard_fragment();\n"
-    "  float fogDepth = 1.0 / max(in.invW, 0.000001);\n"
+    "  float fogDepth = gxmetal_fog_depth(in.position.z, in.invW, fog);\n"
     "  return gxmetal_apply_fog(result, fogDepth, fog);\n"
     "}\n";
 
@@ -276,7 +282,7 @@ static NSString *const kGXMetalTextureShaderSource = @
     "  if ((operation & 2u) != 0u) result.rgb += in.ks;\n"
     "  result = clamp(result, 0.0, 1.0);\n"
     "  if (!gxmetal_alpha_visible(result.a, alphaTest)) discard_fragment();\n"
-    "  float fogDepth = 1.0 / max(in.invW, 0.000001);\n"
+    "  float fogDepth = gxmetal_fog_depth(in.position.z, in.invW, fog);\n"
     "  return gxmetal_apply_fog(result, fogDepth, fog);\n"
     "}\n";
 
@@ -362,6 +368,8 @@ static uint32_t gxmetal_metal_resource_bytes_per_pixel(uint32_t format)
 {
     switch (format) {
     case GXMETAL_PIXEL_RGB555:
+    case GXMETAL_PIXEL_RGB565:
+    case GXMETAL_PIXEL_ATI_BGR565_LE:
     case GXMETAL_PIXEL_ARGB1555:
     case GXMETAL_PIXEL_ARGB4444:
         return 2;
@@ -681,6 +689,24 @@ static void gxmetal_metal_convert_pixel(uint32_t format,
         destination[2] = (uint8_t)((value & 31) * 255 / 31);
         destination[3] = 255;
         break;
+    case GXMETAL_PIXEL_RGB565:
+        value = (uint16_t)((uint16_t)source[0] << 8 | source[1]);
+        destination[0] = (uint8_t)(((value >> 11) & 31) * 255 / 31);
+        destination[1] = (uint8_t)(((value >> 5) & 63) * 255 / 63);
+        destination[2] = (uint8_t)((value & 31) * 255 / 31);
+        destination[3] = 255;
+        break;
+    case GXMETAL_PIXEL_ATI_BGR565_LE:
+        value = (uint16_t)((uint16_t)source[1] << 8 | source[0]);
+        destination[0] = (uint8_t)((value & 31) * 255 / 31);
+        destination[1] = (uint8_t)(((value >> 5) & 63) * 255 / 63);
+        destination[2] = (uint8_t)(((value >> 11) & 31) * 255 / 31);
+        /* ATI's RGB16 compatibility path uses zero as its transparent
+         * color key.  Opaque draws still write a black texel because their
+         * blend mode ignores source alpha; interpolated UI sprites use the
+         * generated alpha to preserve overlapping glyphs and panels. */
+        destination[3] = value == 0 ? 0 : 255;
+        break;
     case GXMETAL_PIXEL_ARGB1555:
         value = (uint16_t)((uint16_t)source[0] << 8 | source[1]);
         destination[0] = (uint8_t)(((value >> 10) & 31) * 255 / 31);
@@ -942,7 +968,8 @@ static int gxmetal_metal_read_vertex(const GXMetalMetalContext *context,
     vertex->y = gxmetal_metal_load_float(source + GXMETAL_VERTEX_Y_OFFSET);
     vertex->z = gxmetal_metal_load_float(source + GXMETAL_VERTEX_Z_OFFSET);
     vertex->inv_w = 1.0f;
-    if (context->fog.mode_and_padding[0] >= GXMETAL_FOG_LINEAR) {
+    if (context->fog.mode_and_padding[0] >= GXMETAL_FOG_LINEAR &&
+        context->fog.mode_and_padding[1] != 0) {
         vertex->inv_w = gxmetal_metal_load_float(
             source + GXMETAL_VERTEX_INV_W_OFFSET);
     }
@@ -1624,6 +1651,15 @@ static uint32_t gxmetal_metal_set_state(GXMetalMetalContext *context,
         break;
     case GXMETAL_STATE_TEXTURE_OP:
         context->texture_op = value;
+        break;
+    case GXMETAL_STATE_PERSPECTIVE_Z:
+        if (value > 1) {
+            return GXMETAL_ERROR_BAD_PACKET;
+        }
+        /* The second word is shader-visible padding in the fog constants.
+         * RAVE only requires Gouraud invW when perspective-Z is enabled;
+         * otherwise depth fog is derived from the normalized Z coordinate. */
+        context->fog.mode_and_padding[1] = value;
         break;
     case GXMETAL_STATE_FOG_MODE:
         if (value > GXMETAL_FOG_EXPONENTIAL_SQUARED) {
