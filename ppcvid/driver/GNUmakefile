@@ -7,6 +7,7 @@
 # scripts/build-ppcvid-ndrv.sh, which sets up the toolchain).
 
 CC := powerpc-apple-macos-gcc
+HOST_CC ?= cc
 
 # TYPE_BOOL settles a dispute between MacTypes.h and stdbool.h; the driver
 # sources predate C99 so build them as gnu99.
@@ -28,6 +29,9 @@ LIBS := -lDriverServicesLib -lNameRegistryLib -lPCILib -lVideoServicesLib
 
 all: bin/qemu_vga.ndrv
 
+test: bin/test_mode_contract
+	./bin/test_mode_contract
+
 clean:
 	rm -rf bin
 
@@ -40,4 +44,8 @@ bin/qemu_vga.so: $(SRCS) $(wildcard src/*.h) src/VideoDriver.exp ndrv.lds GNUmak
 bin/qemu_vga.ndrv: bin/qemu_vga.so
 	MakePEF -o $@ $<
 
-.PHONY: all clean
+bin/test_mode_contract: tests/test_mode_contract.c src/ModeContract.h GNUmakefile
+	@mkdir -p bin
+	$(HOST_CC) -std=c99 -Wall -Wextra -Werror -Isrc -o $@ $<
+
+.PHONY: all clean test

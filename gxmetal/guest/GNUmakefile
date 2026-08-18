@@ -29,7 +29,8 @@ all: bin/GXMetal.bin bin/GXMetalStartup.bin bin/GXMetalInstaller.bin \
      bin/GXMetalTest.bin
 
 bin/GXMetal.xcoff: src/GXMetalEngine.c src/GXMetalTransport.c \
-                   src/GXMetalTransport.h include/GXMetalDiagnostics.h \
+                   src/GXMetalTransport.h src/GXMetalATICompatibility.h \
+                   include/GXMetalDiagnostics.h \
                    include/GXMetalRegistry.h include/GXMetalVersion.h \
                    src/GXMetal.exp \
                    ../protocol/gxmetal_protocol.h GNUmakefile
