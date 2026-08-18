@@ -21,9 +21,9 @@ write masking, interpolated or premultiplied alpha, and double-buffer swaps in a
 native Metal render pipeline. The PowerPC engine also creates, uploads, binds,
 and destroys RGB555, RGB565, ARGB1555, ARGB4444, RGB32, and ARGB32 textures.
 The ATI compatibility path additionally accepts Carmageddon II's private
-pixel type 1001 as little-endian BGR565 and reproduces its zero-valued
-transparent color key. This is required for correctly colored world textures
-and for overlapping menu/HUD glyph sprites. Metal
+pixel type 1001 as big-endian ARGB4444, preserving the alpha nibble used for
+antialiased menu and HUD glyph masks. This is required for correctly colored
+world textures and overlapping interface sprites. Metal
 provides perspective-correct sampling, repeat/clamp addressing, nearest,
 bilinear, and trilinear mip filtering, plus RAVE decal, modulation, and
 highlight texture operations. Linear, exponential, and squared-exponential
@@ -98,6 +98,12 @@ explicitly supplies `kQATexture_NoCopy`. Only those caller-backed textures are
 checked for CPU-side changes. This avoids rescanning every static world and UI
 texture in emulated PowerPC code on every frame.
 
+The Metal backend retains up to 4,096 live texture and bitmap records. This is
+deliberately larger than Carmageddon II's observed 477-resource peak: menu,
+HUD, and world transitions can retain more than 256 resources at once, and
+exhausting the old fixed table faulted the command queue for the rest of the
+session.
+
 The producer writes complete packets, performs a PowerPC I/O synchronization,
 publishes the producer offset, then rings the doorbell. The host validates the
 entire packet before dispatch and advances the consumer offset only after it
@@ -123,8 +129,9 @@ clipped, padded-row, offset, empty, destroyed, reset, and malformed-context
 dirty-range behavior. The Metal test also forces both direct and fallback
 present selection and validates the direct kernel's three guest framebuffer
 formats plus partial-rectangle preservation. It also verifies ATI's
-little-endian BGR565 channel order and zero color-key blending. Every result is
-read back from the guest-format framebuffer:
+big-endian ARGB4444 channel order and alpha blending, then creates and destroys
+a 300-texture working set to guard against the former Carmageddon resource
+ceiling. Every result is read back from the guest-format framebuffer:
 
 ```sh
 make -C gxmetal test

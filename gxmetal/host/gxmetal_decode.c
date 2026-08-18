@@ -109,7 +109,7 @@ GXMetalDecodeResult gxmetal_ring_advance(uint32_t position,
 static int gxmetal_pixel_format_valid(uint32_t format)
 {
     return format >= GXMETAL_PIXEL_RGB555 &&
-           format <= GXMETAL_PIXEL_ATI_BGR565_LE;
+           format <= GXMETAL_PIXEL_ATI_ARGB4444;
 }
 
 static int gxmetal_draw_pixel_format_valid(uint32_t format)

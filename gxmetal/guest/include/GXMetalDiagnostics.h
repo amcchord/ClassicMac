@@ -46,8 +46,9 @@ enum GXMetalDisplayRejectReason {
 };
 
 #define GXMETAL_DIAGNOSTIC_MAGIC UINT32_C(0x47584447) /* GXDG */
-#define GXMETAL_DIAGNOSTIC_VERSION UINT32_C(0x0001000a)
+#define GXMETAL_DIAGNOSTIC_VERSION UINT32_C(0x0001000b)
 #define GXMETAL_DIAGNOSTIC_PIXEL_TYPES 18u
+#define GXMETAL_DIAGNOSTIC_PRIVATE_PIXEL_TYPES 16u
 #define GXMETAL_DIAGNOSTIC_PROPERTY "AAPL,GXMetalEngineDiagnostic"
 
 typedef struct GXMetalDiagnosticSnapshot {
@@ -198,6 +199,18 @@ typedef struct GXMetalDiagnosticSnapshot {
     uint32_t private_texture_refresh_check_count;
     uint32_t private_texture_refresh_upload_count;
     uint32_t private_texture_refresh_error_count;
+    uint32_t private_texture_attempt_by_type[
+        GXMETAL_DIAGNOSTIC_PRIVATE_PIXEL_TYPES];
+    uint32_t private_texture_success_by_type[
+        GXMETAL_DIAGNOSTIC_PRIVATE_PIXEL_TYPES];
+    uint32_t private_texture_flags_or;
+    uint32_t private_texture_attempt_nocopy_count;
+    uint32_t private_texture_success_nocopy_count;
+    uint32_t private_texture_success_small_count;
+    uint32_t private_texture_success_large_count;
+    uint32_t texture_reject_invalid_image_count;
+    uint32_t texture_reject_unsupported_format_count;
+    uint32_t texture_reject_transport_count;
 } GXMetalDiagnosticSnapshot;
 
 int32_t GXMetalGetDiagnosticStatus(void);

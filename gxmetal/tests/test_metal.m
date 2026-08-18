@@ -393,10 +393,10 @@ static void test_metal_texture_upload_and_sampling(void)
     CHECK(framebuffer_pixel(framebuffer, 48, 48) == 0x03e0);
 
     /* Carmageddon II's ATI RAVE path reports private pixel type 1001 for
-     * little-endian BGR565 surfaces. Verify byte/channel order and ATI's
-     * zero-valued transparent color key. */
+     * big-endian ARGB4444 surfaces. Verify channel order and that a zero
+     * alpha nibble preserves the blue clear color behind a white texel. */
     memcpy(shared + GXMETAL_UPLOAD_OFFSET,
-           "\x1f\0\xe0\x07\0\0", 6);
+           "\xff\0\xf0\xf0\x0f\xff", 6);
     make_packet(packet, GXMETAL_OP_TEXTURE_CREATE, 48, 0);
     payload = packet + 16;
     gxmetal_store_le32(payload + GXMETAL_RESOURCE_ID_OFFSET, 8);
@@ -404,7 +404,7 @@ static void test_metal_texture_upload_and_sampling(void)
     gxmetal_store_le32(payload + GXMETAL_RESOURCE_HEIGHT_OFFSET, 1);
     gxmetal_store_le32(payload + GXMETAL_RESOURCE_ROW_BYTES_OFFSET, 6);
     gxmetal_store_le32(payload + GXMETAL_RESOURCE_PIXEL_FORMAT_OFFSET,
-                       GXMETAL_PIXEL_ATI_BGR565_LE);
+                       GXMETAL_PIXEL_ATI_ARGB4444);
     gxmetal_store_le32(payload + GXMETAL_RESOURCE_LEVELS_OFFSET, 1);
     CHECK(dispatch(renderer, packet, 48) == GXMETAL_ERROR_NONE);
     make_packet(packet, GXMETAL_OP_TEXTURE_UPLOAD, 48, 0);
@@ -967,6 +967,44 @@ static void test_metal_direct_present_formats(void)
     free(framebuffer);
 }
 
+static void test_metal_carmageddon_resource_working_set(void)
+{
+    enum { kCarmageddonResourceWorkingSet = 300 };
+    uint8_t framebuffer[2] = {0};
+    uint8_t shared = 0;
+    uint8_t packet[48];
+    uint8_t *payload;
+    uint32_t resource;
+    GXMetalMetalRenderer *renderer = gxmetal_metal_create(
+        framebuffer, sizeof(framebuffer), &shared, sizeof(shared));
+
+    if (renderer == NULL) {
+        return;
+    }
+    for (resource = 1; resource <= kCarmageddonResourceWorkingSet;
+         resource++) {
+        make_packet(packet, GXMETAL_OP_TEXTURE_CREATE, 48, 0);
+        payload = packet + GXMETAL_PACKET_HEADER_BYTES;
+        gxmetal_store_le32(payload + GXMETAL_RESOURCE_ID_OFFSET, resource);
+        gxmetal_store_le32(payload + GXMETAL_RESOURCE_WIDTH_OFFSET, 1);
+        gxmetal_store_le32(payload + GXMETAL_RESOURCE_HEIGHT_OFFSET, 1);
+        gxmetal_store_le32(payload + GXMETAL_RESOURCE_ROW_BYTES_OFFSET, 2);
+        gxmetal_store_le32(payload + GXMETAL_RESOURCE_PIXEL_FORMAT_OFFSET,
+                           GXMETAL_PIXEL_RGB555);
+        gxmetal_store_le32(payload + GXMETAL_RESOURCE_LEVELS_OFFSET, 1);
+        CHECK(dispatch(renderer, packet, 48) == GXMETAL_ERROR_NONE);
+    }
+    for (resource = 1; resource <= kCarmageddonResourceWorkingSet;
+         resource++) {
+        make_packet(packet, GXMETAL_OP_TEXTURE_DESTROY, 32, 0);
+        payload = packet + GXMETAL_PACKET_HEADER_BYTES;
+        gxmetal_store_le32(payload + GXMETAL_DESTROY_RESOURCE_ID_OFFSET,
+                           resource);
+        CHECK(dispatch(renderer, packet, 32) == GXMETAL_ERROR_NONE);
+    }
+    gxmetal_metal_destroy(renderer);
+}
+
 int main(void)
 {
     @autoreleasepool {
@@ -975,6 +1013,7 @@ int main(void)
         test_metal_texture_upload_and_sampling();
         test_metal_rect_clip_scissor_and_dirty_present();
         test_metal_direct_present_formats();
+        test_metal_carmageddon_resource_working_set();
     }
     if (failures != 0) {
         fprintf(stderr, "GXMetal Metal: %u failure(s)\n", failures);

@@ -175,6 +175,17 @@ static void GXMetalCountPixelType(uint32_t counters[],
     }
 }
 
+static void GXMetalCountPrivatePixelType(uint32_t counters[],
+                                         TQAImagePixelType pixelType)
+{
+    uint32_t type = (uint32_t)pixelType;
+
+    if (type >= UINT32_C(1000) &&
+        type < UINT32_C(1000) + GXMETAL_DIAGNOSTIC_PRIVATE_PIXEL_TYPES) {
+        counters[type - UINT32_C(1000)]++;
+    }
+}
+
 static TQABoolean GXMetalFindRegistryInfo(GXMetalRegistryInfo *info,
                                           RegEntryID *foundEntry)
 {
@@ -315,9 +326,9 @@ static TQABoolean GXMetalTextureFormat(TQAImagePixelType pixelType,
                                        uint32_t *bytesPerPixel)
 {
     if (pixelType == GXMETAL_ATI_PIXEL_RGB16) {
-        /* ATI's private type-1001 surface is a hardware-native little-endian
-         * BGR565 word stream, despite the big-endian PowerPC caller. */
-        *format = GXMETAL_PIXEL_ATI_BGR565_LE;
+        /* Carmageddon II's ATI private type-1001 atlases use big-endian
+         * ARGB4444. The alpha nibble carries antialiased font and HUD masks. */
+        *format = GXMETAL_PIXEL_ATI_ARGB4444;
         *bytesPerPixel = 2;
         return 1;
     }
@@ -413,6 +424,12 @@ static TQAError GXMetalTextureNew(unsigned long flags,
         (uint32_t)(uintptr_t)newTexture;
     if ((uint32_t)pixelType >= UINT32_C(1000)) {
         gDiagnostics.private_texture_attempt_count++;
+        GXMetalCountPrivatePixelType(
+            gDiagnostics.private_texture_attempt_by_type, pixelType);
+        gDiagnostics.private_texture_flags_or |= (uint32_t)flags;
+        if ((flags & kQATexture_NoCopy) != 0) {
+            gDiagnostics.private_texture_attempt_nocopy_count++;
+        }
     }
     if (newTexture == NULL) {
         gDiagnostics.last_texture_error = kQAParamErr;
@@ -429,6 +446,19 @@ static TQAError GXMetalTextureNew(unsigned long flags,
          !GXMetalTextureFormat(pixelType, &format, &bytesPerPixel)) ||
         !GXMetalTransportAvailable() ||
         (gTransport.features & GXMETAL_FEATURE_TEXTURE) == 0) {
+        if (images == NULL || images[0].pixmap == NULL ||
+            images[0].width <= 0 || images[0].height <= 0 ||
+            images[0].width > (long)GXMETAL_MAX_DIMENSION ||
+            images[0].height > (long)GXMETAL_MAX_DIMENSION ||
+            images[0].rowBytes <= 0) {
+            gDiagnostics.texture_reject_invalid_image_count++;
+        } else if (!indexed &&
+                   !GXMetalTextureFormat(pixelType, &format,
+                                         &bytesPerPixel)) {
+            gDiagnostics.texture_reject_unsupported_format_count++;
+        } else {
+            gDiagnostics.texture_reject_transport_count++;
+        }
         gDiagnostics.last_texture_error = kQANotSupported;
         return kQANotSupported;
     }
@@ -612,6 +642,16 @@ static TQAError GXMetalTextureNew(unsigned long flags,
                           pixelType);
     if (pixelType == GXMETAL_ATI_PIXEL_RGB16) {
         gDiagnostics.private_texture_success_count++;
+        GXMetalCountPrivatePixelType(
+            gDiagnostics.private_texture_success_by_type, pixelType);
+        if ((flags & kQATexture_NoCopy) != 0) {
+            gDiagnostics.private_texture_success_nocopy_count++;
+        }
+        if (width <= 64 && height <= 64) {
+            gDiagnostics.private_texture_success_small_count++;
+        } else {
+            gDiagnostics.private_texture_success_large_count++;
+        }
     }
     if (gDiagnostics.texture_new_count == 1) {
         GXMetalPublishDiagnostics();

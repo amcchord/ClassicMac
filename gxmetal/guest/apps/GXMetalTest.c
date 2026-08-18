@@ -762,14 +762,14 @@ static TQAError GXMetalRenderPattern(TQADrawContext *context,
 }
 
 static void GXMetalFillATITexture(unsigned char pixels[8],
-                                  unsigned char low,
-                                  unsigned char high)
+                                  unsigned char high,
+                                  unsigned char low)
 {
     int pixel;
 
     for (pixel = 0; pixel < 4; pixel++) {
-        pixels[pixel * 2] = low;
-        pixels[pixel * 2 + 1] = high;
+        pixels[pixel * 2] = high;
+        pixels[pixel * 2 + 1] = low;
     }
 }
 
@@ -789,9 +789,9 @@ static TQAError GXMetalRenderATITextureMutation(
     TQARect dirty = {0, GXMETAL_WIDTH, 0, GXMETAL_HEIGHT};
     TQAError error;
 
-    /* ATI type 1001 is a little-endian BGR565 byte stream. */
-    GXMetalFillATITexture(staticPixels, 0x1f, 0x00); /* red */
-    GXMetalFillATITexture(livePixels, 0x1f, 0x00);   /* red */
+    /* ATI type 1001 is a big-endian ARGB4444 byte stream. */
+    GXMetalFillATITexture(staticPixels, 0xff, 0x00); /* opaque red */
+    GXMetalFillATITexture(livePixels, 0xff, 0x00);   /* opaque red */
     staticImage.width = 2;
     staticImage.height = 2;
     staticImage.rowBytes = 4;
@@ -821,8 +821,8 @@ static TQAError GXMetalRenderATITextureMutation(
     /* A normal texture must retain its red creation-time upload even after
      * the caller reuses the source buffer. A NoCopy texture must observe the
      * green CPU-side mutation before its first draw. */
-    GXMetalFillATITexture(staticPixels, 0x00, 0xf8); /* blue */
-    GXMetalFillATITexture(livePixels, 0xe0, 0x07);   /* green */
+    GXMetalFillATITexture(staticPixels, 0xf0, 0x0f); /* opaque blue */
+    GXMetalFillATITexture(livePixels, 0xf0, 0xf0);   /* opaque green */
 
     leftQuad[0] = GXMetalTextureVertex(12.0f, 12.0f, 0.5f,
                                        0.0f, 0.0f);

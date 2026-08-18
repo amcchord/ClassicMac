@@ -16,7 +16,13 @@
 #include <unistd.h>
 
 #define GXMETAL_METAL_MAX_CONTEXTS 32u
-#define GXMETAL_METAL_MAX_RESOURCES 256u
+/* RAVE applications may retain several generations of menu, HUD, and world
+ * textures at once. Carmageddon II reaches 256 live/partially uploaded
+ * resources while changing screens; exhausting this table faults the shared
+ * command queue permanently and leaves the last completed frame onscreen.
+ * Resource records are small and inactive slots are reused, so a larger host
+ * table removes that artificial limit without increasing guest VRAM usage. */
+#define GXMETAL_METAL_MAX_RESOURCES 4096u
 
 typedef struct GXMetalMetalVertex {
     float x;
@@ -369,7 +375,7 @@ static uint32_t gxmetal_metal_resource_bytes_per_pixel(uint32_t format)
     switch (format) {
     case GXMETAL_PIXEL_RGB555:
     case GXMETAL_PIXEL_RGB565:
-    case GXMETAL_PIXEL_ATI_BGR565_LE:
+    case GXMETAL_PIXEL_ATI_ARGB4444:
     case GXMETAL_PIXEL_ARGB1555:
     case GXMETAL_PIXEL_ARGB4444:
         return 2;
@@ -696,17 +702,6 @@ static void gxmetal_metal_convert_pixel(uint32_t format,
         destination[2] = (uint8_t)((value & 31) * 255 / 31);
         destination[3] = 255;
         break;
-    case GXMETAL_PIXEL_ATI_BGR565_LE:
-        value = (uint16_t)((uint16_t)source[1] << 8 | source[0]);
-        destination[0] = (uint8_t)((value & 31) * 255 / 31);
-        destination[1] = (uint8_t)(((value >> 5) & 63) * 255 / 63);
-        destination[2] = (uint8_t)(((value >> 11) & 31) * 255 / 31);
-        /* ATI's RGB16 compatibility path uses zero as its transparent
-         * color key.  Opaque draws still write a black texel because their
-         * blend mode ignores source alpha; interpolated UI sprites use the
-         * generated alpha to preserve overlapping glyphs and panels. */
-        destination[3] = value == 0 ? 0 : 255;
-        break;
     case GXMETAL_PIXEL_ARGB1555:
         value = (uint16_t)((uint16_t)source[0] << 8 | source[1]);
         destination[0] = (uint8_t)(((value >> 10) & 31) * 255 / 31);
@@ -715,6 +710,7 @@ static void gxmetal_metal_convert_pixel(uint32_t format,
         destination[3] = (value & 0x8000) ? 255 : 0;
         break;
     case GXMETAL_PIXEL_ARGB4444:
+    case GXMETAL_PIXEL_ATI_ARGB4444:
         value = (uint16_t)((uint16_t)source[0] << 8 | source[1]);
         destination[0] = (uint8_t)(((value >> 8) & 15) * 17);
         destination[1] = (uint8_t)(((value >> 4) & 15) * 17);

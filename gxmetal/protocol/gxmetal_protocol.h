@@ -148,9 +148,8 @@ enum GXMetalPixelFormat {
     GXMETAL_PIXEL_ARGB1555 = 7,
     GXMETAL_PIXEL_ARGB4444 = 8,
     GXMETAL_PIXEL_RGB565 = 9,
-    /* ATI's private Mac RAVE RGB16 surface: little-endian BGR565 words with
-     * a zero-valued transparent color key. */
-    GXMETAL_PIXEL_ATI_BGR565_LE = 10
+    /* ATI's private Mac RAVE type-1001 surface: big-endian ARGB4444. */
+    GXMETAL_PIXEL_ATI_ARGB4444 = 10
 };
 
 enum GXMetalPrimitive {
