@@ -983,9 +983,13 @@ static void test_metal_carmageddon_resource_working_set(void)
     }
     for (resource = 1; resource <= kCarmageddonResourceWorkingSet;
          resource++) {
+        uint32_t resource_id = UINT32_C(1) +
+            (resource - 1) * UINT32_C(8192);
+
         make_packet(packet, GXMETAL_OP_TEXTURE_CREATE, 48, 0);
         payload = packet + GXMETAL_PACKET_HEADER_BYTES;
-        gxmetal_store_le32(payload + GXMETAL_RESOURCE_ID_OFFSET, resource);
+        /* Deliberately collide every ID in the host lookup table. */
+        gxmetal_store_le32(payload + GXMETAL_RESOURCE_ID_OFFSET, resource_id);
         gxmetal_store_le32(payload + GXMETAL_RESOURCE_WIDTH_OFFSET, 1);
         gxmetal_store_le32(payload + GXMETAL_RESOURCE_HEIGHT_OFFSET, 1);
         gxmetal_store_le32(payload + GXMETAL_RESOURCE_ROW_BYTES_OFFSET, 2);
@@ -996,10 +1000,13 @@ static void test_metal_carmageddon_resource_working_set(void)
     }
     for (resource = 1; resource <= kCarmageddonResourceWorkingSet;
          resource++) {
+        uint32_t resource_id = UINT32_C(1) +
+            (resource - 1) * UINT32_C(8192);
+
         make_packet(packet, GXMETAL_OP_TEXTURE_DESTROY, 32, 0);
         payload = packet + GXMETAL_PACKET_HEADER_BYTES;
         gxmetal_store_le32(payload + GXMETAL_DESTROY_RESOURCE_ID_OFFSET,
-                           resource);
+                           resource_id);
         CHECK(dispatch(renderer, packet, 32) == GXMETAL_ERROR_NONE);
     }
     gxmetal_metal_destroy(renderer);

@@ -32,6 +32,11 @@
 #define GXMETAL_MAX_MIP_LEVELS 15u
 #define GXMETAL_MAX_SUBMITTED_VERTICES UINT32_C(65535)
 #define GXMETAL_MESH_BATCH_TRIANGLES UINT32_C(256)
+#define GXMETAL_DRAW_BATCH_TRIANGLES UINT32_C(64)
+#define GXMETAL_DRAW_BATCH_VERTICES (GXMETAL_DRAW_BATCH_TRIANGLES * 3u)
+#define GXMETAL_DRAW_BATCH_NONE UINT32_C(0)
+#define GXMETAL_DRAW_BATCH_GOURAUD UINT32_C(1)
+#define GXMETAL_DRAW_BATCH_TEXTURE UINT32_C(2)
 #define GXMETAL_ATI_PRIVATE_ENABLE_TAG UINT32_C(1020)
 #define GXMETAL_ATI_PRIVATE_METHODS_TAG UINT32_C(1021)
 #define GXMETAL_ATI_PIXEL_RGB16 ((TQAImagePixelType)1001)
@@ -52,6 +57,11 @@ typedef struct GXMetalDrawState {
     uint32_t submitted_gouraud_count;
     Ptr submitted_texture_vertices;
     uint32_t submitted_texture_count;
+    Ptr pending_vertices;
+    uint32_t pending_kind;
+    uint32_t pending_count;
+    uint32_t pending_flags;
+    uint32_t pending_ati_texel_coordinates;
     TQANoticeMethod notices[kQAMethod_NumSelectors];
     void *notice_refcons[kQAMethod_NumSelectors];
     uint32_t ati_private_enabled;
@@ -1282,6 +1292,8 @@ static TQABoolean GXMetalDescribeClip(const TQAClip *clip,
            *top <= height && *bottom <= height;
 }
 
+static TQABoolean GXMetalFlushPendingDraws(GXMetalDrawState *state);
+
 static TQABoolean GXMetalBeginPacket(GXMetalDrawState *state,
                                      uint16_t opcode, uint32_t bytes,
                                      GXMetalGuestPacket *packet)
@@ -1309,7 +1321,8 @@ static TQABoolean GXMetalEmitState(GXMetalDrawState *state, uint32_t tag,
     GXMetalGuestPacket packet;
     uint8_t *payload;
 
-    if (!GXMetalBeginPacket(state, GXMETAL_OP_SET_STATE,
+    if (!GXMetalFlushPendingDraws(state) ||
+        !GXMetalBeginPacket(state, GXMETAL_OP_SET_STATE,
                             GXMETAL_SET_STATE_PACKET_BYTES, &packet)) {
         return 0;
     }
@@ -1346,7 +1359,8 @@ static TQAError GXMetalEmitRect(GXMetalDrawState *state, uint16_t opcode,
 {
     GXMetalGuestPacket packet;
 
-    if (!GXMetalBeginPacket(state, opcode, 32, &packet)) {
+    if (!GXMetalFlushPendingDraws(state) ||
+        !GXMetalBeginPacket(state, opcode, 32, &packet)) {
         return kQAError;
     }
     GXMetalStoreRect(packet.bytes + GXMETAL_PACKET_HEADER_BYTES, rect,
@@ -1590,13 +1604,145 @@ static TQABoolean GXMetalEmitGouraud(GXMetalDrawState *state,
     return 1;
 }
 
+static TQABoolean GXMetalATIUsesTexelCoordinates(
+    const GXMetalDrawState *state, const TQAVTexture *vertices,
+    uint32_t count)
+{
+    const TQATexture *texture;
+    uint32_t i;
+
+    if (state == NULL || vertices == NULL) {
+        return 0;
+    }
+    texture = (const TQATexture *)state->texture;
+    if (texture == NULL || texture->magic != GXMETAL_TEXTURE_MAGIC ||
+        texture->source_pixel_type != (uint32_t)GXMETAL_ATI_PIXEL_RGB16 ||
+        texture->width == 0 || texture->height == 0) {
+        return 0;
+    }
+    for (i = 0; i < count; i++) {
+        float limit = vertices[i].invW * 2.0f;
+
+        if (vertices[i].invW > 0.0f &&
+            (vertices[i].uOverW < -limit ||
+             vertices[i].uOverW > limit ||
+             vertices[i].vOverW < -limit ||
+             vertices[i].vOverW > limit)) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static TQABoolean GXMetalFlushPendingDraws(GXMetalDrawState *state)
+{
+    uint32_t kind;
+    uint32_t count;
+    uint32_t flags;
+
+    if (state == NULL || state->failed) {
+        return 0;
+    }
+    if (state->pending_count == 0) {
+        return 1;
+    }
+    kind = state->pending_kind;
+    count = state->pending_count;
+    flags = state->pending_flags;
+    state->pending_kind = GXMETAL_DRAW_BATCH_NONE;
+    state->pending_count = 0;
+    if (kind == GXMETAL_DRAW_BATCH_GOURAUD) {
+        return GXMetalEmitGouraud(
+            state, GXMETAL_PRIMITIVE_TRIANGLE, count,
+            (const TQAVGouraud *)state->pending_vertices, flags);
+    }
+    if (kind == GXMETAL_DRAW_BATCH_TEXTURE) {
+        return GXMetalEmitTexture(
+            state, GXMETAL_PRIMITIVE_TRIANGLE, count,
+            (const TQAVTexture *)state->pending_vertices, flags);
+    }
+    state->failed = 1;
+    return 0;
+}
+
+static TQABoolean GXMetalQueueGouraudTriangle(
+    GXMetalDrawState *state, const TQAVGouraud *vertices, uint32_t flags)
+{
+    TQAVGouraud *pending;
+
+    if (state == NULL || vertices == NULL) {
+        return 0;
+    }
+    if (state->pending_vertices == NULL) {
+        return GXMetalEmitGouraud(state, GXMETAL_PRIMITIVE_TRIANGLE, 3,
+                                  vertices, flags);
+    }
+    if (state->pending_count != 0 &&
+        (state->pending_kind != GXMETAL_DRAW_BATCH_GOURAUD ||
+         state->pending_flags != flags)) {
+        if (!GXMetalFlushPendingDraws(state)) {
+            return 0;
+        }
+    }
+    if (state->pending_count + 3u > GXMETAL_DRAW_BATCH_VERTICES &&
+        !GXMetalFlushPendingDraws(state)) {
+        return 0;
+    }
+    if (state->pending_count == 0) {
+        state->pending_kind = GXMETAL_DRAW_BATCH_GOURAUD;
+        state->pending_flags = flags;
+    }
+    pending = (TQAVGouraud *)state->pending_vertices;
+    memcpy(&pending[state->pending_count], vertices, 3u * sizeof(*pending));
+    state->pending_count += 3u;
+    return 1;
+}
+
+static TQABoolean GXMetalQueueTextureTriangle(
+    GXMetalDrawState *state, const TQAVTexture *vertices, uint32_t flags)
+{
+    TQAVTexture *pending;
+    uint32_t atiTexelCoordinates;
+
+    if (state == NULL || vertices == NULL) {
+        return 0;
+    }
+    if (state->pending_vertices == NULL) {
+        return GXMetalEmitTexture(state, GXMETAL_PRIMITIVE_TRIANGLE, 3,
+                                  vertices, flags);
+    }
+    atiTexelCoordinates = GXMetalATIUsesTexelCoordinates(state, vertices, 3);
+    if (state->pending_count != 0 &&
+        (state->pending_kind != GXMETAL_DRAW_BATCH_TEXTURE ||
+         state->pending_flags != flags ||
+         state->pending_ati_texel_coordinates != atiTexelCoordinates)) {
+        if (!GXMetalFlushPendingDraws(state)) {
+            return 0;
+        }
+    }
+    if (state->pending_count + 3u > GXMETAL_DRAW_BATCH_VERTICES &&
+        !GXMetalFlushPendingDraws(state)) {
+        return 0;
+    }
+    if (state->pending_count == 0) {
+        state->pending_kind = GXMETAL_DRAW_BATCH_TEXTURE;
+        state->pending_flags = flags;
+        state->pending_ati_texel_coordinates = atiTexelCoordinates;
+    }
+    pending = (TQAVTexture *)state->pending_vertices;
+    memcpy(&pending[state->pending_count], vertices, 3u * sizeof(*pending));
+    state->pending_count += 3u;
+    return 1;
+}
+
 static TQAError GXMetalEmitClear(GXMetalDrawState *state,
                                  const TQARect *rect, uint32_t flags)
 {
     GXMetalGuestPacket packet;
     uint8_t *payload;
 
-    if (!GXMetalBeginPacket(state, GXMETAL_OP_CLEAR,
+    if (!GXMetalFlushPendingDraws(state) ||
+        !GXMetalBeginPacket(state, GXMETAL_OP_CLEAR,
                             GXMETAL_CLEAR_PACKET_BYTES, &packet)) {
         return kQAError;
     }
@@ -1632,6 +1778,9 @@ static void GXMetalSetFloat(TQADrawContext *drawContext, TQATagFloat tag,
     if (state == NULL || (uint32_t)tag >= GXMETAL_STATE_SLOTS) {
         return;
     }
+    if (!GXMetalFlushPendingDraws(state)) {
+        return;
+    }
     state->float_state[(uint32_t)tag] = newValue;
     if (!GXMetalBeginPacket(state, GXMETAL_OP_SET_STATE,
                             GXMETAL_SET_STATE_PACKET_BYTES, &packet)) {
@@ -1665,6 +1814,9 @@ static void GXMetalSetInt(TQADrawContext *drawContext, TQATagInt tag,
         return;
     }
     if (state == NULL || (uint32_t)tag >= GXMETAL_STATE_SLOTS) {
+        return;
+    }
+    if (!GXMetalFlushPendingDraws(state)) {
         return;
     }
     state->int_state[(uint32_t)tag] = (uint32_t)newValue;
@@ -1710,6 +1862,9 @@ static void GXMetalSetPtr(TQADrawContext *drawContext, TQATagPtr tag,
     }
     if (state == NULL || tag != kQATag_Texture ||
         (texture != NULL && texture->magic != GXMETAL_TEXTURE_MAGIC)) {
+        return;
+    }
+    if (!GXMetalFlushPendingDraws(state)) {
         return;
     }
     state->texture = newValue;
@@ -1914,7 +2069,7 @@ static void GXMetalDrawPoint(const TQADrawContext *drawContext,
 {
     GXMetalDrawState *state = GXMetalGetState(drawContext);
     GXMetalTraceDrawMethod(kQADrawPoint);
-    if (state != NULL) {
+    if (state != NULL && GXMetalFlushPendingDraws(state)) {
         (void)GXMetalEmitGouraud(state, GXMETAL_PRIMITIVE_POINT, 1,
                                  vertex, 0);
     }
@@ -1928,6 +2083,9 @@ static void GXMetalDrawLine(const TQADrawContext *drawContext,
     TQAVGouraud vertices[2];
     GXMetalTraceDrawMethod(kQADrawLine);
     if (state == NULL || v0 == NULL || v1 == NULL) {
+        return;
+    }
+    if (!GXMetalFlushPendingDraws(state)) {
         return;
     }
     vertices[0] = *v0;
@@ -1951,8 +2109,7 @@ static void GXMetalDrawTriGouraud(const TQADrawContext *drawContext,
     vertices[0] = *v0;
     vertices[1] = *v1;
     vertices[2] = *v2;
-    (void)GXMetalEmitGouraud(state, GXMETAL_PRIMITIVE_TRIANGLE, 3,
-                             vertices, (uint32_t)flags);
+    (void)GXMetalQueueGouraudTriangle(state, vertices, (uint32_t)flags);
 }
 
 static float GXMetalClampUnit(float value)
@@ -2027,8 +2184,7 @@ static void GXMetalDrawTriTexture(const TQADrawContext *drawContext,
         GXMetalUnboundTextureVertex(state, v0, &gouraud[0]);
         GXMetalUnboundTextureVertex(state, v1, &gouraud[1]);
         GXMetalUnboundTextureVertex(state, v2, &gouraud[2]);
-        (void)GXMetalEmitGouraud(state, GXMETAL_PRIMITIVE_TRIANGLE, 3,
-                                 gouraud, (uint32_t)flags);
+        (void)GXMetalQueueGouraudTriangle(state, gouraud, (uint32_t)flags);
         return;
     }
     if (((const TQATexture *)state->texture)->magic !=
@@ -2045,8 +2201,7 @@ static void GXMetalDrawTriTexture(const TQADrawContext *drawContext,
     vertices[0] = *v0;
     vertices[1] = *v1;
     vertices[2] = *v2;
-    (void)GXMetalEmitTexture(state, GXMETAL_PRIMITIVE_TRIANGLE, 3,
-                             vertices, (uint32_t)flags);
+    (void)GXMetalQueueTextureTriangle(state, vertices, (uint32_t)flags);
 }
 
 static void GXMetalSubmitVerticesGouraud(
@@ -2142,6 +2297,9 @@ static void GXMetalDrawTriMeshGouraud(
         state->failed = 1;
         return;
     }
+    if (!GXMetalFlushPendingDraws(state)) {
+        return;
+    }
     submitted = (const TQAVGouraud *)state->submitted_gouraud_vertices;
     batch = (TQAVGouraud *)NewPtr((Size)(GXMETAL_MESH_BATCH_TRIANGLES * 3u *
                                         sizeof(*batch)));
@@ -2201,6 +2359,9 @@ static void GXMetalDrawTriMeshTexture(
         state->failed = 1;
         return;
     }
+    if (!GXMetalFlushPendingDraws(state)) {
+        return;
+    }
     submitted = (const TQAVTexture *)state->submitted_texture_vertices;
     batch = (TQAVTexture *)NewPtr((Size)(GXMETAL_MESH_BATCH_TRIANGLES * 3u *
                                         sizeof(*batch)));
@@ -2252,6 +2413,9 @@ static void GXMetalDrawVGouraud(const TQADrawContext *drawContext,
     if (state == NULL || vertices == NULL || nVertices == 0) {
         return;
     }
+    if (!GXMetalFlushPendingDraws(state)) {
+        return;
+    }
     switch (vertexMode) {
     case kQAVertexMode_Point:
         primitive = GXMETAL_PRIMITIVE_POINT;
@@ -2266,9 +2430,8 @@ static void GXMetalDrawVGouraud(const TQADrawContext *drawContext,
         }
         if (flags != NULL) {
             for (i = 0; i < nVertices; i += 3) {
-                (void)GXMetalEmitGouraud(
-                    state, GXMETAL_PRIMITIVE_TRIANGLE, 3, &vertices[i],
-                    (uint32_t)flags[i / 3]);
+                (void)GXMetalQueueGouraudTriangle(
+                    state, &vertices[i], (uint32_t)flags[i / 3]);
             }
             return;
         }
@@ -2281,9 +2444,8 @@ static void GXMetalDrawVGouraud(const TQADrawContext *drawContext,
                 triangle[0] = vertices[i + (i & 1)];
                 triangle[1] = vertices[i + ((i & 1) == 0)];
                 triangle[2] = vertices[i + 2];
-                (void)GXMetalEmitGouraud(
-                    state, GXMETAL_PRIMITIVE_TRIANGLE, 3, triangle,
-                    (uint32_t)flags[i]);
+                (void)GXMetalQueueGouraudTriangle(
+                    state, triangle, (uint32_t)flags[i]);
             }
             return;
         }
@@ -2296,9 +2458,8 @@ static void GXMetalDrawVGouraud(const TQADrawContext *drawContext,
             for (i = 0; i + 2 < nVertices; i++) {
                 triangle[1] = vertices[i + 1];
                 triangle[2] = vertices[i + 2];
-                (void)GXMetalEmitGouraud(
-                    state, GXMETAL_PRIMITIVE_TRIANGLE, 3, triangle,
-                    (uint32_t)flags[i]);
+                (void)GXMetalQueueGouraudTriangle(
+                    state, triangle, (uint32_t)flags[i]);
             }
             return;
         }
@@ -2332,6 +2493,9 @@ static void GXMetalDrawVTexture(const TQADrawContext *drawContext,
         nVertices == 0) {
         return;
     }
+    if (!GXMetalFlushPendingDraws(state)) {
+        return;
+    }
     switch (vertexMode) {
     case kQAVertexMode_Point:
         primitive = GXMETAL_PRIMITIVE_POINT;
@@ -2346,9 +2510,8 @@ static void GXMetalDrawVTexture(const TQADrawContext *drawContext,
         }
         if (flags != NULL) {
             for (i = 0; i < nVertices; i += 3) {
-                (void)GXMetalEmitTexture(
-                    state, GXMETAL_PRIMITIVE_TRIANGLE, 3, &vertices[i],
-                    (uint32_t)flags[i / 3]);
+                (void)GXMetalQueueTextureTriangle(
+                    state, &vertices[i], (uint32_t)flags[i / 3]);
             }
             return;
         }
@@ -2361,9 +2524,8 @@ static void GXMetalDrawVTexture(const TQADrawContext *drawContext,
                 triangle[0] = vertices[i + (i & 1)];
                 triangle[1] = vertices[i + ((i & 1) == 0)];
                 triangle[2] = vertices[i + 2];
-                (void)GXMetalEmitTexture(
-                    state, GXMETAL_PRIMITIVE_TRIANGLE, 3, triangle,
-                    (uint32_t)flags[i]);
+                (void)GXMetalQueueTextureTriangle(
+                    state, triangle, (uint32_t)flags[i]);
             }
             return;
         }
@@ -2376,9 +2538,8 @@ static void GXMetalDrawVTexture(const TQADrawContext *drawContext,
             for (i = 0; i + 2 < nVertices; i++) {
                 triangle[1] = vertices[i + 1];
                 triangle[2] = vertices[i + 2];
-                (void)GXMetalEmitTexture(
-                    state, GXMETAL_PRIMITIVE_TRIANGLE, 3, triangle,
-                    (uint32_t)flags[i]);
+                (void)GXMetalQueueTextureTriangle(
+                    state, triangle, (uint32_t)flags[i]);
             }
             return;
         }
@@ -2448,6 +2609,9 @@ static void GXMetalDrawBitmap(const TQADrawContext *drawContext,
     if (state == NULL || v == NULL || bitmap == NULL ||
         bitmap->magic != GXMETAL_BITMAP_MAGIC) {
         gDiagnostics.draw_bitmap_reject_count++;
+        return;
+    }
+    if (!GXMetalFlushPendingDraws(state)) {
         return;
     }
     left = v->x;
@@ -2584,6 +2748,7 @@ static TQAError GXMetalSync(const TQADrawContext *drawContext)
     gDiagnostics.draw_method_stage = 230;
     gDiagnostics.sync_count++;
     if (state == NULL || state->failed ||
+        !GXMetalFlushPendingDraws(state) ||
         !gxmetal_guest_emit_fence(state->transport, &sequence) ||
         !gxmetal_guest_wait(state->transport, sequence,
                             GXMETAL_SYNC_SPINS)) {
@@ -2600,7 +2765,8 @@ static TQAError GXMetalFlush(const TQADrawContext *drawContext)
     GXMetalDrawState *state = GXMetalGetState(drawContext);
     gDiagnostics.draw_method_stage = 220;
     gDiagnostics.flush_count++;
-    return state != NULL && !state->failed ? kQANoErr : kQAError;
+    return state != NULL && !state->failed &&
+           GXMetalFlushPendingDraws(state) ? kQANoErr : kQAError;
 }
 
 static TQAError GXMetalRenderAbort(const TQADrawContext *drawContext)
@@ -2887,6 +3053,8 @@ static TQAError GXMetalDrawPrivateNew(TQADrawContext *newDrawContext,
         DisposePtr((Ptr)state);
         return error;
     }
+    state->pending_vertices = NewPtr(
+        (Size)(GXMETAL_DRAW_BATCH_VERTICES * sizeof(TQAVTexture)));
     gDiagnosticStatus = kGXMetalDiagnosticContextReady;
     GXMetalPublishDiagnostics();
     GXMetalPersistDiagnostics();
@@ -2901,6 +3069,7 @@ static void GXMetalDrawPrivateDelete(TQADrawPrivate *drawPrivate)
     if (state == NULL) {
         return;
     }
+    (void)GXMetalFlushPendingDraws(state);
     if (!state->failed && GXMetalBeginPacket(state,
             GXMETAL_OP_CONTEXT_DESTROY, GXMETAL_PACKET_HEADER_BYTES,
             &packet)) {
@@ -2911,6 +3080,9 @@ static void GXMetalDrawPrivateDelete(TQADrawPrivate *drawPrivate)
     }
     if (state->submitted_texture_vertices != NULL) {
         DisposePtr(state->submitted_texture_vertices);
+    }
+    if (state->pending_vertices != NULL) {
+        DisposePtr(state->pending_vertices);
     }
     DisposePtr((Ptr)state);
 }

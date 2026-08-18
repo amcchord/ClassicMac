@@ -214,6 +214,13 @@ The build checks that the PowerPC VGA device accepts the `gxmetal` property,
 that BAR2 remains a 4 KiB register aperture, that the prefetchable GXMetal BAR4
 is 4 MiB, and that invalid configurations fail realization.
 
+Set `GXMETAL_PROFILE=1` in QEMU's host environment to print a two-second
+rolling presentation profile to standard error. The profile reports actual
+PRESENT-packet FPS, direct versus fallback presentation, presentation time,
+draw packets per frame, vertices per draw, the percentage of one-triangle
+packets, and resource-table probes per lookup. It is disabled by default and
+does not add logging to normal releases.
+
 On macOS, validate the exact Developer ID-signed application against a supplied
 Mac OS 9 disk without modifying the source image:
 
@@ -242,6 +249,30 @@ python3 scripts/gxmetal-vnc.py \
 `Super_L` is QEMU VNC's Mac Command key. The same path was used for the
 Carmageddon II launcher, menu, race, sustained-input, and clean-quit tests, so
 those checks do not depend on the foreground ClassicMac window.
+
+### Carmageddon II performance validation
+
+Host presentation telemetry identified two CPU-side submission bottlenecks.
+The texture table originally required a linear scan of a 4,096-entry array;
+the Carmageddon menu averaged about 30 probes per texture lookup and dense
+gameplay reached roughly 170-195. An 8,192-bucket collision-safe hash table
+reduces that to one probe in the measured working set. Small host vertex arrays
+also use stack storage, avoiding thousands of short-lived allocations.
+
+More importantly, 99.92% of the game's original draw packets contained one
+triangle. The guest now preserves adjacent Gouraud or textured triangles in a
+64-triangle batch until render state, texture, orientation flags, ATI private
+coordinate mode, ordering, or synchronization requires a flush. This reduced
+measured gameplay from roughly 1,300-2,500 host draw packets per frame to
+220-380 without changing the submitted triangle order.
+
+On the disposable Mac OS 9.2 Carmageddon II validation disk, a sustained
+20-sample gameplay window measured 78.54 FPS minimum, 84.35 FPS average, and
+100.75 FPS maximum. Active driving samples measured 73-81 FPS. The game's
+static menu remains paced internally at about 47.4 FPS even after draw traffic
+falls from 1,177 to 272 packets per frame; that is game timing rather than host
+renderer saturation. The current in-guest conformance workload passes and
+measures GXMetal at 12.77x Apple Software RAVE on the same VM.
 
 ## Versioning and safety
 
