@@ -144,6 +144,10 @@ final class QEMURunnerArgumentTests: XCTestCase {
                 optionValues("-device", in: arguments)
                     .contains("virtio-blk-pci,drive=classicmac-tools")
             )
+            XCTAssertFalse(
+                optionValues("-prom-env", in: arguments)
+                    .contains { $0.hasPrefix("boot-device=virtio") }
+            )
             XCTAssertTrue(
                 optionValues("-device", in: arguments)
                     .contains { $0.hasPrefix("loader,addr=0x4000000,file=") }
