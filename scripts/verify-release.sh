@@ -68,9 +68,10 @@ PLIST="$APP/Contents/Info.plist"
 PPC_HELPER="$APP/Contents/Helpers/Power Mac G4.app"
 PPC_QEMU="$PPC_HELPER/Contents/MacOS/qemu-system-ppc"
 TOOLS_CD="$APP/Contents/Resources/ClassicMacTools.iso"
+VNC_KEYMAP="$APP/Contents/Resources/qemu/pc-bios/keymaps/en-us"
 
 for required in "$PLIST" "$PPC_HELPER/Contents/Info.plist" \
-  "$PPC_QEMU" "$TOOLS_CD"; do
+  "$PPC_QEMU" "$TOOLS_CD" "$VNC_KEYMAP"; do
   [ -e "$required" ] || die "Required release component is missing: $required"
 done
 [ -s "$TOOLS_CD" ] || die "Bundled ClassicMac Tools CD is empty"
@@ -121,6 +122,9 @@ for property in gxmetal untracked-vram packed-lowbpp hardware-cursor host-resize
   printf '%s\n' "$DEVICE_HELP" | grep -q "$property" || \
     die "Bundled Power Mac QEMU lacks VGA.$property"
 done
+VNC_HELP="$("$PPC_QEMU" -vnc help 2>&1 || true)"
+printf '%s\n' "$VNC_HELP" | grep -q 'vnc options' || \
+  die "Bundled Power Mac QEMU lacks the headless VNC display"
 if otool -L "$PPC_QEMU" | grep -Eq '/opt/homebrew|/usr/local'; then
   die "Bundled Power Mac QEMU still references a package-manager library"
 fi

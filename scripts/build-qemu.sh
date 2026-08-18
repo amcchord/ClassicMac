@@ -335,7 +335,7 @@ fi
 if [ -f "$BUILD_DIR/build.ninja" ] && [ -z "${FORCE_CONFIGURE:-}" ]; then
   log "Already configured (set FORCE_CONFIGURE=1 to reconfigure)"
 else
-  log "Configuring QEMU for m68k-softmmu + ppc-softmmu (cocoa, slirp, coreaudio, 9p)"
+  log "Configuring QEMU for m68k-softmmu + ppc-softmmu (cocoa, VNC, slirp, coreaudio, 9p)"
   rm -rf "$BUILD_DIR"
   mkdir -p "$BUILD_DIR"
   (
@@ -351,7 +351,7 @@ else
       --disable-docs \
       --disable-gtk \
       --disable-sdl \
-      --disable-vnc \
+      --enable-vnc \
       --disable-curses \
       --disable-guest-agent \
       --disable-debug-info \
@@ -393,6 +393,9 @@ fi
 
 QEMU_PPC_BIN="$BUILD_DIR/qemu-system-ppc"
 [ -x "$QEMU_PPC_BIN" ] || die "qemu-system-ppc was not produced"
+grep -Eq '^#define CONFIG_VNC([[:space:]]|$)' \
+  "$BUILD_DIR/config-host.h" || \
+  die "QEMU was built without the required headless VNC display"
 if "$QEMU_PPC_BIN" -machine help 2>&1 | grep -q "^mac99"; then
   printf '    OK  mac99 machine (ppc)\n'
 else

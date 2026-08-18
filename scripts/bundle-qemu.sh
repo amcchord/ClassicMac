@@ -58,10 +58,12 @@ die() { printf '\nERROR: %s\n' "$*" >&2; exit 1; }
 #   qemu_vga.ndrv      - Mac OS video driver OpenBIOS hands to the guest
 #                        (ClassicMac build from ppcvid/ with live host-window
 #                        resizing; installed by build-qemu.sh)
+#   keymaps/            - QEMU keyboard maps required by the VNC input path
 PCBIOS_FILES=(mac_qfb.rom openbios-ppc vgabios-stdvga.bin qemu_vga.ndrv)
 for fw in "${PCBIOS_FILES[@]}"; do
   [ -f "$QEMU_PCBIOS_DIR/$fw" ] || die "$fw firmware not found. Run scripts/build-qemu.sh first."
 done
+[ -d "$QEMU_PCBIOS_DIR/keymaps" ] || die "QEMU keymaps not found. Run scripts/build-qemu.sh first."
 [ -f "$ROM_SRC" ] || die "Quadra800.rom not found in Resources/."
 [ -f "$ICON_PNG" ] || die "AppIcon.png not found in Resources/."
 [ -f "$ICON_DOC/icon.json" ] || die "AppIcon.icon (Icon Composer document) not found in Resources/."
@@ -161,6 +163,7 @@ rm -rf "$ACTOOL_OUT"
 for fw in "${PCBIOS_FILES[@]}"; do
   cp "$QEMU_PCBIOS_DIR/$fw" "$PCBIOS_DEST/"
 done
+cp -R "$QEMU_PCBIOS_DIR/keymaps" "$PCBIOS_DEST/keymaps"
 cp "$DECLROM_SRC" "$RES_DIR/declrom"
 cp "$NDRVLOADER_SRC" "$RES_DIR/ndrvloader"
 cp "$PRAMSEED_SRC" "$RES_DIR/pram-seed.img"
