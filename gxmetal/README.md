@@ -104,6 +104,18 @@ HUD, and world transitions can retain more than 256 resources at once, and
 exhausting the old fixed table faulted the command queue for the rest of the
 session.
 
+## Carmageddon II compatibility
+
+The Mac OS 9 RAVE release is validated both by opening its RAVE application
+directly and through the original launcher with **640 x 480 Hardware
+accelerated** and the highest-quality texture option. The launcher does not
+search for a compatible application: it opens the exact relative path
+`Carma2:Carmageddon 2 Rave`. Some third-party patched installs rename that file
+to `Carmageddoon 2 Rave` (with an extra `o`). Such an install still runs when
+opened directly, but the launcher silently returns to Finder. Restoring a copy
+with the launcher's exact filename fixes the handoff; GXMetal does not rename
+or modify game files.
+
 The producer writes complete packets, performs a PowerPC I/O synchronization,
 publishes the producer offset, then rings the doorbell. The host validates the
 entire packet before dispatch and advances the consumer offset only after it
@@ -214,6 +226,22 @@ matching driver, startup companion, and test application from the bundle's own
 Tools CD, installs them only into the clone, boots the bundled GXMetal-capable
 QEMU, and reads the flushed PASS/FAIL record back from the clone. It retains the
 temporary directory and final screenshot as auditable evidence.
+
+For interactive debugging without a Cocoa window, start the bundled QEMU with
+`-display none`, a local `-vnc unix:/path/to/vnc.sock` endpoint, and a local
+monitor socket. The dependency-free helper can capture the raw framebuffer and
+send keys, Mac Command-key chords, or pointer clicks:
+
+```sh
+python3 scripts/gxmetal-vnc.py \
+  --unix-socket /path/to/vnc.sock \
+  --chord Super_L+o \
+  --screenshot /tmp/gxmetal.png
+```
+
+`Super_L` is QEMU VNC's Mac Command key. The same path was used for the
+Carmageddon II launcher, menu, race, sustained-input, and clean-quit tests, so
+those checks do not depend on the foreground ClassicMac window.
 
 ## Versioning and safety
 

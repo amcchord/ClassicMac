@@ -24,6 +24,11 @@ KEYSYMS = {
     "Insert": 0xFF63,
     "Delete": 0xFFFF,
     "KP_Enter": 0xFF8D,
+    "Shift_L": 0xFFE1,
+    "Control_L": 0xFFE3,
+    "Meta_L": 0xFFE7,
+    "Alt_L": 0xFFE9,
+    "Super_L": 0xFFEB,
     "Space": 0x20,
 }
 
@@ -112,20 +117,42 @@ class RFBClient:
         self.connection.sendall(b"\x00\x00\x00\x00" + pixel_format)
         self.connection.sendall(struct.pack(">BBHi", 2, 0, 1, 0))
 
-    def key(self, name, hold_seconds):
+    def keysym(self, name):
         if name in KEYSYMS:
-            keysym = KEYSYMS[name]
+            return KEYSYMS[name]
         elif len(name) == 1:
-            keysym = ord(name)
-        else:
-            raise ValueError("unknown VNC key: %s" % name)
-        self.connection.sendall(struct.pack(">BBHI", 4, 1, 0, keysym))
+            return ord(name)
+        raise ValueError("unknown VNC key: %s" % name)
+
+    def key_event(self, keysym, down):
+        self.connection.sendall(struct.pack(">BBHI", 4, down, 0, keysym))
+
+    def key(self, name, hold_seconds):
+        keysym = self.keysym(name)
+        self.key_event(keysym, 1)
         time.sleep(hold_seconds)
-        self.connection.sendall(struct.pack(">BBHI", 4, 0, 0, keysym))
+        self.key_event(keysym, 0)
+
+    def chord(self, value, hold_seconds):
+        names = value.split("+")
+        if len(names) < 2 or any(not name for name in names):
+            raise ValueError("chord must contain two or more '+'-separated keys")
+        keysyms = [self.keysym(name) for name in names]
+        for keysym in keysyms:
+            self.key_event(keysym, 1)
+        time.sleep(hold_seconds)
+        for keysym in reversed(keysyms):
+            self.key_event(keysym, 0)
 
     def click(self, x, y):
         if x < 0 or y < 0 or x >= self.width or y >= self.height:
             raise ValueError("pointer coordinate outside VNC framebuffer")
+        # QEMU's relative ADB mouse needs a button-up motion event before a
+        # button transition from a newly connected VNC client. Without it,
+        # the first requested coordinate only synchronizes QEMU's pointer and
+        # the click lands at the previous guest position.
+        self.connection.sendall(struct.pack(">BBHH", 5, 0, x, y))
+        time.sleep(0.05)
         self.connection.sendall(struct.pack(">BBHH", 5, 1, x, y))
         time.sleep(0.05)
         self.connection.sendall(struct.pack(">BBHH", 5, 0, x, y))
@@ -183,6 +210,7 @@ def main():
     endpoint.add_argument("--unix-socket")
     endpoint.add_argument("--tcp", metavar="HOST:PORT")
     parser.add_argument("--key", action="append", default=[])
+    parser.add_argument("--chord", action="append", default=[])
     parser.add_argument("--click", action="append", type=parse_click,
                         default=[])
     parser.add_argument("--hold-ms", type=int, default=150)
@@ -204,6 +232,8 @@ def main():
     try:
         client = RFBClient(connection)
         client.connect()
+        for chord in args.chord:
+            client.chord(chord, args.hold_ms / 1000.0)
         for key in args.key:
             client.key(key, args.hold_ms / 1000.0)
         for x, y in args.click:
