@@ -1,6 +1,7 @@
 #include "VideoDriverPrivate.h"
 #include "VideoDriverPrototypes.h"
 #include "DriverQDCalls.h"
+#include "ModeContract.h"
 #include "QemuVga.h"
 #include <Timer.h>
 
@@ -524,35 +525,35 @@ OSStatus QemuVga_GetModeInfo(UInt32 index, UInt32 *width, UInt32 *height)
 
 UInt32 QemuVga_GetRowBytes(UInt32 width, UInt32 depth)
 {
-	/*
-	 * DISPI depth 15 is RGB555 stored in a full 16-bit word.  Treating the
-	 * logical color depth as the storage width makes Mac OS advance 15/8
-	 * bytes per pixel while QEMU advances two, visibly skewing every row.
-	 */
-	UInt32 storageDepth = depth == 15 ? 16 : depth;
+	UInt32 rowBytes;
 
-	return (width * storageDepth + 7) / 8;
+	if (!QemuVgaCalculatePageLayout(width, 1, depth, ~0UL,
+									 &rowBytes, NULL, NULL))
+		return 0;
+	return rowBytes;
 }
 
 OSStatus QemuVga_GetModePages(UInt32 index, UInt32 depth,
 							  UInt32 *pageSize, UInt32 *pageCount)
 {
-	UInt32 width, height, pBytes;
+	UInt32 width, height, rowBytes, pBytes, capacity;
+	struct _vMode *vMode;
 
 	if (index >= GLOBAL.numModes)
 		return paramErr;
-	width = getVMode(index)->width;
-	height = getVMode(index)->height;
-	/* Sub-byte depths pack pixels; RGB555 occupies a full 16-bit word. */
-	pBytes = QemuVga_GetRowBytes(width, depth) * height;
+	vMode = getVMode(index);
+	if (vMode == NULL)
+		return paramErr;
+	width = vMode->width;
+	height = vMode->height;
+	capacity = GLOBAL.vramSize;
+	if (capacity == 0 || capacity > GLOBAL.boardFBMappedSize)
+		capacity = GLOBAL.boardFBMappedSize;
+	if (!QemuVgaCalculatePageLayout(width, height, depth, capacity,
+									 &rowBytes, &pBytes, pageCount))
+		return paramErr;
 	if (pageSize)
 		*pageSize = pBytes;
-	if (pageCount) {
-		if (pBytes <= (GLOBAL.boardFBMappedSize / 2))
-			*pageCount = 2;
-		else
-			*pageCount = 1;
-	}
 	return noErr;
 }
 
@@ -560,13 +561,16 @@ OSStatus QemuVga_SetMode(UInt32 mode, UInt32 depth, UInt32 page)
 {
 	UInt32 width, height;
 	UInt32 pageSize, numPages;
+	OSStatus err;
 
 	if (mode >= GLOBAL.numModes)
 		return paramErr;
 	
 	width = getVMode(mode)->width;
 	height = getVMode(mode)->height;
-	QemuVga_GetModePages(mode, depth, &pageSize, &numPages);
+	err = QemuVga_GetModePages(mode, depth, &pageSize, &numPages);
+	if (err != noErr)
+		return err;
 	lprintf("Set Mode: %dx%dx%d has %d pages\n", width, height, depth, numPages);
 	if (page >= numPages)
 		return paramErr;

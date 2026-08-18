@@ -73,6 +73,6 @@ done
 for artifact in GXMetal.bin GXMetalStartup.bin GXMetalInstaller.bin \
                 GXMetalTest.bin; do
     file "$GUEST_DIR/bin/$artifact"
-    strings "$GUEST_DIR/bin/$artifact" | grep -F "1.9.0" >/dev/null || \
-        die "$artifact does not report GXMetal version 1.9.0"
+    strings "$GUEST_DIR/bin/$artifact" | grep -F "1.9.3" >/dev/null || \
+        die "$artifact does not report GXMetal version 1.9.3"
 done

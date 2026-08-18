@@ -184,14 +184,38 @@ diff --git a/ndrvloader.c b/ndrvloader.c
 index 83d0c7f..1afa700 100644
 --- a/ndrvloader.c
 +++ b/ndrvloader.c
-@@ -261,6 +261,42 @@ void chain9p(void) {
+@@ -261,6 +261,66 @@ void chain9p(void) {
  }
  
++/* A normal hard-drive start can still have the read-only ClassicMac Tools
++ * volume on Virtio. Only publish a Virtio Mac OS boot path when OpenBIOS was
++ * explicitly directed to start from one. */
++static int virtioStartupRequested(void) {
++	char bootdevice[512] = {};
++	long optionsph = 0;
++	long length = 0;
++
++	of("finddevice",
++		1, "/options",
++		1, &optionsph);
++	if (optionsph == 0 || optionsph == -1) return 0;
++
++	of("getprop",
++		4, optionsph, "boot-device", bootdevice, sizeof bootdevice - 1,
++		1, &length);
++	if (length < 6) return 0;
++	if (length >= sizeof bootdevice) length = sizeof bootdevice - 1;
++	bootdevice[length] = 0;
++
++	return strncmp(bootdevice, "virtio", 6) == 0;
++}
++
  void chainNormalBoot(void) {
 +	char path[512] = {};
 +	long pathlen = 0;
 +
-+	for (long ph=dtroot(); ph!=0; ph=dtstep(ph)) {
++	for (long ph=virtioStartupRequested() ? dtroot() : 0;
++		ph!=0; ph=dtstep(ph)) {
 +		long vendorid = 0, deviceid = 0;
 +		of("getprop",
 +			4, ph, "vendor-id", &vendorid, sizeof vendorid,
@@ -266,4 +290,3 @@ index 8864c0b..31a0c20 100644
  
  	// Incantation to enable memory-mapped access
  	uint16_t pci_status = 0;
-

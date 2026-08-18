@@ -17,6 +17,7 @@
 
 #include "GXMetalRegistry.h"
 #include "GXMetalDiagnostics.h"
+#include "GXMetalATICompatibility.h"
 #include "GXMetalTransport.h"
 #include "GXMetalVersion.h"
 
@@ -2614,10 +2615,22 @@ static void GXMetalDrawBitmap(const TQADrawContext *drawContext,
     if (!GXMetalFlushPendingDraws(state)) {
         return;
     }
-    left = v->x;
-    top = v->y;
-    right = left + (float)bitmap->width;
-    bottom = top + (float)bitmap->height;
+    if (state->ati_private_enabled &&
+        gxmetal_ati_uses_logical_bitmap_canvas(
+            v->x, v->y, (float)bitmap->width, (float)bitmap->height)) {
+        GXMetalBitmapRect rect = gxmetal_ati_bitmap_rect(
+            state->width, state->height, v->x, v->y,
+            (float)bitmap->width, (float)bitmap->height);
+        left = rect.left;
+        top = rect.top;
+        right = rect.right;
+        bottom = rect.bottom;
+    } else {
+        left = v->x;
+        top = v->y;
+        right = left + (float)bitmap->width;
+        bottom = top + (float)bitmap->height;
+    }
     if (right <= 0.0f || bottom <= 0.0f ||
         left >= (float)state->width || top >= (float)state->height) {
         return;

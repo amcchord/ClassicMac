@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.9.3 — 2026-08-18
+
+### Changed
+
+- GXMetal and its installer, startup companion, and conformance application
+  now report version 1.9.3 throughout the bundled Tools volume.
+
+### Fixed
+
+- **Power Mac hard-drive starts no longer pause at a question-mark disk while
+  ClassicMac Tools is mounted.** The PowerPC NDRV loader now redirects Mac
+  OS's startup path to a Virtio block device only when the user explicitly
+  selected a Virtio startup CD. A normal launch keeps the IDE hard drive as
+  the startup disk while still mounting ClassicMac Tools through Virtio.
+- Corrected combined Mac OS 9 resolution and color-depth switches by
+  validating framebuffer pages against the requested display mode rather
+  than the previous desktop mode. Games can enter their supported GXMetal
+  mode from any supported ClassicMac launcher resolution.
+- Corrected ATI-compatible 320x200 bitmap overlay scaling. Carmageddon II's
+  minimap now appears at the software renderer's expected lower-right
+  position and size while full-screen menu backgrounds remain unchanged.
+
 ## 1.9.0 — 2026-08-18
 
 ### Added

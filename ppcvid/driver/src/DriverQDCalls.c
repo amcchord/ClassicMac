@@ -1,6 +1,7 @@
 #include "VideoDriverPrivate.h"
 #include "VideoDriverPrototypes.h"
 #include "DriverQDCalls.h"
+#include "ModeContract.h"
 #include "QemuVga.h"
 
 /* Depth mode <-> bits-per-pixel mapping.
@@ -13,70 +14,14 @@
 
 UInt8 DepthToDepthMode(UInt8 depth)
 {
-	if (GLOBAL.lowDepthAvail) {
-		switch (depth) {
-		case 1:
-			return kDepthMode1;
-		case 2:
-			return kDepthMode2;
-		case 4:
-			return kDepthMode3;
-		case 8:
-			return kDepthMode4;
-		case 15:
-		case 16:
-			return kDepthMode5;
-		case 24:
-		case 32:
-			return kDepthMode6;
-		default:
-			return kDepthMode4;
-		}
-	}
-	switch (depth) {
-	case 8:
-		return kDepthMode1;
-	case 15:
-	case 16:
-		return kDepthMode2;
-	case 24:
-	case 32:
-		return kDepthMode3;
-	default:
-		return kDepthMode1;
-	}
+	return (UInt8)QemuVgaDepthToDepthMode(GLOBAL.lowDepthAvail,
+											 depth, kDepthMode1);
 }
 
 UInt8 DepthModeToDepth(UInt8 mode)
 {
-	if (GLOBAL.lowDepthAvail) {
-		switch (mode) {
-		case kDepthMode1:
-			return 1;
-		case kDepthMode2:
-			return 2;
-		case kDepthMode3:
-			return 4;
-		case kDepthMode4:
-			return 8;
-		case kDepthMode5:
-			return 15;
-		case kDepthMode6:
-			return 32;
-		default:
-			return 8;
-		}
-	}
-	switch (mode) {
-	case kDepthMode1:
-		return 8;
-	case kDepthMode2:
-		return 15;
-	case kDepthMode3:
-		return 32;
-	default:
-		return 8;
-	}
+	return (UInt8)QemuVgaDepthModeToDepth(GLOBAL.lowDepthAvail,
+											 mode, kDepthMode1);
 }
 
 UInt8 MaxDepthMode(void)
@@ -226,13 +171,18 @@ OSStatus
 GraphicsCoreGetPages(VDPageInfo *pageInfo)
 {
 	UInt32 pageCount, depth;
+	OSStatus err;
 
 	CHECK_OPEN( statusErr );
 
 	Trace(GraphicsCoreGetPages);
 
 	depth = DepthModeToDepth(pageInfo->csMode);
-	QemuVga_GetModePages(GLOBAL.curMode, depth, NULL, &pageCount);
+	if (depth == 0)
+		return paramErr;
+	err = QemuVga_GetModePages(GLOBAL.curMode, depth, NULL, &pageCount);
+	if (err != noErr)
+		return err;
 	pageInfo->csPage = pageCount;
 
 	return noErr;
@@ -616,6 +566,7 @@ OSStatus
 GraphicsCoreSetMode(VDPageInfo *pageInfo)
 {
 	UInt32 newDepth, newPage, pageCount;
+	OSStatus err;
 
 	Trace(GraphicsCoreSetMode);
 
@@ -623,14 +574,21 @@ GraphicsCoreSetMode(VDPageInfo *pageInfo)
 
 	newDepth = DepthModeToDepth(pageInfo->csMode);
 	newPage = pageInfo->csPage;
-	QemuVga_GetModePages(GLOBAL.curMode, newDepth, NULL, &pageCount);
+	if (newDepth == 0)
+		return paramErr;
+	err = QemuVga_GetModePages(GLOBAL.curMode, newDepth, NULL, &pageCount);
+	if (err != noErr)
+		return err;
 
 	lprintf("Requested depth=%d page=%d\n", newDepth, newPage);
 	if (pageInfo->csPage >= pageCount)
 		return paramErr;
 	
-	if (newDepth != GLOBAL.depth || newPage != GLOBAL.curPage)
-		QemuVga_SetMode(GLOBAL.curMode, newDepth, newPage);
+	if (newDepth != GLOBAL.depth || newPage != GLOBAL.curPage) {
+		err = QemuVga_SetMode(GLOBAL.curMode, newDepth, newPage);
+		if (err != noErr)
+			return err;
+	}
 	
 	pageInfo->csBaseAddr = GLOBAL.curBaseAddress;
 	lprintf("Returning BA: %lx\n", pageInfo->csBaseAddr);
@@ -643,23 +601,35 @@ OSStatus
 GraphicsCoreSwitchMode(VDSwitchInfoRec *switchInfo)
 {
 	UInt32 newMode, newDepth, newPage, pageCount;
+	OSStatus err;
 
 	Trace(GraphicsCoreSwitchMode);
 
 	CHECK_OPEN(controlErr);
 	
+	if (switchInfo->csData < 1 || switchInfo->csData > GLOBAL.numModes)
+		return paramErr;
 	newMode = switchInfo->csData - 1;
 	newDepth = DepthModeToDepth(switchInfo->csMode);
 	newPage = switchInfo->csPage;
-	QemuVga_GetModePages(GLOBAL.curMode, newDepth, NULL, &pageCount);
+	if (newDepth == 0)
+		return paramErr;
+
+	/* Validate against the requested resolution.  Using curMode here makes
+	 * a combined resolution/depth switch depend on whichever mode happened
+	 * to be active before the game launched. */
+	err = QemuVga_GetModePages(newMode, newDepth, NULL, &pageCount);
+	if (err != noErr)
+		return err;
 
 	if (newPage >= pageCount)
 		return paramErr;
 
 	if (newMode != GLOBAL.curMode || newDepth != GLOBAL.depth ||
 	    newPage != GLOBAL.curPage) {
-		if (QemuVga_SetMode(newMode, newDepth, newPage))
-			return controlErr;
+		err = QemuVga_SetMode(newMode, newDepth, newPage);
+		if (err != noErr)
+			return err;
 	}
 	switchInfo->csBaseAddr = GLOBAL.curBaseAddress;
 
@@ -718,13 +688,19 @@ GraphicsCoreGetVideoParams(VDVideoParametersInfoRec *videoParams)
  		
 	if (videoParams->csDisplayModeID < 1 || videoParams->csDisplayModeID > GLOBAL.numModes)
 		return paramErr;
-	if (videoParams->csDepthMode > MaxDepthMode())
+	if (videoParams->csDepthMode < kDepthMode1 ||
+	    videoParams->csDepthMode > MaxDepthMode())
 		return paramErr;
 	if (QemuVga_GetModeInfo(videoParams->csDisplayModeID - 1, &width, &height))
 		return paramErr;
 	
 	depth = DepthModeToDepth(videoParams->csDepthMode);
-	QemuVga_GetModePages(videoParams->csDisplayModeID - 1, depth, NULL, &pageCount);
+	if (depth == 0)
+		return paramErr;
+	err = QemuVga_GetModePages(videoParams->csDisplayModeID - 1, depth,
+									 NULL, &pageCount);
+	if (err != noErr)
+		return err;
 	videoParams->csPageCount = pageCount;
 	lprintf("Video Params says %d pages\n", pageCount);
 	
