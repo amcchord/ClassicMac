@@ -1,4 +1,4 @@
-GXMetal 1.8.1 for Mac OS 9
+GXMetal 1.9.0 for Mac OS 9
 ==========================
 
 GXMetal is ClassicMac's host-accelerated QuickDraw 3D RAVE engine. It lets
@@ -20,8 +20,9 @@ INSTALL OR UPDATE
 5. Restart the emulated Mac.
 6. Look for the puzzle-piece M icon in the startup extension row.
 7. Run GXMetal Test. Do not rely on the startup icon alone: the test confirms
-   RAVE discovery, the host transport, rendering correctness, presentation,
-   and software fallback.
+   the installed GXMetal version, RAVE discovery, the host transport,
+   rendering correctness, presentation, and software fallback. GXMetal Test
+   1.9.0 rejects a mismatched driver and tells you to reinstall and restart.
 
 Keep the complete GXMetal folder together while the installer runs. The
 GXMetal file is the RAVE driver; GXMetal Startup is a tiny companion extension
@@ -57,8 +58,9 @@ game files are not changed by the host accelerator.
 TESTED GAME
 -----------
 
-Nanosaur is the primary real-game test. GXMetal 1.8.1 has been exercised
-through its title screen and extended gameplay with textures, depth, clipping,
-fog, water, alpha effects, camera movement, and other dinosaurs. Rendering
-bugs should be reported with a screenshot, the Mac OS version, display
-resolution and color depth, and whether GXMetal Test passes.
+Nanosaur and Carmageddon II are the primary real-game tests. GXMetal 1.9.0 has
+been exercised through their title screens and extended gameplay with
+textures, depth, clipping, fog, water, alpha effects, camera movement, HUDs,
+and dynamic textures. Rendering bugs should be reported with a screenshot,
+the Mac OS version, display resolution and color depth, and whether GXMetal
+Test passes.

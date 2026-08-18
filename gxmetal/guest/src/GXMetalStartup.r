@@ -15,7 +15,7 @@ resource 'INIT' (128, "GXMetal Startup Icon", locked) {
 };
 
 resource 'vers' (1) {
-    1, 8, release, 0, verUS,
-    "1.8.1",
-    "GXMetal Startup 1.8.1"
+    1, 9, release, 0, verUS,
+    "1.9.0",
+    "GXMetal Startup 1.9.0"
 };

@@ -7,6 +7,8 @@
 
 #include <RAVESystem.h>
 #include <CodeFragments.h>
+#include <Files.h>
+#include <Folders.h>
 #include <Memory.h>
 #include <NameRegistry.h>
 #include <Quickdraw.h>
@@ -16,15 +18,28 @@
 #include "GXMetalRegistry.h"
 #include "GXMetalDiagnostics.h"
 #include "GXMetalTransport.h"
+#include "GXMetalVersion.h"
 
-#define GXMETAL_VENDOR_ID UINT32_C(0x47584d54) /* GXMT */
+#define GXMETAL_REGISTRATION_VENDOR_ID UINT32_C(0x47584d54) /* GXMT */
+#define GXMETAL_LEGACY_VENDOR_ID UINT32_C(1) /* kQAVendor_ATI */
 #define GXMETAL_ENGINE_ID UINT32_C(0x00000001)
-#define GXMETAL_REVISION  UINT32_C(0x00010400)
 #define GXMETAL_STATE_SLOTS 154u
 #define GXMETAL_SYNC_SPINS UINT32_C(10000000)
 #define GXMETAL_TEXTURE_MAGIC UINT32_C(0x47585458) /* GXTX */
 #define GXMETAL_BITMAP_MAGIC UINT32_C(0x4758424d) /* GXBM */
+#define GXMETAL_COLOR_TABLE_MAGIC UINT32_C(0x47584354) /* GXCT */
 #define GXMETAL_TEXTURE_MEMORY UINT32_C(0x04000000)
+#define GXMETAL_MAX_MIP_LEVELS 15u
+#define GXMETAL_MAX_SUBMITTED_VERTICES UINT32_C(65535)
+#define GXMETAL_MESH_BATCH_TRIANGLES UINT32_C(256)
+#define GXMETAL_DRAW_BATCH_TRIANGLES UINT32_C(64)
+#define GXMETAL_DRAW_BATCH_VERTICES (GXMETAL_DRAW_BATCH_TRIANGLES * 3u)
+#define GXMETAL_DRAW_BATCH_NONE UINT32_C(0)
+#define GXMETAL_DRAW_BATCH_GOURAUD UINT32_C(1)
+#define GXMETAL_DRAW_BATCH_TEXTURE UINT32_C(2)
+#define GXMETAL_ATI_PRIVATE_ENABLE_TAG UINT32_C(1020)
+#define GXMETAL_ATI_PRIVATE_METHODS_TAG UINT32_C(1021)
+#define GXMETAL_ATI_PIXEL_RGB16 ((TQAImagePixelType)1001)
 
 typedef struct GXMetalDrawState {
     GXMetalGuestTransport *transport;
@@ -38,8 +53,18 @@ typedef struct GXMetalDrawState {
     float float_state[GXMETAL_STATE_SLOTS];
     uint32_t int_state[GXMETAL_STATE_SLOTS];
     const void *texture;
+    Ptr submitted_gouraud_vertices;
+    uint32_t submitted_gouraud_count;
+    Ptr submitted_texture_vertices;
+    uint32_t submitted_texture_count;
+    Ptr pending_vertices;
+    uint32_t pending_kind;
+    uint32_t pending_count;
+    uint32_t pending_flags;
+    uint32_t pending_ati_texel_coordinates;
     TQANoticeMethod notices[kQAMethod_NumSelectors];
     void *notice_refcons[kQAMethod_NumSelectors];
+    uint32_t ati_private_enabled;
     TQABoolean failed;
 } GXMetalDrawState;
 
@@ -48,6 +73,15 @@ struct TQATexture {
     uint32_t resource_id;
     uint32_t levels;
     uint32_t pixel_format;
+    uint32_t width;
+    uint32_t height;
+    uint32_t source_pixel_type;
+    uint32_t source_flags;
+    uint32_t palette_bound;
+    uint32_t source_row_bytes[GXMETAL_MAX_MIP_LEVELS];
+    Ptr source_pixels[GXMETAL_MAX_MIP_LEVELS];
+    const void *live_pixels[GXMETAL_MAX_MIP_LEVELS];
+    uint32_t last_refresh_epoch;
 };
 
 struct TQABitmap {
@@ -56,6 +90,18 @@ struct TQABitmap {
     uint32_t width;
     uint32_t height;
     uint32_t pixel_format;
+    uint32_t source_pixel_type;
+    uint32_t source_flags;
+    uint32_t palette_bound;
+    uint32_t source_row_bytes;
+    Ptr source_pixels;
+};
+
+struct TQAColorTable {
+    uint32_t magic;
+    uint32_t entries;
+    uint32_t transparent_index_zero;
+    uint32_t colors[256];
 };
 
 static const char kGXMetalName[] = "GXMetal";
@@ -64,11 +110,47 @@ static GXMetalRegistryInfo gRegistry;
 static TQABoolean gTransportConnected;
 static uint32_t gNextContextID = 1;
 static uint32_t gNextResourceID = 1;
+static uint32_t gRenderEpoch = 1;
+static TQABoolean gRegistrationVendorPending;
 static int32_t gDiagnosticStatus = kGXMetalDiagnosticNotLoaded;
 static GXMetalDiagnosticSnapshot gDiagnostics = {
     .magic = GXMETAL_DIAGNOSTIC_MAGIC,
     .version = GXMETAL_DIAGNOSTIC_VERSION
 };
+
+static const unsigned char kGXMetalDriverTraceName[] = {
+    20, 'G', 'X', 'M', 'e', 't', 'a', 'l', ' ', 'D', 'r', 'i', 'v', 'e',
+    'r', ' ', 'T', 'r', 'a', 'c', 'e'
+};
+
+/* Diagnostic builds checkpoint the native big-endian snapshot to Preferences.
+ * A game crash unloads the CFM fragment and loses its globals; this small file
+ * preserves the last completed context/resource operation for host analysis. */
+static void GXMetalPersistDiagnostics(void)
+{
+    FSSpec trace;
+    short volume = 0;
+    short refNum = -1;
+    long directory = 0;
+    long length = (long)sizeof(gDiagnostics);
+
+    gDiagnostics.status = gDiagnosticStatus;
+    if (FindFolder(kOnSystemDisk, kPreferencesFolderType, false,
+                   &volume, &directory) != noErr) {
+        return;
+    }
+    (void)FSMakeFSSpec(volume, directory, kGXMetalDriverTraceName, &trace);
+    if (FSpOpenDF(&trace, fsWrPerm, &refNum) != noErr) {
+        if (FSpCreate(&trace, 'GXMT', 'GXDG', smSystemScript) != noErr ||
+            FSpOpenDF(&trace, fsWrPerm, &refNum) != noErr) {
+            return;
+        }
+    }
+    (void)SetFPos(refNum, fsFromStart, 0);
+    (void)FSWrite(refNum, &length, &gDiagnostics);
+    (void)SetEOF(refNum, (long)sizeof(gDiagnostics));
+    (void)FSClose(refNum);
+}
 
 int32_t GXMetalGetDiagnosticStatus(void)
 {
@@ -91,6 +173,27 @@ static uint32_t GXMetalFloatBits(float value)
     uint32_t bits;
     memcpy(&bits, &value, sizeof(bits));
     return bits;
+}
+
+static void GXMetalCountPixelType(uint32_t counters[],
+                                  TQAImagePixelType pixelType)
+{
+    uint32_t type = (uint32_t)pixelType;
+
+    if (type < GXMETAL_DIAGNOSTIC_PIXEL_TYPES) {
+        counters[type]++;
+    }
+}
+
+static void GXMetalCountPrivatePixelType(uint32_t counters[],
+                                         TQAImagePixelType pixelType)
+{
+    uint32_t type = (uint32_t)pixelType;
+
+    if (type >= UINT32_C(1000) &&
+        type < UINT32_C(1000) + GXMETAL_DIAGNOSTIC_PRIVATE_PIXEL_TYPES) {
+        counters[type - UINT32_C(1000)]++;
+    }
 }
 
 static TQABoolean GXMetalFindRegistryInfo(GXMetalRegistryInfo *info,
@@ -140,6 +243,8 @@ static void GXMetalPublishDiagnostics(void)
     gDiagnostics.registry_framebuffer_bytes = info.framebuffer_bytes;
     if (RegistryPropertySet(&entry, GXMETAL_DIAGNOSTIC_PROPERTY,
                             &gDiagnostics, sizeof(gDiagnostics)) != noErr) {
+        (void)RegistryPropertyDelete(&entry,
+                                     GXMETAL_DIAGNOSTIC_PROPERTY);
         (void)RegistryPropertyCreate(&entry, GXMETAL_DIAGNOSTIC_PROPERTY,
                                      &gDiagnostics, sizeof(gDiagnostics));
     }
@@ -205,10 +310,38 @@ static TQABoolean GXMetalCommitGlobalPacket(GXMetalGuestPacket *packet)
            GXMETAL_STATUS_READY;
 }
 
+/* Resource uploads all reference the one fixed staging area at
+ * GXMETAL_UPLOAD_OFFSET.  The command ring stores only that address, not an
+ * inline copy of the pixels, so the guest must not reuse the staging bytes
+ * until the host has consumed the upload packet.  Games which create several
+ * textures back-to-back (notably Carmageddon II's dynamically composed UI)
+ * otherwise race QEMU and give an earlier resource the pixels from a later
+ * texture. */
+static TQABoolean GXMetalCommitUploadPacket(GXMetalGuestPacket *packet)
+{
+    uint32_t sequence;
+
+    gxmetal_guest_packet_commit(&gTransport, packet);
+    if (!gxmetal_guest_emit_fence(&gTransport, &sequence) ||
+        !gxmetal_guest_wait(&gTransport, sequence,
+                            GXMETAL_SYNC_SPINS)) {
+        return 0;
+    }
+    return gxmetal_guest_register_read(&gTransport, GXMETAL_REG_STATUS) ==
+           GXMETAL_STATUS_READY;
+}
+
 static TQABoolean GXMetalTextureFormat(TQAImagePixelType pixelType,
                                        uint32_t *format,
                                        uint32_t *bytesPerPixel)
 {
+    if (pixelType == GXMETAL_ATI_PIXEL_RGB16) {
+        /* Carmageddon II's ATI private type-1001 atlases use big-endian
+         * ARGB4444. The alpha nibble carries antialiased font and HUD masks. */
+        *format = GXMETAL_PIXEL_ATI_ARGB4444;
+        *bytesPerPixel = 2;
+        return 1;
+    }
     switch (pixelType) {
     case kQAPixel_RGB16:
         *format = GXMETAL_PIXEL_RGB555;
@@ -251,6 +384,21 @@ static void GXMetalDestroyTextureResource(uint32_t resourceID)
     (void)GXMetalCommitGlobalPacket(&packet);
 }
 
+static void GXMetalFreeTextureSources(TQATexture *texture)
+{
+    uint32_t level;
+
+    if (texture == NULL) {
+        return;
+    }
+    for (level = 0; level < GXMETAL_MAX_MIP_LEVELS; level++) {
+        if (texture->source_pixels[level] != NULL) {
+            DisposePtr(texture->source_pixels[level]);
+            texture->source_pixels[level] = NULL;
+        }
+    }
+}
+
 static TQAError GXMetalTextureNew(unsigned long flags,
                                   TQAImagePixelType pixelType,
                                   const TQAImage images[],
@@ -259,29 +407,82 @@ static TQAError GXMetalTextureNew(unsigned long flags,
     TQATexture *texture;
     GXMetalGuestPacket packet;
     uint8_t *payload;
-    uint32_t format;
-    uint32_t bytesPerPixel;
+    uint32_t format = 0;
+    uint32_t bytesPerPixel = 0;
     uint32_t levels = 1;
     uint32_t width;
     uint32_t height;
     uint32_t level;
+    TQABoolean indexed;
 
+    gDiagnostics.texture_new_count++;
+    GXMetalCountPixelType(gDiagnostics.texture_new_attempt_by_type,
+                          pixelType);
+    gDiagnostics.resource_stage = 1;
+    gDiagnostics.last_texture_flags = (uint32_t)flags;
+    gDiagnostics.last_texture_pixel_type = (uint32_t)pixelType;
+    gDiagnostics.last_texture_error = kQAError;
+    gDiagnostics.last_texture_image_width = images != NULL ?
+        (uint32_t)images[0].width : 0;
+    gDiagnostics.last_texture_image_height = images != NULL ?
+        (uint32_t)images[0].height : 0;
+    gDiagnostics.last_texture_image_row_bytes = images != NULL ?
+        (uint32_t)images[0].rowBytes : 0;
+    gDiagnostics.last_texture_image_pixels = images != NULL ?
+        (uint32_t)(uintptr_t)images[0].pixmap : 0;
+    gDiagnostics.last_texture_output_pointer =
+        (uint32_t)(uintptr_t)newTexture;
+    if ((uint32_t)pixelType >= UINT32_C(1000)) {
+        gDiagnostics.private_texture_attempt_count++;
+        GXMetalCountPrivatePixelType(
+            gDiagnostics.private_texture_attempt_by_type, pixelType);
+        gDiagnostics.private_texture_flags_or |= (uint32_t)flags;
+        if ((flags & kQATexture_NoCopy) != 0) {
+            gDiagnostics.private_texture_attempt_nocopy_count++;
+        }
+    }
     if (newTexture == NULL) {
+        gDiagnostics.last_texture_error = kQAParamErr;
         return kQAParamErr;
     }
     *newTexture = NULL;
+    indexed = pixelType == kQAPixel_CL8;
     if (images == NULL || images[0].pixmap == NULL ||
         images[0].width <= 0 || images[0].height <= 0 ||
         images[0].width > (long)GXMETAL_MAX_DIMENSION ||
         images[0].height > (long)GXMETAL_MAX_DIMENSION ||
         images[0].rowBytes <= 0 ||
-        !GXMetalTextureFormat(pixelType, &format, &bytesPerPixel) ||
+        (!indexed &&
+         !GXMetalTextureFormat(pixelType, &format, &bytesPerPixel)) ||
         !GXMetalTransportAvailable() ||
         (gTransport.features & GXMETAL_FEATURE_TEXTURE) == 0) {
+        if (images == NULL || images[0].pixmap == NULL ||
+            images[0].width <= 0 || images[0].height <= 0 ||
+            images[0].width > (long)GXMETAL_MAX_DIMENSION ||
+            images[0].height > (long)GXMETAL_MAX_DIMENSION ||
+            images[0].rowBytes <= 0) {
+            gDiagnostics.texture_reject_invalid_image_count++;
+        } else if (!indexed &&
+                   !GXMetalTextureFormat(pixelType, &format,
+                                         &bytesPerPixel)) {
+            gDiagnostics.texture_reject_unsupported_format_count++;
+        } else {
+            gDiagnostics.texture_reject_transport_count++;
+        }
+        gDiagnostics.last_texture_error = kQANotSupported;
         return kQANotSupported;
+    }
+    if (indexed) {
+        /* RAVE binds the CL8 palette after creating the texture. Keep a
+         * private copy of the indices and expose a direct-color host resource
+         * which GXMetalTextureBindColorTable fills once the palette arrives. */
+        format = GXMETAL_PIXEL_ARGB8888;
+        bytesPerPixel = 1;
     }
     width = (uint32_t)images[0].width;
     height = (uint32_t)images[0].height;
+    gDiagnostics.last_texture_width = width;
+    gDiagnostics.last_texture_height = height;
     if (flags & kQATexture_Mipmap) {
         uint32_t w = width;
         uint32_t h = height;
@@ -289,13 +490,15 @@ static TQAError GXMetalTextureNew(unsigned long flags,
             w = w > 1 ? w >> 1 : 1;
             h = h > 1 ? h >> 1 : 1;
             levels++;
-            if (levels > 15) {
+            if (levels > GXMETAL_MAX_MIP_LEVELS) {
+                gDiagnostics.last_texture_error = kQANotSupported;
                 return kQANotSupported;
             }
         }
     }
     texture = (TQATexture *)NewPtrClear(sizeof(*texture));
     if (texture == NULL) {
+        gDiagnostics.last_texture_error = kQAOutOfMemory;
         return kQAOutOfMemory;
     }
     texture->magic = GXMETAL_TEXTURE_MAGIC;
@@ -305,11 +508,18 @@ static TQAError GXMetalTextureNew(unsigned long flags,
     }
     texture->levels = levels;
     texture->pixel_format = format;
+    texture->width = width;
+    texture->height = height;
+    texture->source_pixel_type = (uint32_t)pixelType;
+    texture->source_flags = (uint32_t)flags;
+    gDiagnostics.last_texture_levels = levels;
+    gDiagnostics.resource_stage = 2;
 
     if (!GXMetalGlobalPacket(GXMETAL_OP_TEXTURE_CREATE,
                              GXMETAL_RESOURCE_CREATE_PACKET_BYTES,
                              &packet)) {
         DisposePtr((Ptr)texture);
+        gDiagnostics.last_texture_error = kQAError;
         return kQAError;
     }
     payload = packet.bytes + GXMETAL_PACKET_HEADER_BYTES;
@@ -318,7 +528,8 @@ static TQAError GXMetalTextureNew(unsigned long flags,
     gxmetal_store_le32(payload + GXMETAL_RESOURCE_WIDTH_OFFSET, width);
     gxmetal_store_le32(payload + GXMETAL_RESOURCE_HEIGHT_OFFSET, height);
     gxmetal_store_le32(payload + GXMETAL_RESOURCE_ROW_BYTES_OFFSET,
-                       (uint32_t)images[0].rowBytes);
+                       indexed ? width * 4 :
+                           (uint32_t)images[0].rowBytes);
     gxmetal_store_le32(payload + GXMETAL_RESOURCE_PIXEL_FORMAT_OFFSET,
                        format);
     gxmetal_store_le32(payload + GXMETAL_RESOURCE_FLAGS_OFFSET,
@@ -327,6 +538,7 @@ static TQAError GXMetalTextureNew(unsigned long flags,
     gxmetal_store_le32(payload + GXMETAL_RESOURCE_LEVELS_OFFSET, levels);
     if (!GXMetalCommitGlobalPacket(&packet)) {
         DisposePtr((Ptr)texture);
+        gDiagnostics.last_texture_error = kQAError;
         return kQAError;
     }
 
@@ -347,7 +559,9 @@ static TQAError GXMetalTextureNew(unsigned long flags,
             (uint32_t)images[level].height != levelHeight ||
             images[level].rowBytes <= 0) {
             GXMetalDestroyTextureResource(texture->resource_id);
+            GXMetalFreeTextureSources(texture);
             DisposePtr((Ptr)texture);
+            gDiagnostics.last_texture_error = kQAParamErr;
             return kQAParamErr;
         }
         rowBytes = (uint32_t)images[level].rowBytes;
@@ -355,16 +569,57 @@ static TQAError GXMetalTextureNew(unsigned long flags,
         if (rowBytes < levelWidth * bytesPerPixel ||
             length > GXMETAL_UPLOAD_BYTES) {
             GXMetalDestroyTextureResource(texture->resource_id);
+            GXMetalFreeTextureSources(texture);
             DisposePtr((Ptr)texture);
+            gDiagnostics.last_texture_error = kQAOutOfVideoMemory;
             return kQAOutOfVideoMemory;
         }
+        if (indexed) {
+            texture->source_pixels[level] = NewPtr((Size)length);
+            if (texture->source_pixels[level] == NULL) {
+                GXMetalDestroyTextureResource(texture->resource_id);
+                GXMetalFreeTextureSources(texture);
+                DisposePtr((Ptr)texture);
+                gDiagnostics.last_texture_error = kQAOutOfMemory;
+                return kQAOutOfMemory;
+            }
+            texture->source_row_bytes[level] = rowBytes;
+            memcpy(texture->source_pixels[level], images[level].pixmap,
+                   (size_t)length);
+            gDiagnostics.resource_stage = 3;
+            continue;
+        }
+        if (pixelType == GXMETAL_ATI_PIXEL_RGB16 &&
+            (flags & kQATexture_NoCopy) != 0) {
+            /* NoCopy explicitly keeps the caller's pixelmap live.  Retain an
+             * owned snapshot for change detection in that case only.  Normal
+             * textures are immutable after QATextureNew; scanning all of them
+             * once per frame is especially expensive under PPC emulation and
+             * can also dereference memory the caller has already released. */
+            texture->source_pixels[level] = NewPtr((Size)length);
+            if (texture->source_pixels[level] == NULL) {
+                GXMetalDestroyTextureResource(texture->resource_id);
+                GXMetalFreeTextureSources(texture);
+                DisposePtr((Ptr)texture);
+                gDiagnostics.last_texture_error = kQAOutOfMemory;
+                return kQAOutOfMemory;
+            }
+            texture->source_row_bytes[level] = rowBytes;
+            texture->live_pixels[level] = images[level].pixmap;
+            memcpy(texture->source_pixels[level], images[level].pixmap,
+                   (size_t)length);
+        }
         memcpy(gTransport.shared + GXMETAL_UPLOAD_OFFSET,
-               images[level].pixmap, (size_t)length);
+               texture->source_pixels[level] != NULL ?
+                   texture->source_pixels[level] : images[level].pixmap,
+               (size_t)length);
         if (!GXMetalGlobalPacket(GXMETAL_OP_TEXTURE_UPLOAD,
                                  GXMETAL_RESOURCE_UPLOAD_PACKET_BYTES,
                                  &packet)) {
             GXMetalDestroyTextureResource(texture->resource_id);
+            GXMetalFreeTextureSources(texture);
             DisposePtr((Ptr)texture);
+            gDiagnostics.last_texture_error = kQAError;
             return kQAError;
         }
         payload = packet.bytes + GXMETAL_PACKET_HEADER_BYTES;
@@ -381,13 +636,37 @@ static TQAError GXMetalTextureNew(unsigned long flags,
                            levelWidth);
         gxmetal_store_le32(payload + GXMETAL_UPLOAD_HEIGHT_OFFSET,
                            levelHeight);
-        if (!GXMetalCommitGlobalPacket(&packet)) {
+        if (!GXMetalCommitUploadPacket(&packet)) {
             GXMetalDestroyTextureResource(texture->resource_id);
+            GXMetalFreeTextureSources(texture);
             DisposePtr((Ptr)texture);
+            gDiagnostics.last_texture_error = kQAError;
             return kQAError;
         }
+        gDiagnostics.resource_stage = 3;
     }
     *newTexture = texture;
+    gDiagnostics.resource_stage = 4;
+    gDiagnostics.last_texture_error = kQANoErr;
+    GXMetalCountPixelType(gDiagnostics.texture_new_success_by_type,
+                          pixelType);
+    if (pixelType == GXMETAL_ATI_PIXEL_RGB16) {
+        gDiagnostics.private_texture_success_count++;
+        GXMetalCountPrivatePixelType(
+            gDiagnostics.private_texture_success_by_type, pixelType);
+        if ((flags & kQATexture_NoCopy) != 0) {
+            gDiagnostics.private_texture_success_nocopy_count++;
+        }
+        if (width <= 64 && height <= 64) {
+            gDiagnostics.private_texture_success_small_count++;
+        } else {
+            gDiagnostics.private_texture_success_large_count++;
+        }
+    }
+    if (gDiagnostics.texture_new_count == 1) {
+        GXMetalPublishDiagnostics();
+        GXMetalPersistDiagnostics();
+    }
     return kQANoErr;
 }
 
@@ -403,8 +682,234 @@ static void GXMetalTextureDelete(TQATexture *texture)
         return;
     }
     GXMetalDestroyTextureResource(texture->resource_id);
+    GXMetalFreeTextureSources(texture);
+    gDiagnostics.texture_delete_count++;
+    gDiagnostics.resource_stage = 30;
     texture->magic = 0;
     DisposePtr((Ptr)texture);
+}
+
+static TQAError GXMetalColorTableNew(TQAColorTableType tableType,
+                                     void *pixelData,
+                                     long transparentIndexFlag,
+                                     TQAColorTable **newTable)
+{
+    TQAColorTable *table;
+    uint32_t entries;
+
+    if (newTable == NULL) {
+        gDiagnostics.last_color_table_error = kQAParamErr;
+        return kQAParamErr;
+    }
+    gDiagnostics.color_table_new_count++;
+    gDiagnostics.resource_stage = 10;
+    gDiagnostics.last_color_table_type = (uint32_t)tableType;
+    gDiagnostics.last_color_table_transparent =
+        (uint32_t)(transparentIndexFlag != 0);
+    gDiagnostics.last_color_table_error = kQAError;
+    *newTable = NULL;
+    if (pixelData == NULL ||
+        (tableType != kQAColorTable_CL8_RGB32 &&
+         tableType != kQAColorTable_CL4_RGB32)) {
+        gDiagnostics.last_color_table_error = kQANotSupported;
+        return kQANotSupported;
+    }
+    entries = tableType == kQAColorTable_CL8_RGB32 ? 256 : 16;
+    table = (TQAColorTable *)NewPtrClear(sizeof(*table));
+    if (table == NULL) {
+        gDiagnostics.last_color_table_error = kQAOutOfMemory;
+        return kQAOutOfMemory;
+    }
+    table->magic = GXMETAL_COLOR_TABLE_MAGIC;
+    table->entries = entries;
+    table->transparent_index_zero = transparentIndexFlag != 0;
+    memcpy(table->colors, pixelData, entries * sizeof(table->colors[0]));
+    *newTable = table;
+    gDiagnostics.resource_stage = 11;
+    gDiagnostics.last_color_table_error = kQANoErr;
+    if (gDiagnostics.color_table_new_count == 1) {
+        GXMetalPublishDiagnostics();
+        GXMetalPersistDiagnostics();
+    }
+    return kQANoErr;
+}
+
+static void GXMetalColorTableDelete(TQAColorTable *table)
+{
+    if (table == NULL || table->magic != GXMETAL_COLOR_TABLE_MAGIC) {
+        return;
+    }
+    table->magic = 0;
+    gDiagnostics.color_table_delete_count++;
+    gDiagnostics.resource_stage = 31;
+    DisposePtr((Ptr)table);
+}
+
+static TQAError GXMetalTextureBindColorTable(TQATexture *texture,
+                                              TQAColorTable *table)
+{
+    GXMetalGuestPacket packet;
+    uint8_t *payload;
+    uint32_t level;
+
+    gDiagnostics.texture_bind_color_table_count++;
+    gDiagnostics.resource_stage = 20;
+    gDiagnostics.last_texture_bind_error = kQAError;
+    if (texture == NULL || texture->magic != GXMETAL_TEXTURE_MAGIC ||
+        table == NULL || table->magic != GXMETAL_COLOR_TABLE_MAGIC) {
+        gDiagnostics.last_texture_bind_error = kQAParamErr;
+        return kQAParamErr;
+    }
+    if (texture->source_pixel_type != (uint32_t)kQAPixel_CL8 ||
+        table->entries != 256 || !GXMetalTransportAvailable()) {
+        gDiagnostics.last_texture_bind_error = kQANotSupported;
+        return kQANotSupported;
+    }
+    for (level = 0; level < texture->levels; level++) {
+        uint32_t width = texture->width >> level;
+        uint32_t height = texture->height >> level;
+        uint32_t rowBytes;
+        uint32_t x;
+        uint32_t y;
+        uint64_t length;
+        const uint8_t *source;
+        uint8_t *destination;
+
+        if (width == 0) {
+            width = 1;
+        }
+        if (height == 0) {
+            height = 1;
+        }
+        rowBytes = width * 4;
+        length = (uint64_t)rowBytes * height;
+        if (texture->source_pixels[level] == NULL ||
+            texture->source_row_bytes[level] < width ||
+            length > GXMETAL_UPLOAD_BYTES) {
+            gDiagnostics.last_texture_bind_error = kQAOutOfVideoMemory;
+            return kQAOutOfVideoMemory;
+        }
+        source = (const uint8_t *)texture->source_pixels[level];
+        destination = gTransport.shared + GXMETAL_UPLOAD_OFFSET;
+        for (y = 0; y < height; y++) {
+            for (x = 0; x < width; x++) {
+                uint8_t index = source[y *
+                    texture->source_row_bytes[level] + x];
+                uint32_t color = table->colors[index];
+                uint8_t *pixel = destination + y * rowBytes + x * 4;
+
+                pixel[0] = table->transparent_index_zero && index == 0 ?
+                    0 : 255;
+                pixel[1] = (uint8_t)(color >> 16);
+                pixel[2] = (uint8_t)(color >> 8);
+                pixel[3] = (uint8_t)color;
+            }
+        }
+        gDiagnostics.resource_stage = 21;
+        if (!GXMetalGlobalPacket(GXMETAL_OP_TEXTURE_UPLOAD,
+                                 GXMETAL_RESOURCE_UPLOAD_PACKET_BYTES,
+                                 &packet)) {
+            gDiagnostics.last_texture_bind_error = kQAError;
+            return kQAError;
+        }
+        payload = packet.bytes + GXMETAL_PACKET_HEADER_BYTES;
+        gxmetal_store_le32(payload + GXMETAL_UPLOAD_RESOURCE_ID_OFFSET,
+                           texture->resource_id);
+        gxmetal_store_le32(payload + GXMETAL_UPLOAD_LEVEL_OFFSET, level);
+        gxmetal_store_le32(payload + GXMETAL_UPLOAD_SHARED_OFFSET_OFFSET,
+                           GXMETAL_UPLOAD_OFFSET);
+        gxmetal_store_le32(payload + GXMETAL_UPLOAD_LENGTH_OFFSET,
+                           (uint32_t)length);
+        gxmetal_store_le32(payload + GXMETAL_UPLOAD_ROW_BYTES_OFFSET,
+                           rowBytes);
+        gxmetal_store_le32(payload + GXMETAL_UPLOAD_WIDTH_OFFSET, width);
+        gxmetal_store_le32(payload + GXMETAL_UPLOAD_HEIGHT_OFFSET, height);
+        if (!GXMetalCommitUploadPacket(&packet)) {
+            gDiagnostics.last_texture_bind_error = kQAError;
+            return kQAError;
+        }
+        gDiagnostics.resource_stage = 22;
+    }
+    gDiagnostics.resource_stage = 23;
+    gDiagnostics.last_texture_bind_error = kQANoErr;
+    texture->palette_bound = 1;
+    if (gDiagnostics.texture_bind_color_table_count == 1) {
+        GXMetalPublishDiagnostics();
+        GXMetalPersistDiagnostics();
+    }
+    return kQANoErr;
+}
+
+static TQAError GXMetalBitmapBindColorTable(TQABitmap *bitmap,
+                                             TQAColorTable *table)
+{
+    GXMetalGuestPacket packet;
+    uint8_t *payload;
+    uint32_t rowBytes;
+    uint32_t x;
+    uint32_t y;
+    uint64_t length;
+    const uint8_t *source;
+    uint8_t *destination;
+
+    gDiagnostics.bitmap_bind_color_table_count++;
+    gDiagnostics.last_bitmap_bind_error = kQAError;
+    if (bitmap == NULL || bitmap->magic != GXMETAL_BITMAP_MAGIC ||
+        table == NULL || table->magic != GXMETAL_COLOR_TABLE_MAGIC) {
+        gDiagnostics.last_bitmap_bind_error = kQAParamErr;
+        return kQAParamErr;
+    }
+    if (bitmap->source_pixel_type != (uint32_t)kQAPixel_CL8 ||
+        bitmap->source_pixels == NULL || table->entries != 256 ||
+        !GXMetalTransportAvailable()) {
+        gDiagnostics.last_bitmap_bind_error = kQANotSupported;
+        return kQANotSupported;
+    }
+    rowBytes = bitmap->width * 4;
+    length = (uint64_t)rowBytes * bitmap->height;
+    if (bitmap->source_row_bytes < bitmap->width ||
+        length > GXMETAL_UPLOAD_BYTES) {
+        gDiagnostics.last_bitmap_bind_error = kQAOutOfVideoMemory;
+        return kQAOutOfVideoMemory;
+    }
+    source = (const uint8_t *)bitmap->source_pixels;
+    destination = gTransport.shared + GXMETAL_UPLOAD_OFFSET;
+    for (y = 0; y < bitmap->height; y++) {
+        for (x = 0; x < bitmap->width; x++) {
+            uint8_t index = source[y * bitmap->source_row_bytes + x];
+            uint32_t color = table->colors[index];
+            uint8_t *pixel = destination + y * rowBytes + x * 4;
+
+            pixel[0] = table->transparent_index_zero && index == 0 ? 0 : 255;
+            pixel[1] = (uint8_t)(color >> 16);
+            pixel[2] = (uint8_t)(color >> 8);
+            pixel[3] = (uint8_t)color;
+        }
+    }
+    if (!GXMetalGlobalPacket(GXMETAL_OP_TEXTURE_UPLOAD,
+                             GXMETAL_RESOURCE_UPLOAD_PACKET_BYTES,
+                             &packet)) {
+        gDiagnostics.last_bitmap_bind_error = kQAError;
+        return kQAError;
+    }
+    payload = packet.bytes + GXMETAL_PACKET_HEADER_BYTES;
+    gxmetal_store_le32(payload + GXMETAL_UPLOAD_RESOURCE_ID_OFFSET,
+                       bitmap->resource_id);
+    gxmetal_store_le32(payload + GXMETAL_UPLOAD_LEVEL_OFFSET, 0);
+    gxmetal_store_le32(payload + GXMETAL_UPLOAD_SHARED_OFFSET_OFFSET,
+                       GXMETAL_UPLOAD_OFFSET);
+    gxmetal_store_le32(payload + GXMETAL_UPLOAD_LENGTH_OFFSET,
+                       (uint32_t)length);
+    gxmetal_store_le32(payload + GXMETAL_UPLOAD_ROW_BYTES_OFFSET, rowBytes);
+    gxmetal_store_le32(payload + GXMETAL_UPLOAD_WIDTH_OFFSET, bitmap->width);
+    gxmetal_store_le32(payload + GXMETAL_UPLOAD_HEIGHT_OFFSET, bitmap->height);
+    if (!GXMetalCommitUploadPacket(&packet)) {
+        gDiagnostics.last_bitmap_bind_error = kQAError;
+        return kQAError;
+    }
+    bitmap->palette_bound = 1;
+    gDiagnostics.last_bitmap_bind_error = kQANoErr;
+    return kQANoErr;
 }
 
 static TQAError GXMetalBitmapNew(unsigned long flags,
@@ -415,37 +920,61 @@ static TQAError GXMetalBitmapNew(unsigned long flags,
     TQABitmap *bitmap;
     GXMetalGuestPacket packet;
     uint8_t *payload;
-    uint32_t format;
-    uint32_t bytesPerPixel;
+    uint32_t format = 0;
+    uint32_t bytesPerPixel = 0;
     uint32_t width;
     uint32_t height;
     uint32_t rowBytes;
     uint64_t length;
+    TQABoolean indexed;
 
+    gDiagnostics.bitmap_new_count++;
+    GXMetalCountPixelType(gDiagnostics.bitmap_new_attempt_by_type,
+                          pixelType);
+    gDiagnostics.last_bitmap_flags = (uint32_t)flags;
+    gDiagnostics.last_bitmap_pixel_type = (uint32_t)pixelType;
+    gDiagnostics.last_bitmap_width = image != NULL && image->width > 0 ?
+        (uint32_t)image->width : 0;
+    gDiagnostics.last_bitmap_height = image != NULL && image->height > 0 ?
+        (uint32_t)image->height : 0;
+    gDiagnostics.last_bitmap_error = kQAError;
     if (newBitmap == NULL) {
+        gDiagnostics.last_bitmap_error = kQAParamErr;
         return kQAParamErr;
     }
     *newBitmap = NULL;
+    indexed = pixelType == kQAPixel_CL8;
     if (image == NULL || image->pixmap == NULL || image->width <= 0 ||
         image->height <= 0 ||
         image->width > (long)GXMETAL_MAX_DIMENSION ||
         image->height > (long)GXMETAL_MAX_DIMENSION ||
         image->rowBytes <= 0 ||
         (flags & (kQABitmap_NonRelocatable | kQABitmap_NoCopy)) != 0 ||
-        !GXMetalTextureFormat(pixelType, &format, &bytesPerPixel) ||
+        (!indexed &&
+         !GXMetalTextureFormat(pixelType, &format, &bytesPerPixel)) ||
         !GXMetalTransportAvailable() ||
         (gTransport.features & GXMETAL_FEATURE_TEXTURE) == 0) {
+        gDiagnostics.last_bitmap_error = kQANotSupported;
         return kQANotSupported;
+    }
+    if (indexed) {
+        /* QABitmapBindColorTable supplies the CL8 palette after creation.
+         * Preserve the indices until then and expose an ARGB host resource,
+         * matching the indexed-texture path. */
+        format = GXMETAL_PIXEL_ARGB8888;
+        bytesPerPixel = 1;
     }
     width = (uint32_t)image->width;
     height = (uint32_t)image->height;
     rowBytes = (uint32_t)image->rowBytes;
     length = (uint64_t)rowBytes * height;
     if (rowBytes < width * bytesPerPixel || length > GXMETAL_UPLOAD_BYTES) {
+        gDiagnostics.last_bitmap_error = kQAOutOfVideoMemory;
         return kQAOutOfVideoMemory;
     }
     bitmap = (TQABitmap *)NewPtrClear(sizeof(*bitmap));
     if (bitmap == NULL) {
+        gDiagnostics.last_bitmap_error = kQAOutOfMemory;
         return kQAOutOfMemory;
     }
     bitmap->magic = GXMETAL_BITMAP_MAGIC;
@@ -456,11 +985,14 @@ static TQAError GXMetalBitmapNew(unsigned long flags,
     bitmap->width = width;
     bitmap->height = height;
     bitmap->pixel_format = format;
+    bitmap->source_pixel_type = (uint32_t)pixelType;
+    bitmap->source_flags = (uint32_t)flags;
 
     if (!GXMetalGlobalPacket(GXMETAL_OP_TEXTURE_CREATE,
                              GXMETAL_RESOURCE_CREATE_PACKET_BYTES,
                              &packet)) {
         DisposePtr((Ptr)bitmap);
+        gDiagnostics.last_bitmap_error = kQAError;
         return kQAError;
     }
     payload = packet.bytes + GXMETAL_PACKET_HEADER_BYTES;
@@ -468,7 +1000,8 @@ static TQAError GXMetalBitmapNew(unsigned long flags,
                        bitmap->resource_id);
     gxmetal_store_le32(payload + GXMETAL_RESOURCE_WIDTH_OFFSET, width);
     gxmetal_store_le32(payload + GXMETAL_RESOURCE_HEIGHT_OFFSET, height);
-    gxmetal_store_le32(payload + GXMETAL_RESOURCE_ROW_BYTES_OFFSET, rowBytes);
+    gxmetal_store_le32(payload + GXMETAL_RESOURCE_ROW_BYTES_OFFSET,
+                       indexed ? width * 4 : rowBytes);
     gxmetal_store_le32(payload + GXMETAL_RESOURCE_PIXEL_FORMAT_OFFSET,
                        format);
     gxmetal_store_le32(payload + GXMETAL_RESOURCE_FLAGS_OFFSET,
@@ -476,7 +1009,25 @@ static TQAError GXMetalBitmapNew(unsigned long flags,
     gxmetal_store_le32(payload + GXMETAL_RESOURCE_LEVELS_OFFSET, 1);
     if (!GXMetalCommitGlobalPacket(&packet)) {
         DisposePtr((Ptr)bitmap);
+        gDiagnostics.last_bitmap_error = kQAError;
         return kQAError;
+    }
+
+    if (indexed) {
+        bitmap->source_pixels = NewPtr((Size)length);
+        if (bitmap->source_pixels == NULL) {
+            GXMetalDestroyTextureResource(bitmap->resource_id);
+            DisposePtr((Ptr)bitmap);
+            gDiagnostics.last_bitmap_error = kQAOutOfMemory;
+            return kQAOutOfMemory;
+        }
+        bitmap->source_row_bytes = rowBytes;
+        memcpy(bitmap->source_pixels, image->pixmap, (size_t)length);
+        *newBitmap = bitmap;
+        gDiagnostics.last_bitmap_error = kQANoErr;
+        GXMetalCountPixelType(gDiagnostics.bitmap_new_success_by_type,
+                              pixelType);
+        return kQANoErr;
     }
 
     memcpy(gTransport.shared + GXMETAL_UPLOAD_OFFSET,
@@ -486,6 +1037,7 @@ static TQAError GXMetalBitmapNew(unsigned long flags,
                              &packet)) {
         GXMetalDestroyTextureResource(bitmap->resource_id);
         DisposePtr((Ptr)bitmap);
+        gDiagnostics.last_bitmap_error = kQAError;
         return kQAError;
     }
     payload = packet.bytes + GXMETAL_PACKET_HEADER_BYTES;
@@ -499,12 +1051,16 @@ static TQAError GXMetalBitmapNew(unsigned long flags,
     gxmetal_store_le32(payload + GXMETAL_UPLOAD_ROW_BYTES_OFFSET, rowBytes);
     gxmetal_store_le32(payload + GXMETAL_UPLOAD_WIDTH_OFFSET, width);
     gxmetal_store_le32(payload + GXMETAL_UPLOAD_HEIGHT_OFFSET, height);
-    if (!GXMetalCommitGlobalPacket(&packet)) {
+    if (!GXMetalCommitUploadPacket(&packet)) {
         GXMetalDestroyTextureResource(bitmap->resource_id);
         DisposePtr((Ptr)bitmap);
+        gDiagnostics.last_bitmap_error = kQAError;
         return kQAError;
     }
     *newBitmap = bitmap;
+    gDiagnostics.last_bitmap_error = kQANoErr;
+    GXMetalCountPixelType(gDiagnostics.bitmap_new_success_by_type,
+                          pixelType);
     return kQANoErr;
 }
 
@@ -520,7 +1076,12 @@ static void GXMetalBitmapDelete(TQABitmap *bitmap)
         return;
     }
     GXMetalDestroyTextureResource(bitmap->resource_id);
+    if (bitmap->source_pixels != NULL) {
+        DisposePtr(bitmap->source_pixels);
+        bitmap->source_pixels = NULL;
+    }
     bitmap->magic = 0;
+    gDiagnostics.bitmap_delete_count++;
     DisposePtr((Ptr)bitmap);
 }
 
@@ -549,7 +1110,10 @@ static TQABoolean GXMetalDescribeDevice(const TQADevice *device,
     uint64_t targetAddress;
     uint64_t targetEnd;
 
+    gDiagnostics.display_reject_reason = kGXMetalDisplayAccepted;
     if (device == NULL || rect == NULL || !GXMetalTransportAvailable()) {
+        gDiagnostics.display_reject_reason =
+            kGXMetalDisplayInvalidArguments;
         return 0;
     }
     gDiagnostics.device_type = (uint32_t)device->deviceType;
@@ -562,6 +1126,8 @@ static TQABoolean GXMetalDescribeDevice(const TQADevice *device,
     top = (int32_t)rect->top;
     bottom = (int32_t)rect->bottom;
     if (left < 0 || top < 0 || right <= left || bottom <= top) {
+        gDiagnostics.display_reject_reason =
+            kGXMetalDisplayInvalidRectangle;
         return 0;
     }
 
@@ -571,11 +1137,15 @@ static TQABoolean GXMetalDescribeDevice(const TQADevice *device,
         uint32_t pixelSize;
 
         if (graphicsDevice == NULL || *graphicsDevice == NULL) {
+            gDiagnostics.display_reject_reason =
+                kGXMetalDisplayInvalidGDevice;
             return 0;
         }
         gDiagnostics.device_address = (uint32_t)(uintptr_t)graphicsDevice;
         pixmap = (**graphicsDevice).gdPMap;
         if (pixmap == NULL || *pixmap == NULL) {
+            gDiagnostics.display_reject_reason =
+                kGXMetalDisplayInvalidPixMap;
             return 0;
         }
         gDiagnostics.pixmap_address = (uint32_t)(uintptr_t)pixmap;
@@ -590,6 +1160,8 @@ static TQABoolean GXMetalDescribeDevice(const TQADevice *device,
             *pixelFormat = GXMETAL_PIXEL_RGB8888;
             bytesPerPixel = 4;
         } else {
+            gDiagnostics.display_reject_reason =
+                kGXMetalDisplayUnsupportedPixelSize;
             return 0;
         }
     } else if (device->deviceType == kQADeviceMemory) {
@@ -599,6 +1171,8 @@ static TQABoolean GXMetalDescribeDevice(const TQADevice *device,
         gDiagnostics.pixmap_address = 0;
         gDiagnostics.pixel_size = (uint32_t)memory->pixelType;
         if (memory->rowBytes <= 0) {
+            gDiagnostics.display_reject_reason =
+                kGXMetalDisplayInvalidMemoryRowBytes;
             return 0;
         }
         *rowBytes = (uint32_t)memory->rowBytes;
@@ -616,9 +1190,13 @@ static TQABoolean GXMetalDescribeDevice(const TQADevice *device,
             bytesPerPixel = 4;
             break;
         default:
+            gDiagnostics.display_reject_reason =
+                kGXMetalDisplayUnsupportedMemoryPixelType;
             return 0;
         }
     } else {
+        gDiagnostics.display_reject_reason =
+            kGXMetalDisplayUnsupportedDeviceType;
         return 0;
     }
 
@@ -627,6 +1205,8 @@ static TQABoolean GXMetalDescribeDevice(const TQADevice *device,
     gDiagnostics.base_address = (uint32_t)baseAddress;
     gDiagnostics.row_bytes = *rowBytes;
     if (*rowBytes < *width * bytesPerPixel) {
+        gDiagnostics.display_reject_reason =
+            kGXMetalDisplayRowBytesTooSmall;
         return 0;
     }
     targetAddress = (uint64_t)baseAddress + (uint64_t)(uint32_t)top *
@@ -635,9 +1215,15 @@ static TQABoolean GXMetalDescribeDevice(const TQADevice *device,
         (uint64_t)*width * bytesPerPixel;
     gDiagnostics.target_address = (uint32_t)targetAddress;
     gDiagnostics.target_end = (uint32_t)targetEnd;
-    if (targetAddress < gRegistry.framebuffer_address ||
-        targetEnd > (uint64_t)gRegistry.framebuffer_address +
+    if (targetAddress < gRegistry.framebuffer_address) {
+        gDiagnostics.display_reject_reason =
+            kGXMetalDisplayBeforeFramebuffer;
+        return 0;
+    }
+    if (targetEnd > (uint64_t)gRegistry.framebuffer_address +
                     gRegistry.framebuffer_bytes) {
+        gDiagnostics.display_reject_reason =
+            kGXMetalDisplayAfterFramebuffer;
         return 0;
     }
     *framebufferOffset = (uint32_t)(targetAddress -
@@ -706,6 +1292,8 @@ static TQABoolean GXMetalDescribeClip(const TQAClip *clip,
            *top <= height && *bottom <= height;
 }
 
+static TQABoolean GXMetalFlushPendingDraws(GXMetalDrawState *state);
+
 static TQABoolean GXMetalBeginPacket(GXMetalDrawState *state,
                                      uint16_t opcode, uint32_t bytes,
                                      GXMetalGuestPacket *packet)
@@ -733,7 +1321,8 @@ static TQABoolean GXMetalEmitState(GXMetalDrawState *state, uint32_t tag,
     GXMetalGuestPacket packet;
     uint8_t *payload;
 
-    if (!GXMetalBeginPacket(state, GXMETAL_OP_SET_STATE,
+    if (!GXMetalFlushPendingDraws(state) ||
+        !GXMetalBeginPacket(state, GXMETAL_OP_SET_STATE,
                             GXMETAL_SET_STATE_PACKET_BYTES, &packet)) {
         return 0;
     }
@@ -770,7 +1359,8 @@ static TQAError GXMetalEmitRect(GXMetalDrawState *state, uint16_t opcode,
 {
     GXMetalGuestPacket packet;
 
-    if (!GXMetalBeginPacket(state, opcode, 32, &packet)) {
+    if (!GXMetalFlushPendingDraws(state) ||
+        !GXMetalBeginPacket(state, opcode, 32, &packet)) {
         return kQAError;
     }
     GXMetalStoreRect(packet.bytes + GXMETAL_PACKET_HEADER_BYTES, rect,
@@ -812,6 +1402,73 @@ static void GXMetalStoreTexture(uint8_t *destination,
     }
 }
 
+static TQABoolean GXMetalRefreshPrivateTexture(TQATexture *texture)
+{
+    GXMetalGuestPacket packet;
+    uint32_t level;
+
+    if (texture == NULL || texture->magic != GXMETAL_TEXTURE_MAGIC ||
+        texture->source_pixel_type !=
+            (uint32_t)GXMETAL_ATI_PIXEL_RGB16 ||
+        (texture->source_flags & kQATexture_NoCopy) == 0) {
+        return 1;
+    }
+    gDiagnostics.private_texture_refresh_check_count++;
+    for (level = 0; level < texture->levels; level++) {
+        uint32_t width = texture->width >> level;
+        uint32_t height = texture->height >> level;
+        uint32_t rowBytes = texture->source_row_bytes[level];
+        uint64_t length;
+        uint8_t *payload;
+
+        if (width == 0) {
+            width = 1;
+        }
+        if (height == 0) {
+            height = 1;
+        }
+        length = (uint64_t)rowBytes * height;
+        if (texture->live_pixels[level] == NULL ||
+            texture->source_pixels[level] == NULL ||
+            rowBytes < width * 2u || length > GXMETAL_UPLOAD_BYTES) {
+            gDiagnostics.private_texture_refresh_error_count++;
+            return 0;
+        }
+        if (memcmp(texture->source_pixels[level],
+                   texture->live_pixels[level], (size_t)length) == 0) {
+            continue;
+        }
+        memcpy(texture->source_pixels[level], texture->live_pixels[level],
+               (size_t)length);
+        memcpy(gTransport.shared + GXMETAL_UPLOAD_OFFSET,
+               texture->source_pixels[level], (size_t)length);
+        if (!GXMetalGlobalPacket(GXMETAL_OP_TEXTURE_UPLOAD,
+                                 GXMETAL_RESOURCE_UPLOAD_PACKET_BYTES,
+                                 &packet)) {
+            gDiagnostics.private_texture_refresh_error_count++;
+            return 0;
+        }
+        payload = packet.bytes + GXMETAL_PACKET_HEADER_BYTES;
+        gxmetal_store_le32(payload + GXMETAL_UPLOAD_RESOURCE_ID_OFFSET,
+                           texture->resource_id);
+        gxmetal_store_le32(payload + GXMETAL_UPLOAD_LEVEL_OFFSET, level);
+        gxmetal_store_le32(payload + GXMETAL_UPLOAD_SHARED_OFFSET_OFFSET,
+                           GXMETAL_UPLOAD_OFFSET);
+        gxmetal_store_le32(payload + GXMETAL_UPLOAD_LENGTH_OFFSET,
+                           (uint32_t)length);
+        gxmetal_store_le32(payload + GXMETAL_UPLOAD_ROW_BYTES_OFFSET,
+                           rowBytes);
+        gxmetal_store_le32(payload + GXMETAL_UPLOAD_WIDTH_OFFSET, width);
+        gxmetal_store_le32(payload + GXMETAL_UPLOAD_HEIGHT_OFFSET, height);
+        if (!GXMetalCommitUploadPacket(&packet)) {
+            gDiagnostics.private_texture_refresh_error_count++;
+            return 0;
+        }
+        gDiagnostics.private_texture_refresh_upload_count++;
+    }
+    return 1;
+}
+
 static TQABoolean GXMetalEmitTexture(GXMetalDrawState *state,
                                      uint32_t primitive,
                                      uint32_t count,
@@ -819,16 +1476,31 @@ static TQABoolean GXMetalEmitTexture(GXMetalDrawState *state,
                                      uint32_t flags)
 {
     GXMetalGuestPacket packet;
+    const TQATexture *texture;
+    TQABoolean atiPrivateTexture;
+    TQABoolean atiTexelCoordinates;
     uint32_t packetBytes;
     uint8_t *payload;
     uint32_t i;
 
-    if (count == 0 || vertices == NULL || state->texture == NULL ||
+    if (count == 0 || vertices == NULL ||
         (uint64_t)GXMETAL_PACKET_HEADER_BYTES + GXMETAL_DRAW_HEADER_BYTES +
             (uint64_t)count * GXMETAL_TEXTURE_VERTEX_BYTES >
                 GXMETAL_MAX_PACKET_BYTES) {
         state->failed = 1;
         return 0;
+    }
+    texture = (const TQATexture *)state->texture;
+    if (texture != NULL && texture->magic == GXMETAL_TEXTURE_MAGIC &&
+        texture->source_pixel_type ==
+            (uint32_t)GXMETAL_ATI_PIXEL_RGB16 &&
+        (texture->source_flags & kQATexture_NoCopy) != 0 &&
+        texture->last_refresh_epoch != gRenderEpoch) {
+        if (!GXMetalRefreshPrivateTexture((TQATexture *)texture)) {
+            state->failed = 1;
+            return 0;
+        }
+        ((TQATexture *)texture)->last_refresh_epoch = gRenderEpoch;
     }
     packetBytes = GXMETAL_PACKET_HEADER_BYTES + GXMETAL_DRAW_HEADER_BYTES +
                   count * GXMETAL_TEXTURE_VERTEX_BYTES;
@@ -842,9 +1514,53 @@ static TQABoolean GXMetalEmitTexture(GXMetalDrawState *state,
     gxmetal_store_le32(payload + GXMETAL_DRAW_VERTEX_STRIDE_OFFSET,
                        GXMETAL_TEXTURE_VERTEX_BYTES);
     gxmetal_store_le32(payload + GXMETAL_DRAW_FLAGS_OFFSET, flags);
+    atiPrivateTexture = texture != NULL &&
+                        texture->magic == GXMETAL_TEXTURE_MAGIC &&
+                        texture->source_pixel_type ==
+                            (uint32_t)GXMETAL_ATI_PIXEL_RGB16 &&
+                        texture->width != 0 && texture->height != 0;
+    atiTexelCoordinates = 0;
+    if (atiPrivateTexture) {
+        for (i = 0; i < count; i++) {
+            float limit = vertices[i].invW * 2.0f;
+
+            if (vertices[i].invW > 0.0f &&
+                (vertices[i].uOverW < -limit ||
+                 vertices[i].uOverW > limit ||
+                 vertices[i].vOverW < -limit ||
+                 vertices[i].vOverW > limit)) {
+                atiTexelCoordinates = 1;
+                break;
+            }
+        }
+    }
     for (i = 0; i < count; i++) {
+        const TQAVTexture *vertex = &vertices[i];
+        TQAVTexture adjusted;
+
+        /* ATI's private type-1001 path is intentionally permissive.  The
+         * Carmageddon II renderer mixes normalized model UVs with pixel-space
+         * sprite UVs on the same texture type, and its V values use a
+         * negative, top-origin convention.  Detect texel coordinates per
+         * primitive, normalize only those, then translate both forms into
+         * the lower-origin RAVE convention consumed by the common shader. */
+        if (atiPrivateTexture) {
+            adjusted = *vertex;
+            if (atiTexelCoordinates) {
+                adjusted.uOverW /= (float)texture->width;
+                adjusted.vOverW /= (float)texture->height;
+            }
+            adjusted.vOverW = adjusted.invW + adjusted.vOverW;
+            /* A few ATI UI batches leave alpha uninitialized for opaque
+             * RGB16 sprites.  Preserve valid translucency but make invalid
+             * values opaque, matching the permissive hardware path. */
+            if (!(adjusted.a >= 0.0f && adjusted.a <= 1.0f)) {
+                adjusted.a = 1.0f;
+            }
+            vertex = &adjusted;
+        }
         GXMetalStoreTexture(payload + GXMETAL_DRAW_VERTICES_OFFSET +
-                            i * GXMETAL_TEXTURE_VERTEX_BYTES, &vertices[i]);
+                            i * GXMETAL_TEXTURE_VERTEX_BYTES, vertex);
     }
     GXMetalCommitPacket(state, &packet);
     return 1;
@@ -888,13 +1604,145 @@ static TQABoolean GXMetalEmitGouraud(GXMetalDrawState *state,
     return 1;
 }
 
+static TQABoolean GXMetalATIUsesTexelCoordinates(
+    const GXMetalDrawState *state, const TQAVTexture *vertices,
+    uint32_t count)
+{
+    const TQATexture *texture;
+    uint32_t i;
+
+    if (state == NULL || vertices == NULL) {
+        return 0;
+    }
+    texture = (const TQATexture *)state->texture;
+    if (texture == NULL || texture->magic != GXMETAL_TEXTURE_MAGIC ||
+        texture->source_pixel_type != (uint32_t)GXMETAL_ATI_PIXEL_RGB16 ||
+        texture->width == 0 || texture->height == 0) {
+        return 0;
+    }
+    for (i = 0; i < count; i++) {
+        float limit = vertices[i].invW * 2.0f;
+
+        if (vertices[i].invW > 0.0f &&
+            (vertices[i].uOverW < -limit ||
+             vertices[i].uOverW > limit ||
+             vertices[i].vOverW < -limit ||
+             vertices[i].vOverW > limit)) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static TQABoolean GXMetalFlushPendingDraws(GXMetalDrawState *state)
+{
+    uint32_t kind;
+    uint32_t count;
+    uint32_t flags;
+
+    if (state == NULL || state->failed) {
+        return 0;
+    }
+    if (state->pending_count == 0) {
+        return 1;
+    }
+    kind = state->pending_kind;
+    count = state->pending_count;
+    flags = state->pending_flags;
+    state->pending_kind = GXMETAL_DRAW_BATCH_NONE;
+    state->pending_count = 0;
+    if (kind == GXMETAL_DRAW_BATCH_GOURAUD) {
+        return GXMetalEmitGouraud(
+            state, GXMETAL_PRIMITIVE_TRIANGLE, count,
+            (const TQAVGouraud *)state->pending_vertices, flags);
+    }
+    if (kind == GXMETAL_DRAW_BATCH_TEXTURE) {
+        return GXMetalEmitTexture(
+            state, GXMETAL_PRIMITIVE_TRIANGLE, count,
+            (const TQAVTexture *)state->pending_vertices, flags);
+    }
+    state->failed = 1;
+    return 0;
+}
+
+static TQABoolean GXMetalQueueGouraudTriangle(
+    GXMetalDrawState *state, const TQAVGouraud *vertices, uint32_t flags)
+{
+    TQAVGouraud *pending;
+
+    if (state == NULL || vertices == NULL) {
+        return 0;
+    }
+    if (state->pending_vertices == NULL) {
+        return GXMetalEmitGouraud(state, GXMETAL_PRIMITIVE_TRIANGLE, 3,
+                                  vertices, flags);
+    }
+    if (state->pending_count != 0 &&
+        (state->pending_kind != GXMETAL_DRAW_BATCH_GOURAUD ||
+         state->pending_flags != flags)) {
+        if (!GXMetalFlushPendingDraws(state)) {
+            return 0;
+        }
+    }
+    if (state->pending_count + 3u > GXMETAL_DRAW_BATCH_VERTICES &&
+        !GXMetalFlushPendingDraws(state)) {
+        return 0;
+    }
+    if (state->pending_count == 0) {
+        state->pending_kind = GXMETAL_DRAW_BATCH_GOURAUD;
+        state->pending_flags = flags;
+    }
+    pending = (TQAVGouraud *)state->pending_vertices;
+    memcpy(&pending[state->pending_count], vertices, 3u * sizeof(*pending));
+    state->pending_count += 3u;
+    return 1;
+}
+
+static TQABoolean GXMetalQueueTextureTriangle(
+    GXMetalDrawState *state, const TQAVTexture *vertices, uint32_t flags)
+{
+    TQAVTexture *pending;
+    uint32_t atiTexelCoordinates;
+
+    if (state == NULL || vertices == NULL) {
+        return 0;
+    }
+    if (state->pending_vertices == NULL) {
+        return GXMetalEmitTexture(state, GXMETAL_PRIMITIVE_TRIANGLE, 3,
+                                  vertices, flags);
+    }
+    atiTexelCoordinates = GXMetalATIUsesTexelCoordinates(state, vertices, 3);
+    if (state->pending_count != 0 &&
+        (state->pending_kind != GXMETAL_DRAW_BATCH_TEXTURE ||
+         state->pending_flags != flags ||
+         state->pending_ati_texel_coordinates != atiTexelCoordinates)) {
+        if (!GXMetalFlushPendingDraws(state)) {
+            return 0;
+        }
+    }
+    if (state->pending_count + 3u > GXMETAL_DRAW_BATCH_VERTICES &&
+        !GXMetalFlushPendingDraws(state)) {
+        return 0;
+    }
+    if (state->pending_count == 0) {
+        state->pending_kind = GXMETAL_DRAW_BATCH_TEXTURE;
+        state->pending_flags = flags;
+        state->pending_ati_texel_coordinates = atiTexelCoordinates;
+    }
+    pending = (TQAVTexture *)state->pending_vertices;
+    memcpy(&pending[state->pending_count], vertices, 3u * sizeof(*pending));
+    state->pending_count += 3u;
+    return 1;
+}
+
 static TQAError GXMetalEmitClear(GXMetalDrawState *state,
                                  const TQARect *rect, uint32_t flags)
 {
     GXMetalGuestPacket packet;
     uint8_t *payload;
 
-    if (!GXMetalBeginPacket(state, GXMETAL_OP_CLEAR,
+    if (!GXMetalFlushPendingDraws(state) ||
+        !GXMetalBeginPacket(state, GXMETAL_OP_CLEAR,
                             GXMETAL_CLEAR_PACKET_BYTES, &packet)) {
         return kQAError;
     }
@@ -923,7 +1771,14 @@ static void GXMetalSetFloat(TQADrawContext *drawContext, TQATagFloat tag,
     GXMetalGuestPacket packet;
     uint8_t *payload;
 
+    gDiagnostics.draw_method_stage = 100;
+    gDiagnostics.set_float_count++;
+    gDiagnostics.last_set_float_tag = (uint32_t)tag;
+    gDiagnostics.last_set_float_value = GXMetalFloatBits(newValue);
     if (state == NULL || (uint32_t)tag >= GXMETAL_STATE_SLOTS) {
+        return;
+    }
+    if (!GXMetalFlushPendingDraws(state)) {
         return;
     }
     state->float_state[(uint32_t)tag] = newValue;
@@ -938,6 +1793,7 @@ static void GXMetalSetFloat(TQADrawContext *drawContext, TQATagFloat tag,
     gxmetal_store_le32(payload + GXMETAL_STATE_VALUE_OFFSET,
                        GXMetalFloatBits(newValue));
     GXMetalCommitPacket(state, &packet);
+    gDiagnostics.draw_method_stage = 101;
 }
 
 static void GXMetalSetInt(TQADrawContext *drawContext, TQATagInt tag,
@@ -947,7 +1803,20 @@ static void GXMetalSetInt(TQADrawContext *drawContext, TQATagInt tag,
     GXMetalGuestPacket packet;
     uint8_t *payload;
 
+    gDiagnostics.draw_method_stage = 110;
+    gDiagnostics.set_int_count++;
+    gDiagnostics.last_set_int_tag = (uint32_t)tag;
+    gDiagnostics.last_set_int_value = (uint32_t)newValue;
+    if (state != NULL &&
+        (uint32_t)tag == GXMETAL_ATI_PRIVATE_ENABLE_TAG) {
+        state->ati_private_enabled = (uint32_t)newValue;
+        gDiagnostics.draw_method_stage = 111;
+        return;
+    }
     if (state == NULL || (uint32_t)tag >= GXMETAL_STATE_SLOTS) {
+        return;
+    }
+    if (!GXMetalFlushPendingDraws(state)) {
         return;
     }
     state->int_state[(uint32_t)tag] = (uint32_t)newValue;
@@ -962,6 +1831,7 @@ static void GXMetalSetInt(TQADrawContext *drawContext, TQATagInt tag,
     gxmetal_store_le32(payload + GXMETAL_STATE_VALUE_OFFSET,
                        (uint32_t)newValue);
     GXMetalCommitPacket(state, &packet);
+    gDiagnostics.draw_method_stage = 111;
 }
 
 static void GXMetalSetPtr(TQADrawContext *drawContext, TQATagPtr tag,
@@ -972,8 +1842,29 @@ static void GXMetalSetPtr(TQADrawContext *drawContext, TQATagPtr tag,
     GXMetalGuestPacket packet;
     uint8_t *payload;
 
+    gDiagnostics.draw_method_stage = 120;
+    gDiagnostics.set_ptr_count++;
+    gDiagnostics.last_set_ptr_tag = (uint32_t)tag;
+    gDiagnostics.last_set_ptr_value = (uint32_t)(uintptr_t)newValue;
+    if (tag == kQATag_Texture) {
+        gDiagnostics.set_texture_count++;
+        if (texture == NULL) {
+            gDiagnostics.set_texture_null_count++;
+            gDiagnostics.last_set_texture_magic = 0;
+        } else {
+            gDiagnostics.last_set_texture_magic = texture->magic;
+            if (texture->magic == GXMETAL_TEXTURE_MAGIC) {
+                gDiagnostics.set_texture_valid_count++;
+            } else {
+                gDiagnostics.set_texture_invalid_count++;
+            }
+        }
+    }
     if (state == NULL || tag != kQATag_Texture ||
         (texture != NULL && texture->magic != GXMETAL_TEXTURE_MAGIC)) {
+        return;
+    }
+    if (!GXMetalFlushPendingDraws(state)) {
         return;
     }
     state->texture = newValue;
@@ -988,15 +1879,23 @@ static void GXMetalSetPtr(TQADrawContext *drawContext, TQATagPtr tag,
     gxmetal_store_le32(payload + GXMETAL_STATE_VALUE_OFFSET,
                        texture != NULL ? texture->resource_id : 0);
     GXMetalCommitPacket(state, &packet);
+    gDiagnostics.draw_method_stage = 121;
 }
 
 static float GXMetalGetFloat(const TQADrawContext *drawContext,
                              TQATagFloat tag)
 {
     GXMetalDrawState *state = GXMetalGetState(drawContext);
+    gDiagnostics.draw_method_stage = 130;
+    gDiagnostics.get_float_count++;
+    gDiagnostics.last_get_float_tag = (uint32_t)tag;
     if (state == NULL || (uint32_t)tag >= GXMETAL_STATE_SLOTS) {
+        gDiagnostics.last_get_float_value = 0;
         return 0.0f;
     }
+    gDiagnostics.last_get_float_value =
+        GXMetalFloatBits(state->float_state[(uint32_t)tag]);
+    gDiagnostics.draw_method_stage = 131;
     return state->float_state[(uint32_t)tag];
 }
 
@@ -1004,26 +1903,173 @@ static unsigned long GXMetalGetInt(const TQADrawContext *drawContext,
                                    TQATagInt tag)
 {
     GXMetalDrawState *state = GXMetalGetState(drawContext);
+    gDiagnostics.draw_method_stage = 140;
+    gDiagnostics.get_int_count++;
+    gDiagnostics.last_get_int_tag = (uint32_t)tag;
+    if (state != NULL &&
+        (uint32_t)tag == GXMETAL_ATI_PRIVATE_ENABLE_TAG) {
+        gDiagnostics.last_get_int_value = state->ati_private_enabled;
+        gDiagnostics.draw_method_stage = 141;
+        return state->ati_private_enabled;
+    }
     if (state == NULL || (uint32_t)tag >= GXMETAL_STATE_SLOTS) {
+        gDiagnostics.last_get_int_value = 0;
         return 0;
     }
+    gDiagnostics.last_get_int_value = state->int_state[(uint32_t)tag];
+    gDiagnostics.draw_method_stage = 141;
     return state->int_state[(uint32_t)tag];
 }
+
+typedef TQAError (*GXMetalATIPrivateMethod)(
+    const TQADrawContext *drawContext, unsigned long value);
+
+/* Carmageddon II uses the two-function ATI RAVE compatibility table returned
+ * by private pointer tag 1021. Reverse engineering ATI 3D Accelerator 5.0.4
+ * confirms that entries zero and one invoke its color-buffer and depth-buffer
+ * clear paths. Older games use these before RAVE 1.6's public clear methods.
+ * The second argument is reserved by the ATI wrappers and Carmageddon passes
+ * zero, so both operations cover the complete draw context. */
+static TQAError GXMetalATIPrivateMethod0(
+    const TQADrawContext *drawContext, unsigned long value)
+{
+    GXMetalDrawState *state = GXMetalGetState(drawContext);
+    (void)value;
+    gDiagnostics.draw_method_stage = 270;
+    if (state == NULL) {
+        return kQAParamErr;
+    }
+    return GXMetalEmitClear(state, NULL, GXMETAL_CLEAR_COLOR);
+}
+
+static TQAError GXMetalATIPrivateMethod1(
+    const TQADrawContext *drawContext, unsigned long value)
+{
+    GXMetalDrawState *state = GXMetalGetState(drawContext);
+    (void)value;
+    gDiagnostics.draw_method_stage = 271;
+    if (state == NULL) {
+        return kQAParamErr;
+    }
+    if ((state->context_flags & GXMETAL_CONTEXT_Z16) == 0) {
+        return kQANotSupported;
+    }
+    return GXMetalEmitClear(state, NULL, GXMETAL_CLEAR_DEPTH);
+}
+
+static GXMetalATIPrivateMethod gGXMetalATIPrivateMethods[2] = {
+    GXMetalATIPrivateMethod0,
+    GXMetalATIPrivateMethod1
+};
 
 static void *GXMetalGetPtr(const TQADrawContext *drawContext, TQATagPtr tag)
 {
     GXMetalDrawState *state = GXMetalGetState(drawContext);
+    gDiagnostics.draw_method_stage = 150;
+    gDiagnostics.get_ptr_count++;
+    gDiagnostics.last_get_ptr_tag = (uint32_t)tag;
+    if (state != NULL &&
+        (uint32_t)tag == GXMETAL_ATI_PRIVATE_METHODS_TAG) {
+        gDiagnostics.last_get_ptr_value =
+            (uint32_t)(uintptr_t)gGXMetalATIPrivateMethods;
+        gDiagnostics.draw_method_stage = 151;
+        return (void *)gGXMetalATIPrivateMethods;
+    }
     if (state == NULL || tag != kQATag_Texture) {
+        gDiagnostics.last_get_ptr_value = 0;
         return NULL;
     }
+    gDiagnostics.last_get_ptr_value = (uint32_t)(uintptr_t)state->texture;
+    gDiagnostics.draw_method_stage = 151;
     return (void *)state->texture;
+}
+
+static void GXMetalTraceDrawMethod(uint32_t method)
+{
+    uint32_t mask = method < 32 ? UINT32_C(1) << method : 0;
+
+    gDiagnostics.draw_method_stage = 300 + method;
+    gDiagnostics.draw_call_count++;
+    gDiagnostics.last_draw_method = method;
+    if (mask != 0 && (gDiagnostics.draw_method_mask & mask) == 0) {
+        gDiagnostics.draw_method_mask |= mask;
+        GXMetalPublishDiagnostics();
+        GXMetalPersistDiagnostics();
+    }
+}
+
+static void GXMetalTraceTextureState(const GXMetalDrawState *state,
+                                     const TQAVTexture *vertex)
+{
+    const TQATexture *texture;
+
+    if (state == NULL) {
+        return;
+    }
+    gDiagnostics.current_state_texture_op =
+        state->int_state[kQATag_TextureOp];
+    gDiagnostics.current_state_texture_filter =
+        state->int_state[kQATag_TextureFilter];
+    gDiagnostics.current_state_blend = state->int_state[kQATag_Blend];
+    gDiagnostics.current_state_z_function =
+        state->int_state[kQATag_ZFunction];
+    gDiagnostics.current_state_z_buffer_mask =
+        state->int_state[kQATag_ZBufferMask];
+    gDiagnostics.current_state_perspective_z =
+        state->int_state[kQATag_PerspectiveZ];
+    gDiagnostics.current_state_fog_mode =
+        state->int_state[kQATag_FogMode];
+    gDiagnostics.current_state_alpha_test =
+        state->int_state[kQATag_AlphaTestFunc];
+    gDiagnostics.current_state_alpha_reference =
+        GXMetalFloatBits(state->float_state[kQATag_AlphaTestRef]);
+    gDiagnostics.current_state_wrap_u =
+        state->int_state[kQATagGL_TextureWrapU];
+    gDiagnostics.current_state_wrap_v =
+        state->int_state[kQATagGL_TextureWrapV];
+
+    texture = (const TQATexture *)state->texture;
+    if (texture != NULL && texture->magic == GXMETAL_TEXTURE_MAGIC) {
+        gDiagnostics.current_texture_resource_id = texture->resource_id;
+        gDiagnostics.current_texture_flags = texture->source_flags;
+        gDiagnostics.current_texture_pixel_type = texture->source_pixel_type;
+        gDiagnostics.current_texture_width = texture->width;
+        gDiagnostics.current_texture_height = texture->height;
+        gDiagnostics.current_texture_palette_bound = texture->palette_bound;
+    } else {
+        gDiagnostics.current_texture_resource_id = 0;
+        gDiagnostics.current_texture_flags = 0;
+        gDiagnostics.current_texture_pixel_type = UINT32_MAX;
+        gDiagnostics.current_texture_width = 0;
+        gDiagnostics.current_texture_height = 0;
+        gDiagnostics.current_texture_palette_bound = 0;
+    }
+    if (vertex != NULL) {
+        gDiagnostics.last_texture_vertex_x = GXMetalFloatBits(vertex->x);
+        gDiagnostics.last_texture_vertex_y = GXMetalFloatBits(vertex->y);
+        gDiagnostics.last_texture_vertex_z = GXMetalFloatBits(vertex->z);
+        gDiagnostics.last_texture_vertex_inv_w =
+            GXMetalFloatBits(vertex->invW);
+        gDiagnostics.last_texture_vertex_a = GXMetalFloatBits(vertex->a);
+        gDiagnostics.last_texture_vertex_u_over_w =
+            GXMetalFloatBits(vertex->uOverW);
+        gDiagnostics.last_texture_vertex_v_over_w =
+            GXMetalFloatBits(vertex->vOverW);
+        gDiagnostics.last_texture_vertex_kd_r =
+            GXMetalFloatBits(vertex->kd_r);
+        gDiagnostics.last_texture_vertex_kd_g =
+            GXMetalFloatBits(vertex->kd_g);
+        gDiagnostics.last_texture_vertex_kd_b =
+            GXMetalFloatBits(vertex->kd_b);
+    }
 }
 
 static void GXMetalDrawPoint(const TQADrawContext *drawContext,
                              const TQAVGouraud *vertex)
 {
     GXMetalDrawState *state = GXMetalGetState(drawContext);
-    if (state != NULL) {
+    GXMetalTraceDrawMethod(kQADrawPoint);
+    if (state != NULL && GXMetalFlushPendingDraws(state)) {
         (void)GXMetalEmitGouraud(state, GXMETAL_PRIMITIVE_POINT, 1,
                                  vertex, 0);
     }
@@ -1035,7 +2081,11 @@ static void GXMetalDrawLine(const TQADrawContext *drawContext,
 {
     GXMetalDrawState *state = GXMetalGetState(drawContext);
     TQAVGouraud vertices[2];
+    GXMetalTraceDrawMethod(kQADrawLine);
     if (state == NULL || v0 == NULL || v1 == NULL) {
+        return;
+    }
+    if (!GXMetalFlushPendingDraws(state)) {
         return;
     }
     vertices[0] = *v0;
@@ -1051,14 +2101,58 @@ static void GXMetalDrawTriGouraud(const TQADrawContext *drawContext,
 {
     GXMetalDrawState *state = GXMetalGetState(drawContext);
     TQAVGouraud vertices[3];
+    GXMetalTraceDrawMethod(kQADrawTriGouraud);
+    gDiagnostics.draw_tri_gouraud_count++;
     if (state == NULL || v0 == NULL || v1 == NULL || v2 == NULL) {
         return;
     }
     vertices[0] = *v0;
     vertices[1] = *v1;
     vertices[2] = *v2;
-    (void)GXMetalEmitGouraud(state, GXMETAL_PRIMITIVE_TRIANGLE, 3,
-                             vertices, (uint32_t)flags);
+    (void)GXMetalQueueGouraudTriangle(state, vertices, (uint32_t)flags);
+}
+
+static float GXMetalClampUnit(float value)
+{
+    if (value < 0.0f) {
+        return 0.0f;
+    }
+    return value > 1.0f ? 1.0f : value;
+}
+
+/* Carmageddon II's ATI RAVE path uses TQAVTexture for both textured and
+ * untextured lit materials. For the latter it binds a NULL texture and still
+ * submits Modulate/Highlight vertices. ATI treats that as an opaque white
+ * texel, allowing kd + ks to carry the material lighting. Preserve that
+ * compatibility behavior by lowering the triangle to an equivalent Gouraud
+ * draw instead of silently dropping it. */
+static void GXMetalUnboundTextureVertex(const GXMetalDrawState *state,
+                                        const TQAVTexture *source,
+                                        TQAVGouraud *destination)
+{
+    uint32_t operation = state->int_state[kQATag_TextureOp];
+    float red = 1.0f;
+    float green = 1.0f;
+    float blue = 1.0f;
+
+    if (operation & kQATextureOp_Modulate) {
+        red *= source->kd_r;
+        green *= source->kd_g;
+        blue *= source->kd_b;
+    }
+    if (operation & kQATextureOp_Highlight) {
+        red += source->ks_r;
+        green += source->ks_g;
+        blue += source->ks_b;
+    }
+    destination->x = source->x;
+    destination->y = source->y;
+    destination->z = source->z;
+    destination->invW = source->invW;
+    destination->r = GXMetalClampUnit(red);
+    destination->g = GXMetalClampUnit(green);
+    destination->b = GXMetalClampUnit(blue);
+    destination->a = GXMetalClampUnit(source->a);
 }
 
 static void GXMetalDrawTriTexture(const TQADrawContext *drawContext,
@@ -1069,14 +2163,240 @@ static void GXMetalDrawTriTexture(const TQADrawContext *drawContext,
 {
     GXMetalDrawState *state = GXMetalGetState(drawContext);
     TQAVTexture vertices[3];
-    if (state == NULL || v0 == NULL || v1 == NULL || v2 == NULL) {
+    GXMetalTraceDrawMethod(kQADrawTriTexture);
+    gDiagnostics.draw_tri_texture_count++;
+    GXMetalTraceTextureState(state, v0);
+    if (state == NULL) {
+        gDiagnostics.draw_tri_texture_reject_count++;
+        gDiagnostics.draw_texture_null_state_count++;
+        return;
+    }
+    if (state->texture == NULL) {
+        TQAVGouraud gouraud[3];
+
+        if (v0 == NULL || v1 == NULL || v2 == NULL) {
+            gDiagnostics.draw_tri_texture_reject_count++;
+            gDiagnostics.draw_texture_null_vertex_count++;
+            return;
+        }
+        gDiagnostics.draw_texture_null_resource_count++;
+        gDiagnostics.draw_texture_unbound_fallback_count++;
+        GXMetalUnboundTextureVertex(state, v0, &gouraud[0]);
+        GXMetalUnboundTextureVertex(state, v1, &gouraud[1]);
+        GXMetalUnboundTextureVertex(state, v2, &gouraud[2]);
+        (void)GXMetalQueueGouraudTriangle(state, gouraud, (uint32_t)flags);
+        return;
+    }
+    if (((const TQATexture *)state->texture)->magic !=
+            GXMETAL_TEXTURE_MAGIC) {
+        gDiagnostics.draw_tri_texture_reject_count++;
+        gDiagnostics.draw_texture_invalid_resource_count++;
+        return;
+    }
+    if (v0 == NULL || v1 == NULL || v2 == NULL) {
+        gDiagnostics.draw_tri_texture_reject_count++;
+        gDiagnostics.draw_texture_null_vertex_count++;
         return;
     }
     vertices[0] = *v0;
     vertices[1] = *v1;
     vertices[2] = *v2;
-    (void)GXMetalEmitTexture(state, GXMETAL_PRIMITIVE_TRIANGLE, 3,
-                             vertices, (uint32_t)flags);
+    (void)GXMetalQueueTextureTriangle(state, vertices, (uint32_t)flags);
+}
+
+static void GXMetalSubmitVerticesGouraud(
+    const TQADrawContext *drawContext, unsigned long nVertices,
+    const TQAVGouraud *vertices)
+{
+    GXMetalDrawState *state = GXMetalGetState(drawContext);
+    Ptr replacement = NULL;
+    uint32_t count = (uint32_t)nVertices;
+
+    GXMetalTraceDrawMethod(kQASubmitVerticesGouraud);
+    if (state == NULL) {
+        return;
+    }
+    if (nVertices != (unsigned long)count ||
+        count > GXMETAL_MAX_SUBMITTED_VERTICES ||
+        (count != 0 && vertices == NULL)) {
+        state->failed = 1;
+        return;
+    }
+    if (count != 0) {
+        replacement = NewPtr((Size)((uint64_t)count * sizeof(*vertices)));
+        if (replacement == NULL) {
+            state->failed = 1;
+            return;
+        }
+        memcpy(replacement, vertices, (size_t)count * sizeof(*vertices));
+    }
+    if (state->submitted_gouraud_vertices != NULL) {
+        DisposePtr(state->submitted_gouraud_vertices);
+    }
+    state->submitted_gouraud_vertices = replacement;
+    state->submitted_gouraud_count = count;
+}
+
+static void GXMetalSubmitVerticesTexture(
+    const TQADrawContext *drawContext, unsigned long nVertices,
+    const TQAVTexture *vertices)
+{
+    GXMetalDrawState *state = GXMetalGetState(drawContext);
+    Ptr replacement = NULL;
+    uint32_t count = (uint32_t)nVertices;
+
+    GXMetalTraceDrawMethod(kQASubmitVerticesTexture);
+    if (state == NULL) {
+        return;
+    }
+    if (nVertices != (unsigned long)count ||
+        count > GXMETAL_MAX_SUBMITTED_VERTICES ||
+        (count != 0 && vertices == NULL)) {
+        state->failed = 1;
+        return;
+    }
+    if (count != 0) {
+        replacement = NewPtr((Size)((uint64_t)count * sizeof(*vertices)));
+        if (replacement == NULL) {
+            state->failed = 1;
+            return;
+        }
+        memcpy(replacement, vertices, (size_t)count * sizeof(*vertices));
+    }
+    if (state->submitted_texture_vertices != NULL) {
+        DisposePtr(state->submitted_texture_vertices);
+    }
+    state->submitted_texture_vertices = replacement;
+    state->submitted_texture_count = count;
+}
+
+static TQABoolean GXMetalMeshTriangleIsValid(
+    const TQAIndexedTriangle *triangle, uint32_t vertexCount)
+{
+    return triangle != NULL && triangle->vertices[0] < vertexCount &&
+           triangle->vertices[1] < vertexCount &&
+           triangle->vertices[2] < vertexCount;
+}
+
+static void GXMetalDrawTriMeshGouraud(
+    const TQADrawContext *drawContext, unsigned long nTriangles,
+    const TQAIndexedTriangle *triangles)
+{
+    GXMetalDrawState *state = GXMetalGetState(drawContext);
+    const TQAVGouraud *submitted;
+    TQAVGouraud *batch;
+    uint32_t triangleCount = (uint32_t)nTriangles;
+    uint32_t triangleIndex = 0;
+
+    GXMetalTraceDrawMethod(kQADrawTriMeshGouraud);
+    if (state == NULL || nTriangles == 0) {
+        return;
+    }
+    if (nTriangles != (unsigned long)triangleCount || triangles == NULL ||
+        state->submitted_gouraud_vertices == NULL) {
+        state->failed = 1;
+        return;
+    }
+    if (!GXMetalFlushPendingDraws(state)) {
+        return;
+    }
+    submitted = (const TQAVGouraud *)state->submitted_gouraud_vertices;
+    batch = (TQAVGouraud *)NewPtr((Size)(GXMETAL_MESH_BATCH_TRIANGLES * 3u *
+                                        sizeof(*batch)));
+    if (batch == NULL) {
+        state->failed = 1;
+        return;
+    }
+    while (triangleIndex < triangleCount && !state->failed) {
+        uint32_t flags = (uint32_t)triangles[triangleIndex].triangleFlags;
+        uint32_t batchTriangles = 0;
+        while (triangleIndex + batchTriangles < triangleCount &&
+               batchTriangles < GXMETAL_MESH_BATCH_TRIANGLES &&
+               triangles[triangleIndex + batchTriangles].triangleFlags ==
+                   (unsigned long)flags) {
+            const TQAIndexedTriangle *triangle =
+                &triangles[triangleIndex + batchTriangles];
+            uint32_t destination = batchTriangles * 3u;
+            if (!GXMetalMeshTriangleIsValid(
+                    triangle, state->submitted_gouraud_count)) {
+                state->failed = 1;
+                break;
+            }
+            batch[destination] = submitted[triangle->vertices[0]];
+            batch[destination + 1] = submitted[triangle->vertices[1]];
+            batch[destination + 2] = submitted[triangle->vertices[2]];
+            batchTriangles++;
+        }
+        if (batchTriangles != 0 &&
+            !GXMetalEmitGouraud(state, GXMETAL_PRIMITIVE_TRIANGLE,
+                                batchTriangles * 3u, batch, flags)) {
+            state->failed = 1;
+        }
+        triangleIndex += batchTriangles;
+    }
+    DisposePtr((Ptr)batch);
+}
+
+static void GXMetalDrawTriMeshTexture(
+    const TQADrawContext *drawContext, unsigned long nTriangles,
+    const TQAIndexedTriangle *triangles)
+{
+    GXMetalDrawState *state = GXMetalGetState(drawContext);
+    const TQAVTexture *submitted;
+    TQAVTexture *batch;
+    uint32_t triangleCount = (uint32_t)nTriangles;
+    uint32_t triangleIndex = 0;
+
+    GXMetalTraceDrawMethod(kQADrawTriMeshTexture);
+    if (state == NULL || nTriangles == 0) {
+        return;
+    }
+    if (state->texture == NULL) {
+        return;
+    }
+    if (nTriangles != (unsigned long)triangleCount || triangles == NULL ||
+        state->submitted_texture_vertices == NULL) {
+        state->failed = 1;
+        return;
+    }
+    if (!GXMetalFlushPendingDraws(state)) {
+        return;
+    }
+    submitted = (const TQAVTexture *)state->submitted_texture_vertices;
+    batch = (TQAVTexture *)NewPtr((Size)(GXMETAL_MESH_BATCH_TRIANGLES * 3u *
+                                        sizeof(*batch)));
+    if (batch == NULL) {
+        state->failed = 1;
+        return;
+    }
+    while (triangleIndex < triangleCount && !state->failed) {
+        uint32_t flags = (uint32_t)triangles[triangleIndex].triangleFlags;
+        uint32_t batchTriangles = 0;
+        while (triangleIndex + batchTriangles < triangleCount &&
+               batchTriangles < GXMETAL_MESH_BATCH_TRIANGLES &&
+               triangles[triangleIndex + batchTriangles].triangleFlags ==
+                   (unsigned long)flags) {
+            const TQAIndexedTriangle *triangle =
+                &triangles[triangleIndex + batchTriangles];
+            uint32_t destination = batchTriangles * 3u;
+            if (!GXMetalMeshTriangleIsValid(
+                    triangle, state->submitted_texture_count)) {
+                state->failed = 1;
+                break;
+            }
+            batch[destination] = submitted[triangle->vertices[0]];
+            batch[destination + 1] = submitted[triangle->vertices[1]];
+            batch[destination + 2] = submitted[triangle->vertices[2]];
+            batchTriangles++;
+        }
+        if (batchTriangles != 0 &&
+            !GXMetalEmitTexture(state, GXMETAL_PRIMITIVE_TRIANGLE,
+                                batchTriangles * 3u, batch, flags)) {
+            state->failed = 1;
+        }
+        triangleIndex += batchTriangles;
+    }
+    DisposePtr((Ptr)batch);
 }
 
 static void GXMetalDrawVGouraud(const TQADrawContext *drawContext,
@@ -1089,7 +2409,11 @@ static void GXMetalDrawVGouraud(const TQADrawContext *drawContext,
     uint32_t primitive;
     unsigned long i;
 
+    GXMetalTraceDrawMethod(kQADrawVGouraud);
     if (state == NULL || vertices == NULL || nVertices == 0) {
+        return;
+    }
+    if (!GXMetalFlushPendingDraws(state)) {
         return;
     }
     switch (vertexMode) {
@@ -1106,9 +2430,8 @@ static void GXMetalDrawVGouraud(const TQADrawContext *drawContext,
         }
         if (flags != NULL) {
             for (i = 0; i < nVertices; i += 3) {
-                (void)GXMetalEmitGouraud(
-                    state, GXMETAL_PRIMITIVE_TRIANGLE, 3, &vertices[i],
-                    (uint32_t)flags[i / 3]);
+                (void)GXMetalQueueGouraudTriangle(
+                    state, &vertices[i], (uint32_t)flags[i / 3]);
             }
             return;
         }
@@ -1121,9 +2444,8 @@ static void GXMetalDrawVGouraud(const TQADrawContext *drawContext,
                 triangle[0] = vertices[i + (i & 1)];
                 triangle[1] = vertices[i + ((i & 1) == 0)];
                 triangle[2] = vertices[i + 2];
-                (void)GXMetalEmitGouraud(
-                    state, GXMETAL_PRIMITIVE_TRIANGLE, 3, triangle,
-                    (uint32_t)flags[i]);
+                (void)GXMetalQueueGouraudTriangle(
+                    state, triangle, (uint32_t)flags[i]);
             }
             return;
         }
@@ -1136,9 +2458,8 @@ static void GXMetalDrawVGouraud(const TQADrawContext *drawContext,
             for (i = 0; i + 2 < nVertices; i++) {
                 triangle[1] = vertices[i + 1];
                 triangle[2] = vertices[i + 2];
-                (void)GXMetalEmitGouraud(
-                    state, GXMETAL_PRIMITIVE_TRIANGLE, 3, triangle,
-                    (uint32_t)flags[i]);
+                (void)GXMetalQueueGouraudTriangle(
+                    state, triangle, (uint32_t)flags[i]);
             }
             return;
         }
@@ -1167,7 +2488,12 @@ static void GXMetalDrawVTexture(const TQADrawContext *drawContext,
     uint32_t primitive;
     unsigned long i;
 
-    if (state == NULL || vertices == NULL || nVertices == 0) {
+    GXMetalTraceDrawMethod(kQADrawVTexture);
+    if (state == NULL || state->texture == NULL || vertices == NULL ||
+        nVertices == 0) {
+        return;
+    }
+    if (!GXMetalFlushPendingDraws(state)) {
         return;
     }
     switch (vertexMode) {
@@ -1184,9 +2510,8 @@ static void GXMetalDrawVTexture(const TQADrawContext *drawContext,
         }
         if (flags != NULL) {
             for (i = 0; i < nVertices; i += 3) {
-                (void)GXMetalEmitTexture(
-                    state, GXMETAL_PRIMITIVE_TRIANGLE, 3, &vertices[i],
-                    (uint32_t)flags[i / 3]);
+                (void)GXMetalQueueTextureTriangle(
+                    state, &vertices[i], (uint32_t)flags[i / 3]);
             }
             return;
         }
@@ -1199,9 +2524,8 @@ static void GXMetalDrawVTexture(const TQADrawContext *drawContext,
                 triangle[0] = vertices[i + (i & 1)];
                 triangle[1] = vertices[i + ((i & 1) == 0)];
                 triangle[2] = vertices[i + 2];
-                (void)GXMetalEmitTexture(
-                    state, GXMETAL_PRIMITIVE_TRIANGLE, 3, triangle,
-                    (uint32_t)flags[i]);
+                (void)GXMetalQueueTextureTriangle(
+                    state, triangle, (uint32_t)flags[i]);
             }
             return;
         }
@@ -1214,9 +2538,8 @@ static void GXMetalDrawVTexture(const TQADrawContext *drawContext,
             for (i = 0; i + 2 < nVertices; i++) {
                 triangle[1] = vertices[i + 1];
                 triangle[2] = vertices[i + 2];
-                (void)GXMetalEmitTexture(
-                    state, GXMETAL_PRIMITIVE_TRIANGLE, 3, triangle,
-                    (uint32_t)flags[i]);
+                (void)GXMetalQueueTextureTriangle(
+                    state, triangle, (uint32_t)flags[i]);
             }
             return;
         }
@@ -1236,30 +2559,33 @@ static void GXMetalDrawVTexture(const TQADrawContext *drawContext,
                              vertices, 0);
 }
 
-static TQAVTexture GXMetalBitmapVertex(const TQAVGouraud *source,
-                                       float x, float y, float u, float v)
+static void GXMetalBitmapVertex(TQAVTexture *vertex,
+                                const TQAVGouraud *source,
+                                float x, float y, float u, float v)
 {
-    TQAVTexture vertex;
-
-    memset(&vertex, 0, sizeof(vertex));
-    vertex.x = x;
-    vertex.y = y;
-    vertex.z = source->z;
-    vertex.invW = source->invW > 0.0f ? source->invW : 1.0f;
-    vertex.r = source->r;
-    vertex.g = source->g;
-    vertex.b = source->b;
-    vertex.a = source->a;
-    vertex.uOverW = u * vertex.invW;
+    memset(vertex, 0, sizeof(*vertex));
+    vertex->x = x;
+    vertex->y = y;
+    vertex->z = source->z;
+    /* QADrawBitmap is an affine screen-space copy. The source Gouraud
+     * vertex's invW is optional unless perspective-Z is enabled, and older
+     * games (including Carmageddon II) leave it at zero. Use the canonical
+     * affine homogeneous coordinate instead of propagating that sentinel
+     * into texture-coordinate division on the host. */
+    vertex->invW = 1.0f;
+    vertex->r = source->r;
+    vertex->g = source->g;
+    vertex->b = source->b;
+    vertex->a = source->a;
+    vertex->uOverW = u;
     /* QADrawBitmap places image row zero at the top of the destination.
      * Textured RAVE primitives use a lower-left V origin, so compensate in
      * these engine-generated vertices before the Metal shader performs the
      * normal RAVE-to-Metal origin conversion. */
-    vertex.vOverW = (1.0f - v) * vertex.invW;
-    vertex.kd_r = source->r;
-    vertex.kd_g = source->g;
-    vertex.kd_b = source->b;
-    return vertex;
+    vertex->vOverW = 1.0f - v;
+    vertex->kd_r = source->r;
+    vertex->kd_g = source->g;
+    vertex->kd_b = source->b;
 }
 
 static void GXMetalDrawBitmap(const TQADrawContext *drawContext,
@@ -1277,8 +2603,15 @@ static void GXMetalDrawBitmap(const TQADrawContext *drawContext,
     float u1;
     float v1;
 
+    GXMetalTraceDrawMethod(kQADrawBitmap);
+    gDiagnostics.draw_bitmap_count++;
+
     if (state == NULL || v == NULL || bitmap == NULL ||
         bitmap->magic != GXMETAL_BITMAP_MAGIC) {
+        gDiagnostics.draw_bitmap_reject_count++;
+        return;
+    }
+    if (!GXMetalFlushPendingDraws(state)) {
         return;
     }
     left = v->x;
@@ -1309,12 +2642,17 @@ static void GXMetalDrawBitmap(const TQADrawContext *drawContext,
         v1 -= (bottom - (float)state->height) / (float)bitmap->height;
         bottom = (float)state->height;
     }
-    vertices[0] = GXMetalBitmapVertex(v, left, top, u0, v0);
-    vertices[1] = GXMetalBitmapVertex(v, right, top, u1, v0);
-    vertices[2] = GXMetalBitmapVertex(v, left, bottom, u0, v1);
-    vertices[3] = GXMetalBitmapVertex(v, right, bottom, u1, v1);
+    GXMetalBitmapVertex(&vertices[0], v, left, top, u0, v0);
+    GXMetalBitmapVertex(&vertices[1], v, right, top, u1, v0);
+    GXMetalBitmapVertex(&vertices[2], v, left, bottom, u0, v1);
+    GXMetalBitmapVertex(&vertices[3], v, right, bottom, u1, v1);
 
     savedTexture = (const TQATexture *)state->texture;
+    /* The bitmap resource is bound directly by ID and has no TQATexture
+     * wrapper.  Hide the previously bound ATI texture while emitting this
+     * quad so GXMetalEmitTexture does not apply ATI's private UV transform to
+     * an ordinary QADrawBitmap operation. */
+    state->texture = NULL;
     if (!GXMetalEmitState(state, kQATag_Texture, GXMETAL_STATE_RESOURCE,
                           bitmap->resource_id) ||
         !GXMetalEmitState(state, kQATag_TextureOp, GXMETAL_STATE_UINT32,
@@ -1327,8 +2665,10 @@ static void GXMetalDrawBitmap(const TQADrawContext *drawContext,
                           kQAGL_Clamp) ||
         !GXMetalEmitTexture(state, GXMETAL_PRIMITIVE_TRIANGLE_STRIP, 4,
                             vertices, 0)) {
+        state->texture = savedTexture;
         return;
     }
+    state->texture = savedTexture;
     (void)GXMetalEmitState(state, kQATag_Texture, GXMETAL_STATE_RESOURCE,
                            savedTexture != NULL ? savedTexture->resource_id : 0);
     (void)GXMetalEmitState(state, kQATag_TextureOp, GXMETAL_STATE_UINT32,
@@ -1348,9 +2688,15 @@ static void GXMetalRenderStart(const TQADrawContext *drawContext,
                                const TQADrawContext *initialContext)
 {
     GXMetalDrawState *state = GXMetalGetState(drawContext);
+    gDiagnostics.draw_method_stage = 200;
+    gDiagnostics.render_start_count++;
     (void)initialContext;
     if (state == NULL) {
         return;
+    }
+    gRenderEpoch++;
+    if (gRenderEpoch == 0) {
+        gRenderEpoch = 1;
     }
     if (GXMetalEmitRect(state, GXMETAL_OP_BEGIN_FRAME, dirtyRect) ==
         kQANoErr) {
@@ -1360,6 +2706,7 @@ static void GXMetalRenderStart(const TQADrawContext *drawContext,
         }
         (void)GXMetalEmitClear(state, dirtyRect, clearFlags);
     }
+    gDiagnostics.draw_method_stage = 201;
 }
 
 static TQAError GXMetalRenderEnd(const TQADrawContext *drawContext,
@@ -1368,6 +2715,8 @@ static TQAError GXMetalRenderEnd(const TQADrawContext *drawContext,
     GXMetalDrawState *state = GXMetalGetState(drawContext);
     TQAError error;
 
+    gDiagnostics.draw_method_stage = 210;
+    gDiagnostics.render_end_count++;
     if (state == NULL || state->failed) {
         return kQAError;
     }
@@ -1383,6 +2732,11 @@ static TQAError GXMetalRenderEnd(const TQADrawContext *drawContext,
             drawContext,
             state->notice_refcons[kQAMethod_RenderCompletion]);
     }
+    gDiagnostics.draw_method_stage = 211;
+    if ((gDiagnostics.render_end_count & UINT32_C(63)) == 0) {
+        GXMetalPublishDiagnostics();
+        GXMetalPersistDiagnostics();
+    }
     return error;
 }
 
@@ -1391,7 +2745,10 @@ static TQAError GXMetalSync(const TQADrawContext *drawContext)
     GXMetalDrawState *state = GXMetalGetState(drawContext);
     uint32_t sequence;
 
+    gDiagnostics.draw_method_stage = 230;
+    gDiagnostics.sync_count++;
     if (state == NULL || state->failed ||
+        !GXMetalFlushPendingDraws(state) ||
         !gxmetal_guest_emit_fence(state->transport, &sequence) ||
         !gxmetal_guest_wait(state->transport, sequence,
                             GXMETAL_SYNC_SPINS)) {
@@ -1406,11 +2763,16 @@ static TQAError GXMetalSync(const TQADrawContext *drawContext)
 static TQAError GXMetalFlush(const TQADrawContext *drawContext)
 {
     GXMetalDrawState *state = GXMetalGetState(drawContext);
-    return state != NULL && !state->failed ? kQANoErr : kQAError;
+    gDiagnostics.draw_method_stage = 220;
+    gDiagnostics.flush_count++;
+    return state != NULL && !state->failed &&
+           GXMetalFlushPendingDraws(state) ? kQANoErr : kQAError;
 }
 
 static TQAError GXMetalRenderAbort(const TQADrawContext *drawContext)
 {
+    gDiagnostics.draw_method_stage = 240;
+    gDiagnostics.render_abort_count++;
     return GXMetalSync(drawContext);
 }
 
@@ -1420,6 +2782,7 @@ static TQAError GXMetalSetNoticeMethod(const TQADrawContext *drawContext,
                                        void *refCon)
 {
     GXMetalDrawState *state = GXMetalGetState(drawContext);
+    gDiagnostics.draw_method_stage = 250;
     if (state == NULL || method < 0 || method >= kQAMethod_NumSelectors) {
         return kQAParamErr;
     }
@@ -1434,6 +2797,7 @@ static TQAError GXMetalGetNoticeMethod(const TQADrawContext *drawContext,
                                        void **refCon)
 {
     GXMetalDrawState *state = GXMetalGetState(drawContext);
+    gDiagnostics.draw_method_stage = 251;
     if (state == NULL || callback == NULL || refCon == NULL || method < 0 ||
         method >= kQAMethod_NumSelectors) {
         return kQAParamErr;
@@ -1448,6 +2812,7 @@ static TQAError GXMetalClearDrawBuffer(const TQADrawContext *drawContext,
                                        const TQADrawContext *initialContext)
 {
     GXMetalDrawState *state = GXMetalGetState(drawContext);
+    gDiagnostics.draw_method_stage = 260;
     (void)initialContext;
     if (state == NULL) {
         return kQAParamErr;
@@ -1460,6 +2825,7 @@ static TQAError GXMetalClearZBuffer(const TQADrawContext *drawContext,
                                     const TQADrawContext *initialContext)
 {
     GXMetalDrawState *state = GXMetalGetState(drawContext);
+    gDiagnostics.draw_method_stage = 261;
     (void)initialContext;
     if (state == NULL ||
         (state->context_flags & GXMETAL_CONTEXT_Z16) == 0) {
@@ -1472,6 +2838,7 @@ static TQAError GXMetalSwapBuffers(const TQADrawContext *drawContext,
                                    const TQARect *dirtyRect)
 {
     GXMetalDrawState *state = GXMetalGetState(drawContext);
+    gDiagnostics.draw_method_stage = 262;
     if (state == NULL ||
         (state->context_flags & GXMETAL_CONTEXT_DOUBLE_BUFFER) == 0) {
         return kQANotSupported;
@@ -1505,6 +2872,16 @@ static TQAError GXMetalRegisterMethods(TQADrawContext *drawContext)
                             GXMetalDrawTriGouraud);
     GXMETAL_REGISTER_METHOD(kQADrawTriTexture, drawTriTexture,
                             GXMetalDrawTriTexture);
+    GXMETAL_REGISTER_METHOD(kQASubmitVerticesGouraud,
+                            submitVerticesGouraud,
+                            GXMetalSubmitVerticesGouraud);
+    GXMETAL_REGISTER_METHOD(kQASubmitVerticesTexture,
+                            submitVerticesTexture,
+                            GXMetalSubmitVerticesTexture);
+    GXMETAL_REGISTER_METHOD(kQADrawTriMeshGouraud, drawTriMeshGouraud,
+                            GXMetalDrawTriMeshGouraud);
+    GXMETAL_REGISTER_METHOD(kQADrawTriMeshTexture, drawTriMeshTexture,
+                            GXMetalDrawTriMeshTexture);
     GXMETAL_REGISTER_METHOD(kQADrawVGouraud, drawVGouraud,
                             GXMetalDrawVGouraud);
     GXMETAL_REGISTER_METHOD(kQADrawVTexture, drawVTexture,
@@ -1547,27 +2924,65 @@ static TQAError GXMetalDrawPrivateNew(TQADrawContext *newDrawContext,
     uint32_t clipRight;
     uint32_t clipBottom;
 
-    if (newDrawContext == NULL || !GXMetalTransportAvailable() ||
-        (flags & (kQAContext_DeepZ | kQAContext_Cache |
+    gDiagnostics.draw_private_new_count++;
+    gDiagnostics.context_flags = (uint32_t)flags;
+    gDiagnostics.context_error = kQANoErr;
+    gDiagnosticStatus = kGXMetalDiagnosticCreatingContext;
+    if (newDrawContext == NULL) {
+        gDiagnosticStatus = kGXMetalDiagnosticContextInvalidArguments;
+        gDiagnostics.context_error = kQAParamErr;
+        GXMetalPublishDiagnostics();
+        return kQAParamErr;
+    }
+    if (!GXMetalTransportAvailable()) {
+        gDiagnostics.context_error = kQANotSupported;
+        GXMetalPublishDiagnostics();
+        return kQANotSupported;
+    }
+    if ((flags & (kQAContext_DeepZ | kQAContext_Cache |
                   kQAContext_Scale)) != 0 ||
         ((flags & kQAContext_NoZBuffer) == 0 &&
          (gTransport.features & GXMETAL_FEATURE_Z16) == 0) ||
         ((flags & kQAContext_DoubleBuffer) != 0 &&
          (gTransport.features & GXMETAL_FEATURE_DOUBLE_BUFFER) == 0)) {
+        gDiagnosticStatus = kGXMetalDiagnosticContextUnsupportedFlags;
+        gDiagnostics.context_error = kQANotSupported;
+        GXMetalPublishDiagnostics();
         return kQANotSupported;
     }
     state = (GXMetalDrawState *)NewPtrClear(sizeof(*state));
     if (state == NULL) {
+        gDiagnosticStatus = kGXMetalDiagnosticContextOutOfMemory;
+        gDiagnostics.context_error = kQAOutOfMemory;
+        GXMetalPublishDiagnostics();
         return kQAOutOfMemory;
     }
     if (!GXMetalDescribeDevice(device, rect, &state->width, &state->height,
                                &state->row_bytes, &state->pixel_format,
-                               &state->framebuffer_offset) ||
-        !GXMetalDescribeClip(clip, rect, state->width, state->height,
-                             &clipLeft, &clipTop, &clipRight, &clipBottom)) {
+                               &state->framebuffer_offset)) {
+        gDiagnosticStatus = kGXMetalDiagnosticContextDisplayRejected;
+        gDiagnostics.context_error = kQANotSupported;
+        GXMetalPublishDiagnostics();
         DisposePtr((Ptr)state);
         return kQANotSupported;
     }
+    gDiagnostics.context_width = state->width;
+    gDiagnostics.context_height = state->height;
+    gDiagnostics.context_row_bytes = state->row_bytes;
+    gDiagnostics.context_pixel_format = state->pixel_format;
+    gDiagnostics.context_framebuffer_offset = state->framebuffer_offset;
+    if (!GXMetalDescribeClip(clip, rect, state->width, state->height,
+                             &clipLeft, &clipTop, &clipRight, &clipBottom)) {
+        gDiagnosticStatus = kGXMetalDiagnosticContextClipRejected;
+        gDiagnostics.context_error = kQANotSupported;
+        GXMetalPublishDiagnostics();
+        DisposePtr((Ptr)state);
+        return kQANotSupported;
+    }
+    gDiagnostics.context_clip_left = clipLeft;
+    gDiagnostics.context_clip_top = clipTop;
+    gDiagnostics.context_clip_right = clipRight;
+    gDiagnostics.context_clip_bottom = clipBottom;
     state->transport = &gTransport;
     state->context_id = gNextContextID++;
     if (gNextContextID == 0) {
@@ -1597,6 +3012,9 @@ static TQAError GXMetalDrawPrivateNew(TQADrawContext *newDrawContext,
 
     if (!GXMetalBeginPacket(state, GXMETAL_OP_CONTEXT_CREATE,
                             GXMETAL_CONTEXT_CREATE_PACKET_BYTES, &packet)) {
+        gDiagnosticStatus = kGXMetalDiagnosticContextPacketFailed;
+        gDiagnostics.context_error = kQAError;
+        GXMetalPublishDiagnostics();
         DisposePtr((Ptr)state);
         return kQAError;
     }
@@ -1618,6 +3036,9 @@ static TQAError GXMetalDrawPrivateNew(TQADrawContext *newDrawContext,
     GXMetalCommitPacket(state, &packet);
     if (gxmetal_guest_register_read(state->transport, GXMETAL_REG_STATUS) !=
         GXMETAL_STATUS_READY) {
+        gDiagnosticStatus = kGXMetalDiagnosticContextTransportFault;
+        gDiagnostics.context_error = kQAError;
+        GXMetalPublishDiagnostics();
         DisposePtr((Ptr)state);
         return kQAError;
     }
@@ -1625,10 +3046,18 @@ static TQAError GXMetalDrawPrivateNew(TQADrawContext *newDrawContext,
     newDrawContext->drawPrivate = (TQADrawPrivate *)state;
     error = GXMetalRegisterMethods(newDrawContext);
     if (error != kQANoErr) {
+        gDiagnosticStatus = kGXMetalDiagnosticContextMethodFailed;
+        gDiagnostics.context_error = error;
+        GXMetalPublishDiagnostics();
         newDrawContext->drawPrivate = NULL;
         DisposePtr((Ptr)state);
         return error;
     }
+    state->pending_vertices = NewPtr(
+        (Size)(GXMETAL_DRAW_BATCH_VERTICES * sizeof(TQAVTexture)));
+    gDiagnosticStatus = kGXMetalDiagnosticContextReady;
+    GXMetalPublishDiagnostics();
+    GXMetalPersistDiagnostics();
     return kQANoErr;
 }
 
@@ -1640,10 +3069,20 @@ static void GXMetalDrawPrivateDelete(TQADrawPrivate *drawPrivate)
     if (state == NULL) {
         return;
     }
+    (void)GXMetalFlushPendingDraws(state);
     if (!state->failed && GXMetalBeginPacket(state,
             GXMETAL_OP_CONTEXT_DESTROY, GXMETAL_PACKET_HEADER_BYTES,
             &packet)) {
         GXMetalCommitPacket(state, &packet);
+    }
+    if (state->submitted_gouraud_vertices != NULL) {
+        DisposePtr(state->submitted_gouraud_vertices);
+    }
+    if (state->submitted_texture_vertices != NULL) {
+        DisposePtr(state->submitted_texture_vertices);
+    }
+    if (state->pending_vertices != NULL) {
+        DisposePtr(state->pending_vertices);
     }
     DisposePtr((Ptr)state);
 }
@@ -1721,7 +3160,7 @@ static TQAError GXMetalEngineGestalt(TQAGestaltSelector selector,
         }
         if (features & GXMETAL_FEATURE_TEXTURE) {
             value |= kQAOptional_Texture | kQAOptional_TextureHQ |
-                     kQAOptional_TextureColor;
+                     kQAOptional_TextureColor | kQAOptional_CL8;
         }
         if (features & GXMETAL_FEATURE_Z16) {
             value |= kQAOptional_ZBufferMask | kQAOptional_ClearZBuffer;
@@ -1739,7 +3178,7 @@ static TQAError GXMetalEngineGestalt(TQAGestaltSelector selector,
             value |= kQAFast_Blend;
         }
         if (features & GXMETAL_FEATURE_TEXTURE) {
-            value |= kQAFast_Texture | kQAFast_TextureHQ;
+            value |= kQAFast_Texture | kQAFast_TextureHQ | kQAFast_CL8;
         }
         if (features & GXMETAL_FEATURE_FOG_DEPTH) {
             value |= kQAFast_FogDepth;
@@ -1761,13 +3200,20 @@ static TQAError GXMetalEngineGestalt(TQAGestaltSelector selector,
         }
         break;
     case kQAGestalt_VendorID:
-        value = GXMETAL_VENDOR_ID;
+        /* OS 9 queries the identity immediately after QARegisterEngine and
+         * rejects a second public ATI identity before CheckDevice. Several
+         * games later refuse any accelerated engine which does not report
+         * kQAVendor_ATI. Give the manager's one-time registration query the
+         * private GXMetal identity, then expose ATI compatibility to apps. */
+        value = gRegistrationVendorPending ?
+            GXMETAL_REGISTRATION_VENDOR_ID : GXMETAL_LEGACY_VENDOR_ID;
+        gRegistrationVendorPending = 0;
         break;
     case kQAGestalt_EngineID:
         value = GXMETAL_ENGINE_ID;
         break;
     case kQAGestalt_Revision:
-        value = GXMETAL_REVISION;
+        value = GXMETAL_PRODUCT_REVISION;
         break;
     case kQAGestalt_ASCIINameLength:
         value = (uint32_t)strlen(kGXMetalName);
@@ -1788,6 +3234,7 @@ static TQAError GXMetalEngineGestalt(TQAGestaltSelector selector,
             (UINT32_C(1) << kQAPixel_ARGB16) |
             (UINT32_C(1) << kQAPixel_RGB32) |
             (UINT32_C(1) << kQAPixel_ARGB32) |
+            (UINT32_C(1) << kQAPixel_CL8) |
             (UINT32_C(1) << kQAPixel_ARGB16_4444) : 0;
         break;
     case kQAGestalt_BitmapPixelTypesAllowed:
@@ -1795,7 +3242,8 @@ static TQAError GXMetalEngineGestalt(TQAGestaltSelector selector,
         value = (features & GXMETAL_FEATURE_TEXTURE) ?
             (UINT32_C(1) << kQAPixel_RGB16) |
             (UINT32_C(1) << kQAPixel_RGB32) |
-            (UINT32_C(1) << kQAPixel_ARGB32) : 0;
+            (UINT32_C(1) << kQAPixel_ARGB32) |
+            (UINT32_C(1) << kQAPixel_CL8) : 0;
         break;
     default:
         return kQAGestaltUnknown;
@@ -1845,6 +3293,18 @@ TQAError GXMetalEngineGetMethod(TQAEngineMethodTag methodTag,
     case kQABitmapDelete:
         method->bitmapDelete = GXMetalBitmapDelete;
         break;
+    case kQAColorTableNew:
+        method->colorTableNew = GXMetalColorTableNew;
+        break;
+    case kQAColorTableDelete:
+        method->colorTableDelete = GXMetalColorTableDelete;
+        break;
+    case kQATextureBindColorTable:
+        method->textureBindColorTable = GXMetalTextureBindColorTable;
+        break;
+    case kQABitmapBindColorTable:
+        method->bitmapBindColorTable = GXMetalBitmapBindColorTable;
+        break;
     default:
         return kQANotSupported;
     }
@@ -1858,6 +3318,7 @@ OSErr GXMetalCFMInitialize(const CFragInitBlock *initBlock)
     (void)initBlock;
     gDiagnostics.initialize_count++;
     gDiagnosticStatus = kGXMetalDiagnosticInitializing;
+    gRegistrationVendorPending = 1;
     error = QARegisterEngine(GXMetalEngineGetMethod);
     gDiagnostics.registration_error = error;
     gDiagnosticStatus = error == kQANoErr ?

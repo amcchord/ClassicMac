@@ -13,6 +13,8 @@
 
 #include <string.h>
 
+#include "GXMetalVersion.h"
+
 #define GXMETAL_ALERT_ID 128
 #define GXMETAL_INSTALL_DIALOG_ID 129
 #define GXMETAL_COPY_BUFFER_BYTES 32768L
@@ -426,7 +428,7 @@ int main(void)
     error = Gestalt(gestaltSystemVersion, &systemVersion);
     if (error != noErr || systemVersion < 0x0850) {
         GXMetalShowResult(false,
-            "GXMetal requires a Power Mac running Mac OS 8.5 through 9.2. This beta is fully tested on Mac OS 9.2.2.");
+            "GXMetal requires a Power Mac running Mac OS 8.5 through 9.2. This release is fully tested on Mac OS 9.2.2.");
         return 1;
     }
     memset(&processInfo, 0, sizeof(processInfo));
@@ -474,6 +476,6 @@ int main(void)
         return 1;
     }
     GXMetalShowResult(true,
-        "GXMetal and its startup icon are installed. The previous active copy is disabled and will be removed during restart. Then run GXMetal Test.");
+        "GXMetal " GXMETAL_PRODUCT_VERSION_STRING " and its startup icon are installed. The previous active copy is disabled and will be removed during restart. Then run GXMetal Test.");
     return 0;
 }

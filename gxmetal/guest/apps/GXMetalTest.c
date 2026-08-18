@@ -13,6 +13,7 @@
 #include <string.h>
 
 #include "GXMetalDiagnostics.h"
+#include "GXMetalVersion.h"
 
 /* QAInit/QAExit remain exported by the classic RAVE manager and import
  * library, but were omitted from the final Universal Interfaces RAVE.h. RAVE
@@ -25,10 +26,15 @@ extern void QAExit(void);
 #define GXMETAL_HEIGHT 220
 #define GXMETAL_BENCHMARK_FRAMES 120
 #define GXMETAL_BENCHMARK_WARMUP_FRAMES 4
+#define GXMETAL_ATI_PIXEL_RGB16 ((TQAImagePixelType)1001)
 
 static const unsigned char kGXMetalResultName[] = {
     20, 'G', 'X', 'M', 'e', 't', 'a', 'l', ' ', 'T', 'e', 's', 't', ' ',
     'R', 'e', 's', 'u', 'l', 't', 's'
+};
+static const unsigned char kGXMetalDiagnosticResultName[] = {
+    26, 'G', 'X', 'M', 'e', 't', 'a', 'l', ' ', 'D', 'i', 'a', 'g', 'n',
+    'o', 's', 't', 'i', 'c', ' ', 'R', 'e', 's', 'u', 'l', 't', 's'
 };
 static const unsigned char kGXMetalExtensionName[] = {
     7, 'G', 'X', 'M', 'e', 't', 'a', 'l'
@@ -71,7 +77,8 @@ static void GXMetalCStringToPascal(const char *source, Str255 destination)
 /* Leave a machine-readable checkpoint in Preferences. Besides making failures
  * diagnosable on a Mac without a debugger, the host validation harness can
  * mount the isolated disk after shutdown and assert the final PASS record. */
-static void GXMetalRecordResult(const char *message)
+static void GXMetalRecordNamedResult(const unsigned char *name,
+                                     const char *message)
 {
     FSSpec result;
     short volume = 0;
@@ -83,7 +90,7 @@ static void GXMetalRecordResult(const char *message)
                    &volume, &directory) != noErr) {
         return;
     }
-    (void)FSMakeFSSpec(volume, directory, kGXMetalResultName, &result);
+    (void)FSMakeFSSpec(volume, directory, name, &result);
     (void)FSpDelete(&result);
     if (FSpCreate(&result, 'GXMT', 'TEXT', smSystemScript) != noErr ||
         FSpOpenDF(&result, fsWrPerm, &refNum) != noErr) {
@@ -92,6 +99,16 @@ static void GXMetalRecordResult(const char *message)
     (void)FSWrite(refNum, &length, message);
     (void)FSClose(refNum);
     (void)FlushVol(NULL, volume);
+}
+
+static void GXMetalRecordResult(const char *message)
+{
+    GXMetalRecordNamedResult(kGXMetalResultName, message);
+}
+
+static void GXMetalRecordDiagnosticResult(const char *message)
+{
+    GXMetalRecordNamedResult(kGXMetalDiagnosticResultName, message);
 }
 
 static void GXMetalShowResult(Boolean success, const char *message)
@@ -269,11 +286,21 @@ static void GXMetalAppendDecimal(char **cursor, const char *end,
     }
 }
 
+static void GXMetalAppendVersion(char **cursor, const char *end,
+                                 uint32_t revision)
+{
+    GXMetalAppendDecimal(cursor, end, (revision >> 16) & 0xffu);
+    GXMetalAppendText(cursor, end, ".");
+    GXMetalAppendDecimal(cursor, end, (revision >> 8) & 0xffu);
+    GXMetalAppendText(cursor, end, ".");
+    GXMetalAppendDecimal(cursor, end, revision & 0xffu);
+}
+
 static void GXMetalRecordDiagnosticSnapshot(
     const GXMetalDiagnosticSnapshot *snapshot, int32_t probeStatus,
     Boolean automaticLoad)
 {
-    char result[240];
+    char result[512];
     char *cursor = result;
     const char *end = result + sizeof(result) - 1;
 
@@ -291,6 +318,36 @@ static void GXMetalRecordDiagnosticSnapshot(
     GXMETAL_DIAGNOSTIC_FIELD(" mask=", snapshot->method_mask);
     GXMETAL_DIAGNOSTIC_FIELD(" gest=", snapshot->gestalt_count);
     GXMETAL_DIAGNOSTIC_FIELD(" sel=", snapshot->last_gestalt_selector);
+    GXMETAL_DIAGNOSTIC_FIELD(" reject=", snapshot->display_reject_reason);
+    GXMETAL_DIAGNOSTIC_FIELD(" ctxn=", snapshot->draw_private_new_count);
+    GXMETAL_DIAGNOSTIC_FIELD(" flags=", snapshot->context_flags);
+    GXMETAL_DIAGNOSTIC_FIELD(" err=", snapshot->context_error);
+    GXMETAL_DIAGNOSTIC_FIELD(" cw=", snapshot->context_width);
+    GXMETAL_DIAGNOSTIC_FIELD(" ch=", snapshot->context_height);
+    GXMETAL_DIAGNOSTIC_FIELD(" crow=", snapshot->context_row_bytes);
+    GXMETAL_DIAGNOSTIC_FIELD(" fmt=", snapshot->context_pixel_format);
+    GXMETAL_DIAGNOSTIC_FIELD(" off=", snapshot->context_framebuffer_offset);
+    GXMETAL_DIAGNOSTIC_FIELD(" rs=", snapshot->resource_stage);
+    GXMETAL_DIAGNOSTIC_FIELD(" tn=", snapshot->texture_new_count);
+    GXMETAL_DIAGNOSTIC_FIELD(" td=", snapshot->texture_delete_count);
+    GXMETAL_DIAGNOSTIC_FIELD(" ct=", snapshot->color_table_new_count);
+    GXMETAL_DIAGNOSTIC_FIELD(" cd=", snapshot->color_table_delete_count);
+    GXMETAL_DIAGNOSTIC_FIELD(" tb=",
+                             snapshot->texture_bind_color_table_count);
+    GXMETAL_DIAGNOSTIC_FIELD(" tf=", snapshot->last_texture_flags);
+    GXMETAL_DIAGNOSTIC_FIELD(" tp=", snapshot->last_texture_pixel_type);
+    GXMETAL_DIAGNOSTIC_FIELD(" tw=", snapshot->last_texture_width);
+    GXMETAL_DIAGNOSTIC_FIELD(" th=", snapshot->last_texture_height);
+    GXMETAL_DIAGNOSTIC_FIELD(" tl=", snapshot->last_texture_levels);
+    GXMETAL_DIAGNOSTIC_FIELD(" te=",
+                             (uint32_t)snapshot->last_texture_error);
+    GXMETAL_DIAGNOSTIC_FIELD(" cty=", snapshot->last_color_table_type);
+    GXMETAL_DIAGNOSTIC_FIELD(" ctr=",
+                             snapshot->last_color_table_transparent);
+    GXMETAL_DIAGNOSTIC_FIELD(" cte=",
+                             (uint32_t)snapshot->last_color_table_error);
+    GXMETAL_DIAGNOSTIC_FIELD(" tbe=",
+                             (uint32_t)snapshot->last_texture_bind_error);
     GXMETAL_DIAGNOSTIC_FIELD(" fb=", snapshot->registry_framebuffer_address);
     if (snapshot->check_device_count != 0) {
         GXMETAL_DIAGNOSTIC_FIELD(" dev=", snapshot->device_type);
@@ -304,6 +361,7 @@ static void GXMetalRecordDiagnosticSnapshot(
 #undef GXMETAL_DIAGNOSTIC_FIELD
     *cursor = '\0';
     GXMetalRecordResult(result);
+    GXMetalRecordDiagnosticResult(result);
 }
 
 static TQAVGouraud GXMetalGouraud(float x, float y, float z,
@@ -419,9 +477,15 @@ static TQAError GXMetalRenderPattern(TQADrawContext *context,
                                      GDHandle graphicsDevice,
                                      const TQARect *deviceRect)
 {
-    static unsigned long texturePixels[4] = {
-        0xffff0000UL, 0xff00ff00UL,
-        0xff0000ffUL, 0xffffffffUL
+    static unsigned char texturePixels[4] = {
+        1, 2,
+        3, 4
+    };
+    static unsigned long texturePalette[256] = {
+        [1] = 0x00ff0000UL,
+        [2] = 0x0000ff00UL,
+        [3] = 0x000000ffUL,
+        [4] = 0x00ffffffUL
     };
     static unsigned long bitmapPixels[16] = {
         0xffff0000UL, 0xffff0000UL, 0xffff0000UL, 0xffff0000UL,
@@ -432,6 +496,7 @@ static TQAError GXMetalRenderPattern(TQADrawContext *context,
     TQAImage image;
     TQAImage bitmapImage;
     TQATexture *texture = NULL;
+    TQAColorTable *colorTable = NULL;
     TQABitmap *bitmap = NULL;
     TQARect dirty = {0, GXMETAL_WIDTH, 0, GXMETAL_HEIGHT};
     TQAVGouraud farTriangle[3];
@@ -453,11 +518,24 @@ static TQAError GXMetalRenderPattern(TQADrawContext *context,
 
     image.width = 2;
     image.height = 2;
-    image.rowBytes = 8;
+    image.rowBytes = 2;
     image.pixmap = texturePixels;
-    error = QATextureNew(engine, kQATexture_None, kQAPixel_ARGB32,
+    error = QATextureNew(engine, kQATexture_None, kQAPixel_CL8,
                          &image, &texture);
+    if (error == kQANoErr) {
+        error = QAColorTableNew(engine, kQAColorTable_CL8_RGB32,
+                                texturePalette, false, &colorTable);
+    }
+    if (error == kQANoErr) {
+        error = QATextureBindColorTable(engine, texture, colorTable);
+    }
     if (error != kQANoErr) {
+        if (colorTable != NULL) {
+            QAColorTableDelete(engine, colorTable);
+        }
+        if (texture != NULL) {
+            QATextureDelete(engine, texture);
+        }
         return error;
     }
     bitmapImage.width = 4;
@@ -473,6 +551,7 @@ static TQAError GXMetalRenderPattern(TQADrawContext *context,
         if (bitmap != NULL) {
             QABitmapDelete(engine, bitmap);
         }
+        QAColorTableDelete(engine, colorTable);
         QATextureDelete(engine, texture);
         return error;
     }
@@ -550,7 +629,7 @@ static TQAError GXMetalRenderPattern(TQADrawContext *context,
                                     1.0f, 0.0f, 0.0f, 1.0f);
     fogTriangle[2] = GXMetalGouraud(270.0f, 232.0f, 0.75f,
                                     1.0f, 0.0f, 0.0f, 1.0f);
-    /* RAVE depth fog uses 1/invW, not the normalized Z-buffer coordinate.
+    /* Perspective-Z fog uses 1/invW, not the normalized Z-buffer coordinate.
      * Keep the historical 0.75 fog depth while making Z deliberately near. */
     fogTriangle[0].z = fogTriangle[1].z = fogTriangle[2].z = 0.10f;
     fogTriangle[0].invW = fogTriangle[1].invW = fogTriangle[2].invW =
@@ -603,6 +682,10 @@ static TQAError GXMetalRenderPattern(TQADrawContext *context,
                    backfaceTextureOriented, backfaceFlags);
     QADrawVTexture(context, 4, kQAVertexMode_Strip,
                    texturedQuad, flags);
+    /* Bitmaps bind their own resource and must not depend on an unrelated
+     * current texture. Carmageddon II exercises this path before binding its
+     * first scene texture. */
+    QASetPtr(context, kQATag_Texture, NULL);
     QADrawBitmap(context, &bitmapVertex, bitmap);
     QASetFloat(context, kQATag_FogColor_a, 1.0f);
     QASetFloat(context, kQATag_FogColor_r, 0.0f);
@@ -610,10 +693,12 @@ static TQAError GXMetalRenderPattern(TQADrawContext *context,
     QASetFloat(context, kQATag_FogColor_b, 1.0f);
     QASetFloat(context, kQATag_FogStart, 0.0f);
     QASetFloat(context, kQATag_FogEnd, 1.0f);
+    QASetInt(context, kQATag_PerspectiveZ, kQAPerspectiveZ_On);
     QASetInt(context, kQATag_FogMode, kQAFogMode_Linear);
     QADrawTriGouraud(context, &fogTriangle[0], &fogTriangle[1],
                      &fogTriangle[2], kQATriFlags_None);
     QASetInt(context, kQATag_FogMode, kQAFogMode_None);
+    QASetInt(context, kQATag_PerspectiveZ, kQAPerspectiveZ_Off);
     error = QARenderEnd(context, &dirty);
     if (error == kQANoErr) {
         error = QASync(context);
@@ -682,7 +767,132 @@ static TQAError GXMetalRenderPattern(TQADrawContext *context,
         error = kQAError;
     }
     QABitmapDelete(engine, bitmap);
+    QAColorTableDelete(engine, colorTable);
     QATextureDelete(engine, texture);
+    return error;
+}
+
+static void GXMetalFillATITexture(unsigned char pixels[8],
+                                  unsigned char high,
+                                  unsigned char low)
+{
+    int pixel;
+
+    for (pixel = 0; pixel < 4; pixel++) {
+        pixels[pixel * 2] = high;
+        pixels[pixel * 2 + 1] = low;
+    }
+}
+
+static TQAError GXMetalRenderATITextureMutation(
+    TQADrawContext *context, const TQAEngine *engine,
+    GDHandle graphicsDevice, const TQARect *deviceRect)
+{
+    unsigned char staticPixels[8];
+    unsigned char livePixels[8];
+    TQAImage staticImage;
+    TQAImage liveImage;
+    TQATexture *staticTexture = NULL;
+    TQATexture *liveTexture = NULL;
+    TQAVTexture leftQuad[4];
+    TQAVTexture rightQuad[4];
+    unsigned long vertexFlags[4] = {0, 0, 0, 0};
+    TQARect dirty = {0, GXMETAL_WIDTH, 0, GXMETAL_HEIGHT};
+    TQAError error;
+
+    /* ATI type 1001 is a big-endian ARGB4444 byte stream. */
+    GXMetalFillATITexture(staticPixels, 0xff, 0x00); /* opaque red */
+    GXMetalFillATITexture(livePixels, 0xff, 0x00);   /* opaque red */
+    staticImage.width = 2;
+    staticImage.height = 2;
+    staticImage.rowBytes = 4;
+    staticImage.pixmap = staticPixels;
+    liveImage = staticImage;
+    liveImage.pixmap = livePixels;
+
+    error = QATextureNew(engine, kQATexture_None,
+                         GXMETAL_ATI_PIXEL_RGB16,
+                         &staticImage, &staticTexture);
+    if (error == kQANoErr) {
+        error = QATextureNew(engine, kQATexture_NoCopy,
+                             GXMETAL_ATI_PIXEL_RGB16,
+                             &liveImage, &liveTexture);
+    }
+    if (error != kQANoErr) {
+        if (liveTexture != NULL) {
+            QATextureDelete(engine, liveTexture);
+        }
+        if (staticTexture != NULL) {
+            QATextureDelete(engine, staticTexture);
+        }
+        GXMetalRecordResult("FAIL: ATI private texture creation");
+        return error;
+    }
+
+    /* A normal texture must retain its red creation-time upload even after
+     * the caller reuses the source buffer. A NoCopy texture must observe the
+     * green CPU-side mutation before its first draw. */
+    GXMetalFillATITexture(staticPixels, 0xf0, 0x0f); /* opaque blue */
+    GXMetalFillATITexture(livePixels, 0xf0, 0xf0);   /* opaque green */
+
+    leftQuad[0] = GXMetalTextureVertex(12.0f, 12.0f, 0.5f,
+                                       0.0f, 0.0f);
+    leftQuad[1] = GXMetalTextureVertex(150.0f, 12.0f, 0.5f,
+                                       1.0f, 0.0f);
+    leftQuad[2] = GXMetalTextureVertex(12.0f, 208.0f, 0.5f,
+                                       0.0f, -1.0f);
+    leftQuad[3] = GXMetalTextureVertex(150.0f, 208.0f, 0.5f,
+                                       1.0f, -1.0f);
+    rightQuad[0] = GXMetalTextureVertex(170.0f, 12.0f, 0.5f,
+                                        0.0f, 0.0f);
+    rightQuad[1] = GXMetalTextureVertex(308.0f, 12.0f, 0.5f,
+                                        1.0f, 0.0f);
+    rightQuad[2] = GXMetalTextureVertex(170.0f, 208.0f, 0.5f,
+                                        0.0f, -1.0f);
+    rightQuad[3] = GXMetalTextureVertex(308.0f, 208.0f, 0.5f,
+                                        1.0f, -1.0f);
+
+    QASetFloat(context, kQATag_ColorBG_r, 0.0f);
+    QASetFloat(context, kQATag_ColorBG_g, 0.0f);
+    QASetFloat(context, kQATag_ColorBG_b, 0.0f);
+    QASetFloat(context, kQATag_ColorBG_a, 1.0f);
+    QASetInt(context, kQATag_ZFunction, kQAZFunction_None);
+    QASetInt(context, kQATag_ZBufferMask, kQAZBufferMask_Disable);
+    QASetInt(context, kQATag_Blend, kQABlend_Interpolate);
+    QASetInt(context, kQATag_TextureFilter, kQATextureFilter_Fast);
+    QASetInt(context, kQATag_TextureOp, kQATextureOp_None);
+    QASetInt(context, kQATagGL_TextureWrapU, kQAGL_Clamp);
+    QASetInt(context, kQATagGL_TextureWrapV, kQAGL_Clamp);
+
+    QARenderStart(context, &dirty, NULL);
+    QASetPtr(context, kQATag_Texture, staticTexture);
+    QADrawVTexture(context, 4, kQAVertexMode_Strip,
+                   leftQuad, vertexFlags);
+    QASetPtr(context, kQATag_Texture, liveTexture);
+    QADrawVTexture(context, 4, kQAVertexMode_Strip,
+                   rightQuad, vertexFlags);
+    error = QARenderEnd(context, &dirty);
+    if (error == kQANoErr) {
+        error = QASync(context);
+    }
+    if (error == kQANoErr &&
+        !GXMetalPixelMatches(graphicsDevice,
+                             deviceRect->left + 80,
+                             deviceRect->top + 110,
+                             kGXMetalPixelRed)) {
+        GXMetalRecordResult("FAIL: static ATI texture changed with caller memory");
+        error = kQAError;
+    }
+    if (error == kQANoErr &&
+        !GXMetalPixelMatches(graphicsDevice,
+                             deviceRect->left + 240,
+                             deviceRect->top + 110,
+                             kGXMetalPixelGreen)) {
+        GXMetalRecordResult("FAIL: ATI NoCopy texture did not refresh");
+        error = kQAError;
+    }
+    QATextureDelete(engine, liveTexture);
+    QATextureDelete(engine, staticTexture);
     return error;
 }
 
@@ -837,6 +1047,7 @@ static TQAError GXMetalBenchmarkSoftware(const TQADevice *device,
 }
 
 static void GXMetalBuildPassResult(char *result, size_t resultCapacity,
+                                   uint32_t revision,
                                    uint64_t gxMetalMicroseconds,
                                    uint64_t softwareMicroseconds,
                                    uint64_t speedupTimes100)
@@ -844,8 +1055,10 @@ static void GXMetalBuildPassResult(char *result, size_t resultCapacity,
     char *cursor = result;
     const char *end = result + resultCapacity - 1;
 
+    GXMetalAppendText(&cursor, end, "PASS: version=");
+    GXMetalAppendVersion(&cursor, end, revision);
     GXMetalAppendText(&cursor, end,
-        "PASS: RAVE discovery depth blend alpha-test backface clip texture bitmap dirty-present double-buffer framebuffer gx_us=");
+        " RAVE discovery depth blend alpha-test backface clip texture ATI-private-nocopy bitmap dirty-present double-buffer framebuffer gx_us=");
     GXMetalAppendDecimal(&cursor, end, gxMetalMicroseconds);
     GXMetalAppendText(&cursor, end, " sw_us=");
     GXMetalAppendDecimal(&cursor, end, softwareMicroseconds);
@@ -855,14 +1068,17 @@ static void GXMetalBuildPassResult(char *result, size_t resultCapacity,
 }
 
 static void GXMetalBuildPassMessage(char *message, size_t messageCapacity,
+                                    uint32_t revision,
                                     const char *softwareEngineName,
                                     uint64_t speedupTimes100)
 {
     char *cursor = message;
     const char *end = message + messageCapacity - 1;
 
+    GXMetalAppendText(&cursor, end, "GXMetal ");
+    GXMetalAppendVersion(&cursor, end, revision);
     GXMetalAppendText(&cursor, end,
-        "GXMetal passed automatic RAVE discovery, framebuffer correctness, bitmap drawing, presentation, and fallback. The repeatable mixed texture/Gouraud workload ran ");
+        " passed automatic RAVE discovery, framebuffer correctness, ATI private static/NoCopy texture mutation, bitmap drawing, presentation, and fallback. The repeatable mixed texture/Gouraud workload ran ");
     GXMetalAppendDecimal(&cursor, end, speedupTimes100 / 100);
     GXMetalAppendText(&cursor, end, ".");
     if (speedupTimes100 % 100 < 10) {
@@ -875,10 +1091,29 @@ static void GXMetalBuildPassMessage(char *message, size_t messageCapacity,
     *cursor = '\0';
 }
 
+static void GXMetalBuildVersionMismatch(char *message,
+                                        size_t messageCapacity,
+                                        uint32_t revision)
+{
+    char *cursor = message;
+    const char *end = message + messageCapacity - 1;
+
+    GXMetalAppendText(&cursor, end, "GXMetal Test ");
+    GXMetalAppendText(&cursor, end, GXMETAL_PRODUCT_VERSION_STRING);
+    GXMetalAppendText(&cursor, end,
+        " found installed GXMetal driver revision ");
+    GXMetalAppendVersion(&cursor, end, revision);
+    GXMetalAppendText(&cursor, end, ". Install GXMetal ");
+    GXMetalAppendText(&cursor, end, GXMETAL_PRODUCT_VERSION_STRING);
+    GXMetalAppendText(&cursor, end, " and restart Mac OS before testing.");
+    *cursor = '\0';
+}
+
 int main(void)
 {
     static const unsigned char kWindowTitle[] = {
-        12, 'G', 'X', 'M', 'e', 't', 'a', 'l', ' ', 'T', 'e', 's', 't'
+        18, 'G', 'X', 'M', 'e', 't', 'a', 'l', ' ', 'T', 'e', 's', 't',
+        ' ', '1', '.', '9', '.', '0'
     };
     Rect windowRect;
     Rect localRect;
@@ -897,6 +1132,9 @@ int main(void)
     TQADrawContext *unexpectedContext = NULL;
     unsigned long optionalFeatures = 0;
     unsigned long optionalFeatures2 = 0;
+    unsigned long vendorID = 0;
+    unsigned long engineID = 0;
+    unsigned long revision = 0;
     unsigned long requiredFeatures;
     TQAError error;
     OSErr loadError;
@@ -911,6 +1149,7 @@ int main(void)
     char softwareEngineName[64];
     char passResult[240];
     char passMessage[256];
+    char versionMessage[256];
 
     GXMetalInitToolbox();
     GXMetalRecordResult("START: GXMetal Test entered main");
@@ -922,6 +1161,23 @@ int main(void)
         return 1;
     }
     GXMetalRecordResult("RAVE: QAInit succeeded");
+    memset(&publishedSnapshot, 0, sizeof(publishedSnapshot));
+    if (GXMetalReadPublishedDiagnostics(&publishedSnapshot)) {
+        GXMetalRecordDiagnosticSnapshot(&publishedSnapshot, -1, true);
+    }
+    /* Always snapshot the live fragment before this app changes any driver
+     * state. This also turns GXMetal Test into a post-crash diagnostic probe
+     * for games which leave the RAVE manager running but unstable. */
+    loadError = GXMetalLoadInstalledExtension(&diagnosticConnection);
+    if (loadError == noErr && diagnosticConnection != NULL) {
+        memset(&diagnosticSnapshot, 0, sizeof(diagnosticSnapshot));
+        if (GXMetalCopyDriverDiagnostics(diagnosticConnection,
+                                         &diagnosticSnapshot) == kQANoErr) {
+            GXMetalRecordDiagnosticSnapshot(&diagnosticSnapshot, -1, true);
+        }
+        CloseConnection(&diagnosticConnection);
+        diagnosticConnection = NULL;
+    }
     SetRect(&windowRect, 70, 58, 70 + GXMETAL_WIDTH,
             58 + GXMETAL_HEIGHT);
     window = NewCWindow(NULL, &windowRect, kWindowTitle, true,
@@ -1008,10 +1264,41 @@ int main(void)
     if (QAEngineGestalt(engine, kQAGestalt_OptionalFeatures,
                         &optionalFeatures) != kQANoErr ||
         QAEngineGestalt(engine, kQAGestalt_OptionalFeatures2,
-                        &optionalFeatures2) != kQANoErr) {
+                        &optionalFeatures2) != kQANoErr ||
+        QAEngineGestalt(engine, kQAGestalt_VendorID,
+                        &vendorID) != kQANoErr ||
+        QAEngineGestalt(engine, kQAGestalt_EngineID,
+                        &engineID) != kQANoErr ||
+        QAEngineGestalt(engine, kQAGestalt_Revision,
+                        &revision) != kQANoErr) {
         GXMetalRecordResult("FAIL: RAVE feature gestalt");
         DisposeWindow(window);
         GXMetalShowResult(false, "GXMetal did not return its RAVE feature set.");
+        QAExit();
+        return 1;
+    }
+    if (vendorID != 1) { /* kQAVendor_ATI */
+        GXMetalRecordResult("FAIL: legacy RAVE vendor compatibility");
+        DisposeWindow(window);
+        GXMetalShowResult(false,
+            "GXMetal did not advertise the ATI-compatible RAVE identity required by legacy game launchers.");
+        QAExit();
+        return 1;
+    }
+    if (engineID != 1) {
+        GXMetalRecordResult("FAIL: GXMetal engine identity");
+        DisposeWindow(window);
+        GXMetalShowResult(false,
+            "GXMetal did not advertise its unique engine identity.");
+        QAExit();
+        return 1;
+    }
+    if ((uint32_t)revision != GXMETAL_PRODUCT_REVISION) {
+        GXMetalBuildVersionMismatch(versionMessage, sizeof(versionMessage),
+                                    (uint32_t)revision);
+        GXMetalRecordResult(versionMessage);
+        DisposeWindow(window);
+        GXMetalShowResult(false, versionMessage);
         QAExit();
         return 1;
     }
@@ -1083,6 +1370,10 @@ int main(void)
     if (error == kQANoErr) {
         error = GXMetalRenderPattern(context, engine,
                                      device.device.gDevice, &deviceRect);
+        if (error == kQANoErr) {
+            error = GXMetalRenderATITextureMutation(
+                context, engine, device.device.gDevice, &deviceRect);
+        }
     } else {
         GXMetalRecordResult("FAIL: accelerated draw context creation");
     }
@@ -1116,10 +1407,11 @@ int main(void)
         return 1;
     }
     speedupTimes100 = softwareMicroseconds * 100 / gxMetalMicroseconds;
-    GXMetalBuildPassResult(passResult, sizeof(passResult),
+    GXMetalBuildPassResult(passResult, sizeof(passResult), (uint32_t)revision,
                            gxMetalMicroseconds, softwareMicroseconds,
                            speedupTimes100);
     GXMetalBuildPassMessage(passMessage, sizeof(passMessage),
+                            (uint32_t)revision,
                             softwareEngineName, speedupTimes100);
     GXMetalRecordResult(passResult);
     GXMetalShowResult(true, passMessage);

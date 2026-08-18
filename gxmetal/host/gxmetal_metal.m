@@ -13,10 +13,23 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 
 #define GXMETAL_METAL_MAX_CONTEXTS 32u
-#define GXMETAL_METAL_MAX_RESOURCES 256u
+/* RAVE applications may retain several generations of menu, HUD, and world
+ * textures at once. Carmageddon II reaches 256 live/partially uploaded
+ * resources while changing screens; exhausting this table faults the shared
+ * command queue permanently and leaves the last completed frame onscreen.
+ * Resource records are small and inactive slots are reused, so a larger host
+ * table removes that artificial limit without increasing guest VRAM usage. */
+#define GXMETAL_METAL_MAX_RESOURCES 4096u
+#define GXMETAL_METAL_RESOURCE_HASH_SIZE 8192u
+#define GXMETAL_METAL_STACK_VERTICES 16u
+
+_Static_assert((GXMETAL_METAL_RESOURCE_HASH_SIZE &
+                (GXMETAL_METAL_RESOURCE_HASH_SIZE - 1)) == 0,
+               "Metal resource hash size must be a power of two");
 
 typedef struct GXMetalMetalVertex {
     float x;
@@ -102,6 +115,7 @@ typedef struct GXMetalMetalResource {
     uint32_t pixel_format;
     uint32_t flags;
     uint32_t levels;
+    uint32_t hash_next;
     int active;
     id<MTLTexture> texture;
 } GXMetalMetalResource;
@@ -147,6 +161,17 @@ struct GXMetalMetalRenderer {
     uint32_t shared_bytes;
     uint64_t direct_present_count;
     uint64_t fallback_present_count;
+    int profile_enabled;
+    uint64_t profile_window_start_ns;
+    uint64_t profile_present_count;
+    uint64_t profile_direct_present_count;
+    uint64_t profile_fallback_present_count;
+    uint64_t profile_present_ns;
+    uint64_t profile_draw_count;
+    uint64_t profile_draw_vertex_count;
+    uint64_t profile_single_triangle_count;
+    uint64_t profile_resource_lookup_count;
+    uint64_t profile_resource_lookup_probes;
     id<MTLDevice> device;
     id<MTLCommandQueue> command_queue;
     id<MTLRenderPipelineState> pipelines[3];
@@ -159,7 +184,120 @@ struct GXMetalMetalRenderer {
     id<MTLSamplerState> samplers[3][4];
     GXMetalMetalContext contexts[GXMETAL_METAL_MAX_CONTEXTS];
     GXMetalMetalResource resources[GXMETAL_METAL_MAX_RESOURCES];
+    uint32_t resource_hash[GXMETAL_METAL_RESOURCE_HASH_SIZE];
 };
+
+static uint64_t gxmetal_metal_now_ns(void)
+{
+    struct timespec now;
+
+    if (clock_gettime(CLOCK_MONOTONIC, &now) != 0) {
+        return 0;
+    }
+    return (uint64_t)now.tv_sec * UINT64_C(1000000000) +
+           (uint64_t)now.tv_nsec;
+}
+
+static void gxmetal_metal_profile_draw(GXMetalMetalRenderer *renderer,
+                                       const GXMetalPacketView *packet)
+{
+    uint32_t primitive;
+    uint32_t count;
+
+    if (!renderer->profile_enabled ||
+        packet->payload_bytes < GXMETAL_DRAW_HEADER_BYTES) {
+        return;
+    }
+    primitive = gxmetal_load_le32(
+        packet->payload + GXMETAL_DRAW_PRIMITIVE_OFFSET);
+    count = gxmetal_load_le32(
+        packet->payload + GXMETAL_DRAW_VERTEX_COUNT_OFFSET);
+    renderer->profile_draw_count++;
+    renderer->profile_draw_vertex_count += count;
+    if (primitive == GXMETAL_PRIMITIVE_TRIANGLE && count == 3) {
+        renderer->profile_single_triangle_count++;
+    }
+}
+
+static void gxmetal_metal_profile_present(GXMetalMetalRenderer *renderer,
+                                          int direct,
+                                          uint64_t present_start_ns)
+{
+    uint64_t now_ns;
+    uint64_t elapsed_ns;
+    double elapsed_seconds;
+    double frames_per_second;
+    double present_ms;
+    double draws_per_frame;
+    double vertices_per_draw;
+    double single_triangle_percent;
+    double probes_per_lookup;
+
+    if (!renderer->profile_enabled) {
+        return;
+    }
+    now_ns = gxmetal_metal_now_ns();
+    if (now_ns == 0) {
+        return;
+    }
+    if (renderer->profile_window_start_ns == 0) {
+        renderer->profile_window_start_ns = present_start_ns != 0 ?
+            present_start_ns : now_ns;
+    }
+    renderer->profile_present_count++;
+    if (direct) {
+        renderer->profile_direct_present_count++;
+    } else {
+        renderer->profile_fallback_present_count++;
+    }
+    if (present_start_ns != 0 && now_ns >= present_start_ns) {
+        renderer->profile_present_ns += now_ns - present_start_ns;
+    }
+    elapsed_ns = now_ns - renderer->profile_window_start_ns;
+    if (elapsed_ns < UINT64_C(2000000000)) {
+        return;
+    }
+
+    elapsed_seconds = (double)elapsed_ns / 1000000000.0;
+    frames_per_second = (double)renderer->profile_present_count /
+                        elapsed_seconds;
+    present_ms = renderer->profile_present_count != 0 ?
+        (double)renderer->profile_present_ns /
+            (double)renderer->profile_present_count / 1000000.0 : 0.0;
+    draws_per_frame = renderer->profile_present_count != 0 ?
+        (double)renderer->profile_draw_count /
+            (double)renderer->profile_present_count : 0.0;
+    vertices_per_draw = renderer->profile_draw_count != 0 ?
+        (double)renderer->profile_draw_vertex_count /
+            (double)renderer->profile_draw_count : 0.0;
+    single_triangle_percent = renderer->profile_draw_count != 0 ?
+        (double)renderer->profile_single_triangle_count * 100.0 /
+            (double)renderer->profile_draw_count : 0.0;
+    probes_per_lookup = renderer->profile_resource_lookup_count != 0 ?
+        (double)renderer->profile_resource_lookup_probes /
+            (double)renderer->profile_resource_lookup_count : 0.0;
+    fprintf(stderr,
+            "GXMetal profile: fps=%.2f frames=%llu direct=%llu "
+            "fallback=%llu present_ms=%.3f draws_per_frame=%.2f "
+            "vertices_per_draw=%.2f single_triangle_pct=%.2f "
+            "resource_probes_per_lookup=%.2f\n",
+            frames_per_second,
+            (unsigned long long)renderer->profile_present_count,
+            (unsigned long long)renderer->profile_direct_present_count,
+            (unsigned long long)renderer->profile_fallback_present_count,
+            present_ms, draws_per_frame, vertices_per_draw,
+            single_triangle_percent, probes_per_lookup);
+    renderer->profile_window_start_ns = now_ns;
+    renderer->profile_present_count = 0;
+    renderer->profile_direct_present_count = 0;
+    renderer->profile_fallback_present_count = 0;
+    renderer->profile_present_ns = 0;
+    renderer->profile_draw_count = 0;
+    renderer->profile_draw_vertex_count = 0;
+    renderer->profile_single_triangle_count = 0;
+    renderer->profile_resource_lookup_count = 0;
+    renderer->profile_resource_lookup_probes = 0;
+}
 
 static NSString *const kGXMetalShaderSource = @
     "#include <metal_stdlib>\n"
@@ -190,6 +328,12 @@ static NSString *const kGXMetalShaderSource = @
     "  }\n"
     "  return mix(fog.color, source, clamp(keep, 0.0, 1.0));\n"
     "}\n"
+    "float gxmetal_fog_depth(float z, float invW,\n"
+    "                        constant GXFog &fog) {\n"
+    "  if (fog.modeAndPadding.y == 0u) return z;\n"
+    "  float depth = 1.0 / max(invW, 0.000001);\n"
+    "  return fog.maxDepth > 0.0 ? min(depth, fog.maxDepth) : depth;\n"
+    "}\n"
     "struct GXAlphaTest { uint function; float reference; };\n"
     "bool gxmetal_alpha_visible(float alpha,\n"
     "                           constant GXAlphaTest &test) {\n"
@@ -219,7 +363,7 @@ static NSString *const kGXMetalShaderSource = @
     "    constant GXAlphaTest &alphaTest [[buffer(1)]]) {\n"
     "  float4 result = clamp(in.color, 0.0, 1.0);\n"
     "  if (!gxmetal_alpha_visible(result.a, alphaTest)) discard_fragment();\n"
-    "  float fogDepth = 1.0 / max(in.invW, 0.000001);\n"
+    "  float fogDepth = gxmetal_fog_depth(in.position.z, in.invW, fog);\n"
     "  return gxmetal_apply_fog(result, fogDepth, fog);\n"
     "}\n";
 
@@ -276,7 +420,7 @@ static NSString *const kGXMetalTextureShaderSource = @
     "  if ((operation & 2u) != 0u) result.rgb += in.ks;\n"
     "  result = clamp(result, 0.0, 1.0);\n"
     "  if (!gxmetal_alpha_visible(result.a, alphaTest)) discard_fragment();\n"
-    "  float fogDepth = 1.0 / max(in.invW, 0.000001);\n"
+    "  float fogDepth = gxmetal_fog_depth(in.position.z, in.invW, fog);\n"
     "  return gxmetal_apply_fog(result, fogDepth, fog);\n"
     "}\n";
 
@@ -348,20 +492,72 @@ static GXMetalMetalContext *gxmetal_metal_find_context(
 static GXMetalMetalResource *gxmetal_metal_find_resource(
     GXMetalMetalRenderer *renderer, uint32_t id)
 {
-    uint32_t i;
-    for (i = 0; i < GXMETAL_METAL_MAX_RESOURCES; i++) {
-        if (renderer->resources[i].active &&
-            renderer->resources[i].id == id) {
-            return &renderer->resources[i];
+    uint32_t slot = renderer->resource_hash[
+        (id * UINT32_C(2654435761)) &
+        (GXMETAL_METAL_RESOURCE_HASH_SIZE - 1)];
+
+    if (renderer->profile_enabled) {
+        renderer->profile_resource_lookup_count++;
+    }
+    while (slot != 0) {
+        GXMetalMetalResource *resource;
+
+        if (renderer->profile_enabled) {
+            renderer->profile_resource_lookup_probes++;
         }
+        if (slot > GXMETAL_METAL_MAX_RESOURCES) {
+            return NULL;
+        }
+        resource = &renderer->resources[slot - 1];
+        if (resource->active && resource->id == id) {
+            return resource;
+        }
+        slot = resource->hash_next;
     }
     return NULL;
+}
+
+static void gxmetal_metal_insert_resource(GXMetalMetalRenderer *renderer,
+                                          GXMetalMetalResource *resource)
+{
+    uint32_t bucket = (resource->id * UINT32_C(2654435761)) &
+        (GXMETAL_METAL_RESOURCE_HASH_SIZE - 1);
+    uint32_t slot = (uint32_t)(resource - renderer->resources) + 1;
+
+    resource->hash_next = renderer->resource_hash[bucket];
+    renderer->resource_hash[bucket] = slot;
+}
+
+static void gxmetal_metal_remove_resource(GXMetalMetalRenderer *renderer,
+                                          GXMetalMetalResource *resource)
+{
+    uint32_t bucket = (resource->id * UINT32_C(2654435761)) &
+        (GXMETAL_METAL_RESOURCE_HASH_SIZE - 1);
+    uint32_t slot = (uint32_t)(resource - renderer->resources) + 1;
+    uint32_t *link = &renderer->resource_hash[bucket];
+
+    while (*link != 0) {
+        GXMetalMetalResource *candidate;
+
+        if (*link > GXMETAL_METAL_MAX_RESOURCES) {
+            return;
+        }
+        candidate = &renderer->resources[*link - 1];
+        if (*link == slot) {
+            *link = candidate->hash_next;
+            candidate->hash_next = 0;
+            return;
+        }
+        link = &candidate->hash_next;
+    }
 }
 
 static uint32_t gxmetal_metal_resource_bytes_per_pixel(uint32_t format)
 {
     switch (format) {
     case GXMETAL_PIXEL_RGB555:
+    case GXMETAL_PIXEL_RGB565:
+    case GXMETAL_PIXEL_ATI_ARGB4444:
     case GXMETAL_PIXEL_ARGB1555:
     case GXMETAL_PIXEL_ARGB4444:
         return 2;
@@ -664,6 +860,7 @@ static uint32_t gxmetal_metal_resource_create(
         return GXMETAL_ERROR_RENDERER;
     }
     resource->active = 1;
+    gxmetal_metal_insert_resource(renderer, resource);
     return GXMETAL_ERROR_NONE;
 }
 
@@ -681,6 +878,13 @@ static void gxmetal_metal_convert_pixel(uint32_t format,
         destination[2] = (uint8_t)((value & 31) * 255 / 31);
         destination[3] = 255;
         break;
+    case GXMETAL_PIXEL_RGB565:
+        value = (uint16_t)((uint16_t)source[0] << 8 | source[1]);
+        destination[0] = (uint8_t)(((value >> 11) & 31) * 255 / 31);
+        destination[1] = (uint8_t)(((value >> 5) & 63) * 255 / 63);
+        destination[2] = (uint8_t)((value & 31) * 255 / 31);
+        destination[3] = 255;
+        break;
     case GXMETAL_PIXEL_ARGB1555:
         value = (uint16_t)((uint16_t)source[0] << 8 | source[1]);
         destination[0] = (uint8_t)(((value >> 10) & 31) * 255 / 31);
@@ -689,6 +893,7 @@ static void gxmetal_metal_convert_pixel(uint32_t format,
         destination[3] = (value & 0x8000) ? 255 : 0;
         break;
     case GXMETAL_PIXEL_ARGB4444:
+    case GXMETAL_PIXEL_ATI_ARGB4444:
         value = (uint16_t)((uint16_t)source[0] << 8 | source[1]);
         destination[0] = (uint8_t)(((value >> 8) & 15) * 17);
         destination[1] = (uint8_t)(((value >> 4) & 15) * 17);
@@ -798,6 +1003,7 @@ static uint32_t gxmetal_metal_resource_destroy(
             renderer->contexts[i].texture_id = 0;
         }
     }
+    gxmetal_metal_remove_resource(renderer, resource);
     [resource->texture release];
     memset(resource, 0, sizeof(*resource));
     return GXMETAL_ERROR_NONE;
@@ -942,7 +1148,8 @@ static int gxmetal_metal_read_vertex(const GXMetalMetalContext *context,
     vertex->y = gxmetal_metal_load_float(source + GXMETAL_VERTEX_Y_OFFSET);
     vertex->z = gxmetal_metal_load_float(source + GXMETAL_VERTEX_Z_OFFSET);
     vertex->inv_w = 1.0f;
-    if (context->fog.mode_and_padding[0] >= GXMETAL_FOG_LINEAR) {
+    if (context->fog.mode_and_padding[0] >= GXMETAL_FOG_LINEAR &&
+        context->fog.mode_and_padding[1] != 0) {
         vertex->inv_w = gxmetal_metal_load_float(
             source + GXMETAL_VERTEX_INV_W_OFFSET);
     }
@@ -962,6 +1169,7 @@ static uint32_t gxmetal_metal_draw(GXMetalMetalRenderer *renderer,
                                    const GXMetalPacketView *packet)
 {
     const uint8_t *source = packet->payload + GXMETAL_DRAW_VERTICES_OFFSET;
+    GXMetalMetalVertex stack_vertices[GXMETAL_METAL_STACK_VERTICES];
     GXMetalMetalVertex *vertices;
     GXMetalMetalVertex *draw_vertices;
     GXMetalMetalViewport viewport;
@@ -973,15 +1181,20 @@ static uint32_t gxmetal_metal_draw(GXMetalMetalRenderer *renderer,
     uint32_t draw_count = count;
     uint32_t i;
 
-    vertices = malloc((size_t)count * sizeof(*vertices));
-    if (vertices == NULL) {
-        return GXMETAL_ERROR_RENDERER;
+    vertices = stack_vertices;
+    if (count > GXMETAL_METAL_STACK_VERTICES) {
+        vertices = malloc((size_t)count * sizeof(*vertices));
+        if (vertices == NULL) {
+            return GXMETAL_ERROR_RENDERER;
+        }
     }
     for (i = 0; i < count; i++) {
         if (!gxmetal_metal_read_vertex(context,
                 source + i * GXMETAL_GOURAUD_VERTEX_BYTES,
                 &vertices[i])) {
-            free(vertices);
+            if (vertices != stack_vertices) {
+                free(vertices);
+            }
             return GXMETAL_ERROR_BAD_PACKET;
         }
     }
@@ -1003,7 +1216,9 @@ static uint32_t gxmetal_metal_draw(GXMetalMetalRenderer *renderer,
         draw_count = (count - 2) * 3;
         draw_vertices = malloc((size_t)draw_count * sizeof(*draw_vertices));
         if (draw_vertices == NULL) {
-            free(vertices);
+            if (vertices != stack_vertices) {
+                free(vertices);
+            }
             return GXMETAL_ERROR_RENDERER;
         }
         for (i = 0; i < count - 2; i++) {
@@ -1014,7 +1229,9 @@ static uint32_t gxmetal_metal_draw(GXMetalMetalRenderer *renderer,
         metal_primitive = MTLPrimitiveTypeTriangle;
         break;
     default:
-        free(vertices);
+        if (vertices != stack_vertices) {
+            free(vertices);
+        }
         return GXMETAL_ERROR_BAD_PACKET;
     }
 
@@ -1023,14 +1240,18 @@ static uint32_t gxmetal_metal_draw(GXMetalMetalRenderer *renderer,
         if (draw_vertices != vertices) {
             free(draw_vertices);
         }
-        free(vertices);
+        if (vertices != stack_vertices) {
+            free(vertices);
+        }
         return GXMETAL_ERROR_RENDERER;
     }
     if (!gxmetal_metal_apply_scissor(context)) {
         if (draw_vertices != vertices) {
             free(draw_vertices);
         }
-        free(vertices);
+        if (vertices != stack_vertices) {
+            free(vertices);
+        }
         return GXMETAL_ERROR_NONE;
     }
     viewport.width = (float)context->width;
@@ -1055,7 +1276,9 @@ static uint32_t gxmetal_metal_draw(GXMetalMetalRenderer *renderer,
     if (draw_vertices != vertices) {
         free(draw_vertices);
     }
-    free(vertices);
+    if (vertices != stack_vertices) {
+        free(vertices);
+    }
     return GXMETAL_ERROR_NONE;
 }
 
@@ -1141,6 +1364,7 @@ static uint32_t gxmetal_metal_draw_textured(
     const uint8_t *source = packet->payload + GXMETAL_DRAW_VERTICES_OFFSET;
     GXMetalMetalResource *resource = gxmetal_metal_find_resource(
         renderer, context->texture_id);
+    GXMetalMetalTextureVertex stack_vertices[GXMETAL_METAL_STACK_VERTICES];
     GXMetalMetalTextureVertex *vertices;
     GXMetalMetalTextureVertex *draw_vertices;
     GXMetalMetalViewport viewport;
@@ -1162,15 +1386,20 @@ static uint32_t gxmetal_metal_draw_textured(
     if (context->texture_op & GXMETAL_TEXTURE_SHRINK) {
         address_mode = 3;
     }
-    vertices = malloc((size_t)count * sizeof(*vertices));
-    if (vertices == NULL) {
-        return GXMETAL_ERROR_RENDERER;
+    vertices = stack_vertices;
+    if (count > GXMETAL_METAL_STACK_VERTICES) {
+        vertices = malloc((size_t)count * sizeof(*vertices));
+        if (vertices == NULL) {
+            return GXMETAL_ERROR_RENDERER;
+        }
     }
     for (i = 0; i < count; i++) {
         if (!gxmetal_metal_read_texture_vertex(
                 context, source + i * GXMETAL_TEXTURE_VERTEX_BYTES,
                 &vertices[i])) {
-            free(vertices);
+            if (vertices != stack_vertices) {
+                free(vertices);
+            }
             return GXMETAL_ERROR_BAD_PACKET;
         }
     }
@@ -1192,7 +1421,9 @@ static uint32_t gxmetal_metal_draw_textured(
         draw_count = (count - 2) * 3;
         draw_vertices = malloc((size_t)draw_count * sizeof(*draw_vertices));
         if (draw_vertices == NULL) {
-            free(vertices);
+            if (vertices != stack_vertices) {
+                free(vertices);
+            }
             return GXMETAL_ERROR_RENDERER;
         }
         for (i = 0; i < count - 2; i++) {
@@ -1203,7 +1434,9 @@ static uint32_t gxmetal_metal_draw_textured(
         metal_primitive = MTLPrimitiveTypeTriangle;
         break;
     default:
-        free(vertices);
+        if (vertices != stack_vertices) {
+            free(vertices);
+        }
         return GXMETAL_ERROR_BAD_PACKET;
     }
     if (!gxmetal_metal_ensure_encoder(renderer, context, 0,
@@ -1211,14 +1444,18 @@ static uint32_t gxmetal_metal_draw_textured(
         if (draw_vertices != vertices) {
             free(draw_vertices);
         }
-        free(vertices);
+        if (vertices != stack_vertices) {
+            free(vertices);
+        }
         return GXMETAL_ERROR_RENDERER;
     }
     if (!gxmetal_metal_apply_scissor(context)) {
         if (draw_vertices != vertices) {
             free(draw_vertices);
         }
-        free(vertices);
+        if (vertices != stack_vertices) {
+            free(vertices);
+        }
         return GXMETAL_ERROR_NONE;
     }
     viewport.width = (float)context->width;
@@ -1249,7 +1486,9 @@ static uint32_t gxmetal_metal_draw_textured(
     if (draw_vertices != vertices) {
         free(draw_vertices);
     }
-    free(vertices);
+    if (vertices != stack_vertices) {
+        free(vertices);
+    }
     return GXMETAL_ERROR_NONE;
 }
 
@@ -1339,6 +1578,8 @@ static uint32_t gxmetal_metal_present(GXMetalMetalRenderer *renderer,
                                       GXMetalMetalContext *context,
                                       const GXMetalPacketView *packet)
 {
+    uint64_t profile_start_ns = renderer->profile_enabled ?
+        gxmetal_metal_now_ns() : 0;
     uint8_t *pixels;
     int32_t left = (int32_t)gxmetal_load_le32(
         packet->payload + GXMETAL_RECT_LEFT_OFFSET);
@@ -1415,6 +1656,7 @@ static uint32_t gxmetal_metal_present(GXMetalMetalRenderer *renderer,
             return GXMETAL_ERROR_RENDERER;
         }
         gxmetal_metal_release_frame(context);
+        gxmetal_metal_profile_present(renderer, 1, profile_start_ns);
         return GXMETAL_ERROR_NONE;
     }
     if (!gxmetal_metal_wait_render(context)) {
@@ -1459,6 +1701,7 @@ static uint32_t gxmetal_metal_present(GXMetalMetalRenderer *renderer,
     }
     free(pixels);
     gxmetal_metal_release_frame(context);
+    gxmetal_metal_profile_present(renderer, 0, profile_start_ns);
     return GXMETAL_ERROR_NONE;
 }
 
@@ -1625,6 +1868,15 @@ static uint32_t gxmetal_metal_set_state(GXMetalMetalContext *context,
     case GXMETAL_STATE_TEXTURE_OP:
         context->texture_op = value;
         break;
+    case GXMETAL_STATE_PERSPECTIVE_Z:
+        if (value > 1) {
+            return GXMETAL_ERROR_BAD_PACKET;
+        }
+        /* The second word is shader-visible padding in the fog constants.
+         * RAVE only requires Gouraud invW when perspective-Z is enabled;
+         * otherwise depth fog is derived from the normalized Z coordinate. */
+        context->fog.mode_and_padding[1] = value;
+        break;
     case GXMETAL_STATE_FOG_MODE:
         if (value > GXMETAL_FOG_EXPONENTIAL_SQUARED) {
             return GXMETAL_ERROR_BAD_PACKET;
@@ -1699,6 +1951,11 @@ GXMetalMetalRenderer *gxmetal_metal_create(void *framebuffer,
     renderer->framebuffer_bytes = framebuffer_bytes;
     renderer->shared = shared;
     renderer->shared_bytes = shared_bytes;
+    {
+        const char *profile = getenv("GXMETAL_PROFILE");
+        renderer->profile_enabled = profile != NULL &&
+                                    strcmp(profile, "0") != 0;
+    }
     renderer->device = [MTLCreateSystemDefaultDevice() retain];
     if (renderer->device == nil) {
         free(renderer);
@@ -1863,6 +2120,7 @@ void gxmetal_metal_reset(GXMetalMetalRenderer *renderer)
                    sizeof(renderer->resources[i]));
         }
     }
+    memset(renderer->resource_hash, 0, sizeof(renderer->resource_hash));
 }
 
 uint32_t gxmetal_metal_dispatch(void *opaque,
@@ -1913,8 +2171,10 @@ uint32_t gxmetal_metal_dispatch(void *opaque,
         case GXMETAL_OP_CLEAR:
             return gxmetal_metal_clear(renderer, context, packet);
         case GXMETAL_OP_DRAW_GOURAUD:
+            gxmetal_metal_profile_draw(renderer, packet);
             return gxmetal_metal_draw(renderer, context, packet);
         case GXMETAL_OP_DRAW_TEXTURED:
+            gxmetal_metal_profile_draw(renderer, packet);
             return gxmetal_metal_draw_textured(renderer, context, packet);
         default:
             return GXMETAL_ERROR_BAD_OPCODE;

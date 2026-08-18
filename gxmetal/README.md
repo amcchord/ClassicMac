@@ -19,7 +19,11 @@ On macOS, QEMU now executes direct-color Gouraud points, lines, strips, fans,
 triangles, clipped color/depth clears, all RAVE depth comparisons and depth
 write masking, interpolated or premultiplied alpha, and double-buffer swaps in a
 native Metal render pipeline. The PowerPC engine also creates, uploads, binds,
-and destroys RGB555, ARGB1555, ARGB4444, RGB32, and ARGB32 textures. Metal
+and destroys RGB555, RGB565, ARGB1555, ARGB4444, RGB32, and ARGB32 textures.
+The ATI compatibility path additionally accepts Carmageddon II's private
+pixel type 1001 as big-endian ARGB4444, preserving the alpha nibble used for
+antialiased menu and HUD glyph masks. This is required for correctly colored
+world textures and overlapping interface sprites. Metal
 provides perspective-correct sampling, repeat/clamp addressing, nearest,
 bilinear, and trilinear mip filtering, plus RAVE decal, modulation, and
 highlight texture operations. Linear, exponential, and squared-exponential
@@ -59,7 +63,7 @@ remains a small Gouraud correctness oracle.
 
 ## Transport contract
 
-The backward-compatible version 1.4 wire contract is defined in
+The backward-compatible version 1.6 wire contract is defined in
 `protocol/gxmetal_protocol.h`. All registers and shared-memory packets are
 little-endian. Packet sizes are multiples of 16 bytes, packets never cross the
 end of the circular command ring, and offsets in commands refer only to the
@@ -80,6 +84,37 @@ a typed `SET_STATE` payload, while pointer-valued texture and bitmap state is
 translated to 32-bit GXMetal resource IDs. Gouraud vertices use eight binary32
 values; textured vertices use the exact sixteen-value RAVE layout. Resource
 uploads name only a validated offset and length in the upload heap.
+
+The upload heap is a single staging region, so the guest follows every texture
+or bitmap upload with a fence before reusing those bytes. This prevents games
+which build many small UI atlases back-to-back from racing the host and binding
+later pixels to an earlier resource. QuickDraw bitmap draws also suspend any
+locally bound ATI texture while emitting their temporary bitmap resource; ATI
+sprite coordinate conversion therefore cannot leak into a full-screen bitmap
+and collapse it to a scanline.
+
+Private ATI textures are treated as immutable after creation unless the game
+explicitly supplies `kQATexture_NoCopy`. Only those caller-backed textures are
+checked for CPU-side changes. This avoids rescanning every static world and UI
+texture in emulated PowerPC code on every frame.
+
+The Metal backend retains up to 4,096 live texture and bitmap records. This is
+deliberately larger than Carmageddon II's observed 477-resource peak: menu,
+HUD, and world transitions can retain more than 256 resources at once, and
+exhausting the old fixed table faulted the command queue for the rest of the
+session.
+
+## Carmageddon II compatibility
+
+The Mac OS 9 RAVE release is validated both by opening its RAVE application
+directly and through the original launcher with **640 x 480 Hardware
+accelerated** and the highest-quality texture option. The launcher does not
+search for a compatible application: it opens the exact relative path
+`Carma2:Carmageddon 2 Rave`. Some third-party patched installs rename that file
+to `Carmageddoon 2 Rave` (with an extra `o`). Such an install still runs when
+opened directly, but the launcher silently returns to Finder. Restoring a copy
+with the launcher's exact filename fixes the handoff; GXMetal does not rename
+or modify game files.
 
 The producer writes complete packets, performs a PowerPC I/O synchronization,
 publishes the producer offset, then rings the doorbell. The host validates the
@@ -105,8 +140,10 @@ dirty-rectangle-only presentation. A host-independent scanout test proves
 clipped, padded-row, offset, empty, destroyed, reset, and malformed-context
 dirty-range behavior. The Metal test also forces both direct and fallback
 present selection and validates the direct kernel's three guest framebuffer
-formats plus partial-rectangle preservation. Every result is read back from the
-guest-format framebuffer:
+formats plus partial-rectangle preservation. It also verifies ATI's
+big-endian ARGB4444 channel order and alpha blending, then creates and destroys
+a 300-texture working set to guard against the former Carmageddon resource
+ceiling. Every result is read back from the guest-format framebuffer:
 
 ```sh
 make -C gxmetal test
@@ -177,6 +214,13 @@ The build checks that the PowerPC VGA device accepts the `gxmetal` property,
 that BAR2 remains a 4 KiB register aperture, that the prefetchable GXMetal BAR4
 is 4 MiB, and that invalid configurations fail realization.
 
+Set `GXMETAL_PROFILE=1` in QEMU's host environment to print a two-second
+rolling presentation profile to standard error. The profile reports actual
+PRESENT-packet FPS, direct versus fallback presentation, presentation time,
+draw packets per frame, vertices per draw, the percentage of one-triangle
+packets, and resource-table probes per lookup. It is disabled by default and
+does not add logging to normal releases.
+
 On macOS, validate the exact Developer ID-signed application against a supplied
 Mac OS 9 disk without modifying the source image:
 
@@ -189,6 +233,46 @@ matching driver, startup companion, and test application from the bundle's own
 Tools CD, installs them only into the clone, boots the bundled GXMetal-capable
 QEMU, and reads the flushed PASS/FAIL record back from the clone. It retains the
 temporary directory and final screenshot as auditable evidence.
+
+For interactive debugging without a Cocoa window, start the bundled QEMU with
+`-display none`, a local `-vnc unix:/path/to/vnc.sock` endpoint, and a local
+monitor socket. The dependency-free helper can capture the raw framebuffer and
+send keys, Mac Command-key chords, or pointer clicks:
+
+```sh
+python3 scripts/gxmetal-vnc.py \
+  --unix-socket /path/to/vnc.sock \
+  --chord Super_L+o \
+  --screenshot /tmp/gxmetal.png
+```
+
+`Super_L` is QEMU VNC's Mac Command key. The same path was used for the
+Carmageddon II launcher, menu, race, sustained-input, and clean-quit tests, so
+those checks do not depend on the foreground ClassicMac window.
+
+### Carmageddon II performance validation
+
+Host presentation telemetry identified two CPU-side submission bottlenecks.
+The texture table originally required a linear scan of a 4,096-entry array;
+the Carmageddon menu averaged about 30 probes per texture lookup and dense
+gameplay reached roughly 170-195. An 8,192-bucket collision-safe hash table
+reduces that to one probe in the measured working set. Small host vertex arrays
+also use stack storage, avoiding thousands of short-lived allocations.
+
+More importantly, 99.92% of the game's original draw packets contained one
+triangle. The guest now preserves adjacent Gouraud or textured triangles in a
+64-triangle batch until render state, texture, orientation flags, ATI private
+coordinate mode, ordering, or synchronization requires a flush. This reduced
+measured gameplay from roughly 1,300-2,500 host draw packets per frame to
+220-380 without changing the submitted triangle order.
+
+On the disposable Mac OS 9.2 Carmageddon II validation disk, a sustained
+20-sample gameplay window measured 78.54 FPS minimum, 84.35 FPS average, and
+100.75 FPS maximum. Active driving samples measured 73-81 FPS. The game's
+static menu remains paced internally at about 47.4 FPS even after draw traffic
+falls from 1,177 to 272 packets per frame; that is game timing rather than host
+renderer saturation. The current in-guest conformance workload passes and
+measures GXMetal at 12.77x Apple Software RAVE on the same VM.
 
 ## Versioning and safety
 
