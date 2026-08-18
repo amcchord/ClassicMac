@@ -549,11 +549,13 @@ static TQAError GXMetalTextureNew(unsigned long flags,
             gDiagnostics.resource_stage = 3;
             continue;
         }
-        if (pixelType == GXMETAL_ATI_PIXEL_RGB16) {
-            /* ATI's private textures remain backed by the caller's pixelmap.
-             * Keep an owned snapshot for change detection, but retain the
-             * original pointer so later CPU-rendered HUD updates can be
-             * mirrored into the host resource. */
+        if (pixelType == GXMETAL_ATI_PIXEL_RGB16 &&
+            (flags & kQATexture_NoCopy) != 0) {
+            /* NoCopy explicitly keeps the caller's pixelmap live.  Retain an
+             * owned snapshot for change detection in that case only.  Normal
+             * textures are immutable after QATextureNew; scanning all of them
+             * once per frame is especially expensive under PPC emulation and
+             * can also dereference memory the caller has already released. */
             texture->source_pixels[level] = NewPtr((Size)length);
             if (texture->source_pixels[level] == NULL) {
                 GXMetalDestroyTextureResource(texture->resource_id);
@@ -568,7 +570,7 @@ static TQAError GXMetalTextureNew(unsigned long flags,
                    (size_t)length);
         }
         memcpy(gTransport.shared + GXMETAL_UPLOAD_OFFSET,
-               pixelType == GXMETAL_ATI_PIXEL_RGB16 ?
+               texture->source_pixels[level] != NULL ?
                    texture->source_pixels[level] : images[level].pixmap,
                (size_t)length);
         if (!GXMetalGlobalPacket(GXMETAL_OP_TEXTURE_UPLOAD,
@@ -1353,7 +1355,8 @@ static TQABoolean GXMetalRefreshPrivateTexture(TQATexture *texture)
 
     if (texture == NULL || texture->magic != GXMETAL_TEXTURE_MAGIC ||
         texture->source_pixel_type !=
-            (uint32_t)GXMETAL_ATI_PIXEL_RGB16) {
+            (uint32_t)GXMETAL_ATI_PIXEL_RGB16 ||
+        (texture->source_flags & kQATexture_NoCopy) == 0) {
         return 1;
     }
     gDiagnostics.private_texture_refresh_check_count++;
@@ -1437,6 +1440,7 @@ static TQABoolean GXMetalEmitTexture(GXMetalDrawState *state,
     if (texture != NULL && texture->magic == GXMETAL_TEXTURE_MAGIC &&
         texture->source_pixel_type ==
             (uint32_t)GXMETAL_ATI_PIXEL_RGB16 &&
+        (texture->source_flags & kQATexture_NoCopy) != 0 &&
         texture->last_refresh_epoch != gRenderEpoch) {
         if (!GXMetalRefreshPrivateTexture((TQATexture *)texture)) {
             state->failed = 1;

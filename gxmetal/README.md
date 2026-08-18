@@ -93,6 +93,11 @@ locally bound ATI texture while emitting their temporary bitmap resource; ATI
 sprite coordinate conversion therefore cannot leak into a full-screen bitmap
 and collapse it to a scanline.
 
+Private ATI textures are treated as immutable after creation unless the game
+explicitly supplies `kQATexture_NoCopy`. Only those caller-backed textures are
+checked for CPU-side changes. This avoids rescanning every static world and UI
+texture in emulated PowerPC code on every frame.
+
 The producer writes complete packets, performs a PowerPC I/O synchronization,
 publishes the producer offset, then rings the doorbell. The host validates the
 entire packet before dispatch and advances the consumer offset only after it
