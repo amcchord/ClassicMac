@@ -18,11 +18,11 @@
 #include "GXMetalRegistry.h"
 #include "GXMetalDiagnostics.h"
 #include "GXMetalTransport.h"
+#include "GXMetalVersion.h"
 
 #define GXMETAL_REGISTRATION_VENDOR_ID UINT32_C(0x47584d54) /* GXMT */
 #define GXMETAL_LEGACY_VENDOR_ID UINT32_C(1) /* kQAVendor_ATI */
 #define GXMETAL_ENGINE_ID UINT32_C(0x00000001)
-#define GXMETAL_REVISION  UINT32_C(0x00010400)
 #define GXMETAL_STATE_SLOTS 154u
 #define GXMETAL_SYNC_SPINS UINT32_C(10000000)
 #define GXMETAL_TEXTURE_MAGIC UINT32_C(0x47585458) /* GXTX */
@@ -3213,7 +3213,7 @@ static TQAError GXMetalEngineGestalt(TQAGestaltSelector selector,
         value = GXMETAL_ENGINE_ID;
         break;
     case kQAGestalt_Revision:
-        value = GXMETAL_REVISION;
+        value = GXMETAL_PRODUCT_REVISION;
         break;
     case kQAGestalt_ASCIINameLength:
         value = (uint32_t)strlen(kGXMetalName);

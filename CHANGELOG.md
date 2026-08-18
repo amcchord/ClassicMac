@@ -1,5 +1,41 @@
 # Changelog
 
+## 1.9.0 — 2026-08-18
+
+### Added
+
+- **GXMetal Test now reports the installed GXMetal driver version.** The test
+  reads version 1.9.0 from the RAVE engine that Mac OS actually loaded, includes
+  it in both the PASS dialog and machine-readable result, and rejects a
+  mismatched driver with explicit reinstall-and-restart instructions.
+- Added a dependency-free headless VNC control and screenshot path for
+  repeatable Mac OS 9 game validation without keeping the ClassicMac window in
+  the foreground.
+
+### Changed
+
+- **Carmageddon II gameplay now remains above 60 FPS in the validated OS 9
+  scenes.** Active-driving samples measured 73–81 FPS; a sustained 20-sample
+  window measured 78.54 FPS minimum, 84.35 FPS average, and 100.75 FPS maximum.
+- Adjacent compatible RAVE triangles are submitted in order-preserving batches
+  that flush at every state, texture, orientation, ATI coordinate-mode, and
+  synchronization boundary. Carmageddon II draw traffic fell from roughly
+  1,300–2,500 packets per frame to 220–380.
+- Metal texture resources now use a collision-safe hash table instead of a
+  linear scan, reducing measured lookup work from roughly 170–195 probes to
+  one in dense gameplay. Small host vertex arrays use stack storage rather
+  than thousands of short-lived heap allocations.
+
+### Fixed
+
+- Added the ATI-compatible RAVE identity, private clear methods, texture
+  formats, per-primitive coordinate handling, unbound-texture lighting, and
+  dynamic `NoCopy` texture refresh behavior required by Carmageddon II.
+- Corrected texture lifetime and resource reuse under long-running games,
+  preventing stale textures and resource-table exhaustion.
+- Preserved Carmageddon II menus, HUDs, videos, transparent geometry, and
+  in-game texture orientation through the accelerated path.
+
 ## 1.8.1 — 2026-08-17
 
 ### Changed

@@ -13,6 +13,7 @@
 #include <string.h>
 
 #include "GXMetalDiagnostics.h"
+#include "GXMetalVersion.h"
 
 /* QAInit/QAExit remain exported by the classic RAVE manager and import
  * library, but were omitted from the final Universal Interfaces RAVE.h. RAVE
@@ -283,6 +284,16 @@ static void GXMetalAppendDecimal(char **cursor, const char *end,
     while (count > 0 && *cursor < end) {
         *(*cursor)++ = digits[--count];
     }
+}
+
+static void GXMetalAppendVersion(char **cursor, const char *end,
+                                 uint32_t revision)
+{
+    GXMetalAppendDecimal(cursor, end, (revision >> 16) & 0xffu);
+    GXMetalAppendText(cursor, end, ".");
+    GXMetalAppendDecimal(cursor, end, (revision >> 8) & 0xffu);
+    GXMetalAppendText(cursor, end, ".");
+    GXMetalAppendDecimal(cursor, end, revision & 0xffu);
 }
 
 static void GXMetalRecordDiagnosticSnapshot(
@@ -1036,6 +1047,7 @@ static TQAError GXMetalBenchmarkSoftware(const TQADevice *device,
 }
 
 static void GXMetalBuildPassResult(char *result, size_t resultCapacity,
+                                   uint32_t revision,
                                    uint64_t gxMetalMicroseconds,
                                    uint64_t softwareMicroseconds,
                                    uint64_t speedupTimes100)
@@ -1043,8 +1055,10 @@ static void GXMetalBuildPassResult(char *result, size_t resultCapacity,
     char *cursor = result;
     const char *end = result + resultCapacity - 1;
 
+    GXMetalAppendText(&cursor, end, "PASS: version=");
+    GXMetalAppendVersion(&cursor, end, revision);
     GXMetalAppendText(&cursor, end,
-        "PASS: RAVE discovery depth blend alpha-test backface clip texture ATI-private-nocopy bitmap dirty-present double-buffer framebuffer gx_us=");
+        " RAVE discovery depth blend alpha-test backface clip texture ATI-private-nocopy bitmap dirty-present double-buffer framebuffer gx_us=");
     GXMetalAppendDecimal(&cursor, end, gxMetalMicroseconds);
     GXMetalAppendText(&cursor, end, " sw_us=");
     GXMetalAppendDecimal(&cursor, end, softwareMicroseconds);
@@ -1054,14 +1068,17 @@ static void GXMetalBuildPassResult(char *result, size_t resultCapacity,
 }
 
 static void GXMetalBuildPassMessage(char *message, size_t messageCapacity,
+                                    uint32_t revision,
                                     const char *softwareEngineName,
                                     uint64_t speedupTimes100)
 {
     char *cursor = message;
     const char *end = message + messageCapacity - 1;
 
+    GXMetalAppendText(&cursor, end, "GXMetal ");
+    GXMetalAppendVersion(&cursor, end, revision);
     GXMetalAppendText(&cursor, end,
-        "GXMetal passed automatic RAVE discovery, framebuffer correctness, ATI private static/NoCopy texture mutation, bitmap drawing, presentation, and fallback. The repeatable mixed texture/Gouraud workload ran ");
+        " passed automatic RAVE discovery, framebuffer correctness, ATI private static/NoCopy texture mutation, bitmap drawing, presentation, and fallback. The repeatable mixed texture/Gouraud workload ran ");
     GXMetalAppendDecimal(&cursor, end, speedupTimes100 / 100);
     GXMetalAppendText(&cursor, end, ".");
     if (speedupTimes100 % 100 < 10) {
@@ -1074,10 +1091,29 @@ static void GXMetalBuildPassMessage(char *message, size_t messageCapacity,
     *cursor = '\0';
 }
 
+static void GXMetalBuildVersionMismatch(char *message,
+                                        size_t messageCapacity,
+                                        uint32_t revision)
+{
+    char *cursor = message;
+    const char *end = message + messageCapacity - 1;
+
+    GXMetalAppendText(&cursor, end, "GXMetal Test ");
+    GXMetalAppendText(&cursor, end, GXMETAL_PRODUCT_VERSION_STRING);
+    GXMetalAppendText(&cursor, end,
+        " found installed GXMetal driver revision ");
+    GXMetalAppendVersion(&cursor, end, revision);
+    GXMetalAppendText(&cursor, end, ". Install GXMetal ");
+    GXMetalAppendText(&cursor, end, GXMETAL_PRODUCT_VERSION_STRING);
+    GXMetalAppendText(&cursor, end, " and restart Mac OS before testing.");
+    *cursor = '\0';
+}
+
 int main(void)
 {
     static const unsigned char kWindowTitle[] = {
-        12, 'G', 'X', 'M', 'e', 't', 'a', 'l', ' ', 'T', 'e', 's', 't'
+        18, 'G', 'X', 'M', 'e', 't', 'a', 'l', ' ', 'T', 'e', 's', 't',
+        ' ', '1', '.', '9', '.', '0'
     };
     Rect windowRect;
     Rect localRect;
@@ -1098,6 +1134,7 @@ int main(void)
     unsigned long optionalFeatures2 = 0;
     unsigned long vendorID = 0;
     unsigned long engineID = 0;
+    unsigned long revision = 0;
     unsigned long requiredFeatures;
     TQAError error;
     OSErr loadError;
@@ -1112,6 +1149,7 @@ int main(void)
     char softwareEngineName[64];
     char passResult[240];
     char passMessage[256];
+    char versionMessage[256];
 
     GXMetalInitToolbox();
     GXMetalRecordResult("START: GXMetal Test entered main");
@@ -1230,7 +1268,9 @@ int main(void)
         QAEngineGestalt(engine, kQAGestalt_VendorID,
                         &vendorID) != kQANoErr ||
         QAEngineGestalt(engine, kQAGestalt_EngineID,
-                        &engineID) != kQANoErr) {
+                        &engineID) != kQANoErr ||
+        QAEngineGestalt(engine, kQAGestalt_Revision,
+                        &revision) != kQANoErr) {
         GXMetalRecordResult("FAIL: RAVE feature gestalt");
         DisposeWindow(window);
         GXMetalShowResult(false, "GXMetal did not return its RAVE feature set.");
@@ -1250,6 +1290,15 @@ int main(void)
         DisposeWindow(window);
         GXMetalShowResult(false,
             "GXMetal did not advertise its unique engine identity.");
+        QAExit();
+        return 1;
+    }
+    if ((uint32_t)revision != GXMETAL_PRODUCT_REVISION) {
+        GXMetalBuildVersionMismatch(versionMessage, sizeof(versionMessage),
+                                    (uint32_t)revision);
+        GXMetalRecordResult(versionMessage);
+        DisposeWindow(window);
+        GXMetalShowResult(false, versionMessage);
         QAExit();
         return 1;
     }
@@ -1358,10 +1407,11 @@ int main(void)
         return 1;
     }
     speedupTimes100 = softwareMicroseconds * 100 / gxMetalMicroseconds;
-    GXMetalBuildPassResult(passResult, sizeof(passResult),
+    GXMetalBuildPassResult(passResult, sizeof(passResult), (uint32_t)revision,
                            gxMetalMicroseconds, softwareMicroseconds,
                            speedupTimes100);
     GXMetalBuildPassMessage(passMessage, sizeof(passMessage),
+                            (uint32_t)revision,
                             softwareEngineName, speedupTimes100);
     GXMetalRecordResult(passResult);
     GXMetalShowResult(true, passMessage);
