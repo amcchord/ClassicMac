@@ -604,7 +604,7 @@ struct VMDetailView: View {
                 } label: {
                     Label("Shut Down", systemImage: "power")
                 }
-                .help("Turn the Mac off immediately")
+                .help("Ask Mac OS to shut down safely")
             }
         } else {
             ToolbarItem {
