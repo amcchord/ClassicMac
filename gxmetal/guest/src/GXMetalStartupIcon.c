@@ -22,6 +22,11 @@ static const unsigned char kStartupPreviousName[] = {
     'S', 't', 'a', 'r', 't', 'u', 'p', ' ',
     'P', 'r', 'e', 'v', 'i', 'o', 'u', 's'
 };
+static const unsigned char kInputPreviousName[] = {
+    22, 'G', 'X', 'M', 'e', 't', 'a', 'l', ' ',
+    'I', 'n', 'p', 'u', 't', ' ',
+    'P', 'r', 'e', 'v', 'i', 'o', 'u', 's'
+};
 static const unsigned char kDriverLegacyName[] = {
     21, 'G', 'X', 'M', 'e', 't', 'a', 'l', ' ',
     'L', 'e', 'g', 'a', 'c', 'y', ' ',
@@ -74,6 +79,8 @@ static void GXMetalRemoveInstallerBackups(void)
     GXMetalRemoveBackup(kDriverPreviousName,
                         extensionsVRef, extensionsDirID);
     GXMetalRemoveBackup(kStartupPreviousName,
+                        extensionsVRef, extensionsDirID);
+    GXMetalRemoveBackup(kInputPreviousName,
                         extensionsVRef, extensionsDirID);
     GXMetalRemoveBackup(kDriverLegacyName,
                         extensionsVRef, extensionsDirID);

@@ -25,7 +25,7 @@ INIT_CFLAGS := -std=gnu99 -Os -Wall -Wextra -Werror -Wno-multichar \
                -Wno-array-bounds
 INIT_LDFLAGS := -Wl,--mac-flat
 
-all: bin/GXMetal.bin bin/GXMetalStartup.bin bin/GXMetalInstaller.bin \
+all: bin/GXMetal.bin bin/GXMetalInput.bin bin/GXMetalStartup.bin bin/GXMetalInstaller.bin \
      bin/GXMetalTest.bin
 
 bin/GXMetal.xcoff: src/GXMetalEngine.c src/GXMetalTransport.c \
@@ -51,6 +51,26 @@ bin/GXMetal.bin: bin/GXMetal.pef src/GXMetal.r src/GXMetalIcon.r
 	$(REZ) src/GXMetal.r -I$(RINCLUDES) -o $@ \
 		--cc bin/GXMetal.dsk --cc bin/GXMetal --cc bin/%GXMetal.ad \
 		-t shlb -c tnsl --data bin/GXMetal.pef
+	python3 ../tools/set_macbinary_flags.py $@ --set 0x0400 --clear 0x0180
+
+bin/GXMetalInput.xcoff: src/GXMetalInput.c src/GXMetalInput.exp GNUmakefile
+	@mkdir -p bin
+	$(CC) $(CFLAGS) -shared -Wl,-e,GXMetalInputCFMInitialize \
+		-Wl,-bE:src/GXMetalInput.exp -Wl,--gc-sections \
+		-Wl,--gc-keep-exported -o $@ $< \
+		-lInputSprocketLib -lInterfaceLib
+
+bin/GXMetalInput.pef: bin/GXMetalInput.xcoff
+	$(MAKEPEF) -o $@ $<
+	python3 ../tools/pef_set_init.py --set-init $@
+	python3 ../tools/pef_set_init.py --verify $@
+
+bin/GXMetalInput.bin: bin/GXMetalInput.pef src/GXMetalInput.r \
+                      src/GXMetalIcon.r
+	$(REZ) src/GXMetalInput.r -I$(RINCLUDES) -o $@ \
+		--cc 'bin/GXMetal Input.dsk' --cc 'bin/GXMetal Input' \
+		--cc 'bin/%GXMetalInput.ad' -t shlb -c insp \
+		--data bin/GXMetalInput.pef
 	python3 ../tools/set_macbinary_flags.py $@ --set 0x0400 --clear 0x0180
 
 bin/GXMetalStartup.bin: bin/GXMetalStartupIcon.flt src/GXMetalStartup.r \

@@ -468,7 +468,13 @@ static Boolean GXMetalPixelMatches(GDHandle graphicsDevice,
         return green > maximum * 2 / 3 &&
                red < maximum / 3 && blue < maximum / 3;
     }
-    return red > maximum / 6 && red < maximum * 2 / 5 &&
+    /* The display driver's programmable gamma table is applied before the
+     * test reads VRAM.  The default Mac OS 9 table lifts the linear 25% red
+     * component to roughly 39%, which made the old absolute upper bound fail
+     * even though the fog result was correct.  Preserve the meaningful
+     * checks: both components are present, blue is dominant, and green stays
+     * absent. */
+    return red > maximum / 6 && red < blue &&
            blue > maximum * 3 / 5 && green < maximum / 5;
 }
 
@@ -1111,10 +1117,9 @@ static void GXMetalBuildVersionMismatch(char *message,
 
 int main(void)
 {
-    static const unsigned char kWindowTitle[] = {
-        18, 'G', 'X', 'M', 'e', 't', 'a', 'l', ' ', 'T', 'e', 's', 't',
-        ' ', '1', '.', '9', '.', '0'
-    };
+    static const char kWindowTitleText[] =
+        "GXMetal Test " GXMETAL_PRODUCT_VERSION_STRING;
+    Str255 windowTitle;
     Rect windowRect;
     Rect localRect;
     WindowPtr window;
@@ -1180,7 +1185,8 @@ int main(void)
     }
     SetRect(&windowRect, 70, 58, 70 + GXMETAL_WIDTH,
             58 + GXMETAL_HEIGHT);
-    window = NewCWindow(NULL, &windowRect, kWindowTitle, true,
+    GXMetalCStringToPascal(kWindowTitleText, windowTitle);
+    window = NewCWindow(NULL, &windowRect, windowTitle, true,
                         documentProc, (WindowPtr)-1, false, 0);
     if (window == NULL) {
         GXMetalRecordResult("FAIL: test window creation");

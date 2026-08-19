@@ -74,6 +74,7 @@ typedef struct GXMetalDrawState {
     void *notice_refcons[kQAMethod_NumSelectors];
     uint32_t ati_private_enabled;
     uint32_t ati_private_frame_started;
+    uint32_t ati_private_frame_has_draws;
     TQABoolean failed;
 } GXMetalDrawState;
 
@@ -2164,7 +2165,6 @@ GXMETAL_ATI_PRIVATE_NOOP_WRAPPER(50)
 GXMETAL_ATI_PRIVATE_NOOP_WRAPPER(51)
 GXMETAL_ATI_PRIVATE_NOOP_WRAPPER(52)
 GXMETAL_ATI_PRIVATE_NOOP_WRAPPER(53)
-GXMETAL_ATI_PRIVATE_NOOP_WRAPPER(54)
 GXMETAL_ATI_PRIVATE_NOOP_WRAPPER(55)
 GXMETAL_ATI_PRIVATE_NOOP_WRAPPER(56)
 GXMETAL_ATI_PRIVATE_NOOP_WRAPPER(57)
@@ -2226,11 +2226,13 @@ static TQAError GXMetalATIPrivateMethod23(uint32_t arg0, uint32_t arg1,
         return kQANoErr;
     }
     if (state->ati_private_frame_started) {
-        if (!GXMetalFlushPendingDraws(state) ||
-            GXMetalEmitRect(state, GXMETAL_OP_PRESENT, NULL) != kQANoErr) {
+        if (state->ati_private_frame_has_draws &&
+            (!GXMetalFlushPendingDraws(state) ||
+             GXMetalEmitRect(state, GXMETAL_OP_PRESENT, NULL) != kQANoErr)) {
             return kQANoErr;
         }
         state->ati_private_frame_started = 0;
+        state->ati_private_frame_has_draws = 0;
     }
     if (GXMetalEmitClear(
             state, NULL,
@@ -2240,6 +2242,7 @@ static TQAError GXMetalATIPrivateMethod23(uint32_t arg0, uint32_t arg1,
         return kQANoErr;
     }
     state->ati_private_frame_started = 1;
+    state->ati_private_frame_has_draws = 0;
     return kQANoErr;
 }
 
@@ -2252,13 +2255,14 @@ static TQAError GXMetalATIPrivateMethod24(uint32_t arg0, uint32_t arg1,
     (void)arg0; (void)arg1; (void)arg2; (void)arg3;
     (void)arg4; (void)arg5; (void)arg6; (void)arg7;
 
-    if (state != NULL && !state->failed &&
-        state->ati_private_frame_started) {
-        if (!GXMetalFlushPendingDraws(state) ||
-            GXMetalEmitRect(state, GXMETAL_OP_PRESENT, NULL) != kQANoErr) {
+    if (state != NULL && !state->failed && state->ati_private_frame_started) {
+        if (state->ati_private_frame_has_draws &&
+            (!GXMetalFlushPendingDraws(state) ||
+             GXMetalEmitRect(state, GXMETAL_OP_PRESENT, NULL) != kQANoErr)) {
             return kQANoErr;
         }
         state->ati_private_frame_started = 0;
+        state->ati_private_frame_has_draws = 0;
     }
     return kQANoErr;
 }
@@ -2294,6 +2298,7 @@ static TQABoolean GXMetalATIPrivatePrepareDraw(GXMetalDrawState *state)
             return false;
         }
         state->ati_private_frame_started = 1;
+        state->ati_private_frame_has_draws = 0;
     }
     return true;
 }
@@ -2302,14 +2307,19 @@ static TQABoolean GXMetalATIPrivateQueueTriangle(
     GXMetalDrawState *state, const TQAVTexture triangle[3])
 {
     TQAVGouraud gouraud[3];
+    TQABoolean queued;
     uint32_t vertexIndex;
 
     if (state->texture != NULL) {
         /* OpenGLRendererATI supplies homogeneous, normalized coordinates in
-         * private hooks 48 and 60.  Texel-coordinate detection belongs to
+         * private hooks 48, 54, and 60. Texel-coordinate detection belongs to
          * the older public ATI RAVE path and only adds per-triangle floating
          * point work here. */
-        return GXMetalQueueTextureTriangle(state, triangle, 0, 0);
+        queued = GXMetalQueueTextureTriangle(state, triangle, 0, 0);
+        if (queued) {
+            state->ati_private_frame_has_draws = 1;
+        }
+        return queued;
     }
     for (vertexIndex = 0; vertexIndex < 3u; ++vertexIndex) {
         gouraud[vertexIndex].x = triangle[vertexIndex].x;
@@ -2321,7 +2331,11 @@ static TQABoolean GXMetalATIPrivateQueueTriangle(
         gouraud[vertexIndex].b = triangle[vertexIndex].b;
         gouraud[vertexIndex].a = triangle[vertexIndex].a;
     }
-    return GXMetalQueueGouraudTriangle(state, gouraud, 0);
+    queued = GXMetalQueueGouraudTriangle(state, gouraud, 0);
+    if (queued) {
+        state->ati_private_frame_has_draws = 1;
+    }
+    return queued;
 }
 
 /* OpenGLRendererATI uses hook 48 for a contiguous triangle list.  Each
@@ -2397,6 +2411,45 @@ static TQABoolean GXMetalATIPrivateConvertVertex(uint32_t address,
     destination->ks_g = source[21];
     destination->ks_b = source[23];
     return true;
+}
+
+/* Hook 54 is OpenGLRendererATI's contiguous convex-fan path. Quake III uses
+ * it for transformed screen-space quads such as transparent overlays. The
+ * vertices have the same 128-byte layout as hooks 48 and 60; a four-vertex
+ * call becomes triangles 0-1-2 and 0-2-3. */
+static TQAError GXMetalATIPrivateMethod54(uint32_t arg0, uint32_t arg1,
+                                          uint32_t arg2, uint32_t arg3,
+                                          uint32_t arg4, uint32_t arg5,
+                                          uint32_t arg6, uint32_t arg7)
+{
+    GXMetalDrawState *state = GXMetalGetState(gLastDrawContext);
+    TQAVTexture triangle[3];
+    uint32_t triangleIndex;
+    (void)arg0; (void)arg3; (void)arg4; (void)arg5;
+    (void)arg6; (void)arg7;
+
+    if (state == NULL || state->failed || arg2 < 3u || arg2 > 4096u ||
+        !GXMetalDiagnosticMemoryRangeIsReadable(arg1, arg2 * 128u)) {
+        return kQANoErr;
+    }
+    if (!GXMetalATIPrivateConvertVertex(arg1, &triangle[0]) ||
+        !GXMetalATIPrivateConvertVertex(arg1 + 128u, &triangle[1]) ||
+        !GXMetalATIPrivatePrepareDraw(state)) {
+        return kQANoErr;
+    }
+
+    for (triangleIndex = 0; triangleIndex + 2u < arg2;
+         ++triangleIndex) {
+        if (!GXMetalATIPrivateConvertVertex(
+                arg1 + (triangleIndex + 2u) * 128u, &triangle[2])) {
+            return kQANoErr;
+        }
+        if (!GXMetalATIPrivateQueueTriangle(state, triangle)) {
+            return kQANoErr;
+        }
+        triangle[1] = triangle[2];
+    }
+    return kQANoErr;
 }
 
 /* OpenGLRendererATI's hot draw hook receives an array of pointers to its
