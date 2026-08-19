@@ -1,5 +1,26 @@
 # Changelog
 
+## 2.0.1 — 2026-08-19
+
+### Added
+
+- Added `GXMetal Input`, an InputSprocket bridge that exposes ClassicMac's
+  seamless Virtio pointer to classic games as a standard relative mouse.
+  Quake III's menu cursor now renders, tracks the host pointer one-for-one,
+  and accepts clicks without requiring a separate USB mouse device.
+- The GXMetal installer and Tools CD now install the RAVE driver, startup
+  companion, and InputSprocket bridge as one versioned, rollback-safe set.
+
+### Fixed
+
+- Suppressed clear-only ATI private frames so Quake III's intro no longer
+  alternates between the rendered movie and a solid orange frame.
+- Implemented ATI private convex-fan draw method 54, restoring transparent
+  overlays and other screen-space polygons instead of exposing the orange
+  clear color through their missing geometry.
+- Relaxed the GXMetal Test fog sample tolerance to account for the measured
+  host gamma ramp while continuing to reject incorrect fog colors.
+
 ## 2.0.0 — 2026-08-19
 
 ### Added

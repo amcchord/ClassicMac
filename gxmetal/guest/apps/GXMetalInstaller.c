@@ -26,6 +26,10 @@ static const unsigned char kStartupName[] = {
     15, 'G', 'X', 'M', 'e', 't', 'a', 'l', ' ',
     'S', 't', 'a', 'r', 't', 'u', 'p'
 };
+static const unsigned char kInputName[] = {
+    13, 'G', 'X', 'M', 'e', 't', 'a', 'l', ' ',
+    'I', 'n', 'p', 'u', 't'
+};
 static const unsigned char kDriverTemporaryName[] = {
     15, 'G', 'X', 'M', 'e', 't', 'a', 'l', ' ', 'I', 'n', 's', 't', 'a', 'l', 'l'
 };
@@ -35,6 +39,10 @@ static const unsigned char kLegacyDriverBackupName[] = {
 static const unsigned char kStartupTemporaryName[] = {
     19, 'G', 'X', 'M', 'e', 't', 'a', 'l', ' ',
     'S', 't', 'a', 'r', 't', 'u', 'p', ' ', 'N', 'e', 'w'
+};
+static const unsigned char kInputTemporaryName[] = {
+    17, 'G', 'X', 'M', 'e', 't', 'a', 'l', ' ',
+    'I', 'n', 'p', 'u', 't', ' ', 'N', 'e', 'w'
 };
 static const unsigned char kLegacyStartupBackupName[] = {
     22, 'G', 'X', 'M', 'e', 't', 'a', 'l', ' ',
@@ -48,6 +56,11 @@ static const unsigned char kDriverPreviousName[] = {
 static const unsigned char kStartupPreviousName[] = {
     24, 'G', 'X', 'M', 'e', 't', 'a', 'l', ' ',
     'S', 't', 'a', 'r', 't', 'u', 'p', ' ',
+    'P', 'r', 'e', 'v', 'i', 'o', 'u', 's'
+};
+static const unsigned char kInputPreviousName[] = {
+    22, 'G', 'X', 'M', 'e', 't', 'a', 'l', ' ',
+    'I', 'n', 'p', 'u', 't', ' ',
     'P', 'r', 'e', 'v', 'i', 'o', 'u', 's'
 };
 static const unsigned char kDriverLegacyDisabledName[] = {
@@ -297,6 +310,7 @@ static void GXMetalRestoreBackup(FSSpec *backup,
 
 static OSErr GXMetalInstallFiles(const FSSpec *driverSource,
                                  const FSSpec *startupSource,
+                                 const FSSpec *inputSource,
                                  short extensionsVRef,
                                  long extensionsDirID)
 {
@@ -306,10 +320,15 @@ static OSErr GXMetalInstallFiles(const FSSpec *driverSource,
     FSSpec startupTarget;
     FSSpec startupTemporary;
     FSSpec startupPrevious;
+    FSSpec inputTarget;
+    FSSpec inputTemporary;
+    FSSpec inputPrevious;
     FInfo driverOriginalInfo;
     FInfo startupOriginalInfo;
+    FInfo inputOriginalInfo;
     Boolean hadDriver;
     Boolean hadStartup;
+    Boolean hadInput;
     OSErr error;
 
     error = GXMetalStageFile(driverSource, kDriverTemporaryName,
@@ -325,21 +344,34 @@ static OSErr GXMetalInstallFiles(const FSSpec *driverSource,
         (void)FSpDelete(&driverTemporary);
         return error;
     }
+    error = GXMetalStageFile(inputSource, kInputTemporaryName,
+                             extensionsVRef, extensionsDirID,
+                             &inputTemporary);
+    if (error != noErr) {
+        (void)FSpDelete(&driverTemporary);
+        (void)FSpDelete(&startupTemporary);
+        return error;
+    }
 
     (void)FSMakeFSSpec(extensionsVRef, extensionsDirID,
                        kDriverName, &driverTarget);
     (void)FSMakeFSSpec(extensionsVRef, extensionsDirID,
                        kStartupName, &startupTarget);
     (void)FSMakeFSSpec(extensionsVRef, extensionsDirID,
+                       kInputName, &inputTarget);
+    (void)FSMakeFSSpec(extensionsVRef, extensionsDirID,
                        kDriverPreviousName, &driverPrevious);
     (void)FSMakeFSSpec(extensionsVRef, extensionsDirID,
                        kStartupPreviousName, &startupPrevious);
+    (void)FSMakeFSSpec(extensionsVRef, extensionsDirID,
+                       kInputPreviousName, &inputPrevious);
     error = GXMetalRetireLegacy(kLegacyDriverBackupName,
                                 kDriverLegacyDisabledName,
                                 extensionsVRef, extensionsDirID);
     if (error != noErr) {
         (void)FSpDelete(&driverTemporary);
         (void)FSpDelete(&startupTemporary);
+        (void)FSpDelete(&inputTemporary);
         return error;
     }
     error = GXMetalRetireLegacy(kLegacyStartupBackupName,
@@ -351,19 +383,25 @@ static OSErr GXMetalInstallFiles(const FSSpec *driverSource,
     if (error == noErr) {
         error = GXMetalDeleteIfPresent(&startupPrevious);
     }
+    if (error == noErr) {
+        error = GXMetalDeleteIfPresent(&inputPrevious);
+    }
     if (error != noErr) {
         (void)FSpDelete(&driverTemporary);
         (void)FSpDelete(&startupTemporary);
+        (void)FSpDelete(&inputTemporary);
         return error;
     }
     hadDriver = GXMetalSpecExists(&driverTarget);
     hadStartup = GXMetalSpecExists(&startupTarget);
+    hadInput = GXMetalSpecExists(&inputTarget);
     if (hadDriver) {
         error = GXMetalBackupTarget(&driverTarget, kDriverPreviousName,
                                     &driverPrevious, &driverOriginalInfo);
         if (error != noErr) {
             (void)FSpDelete(&driverTemporary);
             (void)FSpDelete(&startupTemporary);
+            (void)FSpDelete(&inputTemporary);
             return error;
         }
     }
@@ -377,6 +415,25 @@ static OSErr GXMetalInstallFiles(const FSSpec *driverSource,
             }
             (void)FSpDelete(&driverTemporary);
             (void)FSpDelete(&startupTemporary);
+            (void)FSpDelete(&inputTemporary);
+            return error;
+        }
+    }
+    if (hadInput) {
+        error = GXMetalBackupTarget(&inputTarget, kInputPreviousName,
+                                    &inputPrevious, &inputOriginalInfo);
+        if (error != noErr) {
+            if (hadDriver) {
+                GXMetalRestoreBackup(&driverPrevious, kDriverName,
+                                     &driverOriginalInfo);
+            }
+            if (hadStartup) {
+                GXMetalRestoreBackup(&startupPrevious, kStartupName,
+                                     &startupOriginalInfo);
+            }
+            (void)FSpDelete(&driverTemporary);
+            (void)FSpDelete(&startupTemporary);
+            (void)FSpDelete(&inputTemporary);
             return error;
         }
     }
@@ -390,8 +447,13 @@ static OSErr GXMetalInstallFiles(const FSSpec *driverSource,
             GXMetalRestoreBackup(&startupPrevious, kStartupName,
                                  &startupOriginalInfo);
         }
+        if (hadInput) {
+            GXMetalRestoreBackup(&inputPrevious, kInputName,
+                                 &inputOriginalInfo);
+        }
         (void)FSpDelete(&driverTemporary);
         (void)FSpDelete(&startupTemporary);
+        (void)FSpDelete(&inputTemporary);
         return error;
     }
     error = FSpRename(&startupTemporary, kStartupName);
@@ -405,7 +467,31 @@ static OSErr GXMetalInstallFiles(const FSSpec *driverSource,
             GXMetalRestoreBackup(&startupPrevious, kStartupName,
                                  &startupOriginalInfo);
         }
+        if (hadInput) {
+            GXMetalRestoreBackup(&inputPrevious, kInputName,
+                                 &inputOriginalInfo);
+        }
         (void)FSpDelete(&startupTemporary);
+        (void)FSpDelete(&inputTemporary);
+        return error;
+    }
+    error = FSpRename(&inputTemporary, kInputName);
+    if (error != noErr) {
+        (void)FSpDelete(&driverTarget);
+        (void)FSpDelete(&startupTarget);
+        if (hadDriver) {
+            GXMetalRestoreBackup(&driverPrevious, kDriverName,
+                                 &driverOriginalInfo);
+        }
+        if (hadStartup) {
+            GXMetalRestoreBackup(&startupPrevious, kStartupName,
+                                 &startupOriginalInfo);
+        }
+        if (hadInput) {
+            GXMetalRestoreBackup(&inputPrevious, kInputName,
+                                 &inputOriginalInfo);
+        }
+        (void)FSpDelete(&inputTemporary);
         return error;
     }
     return FlushVol(NULL, extensionsVRef);
@@ -418,6 +504,7 @@ int main(void)
     FSSpec application;
     FSSpec driverSource;
     FSSpec startupSource;
+    FSSpec inputSource;
     short extensionsVRef = 0;
     long extensionsDirID = 0;
     long systemVersion = 0;
@@ -447,9 +534,13 @@ int main(void)
         error = FSMakeFSSpec(application.vRefNum, application.parID,
                              kStartupName, &startupSource);
     }
+    if (error == noErr) {
+        error = FSMakeFSSpec(application.vRefNum, application.parID,
+                             kInputName, &inputSource);
+    }
     if (error != noErr) {
         GXMetalShowResult(false,
-            "GXMetal or GXMetal Startup was not found beside this installer. Keep the complete GXMetal folder together and try again.");
+            "GXMetal, GXMetal Startup, or GXMetal Input was not found beside this installer. Keep the complete GXMetal folder together and try again.");
         return 1;
     }
     error = FindFolder(kOnSystemDisk, kExtensionFolderType, false,
@@ -468,7 +559,7 @@ int main(void)
     if (installChoice == 2) {
         return 0;
     }
-    error = GXMetalInstallFiles(&driverSource, &startupSource,
+    error = GXMetalInstallFiles(&driverSource, &startupSource, &inputSource,
                                 extensionsVRef, extensionsDirID);
     if (error != noErr) {
         GXMetalShowResult(false,
@@ -476,6 +567,6 @@ int main(void)
         return 1;
     }
     GXMetalShowResult(true,
-        "GXMetal " GXMETAL_PRODUCT_VERSION_STRING " and its startup icon are installed. The previous active copy is disabled and will be removed during restart. Then run GXMetal Test.");
+        "GXMetal " GXMETAL_PRODUCT_VERSION_STRING ", its startup icon, and seamless game mouse support are installed. The previous active copy is disabled and will be removed during restart. Then run GXMetal Test.");
     return 0;
 }

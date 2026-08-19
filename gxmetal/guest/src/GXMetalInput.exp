@@ -1,0 +1,4 @@
+ISpDriver_CheckConfiguration
+ISpDriver_FindAndLoadDevices
+ISpDriver_DisposeDevices
+ISpDriver_Tickle

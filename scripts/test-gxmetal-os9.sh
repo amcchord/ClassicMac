@@ -76,6 +76,7 @@ SOURCE_MTIME="$(stat -f '%m' "$SOURCE_DISK")"
 log "Verifying the exact signed application candidate"
 "$ROOT_DIR/scripts/verify-release.sh" "$APP"
 
+mkdir -p /tmp/gxmetal-validation
 SCRATCH="$(mktemp -d /tmp/gxmetal-validation/os9-signed-conformance-XXXXXX)"
 DISK="$SCRATCH/disk.img"
 MONITOR="$SCRATCH/monitor.sock"
@@ -91,12 +92,15 @@ mkdir -p "$SCRATCH/macbinary" "$SCRATCH/guest"
 hmount "$TOOLS_CD" >/dev/null
 HFSUTILS_MOUNTED=1
 hcopy -m ':GXMetal:GXMetal' "$SCRATCH/macbinary/GXMetal.bin"
+hcopy -m ':GXMetal:GXMetal Input' "$SCRATCH/macbinary/GXMetalInput.bin"
 hcopy -m ':GXMetal:GXMetal Startup' "$SCRATCH/macbinary/GXMetalStartup.bin"
 hcopy -m ':GXMetal:GXMetal Test' "$SCRATCH/macbinary/GXMetalTest.bin"
 humount >/dev/null
 HFSUTILS_MOUNTED=0
 unar -quiet -output-directory "$SCRATCH/guest" \
   "$SCRATCH/macbinary/GXMetal.bin"
+unar -quiet -output-directory "$SCRATCH/guest" \
+  "$SCRATCH/macbinary/GXMetalInput.bin"
 unar -quiet -output-directory "$SCRATCH/guest" \
   "$SCRATCH/macbinary/GXMetalStartup.bin"
 unar -quiet -output-directory "$SCRATCH/guest" \
@@ -107,6 +111,12 @@ if [ ! -e "$STARTUP_GUEST_FILE" ]; then
 fi
 [ -e "$STARTUP_GUEST_FILE" ] || \
   die "GXMetal Startup did not decode from the bundled Tools CD"
+INPUT_GUEST_FILE="$SCRATCH/guest/GXMetal Input"
+if [ ! -e "$INPUT_GUEST_FILE" ]; then
+  INPUT_GUEST_FILE="$SCRATCH/guest/GXMetalInput"
+fi
+[ -e "$INPUT_GUEST_FILE" ] || \
+  die "GXMetal Input did not decode from the bundled Tools CD"
 
 attach_disk() {
   local attach_output
@@ -144,6 +154,10 @@ if [ -e "$MOUNT_POINT/System Folder/Extensions/GXMetal Startup" ]; then
   mv "$MOUNT_POINT/System Folder/Extensions/GXMetal Startup" \
     "$BACKUP/GXMetal Startup.previous"
 fi
+if [ -e "$MOUNT_POINT/System Folder/Extensions/GXMetal Input" ]; then
+  mv "$MOUNT_POINT/System Folder/Extensions/GXMetal Input" \
+    "$BACKUP/GXMetal Input.previous"
+fi
 if [ -e "$MOUNT_POINT/System Folder/Startup Items/GXMetal Test" ]; then
   mv "$MOUNT_POINT/System Folder/Startup Items/GXMetal Test" \
     "$BACKUP/GXMetal Test.previous"
@@ -156,6 +170,8 @@ ditto "$SCRATCH/guest/GXMetal" \
   "$MOUNT_POINT/System Folder/Extensions/GXMetal"
 ditto "$STARTUP_GUEST_FILE" \
   "$MOUNT_POINT/System Folder/Extensions/GXMetal Startup"
+ditto "$INPUT_GUEST_FILE" \
+  "$MOUNT_POINT/System Folder/Extensions/GXMetal Input"
 ditto "$SCRATCH/guest/GXMetal Test" \
   "$MOUNT_POINT/System Folder/Startup Items/GXMetal Test"
 sync

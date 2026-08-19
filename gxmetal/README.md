@@ -168,24 +168,28 @@ python3 gxmetal/tools/build_icon_resources.py \
   gxmetal/guest/src/GXMetalIcon.r
 ```
 
-The build produces `GXMetal.bin`, `GXMetalStartup.bin`,
+The build produces `GXMetal.bin`, `GXMetalInput.bin`, `GXMetalStartup.bin`,
 `GXMetalInstaller.bin`, and `GXMetalTest.bin` in `gxmetal/guest/bin`. They are
 MacBinary files so their PEF data forks, resource forks, and Finder metadata
 survive transfer to HFS. `GXMetalStartup.bin` is a small 68K `INIT` companion:
 Mac OS 9 does not execute an `INIT` embedded in the required `shlb`/`tnsl` RAVE
 library, so the companion displays GXMetal's puzzle-piece M in the normal
-startup extension row. The build verifies the driver's complete RAVE/CFM
-discovery resources and initialization descriptor, the companion's executable
-`INIT` and icon family, and the test app's public RAVE imports.
+startup extension row. `GXMetalInput.bin` is an InputSprocket driver that
+translates ClassicMac's seamless system pointer into the relative mouse
+elements expected by classic games. The build verifies the driver's complete
+RAVE/CFM discovery resources and initialization descriptor, the InputSprocket
+driver's exported discovery callbacks, the companion's executable `INIT` and
+icon family, and the test app's public RAVE imports.
 
-`scripts/build-guest-cd.sh` rebuilds those four matching artifacts and places
+`scripts/build-guest-cd.sh` rebuilds those five matching artifacts and places
 them in the `GXMetal` folder on the ClassicMac Tools CD. In the guest,
 double-click **Install GXMetal**. It finds the active System Folder and stages
-both forks of the driver and startup companion before changing anything. On an
-update, the already-loaded old files are renamed, made invisible, and changed
-to an inert non-extension Finder type before the new pair takes their canonical
-names. The new startup companion deletes those rollback copies during the
-required restart, so a second RAVE driver cannot be rediscovered. After
+both forks of the RAVE driver, InputSprocket bridge, and startup companion
+before changing anything. On an update, the already-loaded old files are
+renamed, made invisible, and changed to an inert non-extension Finder type
+before the new set takes its canonical names. The new startup companion
+deletes those rollback copies during the required restart, so stale drivers
+cannot be rediscovered. After
 restarting, **GXMetal Test** enumerates the engines
 that RAVE actually registered, selects GXMetal by its gestalt name, exercises a
 Z-buffered and double-buffered render with Gouraud shading, alpha blending,

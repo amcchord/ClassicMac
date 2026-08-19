@@ -24,12 +24,15 @@ make -C "$GUEST_DIR" clean
 make -C "$GUEST_DIR" \
     RINCLUDES="$TOOLCHAIN/universal/RIncludes"
 
-for artifact in GXMetal.bin GXMetalStartup.bin GXMetalInstaller.bin \
-                GXMetalTest.bin; do
+for artifact in GXMetal.bin GXMetalInput.bin GXMetalStartup.bin \
+                GXMetalInstaller.bin GXMetalTest.bin; do
     [ -f "$GUEST_DIR/bin/$artifact" ] || die "$artifact was not produced"
 done
 python3 "$ROOT_DIR/gxmetal/tools/verify_macbinary.py" \
     "$GUEST_DIR/bin/GXMetal.bin" --type shlb --creator tnsl \
+    --require-flags 0x0400 --forbid-flags 0x0180
+python3 "$ROOT_DIR/gxmetal/tools/verify_macbinary.py" \
+    "$GUEST_DIR/bin/GXMetalInput.bin" --type shlb --creator insp \
     --require-flags 0x0400 --forbid-flags 0x0180
 python3 "$ROOT_DIR/gxmetal/tools/verify_macbinary.py" \
     "$GUEST_DIR/bin/GXMetalStartup.bin" --type INIT --creator GXMT \
@@ -42,6 +45,8 @@ python3 "$ROOT_DIR/gxmetal/tools/verify_macbinary.py" \
     --require-flags 0x2000 --forbid-flags 0x0100
 python3 "$ROOT_DIR/gxmetal/tools/pef_set_init.py" \
     --verify "$GUEST_DIR/bin/GXMetal.pef"
+python3 "$ROOT_DIR/gxmetal/tools/pef_set_init.py" \
+    --verify "$GUEST_DIR/bin/GXMetalInput.pef"
 DeRez -only tnsl "$GUEST_DIR/bin/GXMetal" | \
     grep -F "data 'tnsl' (0)" >/dev/null || \
     die "GXMetal resource fork is missing the RAVE tnsl discovery marker"
@@ -57,6 +62,9 @@ DeRez -only INIT "$GUEST_DIR/bin/GXMetal Startup" | \
 DeRez -only ICN# "$GUEST_DIR/bin/GXMetal" | \
     grep -F "data 'ICN#' (-16455" >/dev/null || \
     die "GXMetal resource fork is missing its custom Finder icon"
+DeRez -only ICN# "$GUEST_DIR/bin/GXMetal Input" | \
+    grep -F "data 'ICN#' (-16455" >/dev/null || \
+    die "GXMetal Input is missing its custom Finder icon"
 DeRez -only ICN# "$GUEST_DIR/bin/GXMetal Startup" | \
     grep -F "data 'ICN#' (-16455" >/dev/null || \
     die "GXMetal Startup is missing its custom Finder icon"
@@ -64,15 +72,21 @@ for symbol in QARegisterEngine QARegisterDrawMethod RegistryEntrySearch; do
     strings "$GUEST_DIR/bin/GXMetal.pef" | grep -F "$symbol" >/dev/null ||
         die "GXMetal PEF is missing required import $symbol"
 done
+for symbol in ISpDriver_CheckConfiguration ISpDriver_FindAndLoadDevices \
+    ISpDriver_DisposeDevices ISpDriver_Tickle ISpDevice_New \
+    ISpElement_New ISpElement_PushSimpleData; do
+    strings "$GUEST_DIR/bin/GXMetalInput.pef" | grep -F "$symbol" >/dev/null ||
+        die "GXMetal Input PEF is missing required symbol $symbol"
+done
 for symbol in QAInit QAExit QADeviceGetFirstEngine QADeviceGetNextEngine \
     QADrawContextNew QATextureNew QATextureDetach QABitmapNew \
     QABitmapDetach QABitmapDelete Microseconds; do
     strings "$GUEST_DIR/bin/GXMetalTest.pef" | grep -F "$symbol" >/dev/null ||
         die "GXMetal Test PEF is missing required import $symbol"
 done
-for artifact in GXMetal.bin GXMetalStartup.bin GXMetalInstaller.bin \
-                GXMetalTest.bin; do
+for artifact in GXMetal.bin GXMetalInput.bin GXMetalStartup.bin \
+                GXMetalInstaller.bin GXMetalTest.bin; do
     file "$GUEST_DIR/bin/$artifact"
-    strings "$GUEST_DIR/bin/$artifact" | grep -F "2.0.0" >/dev/null || \
-        die "$artifact does not report GXMetal version 2.0.0"
+    strings "$GUEST_DIR/bin/$artifact" | grep -F "2.0.1" >/dev/null || \
+        die "$artifact does not report GXMetal version 2.0.1"
 done

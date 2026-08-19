@@ -27,9 +27,9 @@ resource 'BNDL' (128, purgeable) {
 };
 
 resource 'vers' (1) {
-    1, 9, release, 3, verUS,
-    "2.0.0",
-    "Install GXMetal 2.0.0"
+    2, 0, release, 1, verUS,
+    "2.0.1",
+    "Install GXMetal 2.0.1"
 };
 
 resource 'cfrg' (0) {
@@ -99,11 +99,11 @@ resource 'DITL' (129, purgeable) {
         {150, 220, 170, 300}, Button { enabled, "Cancel" };
         {16, 16, 48, 48}, Icon { disabled, 128 };
         {16, 64, 134, 392}, StaticText { disabled,
-            "GXMetal adds host-accelerated QuickDraw 3D RAVE to "
-            "ClassicMac Power Mac G4 machines. Apple Software RAVE "
-            "remains available as a safe fallback.\n\n"
-            "Install or update GXMetal and its startup icon in the active "
-            "System Folder? You will need to restart before using it."
+            "GXMetal adds host-accelerated QuickDraw 3D RAVE to this "
+            "ClassicMac Power Mac. Apple Software RAVE remains available "
+            "as a safe fallback.\n\n"
+            "Install or update GXMetal, its startup icon, and seamless "
+            "game mouse support? Restart required."
         };
     }
 };
