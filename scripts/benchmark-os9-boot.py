@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Measure Mac OS 9 boot time using a disposable disk-image clone.
+"""Measure Mac OS 9 startup and resume using a disposable disk-image clone.
 
 The benchmark launches the repository's Power Mac QEMU with the same core
 devices as ClassicMac, polls QEMU's framebuffer through the monitor socket,
@@ -100,8 +100,11 @@ def qemu_command(
     disk_cache: str | None,
     accel: str,
     cpu: str,
+    boot_disk_virtio: bool,
+    boot_cd: Path | None,
     shared_folder: Path | None,
     icount: str | None,
+    load_state: Path | None,
     extra_qemu_args: list[str],
     minimal_devices: bool,
 ) -> list[str]:
@@ -132,26 +135,64 @@ def qemu_command(
         "-serial", f"file:{scratch / 'serial.log'}",
         "-monitor", f"unix:{scratch / 'monitor.sock'},server=on,wait=off",
         "-action", "reboot=shutdown",
-        "-drive",
-        f"file={disk},format=raw,media=disk"
-        + (f",cache={disk_cache}" if disk_cache else ""),
-        "-drive", "if=ide,index=3,media=cdrom,id=cd0,readonly=on",
-        "-drive", "if=ide,index=2,media=cdrom,id=tools0,readonly=on",
         "-trace", f"enable=pmac_ide_completion,file={scratch / 'ide.trace'}",
     ]
+    disk_cache_option = f",cache={disk_cache}" if disk_cache else ""
+    if boot_disk_virtio:
+        command += [
+            "-blockdev",
+            f"driver=file,node-name=classicmac-boot-file,filename={disk}",
+            "-blockdev",
+            "driver=raw,node-name=classicmac-boot,file=classicmac-boot-file",
+            "-device", "virtio-blk-pci,drive=classicmac-boot",
+            "-prom-env", "boot-device=virtio0:\\\\:tbxi",
+        ]
+    else:
+        command += [
+            "-drive",
+            f"file={disk},format=raw,media=disk{disk_cache_option}",
+        ]
+    user_disc_index = 2 if boot_cd is not None else 3
+    tools_disc_index = 3 if boot_cd is not None else 2
+    user_disc = f"if=ide,index={user_disc_index},media=cdrom,id=cd0,readonly=on"
+    if boot_cd is not None:
+        user_disc += f",file={boot_cd},format=raw"
+    command += [
+        "-drive", user_disc,
+        "-drive",
+        f"if=ide,index={tools_disc_index},media=cdrom,id=tools0,readonly=on",
+    ]
+    if boot_cd is not None:
+        command += [
+            "-blockdev",
+            f"driver=file,node-name=classicmac-cd-file,filename={boot_cd},read-only=on",
+            "-blockdev",
+            "driver=raw,node-name=classicmac-cd-boot,file=classicmac-cd-file,read-only=on",
+            "-device", "virtio-blk-pci,drive=classicmac-cd-boot",
+            "-prom-env",
+            f"boot-device=virtio{1 if boot_disk_virtio else 0}:\\\\:tbxi",
+        ]
     if minimal_devices:
         command += ["-nic", "none"]
     else:
+        if boot_cd is None:
+            command += [
+                "-blockdev",
+                f"driver=file,node-name=classicmac-tools-file,filename={tools},read-only=on",
+                "-blockdev",
+                "driver=raw,node-name=classicmac-tools,file=classicmac-tools-file,read-only=on",
+                "-device", "virtio-blk-pci,drive=classicmac-tools",
+            ]
         command += [
-            "-blockdev",
-            f"driver=file,node-name=classicmac-tools-file,filename={tools},read-only=on",
-            "-blockdev",
-            "driver=raw,node-name=classicmac-tools,file=classicmac-tools-file,read-only=on",
-            "-device", "virtio-blk-pci,drive=classicmac-tools",
             "-nic", "user,model=sungem",
             "-device", f"loader,addr=0x4000000,file={loader}",
             "-prom-env", "boot-command=init-program go",
             "-device", "virtio-tablet-pci",
+        ]
+    if (boot_cd is not None or boot_disk_virtio) and minimal_devices:
+        command += [
+            "-device", f"loader,addr=0x4000000,file={loader}",
+            "-prom-env", "boot-command=init-program go",
         ]
     if shared_folder is not None and not minimal_devices:
         command += [
@@ -161,6 +202,8 @@ def qemu_command(
         ]
     if icount is not None:
         command += ["-icount", icount]
+    if load_state is not None:
+        command += ["-incoming", f"file:{load_state}"]
     command += extra_qemu_args
     return command
 
@@ -193,10 +236,30 @@ def main() -> int:
     )
     parser.add_argument("--accel", default="tcg,tb-size=512")
     parser.add_argument("--cpu", default="7400")
+    parser.add_argument(
+        "--boot-disk-virtio",
+        action="store_true",
+        help="boot the main disk through ClassicMac's Virtio block driver",
+    )
+    parser.add_argument(
+        "--boot-cd",
+        type=Path,
+        help="boot the selected installer CD through ClassicMac's Virtio path",
+    )
     parser.add_argument("--timeout", type=float, default=60.0)
     parser.add_argument("--poll-interval", type=float, default=0.25)
     parser.add_argument("--shared-folder", type=Path)
     parser.add_argument("--icount")
+    parser.add_argument(
+        "--save-state",
+        type=Path,
+        help="save a resumable QEMU migration stream after Finder appears",
+    )
+    parser.add_argument(
+        "--load-state",
+        type=Path,
+        help="resume a QEMU migration stream instead of executing a cold boot",
+    )
     parser.add_argument(
         "--minimal-devices",
         action="store_true",
@@ -238,14 +301,22 @@ def main() -> int:
     )
     if not qemu.is_file():
         parser.error(f"QEMU binary does not exist: {qemu}")
+    boot_cd = args.boot_cd.expanduser().resolve() if args.boot_cd else None
+    if boot_cd is not None and not boot_cd.is_file():
+        parser.error(f"installer CD does not exist: {boot_cd}")
+    save_state = args.save_state.expanduser().resolve() if args.save_state else None
+    load_state = args.load_state.expanduser().resolve() if args.load_state else None
+    if load_state is not None and not load_state.is_file():
+        parser.error(f"saved state does not exist: {load_state}")
     scratch = Path(tempfile.mkdtemp(prefix="classicmac-os9-boot-", dir="/tmp"))
     disk = scratch / "disk.img"
     clone_disk(source, disk)
     command = qemu_command(
         root, qemu, disk, scratch, args.dma_delay_ns, args.ram_mb,
-        args.disk_cache, args.accel, args.cpu,
+        args.disk_cache, args.accel, args.cpu, args.boot_disk_virtio, boot_cd,
         args.shared_folder.expanduser().resolve() if args.shared_folder else None,
         args.icount,
+        load_state,
         args.extra_qemu_arg,
         args.minimal_devices,
     )
@@ -291,6 +362,16 @@ def main() -> int:
             if finder_seconds is not None and args.graceful_shutdown:
                 monitor.sendall(b"sendkey ret\n")
                 receive_until_prompt(monitor)
+            elif finder_seconds is not None and save_state is not None:
+                save_state.parent.mkdir(parents=True, exist_ok=True)
+                migration_uri = f"file:{save_state}"
+                monitor.sendall(
+                    f"migrate {json.dumps(migration_uri)}\n".encode("utf-8")
+                )
+                response = receive_until_prompt(monitor)
+                if b"error" in response.lower():
+                    raise RuntimeError(response.decode("utf-8", "replace"))
+                monitor.sendall(b"quit\n")
             else:
                 monitor.sendall(b"quit\n")
     except Exception as error:  # Keep evidence and report after cleanup.
@@ -327,6 +408,10 @@ def main() -> int:
         "disk_cache": args.disk_cache or "default",
         "accel": args.accel,
         "cpu": args.cpu,
+        "boot_disk_virtio": args.boot_disk_virtio,
+        "boot_cd": str(boot_cd) if boot_cd is not None else None,
+        "load_state": str(load_state) if load_state is not None else None,
+        "save_state": str(save_state) if save_state is not None else None,
         "minimal_devices": args.minimal_devices,
         "qemu": str(qemu),
         "graceful_shutdown": args.graceful_shutdown,
