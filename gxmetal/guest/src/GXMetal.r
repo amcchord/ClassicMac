@@ -20,8 +20,8 @@ data 'ftag' (0) {
 
 resource 'vers' (1) {
     1, 9, release, 3, verUS,
-    "1.9.3",
-    "GXMetal 1.9.3"
+    "2.0.0",
+    "GXMetal 2.0.0"
 };
 
 resource 'cfrg' (0) {

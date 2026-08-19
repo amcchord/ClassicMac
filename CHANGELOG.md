@@ -1,5 +1,50 @@
 # Changelog
 
+## 2.0.0 — 2026-08-19
+
+### Added
+
+- **Quake III Arena Demo now runs through GXMetal on Mac OS 9.** The RAVE
+  compatibility layer implements the ATI private draw paths used by the game,
+  including multitextured world geometry and lightmaps, while retaining the
+  general QuickDraw 3D RAVE interface used by existing titles.
+- Added opt-in host profiling for draw encoding, presentation, primitive mix,
+  and ATI texture-coordinate work so future games can be optimized from
+  measured bottlenecks instead of game-specific guesses.
+
+### Changed
+
+- The GXMetal guest library is now compiled with `-O2`, and its transport
+  batches up to 32 packets or 256 KiB while preserving immediate flushes at
+  synchronization boundaries. Quake III retains cross-call triangle batching
+  at roughly 176 host draws per heavy frame.
+- The Power Mac launcher gives QEMU's translated-code cache 512 MiB for large
+  PowerPC games. Metal presentation is coalesced to a trailing 60 Hz console
+  refresh without dropping the final completed frame.
+- Completed Metal frames are copied into QEMU VGA memory, marked dirty, and
+  published through the normal QEMU console. VNC captures, the ClassicMac
+  manager preview, and the Cocoa machine window therefore receive the same
+  framebuffer rather than separate renderer-specific overlays.
+
+### Fixed
+
+- Corrected Quake III blend modes, texture filtering, scissoring, gamma,
+  multitexture coordinates, lightmap composition, and synchronization across
+  its menu and in-game rendering paths.
+- Moved the legacy ATI ARGB4444 texture-coordinate transform to the host behind
+  a negotiated protocol feature, preserving compatibility with older GXMetal
+  hosts while reducing work in supported Carmageddon II draws.
+- Coalesced guest-to-host command traffic and QEMU display refreshes without
+  weakening validation, queue bounds, dirty tracking, or software fallback.
+
+### Performance
+
+- A release-style `-O2` QEMU and GXMetal build sustained approximately 64–65
+  FPS in the validated heavy `q3dm1` scene, with the observed long-run low
+  remaining above 60 FPS. The same scene rendered correctly through VNC, and
+  the production ClassicMac Cocoa path was separately validated through the
+  Quake III main menu.
+
 ## 1.9.3 — 2026-08-18
 
 ### Changed
