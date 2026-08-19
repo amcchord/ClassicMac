@@ -65,6 +65,7 @@
  * reads at least QEMU_EXT_SIZE_FEATURES). */
 #define QEMU_EXT_FEATURE_PACKED_LOWBPP   0x1
 #define QEMU_EXT_FEATURE_HARDWARE_CURSOR 0x2
+#define QEMU_EXT_FEATURE_GAMMA_LUT       0x4
 
 /* Host-composited 16x16 ARGB cursor registers. */
 #define QEMU_EXT_REG_CURSOR_WIDTH        0x6
@@ -77,6 +78,10 @@
 #define QEMU_EXT_REG_CURSOR_COMMAND      0xd
 #define QEMU_EXT_CURSOR_DEFINE           0x1
 #define QEMU_EXT_CURSOR_MOVE             0x2
+#define QEMU_EXT_REG_GAMMA_INDEX         0xe
+#define QEMU_EXT_REG_GAMMA_VALUE         0xf
+#define QEMU_EXT_REG_GAMMA_COMMAND       0x10
+#define QEMU_EXT_GAMMA_APPLY             0x1
 #define QEMU_EXT_CURSOR_DATA_REG         (0x100 / 4)
 #define QEMU_EXT_CURSOR_WIDTH            16
 #define QEMU_EXT_CURSOR_HEIGHT           16
@@ -139,6 +144,7 @@ extern OSStatus QemuVga_GetModeInfo(UInt32 index, UInt32 *width, UInt32 *height)
 extern OSStatus QemuVga_SetMode(UInt32 modeIndex, UInt32 depth, UInt32 page);
 
 extern OSStatus QemuVga_Blank(Boolean blank);
+extern OSStatus QemuVga_SetGamma(const GammaTbl *table);
 
 /* --- Host-window-driven live resizing --- */
 

@@ -119,6 +119,7 @@ static void test_first_triangle_pipeline(void)
     set_vertex(vertices + 32, 56.0f, 8.0f, 0.0f, 1.0f, 0.0f);
     set_vertex(vertices + 64, 32.0f, 56.0f, 0.0f, 0.0f, 1.0f);
     gxmetal_guest_packet_commit(&guest, &packet);
+    CHECK(gxmetal_guest_flush(&guest));
     pump_host(&queue);
     CHECK(queue.error == GXMETAL_ERROR_NONE);
     CHECK(framebuffer[(16 * 64 + 16) * 2] != 0 ||

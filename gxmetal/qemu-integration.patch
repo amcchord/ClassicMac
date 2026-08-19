@@ -1,68 +1,8 @@
-diff --git a/hw/display/vga-pci.c b/hw/display/vga-pci.c
---- a/hw/display/vga-pci.c
-+++ b/hw/display/vga-pci.c
-@@ -34,6 +34,7 @@
- #include "qemu/timer.h"
- #include "hw/core/loader.h"
- #include "hw/display/edid.h"
-+#include "gxmetal_qemu.h"
- #include "qom/object.h"
- #include "hw/acpi/acpi_aml_interface.h"
- 
-@@ -77,5 +78,9 @@ struct PCIVGAState {
-     uint32_t cursor_argb[PCI_VGA_QEXT_CURSOR_MAX_WIDTH *
-                          PCI_VGA_QEXT_CURSOR_MAX_HEIGHT];
-+
-+    /* Optional paravirtual QuickDraw 3D RAVE command transport. */
-+    bool gxmetal_enabled;
-+    GXMetalQemuState gxmetal;
- };
- 
- #define TYPE_PCI_VGA "pci-vga"
-@@ -459,6 +464,12 @@ static void pci_std_vga_realize(PCIDevice *dev, Error **errp)
-     bool qext = false;
-     bool edid = false;
- 
-+    if (d->gxmetal_enabled &&
-+        !(d->flags & (1 << PCI_VGA_FLAG_ENABLE_MMIO))) {
-+        error_setg(errp, "GXMetal requires the VGA MMIO BAR");
-+        return;
-+    }
-+
-     /* vga + console init */
-     if (!vga_common_init(s, OBJECT(dev), errp)) {
-         return;
-@@ -495,6 +506,18 @@ static void pci_std_vga_realize(PCIDevice *dev, Error **errp)
-                                      qext, edid, d->host_resize,
-                                      d->hardware_cursor);
- 
-+        if (d->gxmetal_enabled) {
-+            if (!gxmetal_qemu_init(&d->gxmetal, OBJECT(dev), &s->vram,
-+                                   s->vram_size, errp)) {
-+                return;
-+            }
-+            memory_region_add_subregion(&d->mmio,
-+                                        GXMETAL_BAR2_REGISTER_OFFSET,
-+                                        &d->gxmetal.registers);
-+            pci_register_bar(&d->dev, 4, PCI_BASE_ADDRESS_MEM_PREFETCH,
-+                             &d->gxmetal.shared);
-+        }
-+
-         pci_register_bar(&d->dev, 2, PCI_BASE_ADDRESS_SPACE_MEMORY, &d->mmio);
-     }
- }
-@@ -591,6 +613,7 @@ static const Property vga_pci_properties[] = {
-     DEFINE_PROP_BOOL("packed-lowbpp", PCIVGAState, vga.packed_lowbpp, false),
-     DEFINE_PROP_BOOL("untracked-vram", PCIVGAState, vga.untracked_vram, false),
-     DEFINE_PROP_BOOL("hardware-cursor", PCIVGAState, hardware_cursor, false),
-+    DEFINE_PROP_BOOL("gxmetal", PCIVGAState, gxmetal_enabled, false),
-     DEFINE_EDID_PROPERTIES(PCIVGAState, edid_info),
- };
- 
 diff --git a/hw/display/meson.build b/hw/display/meson.build
+index e1ea7799a1..0aa90dac0f 100644
 --- a/hw/display/meson.build
 +++ b/hw/display/meson.build
-@@ -16,7 +16,17 @@ system_ss.add(when: 'CONFIG_SSD0303', if_true: files('ssd0303.c'))
+@@ -17,7 +17,17 @@ system_ss.add(when: 'CONFIG_SSD0303', if_true: files('ssd0303.c'))
  system_ss.add(when: 'CONFIG_SSD0323', if_true: files('ssd0323.c'))
  system_ss.add(when: 'CONFIG_XEN_BUS', if_true: files('xenfb.c'))
  
@@ -81,3 +21,162 @@ diff --git a/hw/display/meson.build b/hw/display/meson.build
  system_ss.add(when: 'CONFIG_VGA_ISA', if_true: files('vga-isa.c'))
  system_ss.add(when: 'CONFIG_VGA_MMIO', if_true: files('vga-mmio.c'))
  system_ss.add(when: 'CONFIG_VMWARE_VGA', if_true: files('vmware_vga.c'))
+diff --git a/hw/display/vga-pci.c b/hw/display/vga-pci.c
+index e3519edd8a..a514168880 100644
+--- a/hw/display/vga-pci.c
++++ b/hw/display/vga-pci.c
+@@ -35,6 +35,7 @@
+ #include "qemu/timer.h"
+ #include "hw/core/loader.h"
+ #include "hw/display/edid.h"
++#include "gxmetal_qemu.h"
+ #include "qom/object.h"
+ #include "hw/acpi/acpi_aml_interface.h"
+ 
+@@ -76,6 +77,16 @@ struct PCIVGAState {
+     bool cursor_visible;
+     uint32_t cursor_argb[PCI_VGA_QEXT_CURSOR_MAX_WIDTH *
+                          PCI_VGA_QEXT_CURSOR_MAX_HEIGHT];
++
++    /* Classic Mac cscSetGamma table staged through QEXT. */
++    uint32_t gamma_index;
++    uint8_t gamma_red[256];
++    uint8_t gamma_green[256];
++    uint8_t gamma_blue[256];
++
++    /* Optional paravirtual QuickDraw 3D RAVE command transport. */
++    bool gxmetal_enabled;
++    GXMetalQemuState gxmetal;
+ };
+ 
+ #define TYPE_PCI_VGA "pci-vga"
+@@ -199,7 +210,7 @@ static uint64_t pci_vga_qext_resize_read(void *ptr, hwaddr addr,
+ 
+     switch (addr) {
+     case PCI_VGA_QEXT_REG_SIZE:
+-        return d->hardware_cursor ?
++        return (d->hardware_cursor || d->gxmetal_enabled) ?
+             PCI_VGA_QEXT_SIZE_CURSOR : PCI_VGA_QEXT_SIZE_FEATURES;
+     case PCI_VGA_QEXT_REG_REQ_WIDTH:
+         return d->host_req_width;
+@@ -210,7 +221,11 @@ static uint64_t pci_vga_qext_resize_read(void *ptr, hwaddr addr,
+     case PCI_VGA_QEXT_REG_FEATURES:
+         return (s->packed_lowbpp ? PCI_VGA_QEXT_FEATURE_PACKED_LOWBPP : 0) |
+                (d->hardware_cursor ?
+-                    PCI_VGA_QEXT_FEATURE_HARDWARE_CURSOR : 0);
++                    PCI_VGA_QEXT_FEATURE_HARDWARE_CURSOR : 0) |
++               (d->gxmetal_enabled ?
++                    PCI_VGA_QEXT_FEATURE_GAMMA_LUT : 0);
++    case PCI_VGA_QEXT_REG_GAMMA_INDEX:
++        return d->gamma_index;
+     default:
+         return pci_vga_qext_read(ptr, addr, size);
+     }
+@@ -286,6 +301,27 @@ static void pci_vga_qext_resize_write(void *ptr, hwaddr addr,
+     }
+ 
+     switch (addr) {
++    case PCI_VGA_QEXT_REG_GAMMA_INDEX:
++        if (d->gxmetal_enabled) {
++            d->gamma_index = val & 255;
++        }
++        break;
++    case PCI_VGA_QEXT_REG_GAMMA_VALUE:
++        if (d->gxmetal_enabled) {
++            uint32_t index = d->gamma_index & 255;
++
++            d->gamma_red[index] = (val >> 16) & 255;
++            d->gamma_green[index] = (val >> 8) & 255;
++            d->gamma_blue[index] = val & 255;
++            d->gamma_index = (index + 1) & 255;
++        }
++        break;
++    case PCI_VGA_QEXT_REG_GAMMA_COMMAND:
++        if (d->gxmetal_enabled && (val & PCI_VGA_QEXT_GAMMA_APPLY)) {
++            gxmetal_metal_set_gamma(d->gxmetal.metal, d->gamma_red,
++                                    d->gamma_green, d->gamma_blue);
++        }
++        break;
+     case PCI_VGA_QEXT_REG_CURSOR_WIDTH:
+         d->cursor_width = val;
+         break;
+@@ -455,11 +491,23 @@ static void pci_std_vga_realize(PCIDevice *dev, Error **errp)
+     VGACommonState *s = &d->vga;
+     bool qext = false;
+     bool edid = false;
++    uint32_t i;
++
++    if (d->gxmetal_enabled &&
++        !(d->flags & (1 << PCI_VGA_FLAG_ENABLE_MMIO))) {
++        error_setg(errp, "GXMetal requires the VGA MMIO BAR");
++        return;
++    }
+ 
+     /* vga + console init */
+     if (!vga_common_init(s, OBJECT(dev), errp)) {
+         return;
+     }
++    for (i = 0; i < 256; i++) {
++        d->gamma_red[i] = i;
++        d->gamma_green[i] = i;
++        d->gamma_blue[i] = i;
++    }
+     vga_init(s, OBJECT(dev), pci_address_space(dev), pci_address_space_io(dev),
+              true);
+ 
+@@ -489,7 +537,20 @@ static void pci_std_vga_realize(PCIDevice *dev, Error **errp)
+         }
+         pci_std_vga_mmio_region_init(s, OBJECT(dev), &d->mmio, d->mrs,
+                                      qext, edid, d->host_resize,
+-                                     d->hardware_cursor);
++                                     d->hardware_cursor ||
++                                         d->gxmetal_enabled);
++
++        if (d->gxmetal_enabled) {
++            if (!gxmetal_qemu_init(&d->gxmetal, OBJECT(dev), &s->vram,
++                                   s->vram_size, s->con, errp)) {
++                return;
++            }
++            memory_region_add_subregion(&d->mmio,
++                                        GXMETAL_BAR2_REGISTER_OFFSET,
++                                        &d->gxmetal.registers);
++            pci_register_bar(&d->dev, 4, PCI_BASE_ADDRESS_MEM_PREFETCH,
++                             &d->gxmetal.shared);
++        }
+ 
+         pci_register_bar(&d->dev, 2, PCI_BASE_ADDRESS_SPACE_MEMORY, &d->mmio);
+     }
+@@ -566,6 +627,7 @@ static const Property vga_pci_properties[] = {
+     DEFINE_PROP_BOOL("packed-lowbpp", PCIVGAState, vga.packed_lowbpp, false),
+     DEFINE_PROP_BOOL("untracked-vram", PCIVGAState, vga.untracked_vram, false),
+     DEFINE_PROP_BOOL("hardware-cursor", PCIVGAState, hardware_cursor, false),
++    DEFINE_PROP_BOOL("gxmetal", PCIVGAState, gxmetal_enabled, false),
+     DEFINE_EDID_PROPERTIES(PCIVGAState, edid_info),
+ };
+ 
+diff --git a/include/hw/display/bochs-vbe.h b/include/hw/display/bochs-vbe.h
+index 6f43e28cd6..1c39c36efd 100644
+--- a/include/hw/display/bochs-vbe.h
++++ b/include/hw/display/bochs-vbe.h
+@@ -90,6 +90,8 @@
+ #define  PCI_VGA_QEXT_FEATURE_PACKED_LOWBPP  0x1
+ /* host-composited 16x16 ARGB cursor (hardware-cursor=on) */
+ #define  PCI_VGA_QEXT_FEATURE_HARDWARE_CURSOR 0x2
++/* per-channel 256-entry display gamma table (GXMetal present path) */
++#define  PCI_VGA_QEXT_FEATURE_GAMMA_LUT       0x4
+ 
+ /*
+  * Hardware cursor registers and sprite memory. The guest stages a 16x16
+@@ -106,6 +108,12 @@
+ #define PCI_VGA_QEXT_REG_CURSOR_COMMAND (13 * 4)
+ #define  PCI_VGA_QEXT_CURSOR_DEFINE     0x1
+ #define  PCI_VGA_QEXT_CURSOR_MOVE       0x2
++/* Gamma values are packed as 0x00RRGGBB. The value register advances the
++ * selected index; APPLY publishes the staged table atomically. */
++#define PCI_VGA_QEXT_REG_GAMMA_INDEX    (14 * 4)
++#define PCI_VGA_QEXT_REG_GAMMA_VALUE    (15 * 4)
++#define PCI_VGA_QEXT_REG_GAMMA_COMMAND  (16 * 4)
++#define  PCI_VGA_QEXT_GAMMA_APPLY       0x1
+ #define PCI_VGA_QEXT_CURSOR_DATA        0x100
+ #define PCI_VGA_QEXT_CURSOR_MAX_WIDTH   16
+ #define PCI_VGA_QEXT_CURSOR_MAX_HEIGHT  16

@@ -70,6 +70,8 @@ static void test_packet_and_wrap(void)
 {
     GXMetalGuestTransport transport;
     GXMetalGuestPacket packet;
+    uint32_t published_producer;
+    uint32_t published_sequence;
     uint8_t *pad;
 
     initialize_device(GXMETAL_FEATURE_FENCE | GXMETAL_FEATURE_GOURAUD);
@@ -88,7 +90,21 @@ static void test_packet_and_wrap(void)
           GXMETAL_CONTEXT_CREATE_PACKET_BYTES);
     CHECK(registers[GXMETAL_REG_DOORBELL / 4] == packet.sequence);
 
+    published_producer = registers[GXMETAL_REG_PRODUCER / 4];
+    published_sequence = registers[GXMETAL_REG_DOORBELL / 4];
+    CHECK(gxmetal_guest_packet_begin(&transport, GXMETAL_OP_CLEAR,
+                                     GXMETAL_CLEAR_PACKET_BYTES,
+                                     7, &packet));
+    gxmetal_guest_packet_commit(&transport, &packet);
+    CHECK(registers[GXMETAL_REG_PRODUCER / 4] == published_producer);
+    CHECK(registers[GXMETAL_REG_DOORBELL / 4] == published_sequence);
+    CHECK(gxmetal_guest_flush(&transport));
+    CHECK(registers[GXMETAL_REG_PRODUCER / 4] == packet.next_producer);
+    CHECK(registers[GXMETAL_REG_DOORBELL / 4] == packet.sequence);
+
     transport.producer = GXMETAL_RING_BYTES - 32;
+    transport.published_producer = transport.producer;
+    transport.consumer = 192;
     set_register(GXMETAL_REG_PRODUCER, transport.producer);
     set_register(GXMETAL_REG_CONSUMER, 192);
     CHECK(gxmetal_guest_packet_begin(&transport, GXMETAL_OP_DRAW_GOURAUD,
@@ -113,6 +129,7 @@ static void test_full_ring_and_fence(void)
         GXMETAL_FEATURE_FENCE));
     transport.producer = 0;
     set_register(GXMETAL_REG_CONSUMER, GXMETAL_PACKET_ALIGNMENT);
+    transport.consumer = GXMETAL_PACKET_ALIGNMENT;
     CHECK(!gxmetal_guest_packet_begin(&transport, GXMETAL_OP_CLEAR,
                                       GXMETAL_CLEAR_PACKET_BYTES, 1,
                                       &packet));
@@ -126,11 +143,35 @@ static void test_full_ring_and_fence(void)
     CHECK(!gxmetal_guest_wait(&transport, sequence, 1));
 }
 
+static void test_draw_packet_skips_redundant_clear(void)
+{
+    GXMetalGuestTransport transport;
+    GXMetalGuestPacket packet;
+    uint8_t *destination;
+
+    initialize_device(GXMETAL_FEATURE_GOURAUD);
+    CHECK(gxmetal_guest_transport_connect(
+        &transport, registers, sizeof(registers), shared, sizeof(shared),
+        GXMETAL_FEATURE_GOURAUD));
+    destination = shared + GXMETAL_RING_OFFSET;
+    memset(destination, 0xa5, 128);
+    CHECK(gxmetal_guest_draw_packet_begin(
+        &transport, GXMETAL_OP_DRAW_GOURAUD, 128, 7, &packet));
+    CHECK(packet.bytes == destination);
+    CHECK(gxmetal_load_le16(packet.bytes + GXMETAL_PACKET_OPCODE_OFFSET) ==
+          GXMETAL_OP_DRAW_GOURAUD);
+    CHECK(packet.bytes[GXMETAL_PACKET_HEADER_BYTES] == 0xa5);
+    CHECK(!gxmetal_guest_draw_packet_begin(
+        &transport, GXMETAL_OP_CLEAR, GXMETAL_CLEAR_PACKET_BYTES,
+        7, &packet));
+}
+
 int main(void)
 {
     test_probe();
     test_packet_and_wrap();
     test_full_ring_and_fence();
+    test_draw_packet_skips_redundant_clear();
 
     if (failures != 0) {
         fprintf(stderr, "GXMetal guest transport: %u failure(s)\n", failures);

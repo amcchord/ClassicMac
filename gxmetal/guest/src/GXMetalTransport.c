@@ -5,6 +5,11 @@
 #include <stddef.h>
 #include <string.h>
 
+/* Amortize expensive emulated MMIO exits while keeping enough headroom for
+ * the largest legal packet and low latency for explicit presentation. */
+#define GXMETAL_GUEST_BATCH_PACKETS UINT32_C(32)
+#define GXMETAL_GUEST_BATCH_BYTES UINT32_C(0x00040000)
+
 static uint32_t gxmetal_native_to_le32(uint32_t value)
 {
 #if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
@@ -111,10 +116,16 @@ int gxmetal_guest_transport_connect(GXMetalGuestTransport *transport,
     transport->features = features;
     transport->producer = gxmetal_guest_register_read(
         transport, GXMETAL_REG_PRODUCER);
+    transport->consumer = gxmetal_guest_register_read(
+        transport, GXMETAL_REG_CONSUMER);
     if (transport->producer >= transport->ring_bytes ||
-        (transport->producer & (GXMETAL_PACKET_ALIGNMENT - 1)) != 0) {
+        transport->consumer >= transport->ring_bytes ||
+        (transport->producer & (GXMETAL_PACKET_ALIGNMENT - 1)) != 0 ||
+        (transport->consumer & (GXMETAL_PACKET_ALIGNMENT - 1)) != 0) {
         return 0;
     }
+    transport->published_producer = transport->producer;
+    transport->status = status;
     transport->next_sequence = 1;
     return 1;
 }
@@ -129,10 +140,10 @@ static uint32_t gxmetal_guest_ring_free(uint32_t producer,
     return ring_bytes - producer + consumer;
 }
 
-int gxmetal_guest_packet_begin(GXMetalGuestTransport *transport,
-                               uint16_t opcode, uint32_t packet_bytes,
-                               uint32_t context_id,
-                               GXMetalGuestPacket *packet)
+static int gxmetal_guest_packet_begin_internal(
+    GXMetalGuestTransport *transport, uint16_t opcode,
+    uint32_t packet_bytes, uint32_t context_id,
+    GXMetalGuestPacket *packet, int clear_packet)
 {
     uint32_t consumer;
     uint32_t free_bytes;
@@ -146,16 +157,10 @@ int gxmetal_guest_packet_begin(GXMetalGuestTransport *transport,
         (packet_bytes & (GXMETAL_PACKET_ALIGNMENT - 1)) != 0) {
         return 0;
     }
-    if (gxmetal_guest_register_read(transport, GXMETAL_REG_STATUS) !=
-        GXMETAL_STATUS_READY) {
+    if (transport->status != GXMETAL_STATUS_READY) {
         return 0;
     }
-
-    consumer = gxmetal_guest_register_read(transport, GXMETAL_REG_CONSUMER);
-    if (consumer >= transport->ring_bytes ||
-        (consumer & (GXMETAL_PACKET_ALIGNMENT - 1)) != 0) {
-        return 0;
-    }
+    consumer = transport->consumer;
     free_bytes = gxmetal_guest_ring_free(transport->producer, consumer,
                                          transport->ring_bytes);
     tail_bytes = transport->ring_bytes - transport->producer;
@@ -165,7 +170,27 @@ int gxmetal_guest_packet_begin(GXMetalGuestTransport *transport,
     }
     /* Keep one aligned slot empty so producer == consumer means empty. */
     if (free_bytes < required_bytes + GXMETAL_PACKET_ALIGNMENT) {
-        return 0;
+        if (!gxmetal_guest_flush(transport)) {
+            return 0;
+        }
+        consumer = gxmetal_guest_register_read(transport,
+                                                GXMETAL_REG_CONSUMER);
+        if (consumer >= transport->ring_bytes ||
+            (consumer & (GXMETAL_PACKET_ALIGNMENT - 1)) != 0) {
+            transport->status = GXMETAL_STATUS_FAULTED;
+            return 0;
+        }
+        transport->consumer = consumer;
+        free_bytes = gxmetal_guest_ring_free(transport->producer, consumer,
+                                             transport->ring_bytes);
+        tail_bytes = transport->ring_bytes - transport->producer;
+        required_bytes = packet_bytes;
+        if (tail_bytes < packet_bytes) {
+            required_bytes += tail_bytes;
+        }
+        if (free_bytes < required_bytes + GXMETAL_PACKET_ALIGNMENT) {
+            return 0;
+        }
     }
 
     if (tail_bytes < packet_bytes) {
@@ -184,7 +209,9 @@ int gxmetal_guest_packet_begin(GXMetalGuestTransport *transport,
 
     destination = transport->shared + transport->ring_offset +
                   transport->producer;
-    memset(destination, 0, packet_bytes);
+    if (clear_packet) {
+        memset(destination, 0, packet_bytes);
+    }
     packet->sequence = transport->next_sequence++;
     if (transport->next_sequence == 0) {
         transport->next_sequence = 1;
@@ -201,6 +228,7 @@ int gxmetal_guest_packet_begin(GXMetalGuestTransport *transport,
 
     packet->bytes = destination;
     packet->packet_bytes = packet_bytes;
+    packet->opcode = opcode;
     packet->next_producer = transport->producer + packet_bytes;
     if (packet->next_producer == transport->ring_bytes) {
         packet->next_producer = 0;
@@ -208,15 +236,81 @@ int gxmetal_guest_packet_begin(GXMetalGuestTransport *transport,
     return 1;
 }
 
+int gxmetal_guest_packet_begin(GXMetalGuestTransport *transport,
+                               uint16_t opcode, uint32_t packet_bytes,
+                               uint32_t context_id,
+                               GXMetalGuestPacket *packet)
+{
+    return gxmetal_guest_packet_begin_internal(
+        transport, opcode, packet_bytes, context_id, packet, 1);
+}
+
+int gxmetal_guest_draw_packet_begin(GXMetalGuestTransport *transport,
+                                    uint16_t opcode, uint32_t packet_bytes,
+                                    uint32_t context_id,
+                                    GXMetalGuestPacket *packet)
+{
+    if (opcode != GXMETAL_OP_DRAW_GOURAUD &&
+        opcode != GXMETAL_OP_DRAW_TEXTURED) {
+        return 0;
+    }
+    /* Draw encoders overwrite the complete logical packet: the 16-byte
+     * command header, the 16-byte draw header, and every vertex field.  Do
+     * not clear tens of kilobytes of shared memory immediately before
+     * replacing it, particularly on an emulated PowerPC CPU. */
+    return gxmetal_guest_packet_begin_internal(
+        transport, opcode, packet_bytes, context_id, packet, 0);
+}
+
 void gxmetal_guest_packet_commit(GXMetalGuestTransport *transport,
                                  const GXMetalGuestPacket *packet)
 {
     gxmetal_guest_barrier();
     transport->producer = packet->next_producer;
+    transport->last_sequence = packet->sequence;
+    transport->pending_bytes += packet->packet_bytes;
+    transport->pending_packets++;
+    switch (packet->opcode) {
+    case GXMETAL_OP_PRESENT:
+    case GXMETAL_OP_END_FRAME:
+    case GXMETAL_OP_FENCE:
+    case GXMETAL_OP_CONTEXT_CREATE:
+    case GXMETAL_OP_CONTEXT_DESTROY:
+    case GXMETAL_OP_TEXTURE_CREATE:
+    case GXMETAL_OP_TEXTURE_UPLOAD:
+    case GXMETAL_OP_TEXTURE_DESTROY:
+        (void)gxmetal_guest_flush(transport);
+        break;
+    default:
+        if (transport->pending_packets >= GXMETAL_GUEST_BATCH_PACKETS ||
+            transport->pending_bytes >= GXMETAL_GUEST_BATCH_BYTES) {
+            (void)gxmetal_guest_flush(transport);
+        }
+        break;
+    }
+}
+
+int gxmetal_guest_flush(GXMetalGuestTransport *transport)
+{
+    if (transport == NULL || transport->status != GXMETAL_STATUS_READY) {
+        return 0;
+    }
+    if (transport->producer == transport->published_producer) {
+        return 1;
+    }
+    gxmetal_guest_barrier();
     gxmetal_guest_register_write(transport, GXMETAL_REG_PRODUCER,
                                  transport->producer);
     gxmetal_guest_register_write(transport, GXMETAL_REG_DOORBELL,
-                                 packet->sequence);
+                                 transport->last_sequence);
+    transport->published_producer = transport->producer;
+    transport->pending_bytes = 0;
+    transport->pending_packets = 0;
+    transport->status = gxmetal_guest_register_read(
+        transport, GXMETAL_REG_STATUS);
+    transport->consumer = gxmetal_guest_register_read(
+        transport, GXMETAL_REG_CONSUMER);
+    return transport->status == GXMETAL_STATUS_READY;
 }
 
 int gxmetal_guest_emit_fence(GXMetalGuestTransport *transport,

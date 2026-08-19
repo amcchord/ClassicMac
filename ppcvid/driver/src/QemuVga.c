@@ -79,6 +79,79 @@ UInt32 QemuVga_ReadExt(UInt32 reg)
 	return ExtReadL(reg);
 }
 
+static UInt32 QemuVga_ReadGammaValue(const UInt8 *source, UInt32 bytes)
+{
+	UInt32 value = 0;
+	UInt32 i;
+
+	for (i = 0; i < bytes; i++)
+		value = (value << 8) | source[i];
+	return value;
+}
+
+static UInt8 QemuVga_ScaleGammaValue(UInt32 value, UInt32 bits)
+{
+	UInt32 maximum;
+
+	/* Gamma entries wider than one byte are full-range fixed values. Keep
+	 * their most significant eight bits; this is exact for the common 16-bit
+	 * tables and avoids pulling 64-bit division into the small NDRV. */
+	if (bits > 8)
+		return (UInt8)(value >> (bits - 8));
+	maximum = (1UL << bits) - 1UL;
+	if (value > maximum)
+		value = maximum;
+	return (UInt8)((value * 255UL + maximum / 2UL) / maximum);
+}
+
+OSStatus QemuVga_SetGamma(const GammaTbl *table)
+{
+	const UInt8 *data;
+	UInt32 channels;
+	UInt32 count;
+	UInt32 bits;
+	UInt32 bytes;
+	UInt32 i;
+
+	if (!GLOBAL.gammaLUTAvail)
+		return controlErr;
+	if (table == NULL || table->gFormulaSize < 0 || table->gChanCnt < 1 ||
+		table->gChanCnt > 3 || (table->gChanCnt != 1 && table->gChanCnt != 3) ||
+		table->gDataCnt < 2 || table->gDataCnt > 4096 ||
+		table->gDataWidth < 1 || table->gDataWidth > 32)
+		return paramErr;
+
+	channels = (UInt32)table->gChanCnt;
+	count = (UInt32)table->gDataCnt;
+	bits = (UInt32)table->gDataWidth;
+	bytes = bits <= 8 ? 1 : (bits <= 16 ? 2 : 4);
+	data = (const UInt8 *)table->gFormulaData +
+		(UInt32)table->gFormulaSize;
+
+	ExtWriteL(QEMU_EXT_REG_GAMMA_INDEX, 0);
+	for (i = 0; i < 256; i++) {
+		UInt32 sourceIndex = (i * (count - 1) + 127) / 255;
+		UInt32 redOffset = sourceIndex * bytes;
+		UInt32 greenOffset = channels == 3 ?
+			(count + sourceIndex) * bytes : redOffset;
+		UInt32 blueOffset = channels == 3 ?
+			(2 * count + sourceIndex) * bytes : redOffset;
+		UInt32 red = QemuVga_ScaleGammaValue(
+			QemuVga_ReadGammaValue(data + redOffset, bytes), bits);
+		UInt32 green = QemuVga_ScaleGammaValue(
+			QemuVga_ReadGammaValue(data + greenOffset, bytes), bits);
+		UInt32 blue = QemuVga_ScaleGammaValue(
+			QemuVga_ReadGammaValue(data + blueOffset, bytes), bits);
+
+		ExtWriteL(QEMU_EXT_REG_GAMMA_VALUE,
+			(red << 16) | (green << 8) | blue);
+	}
+	ExtWriteL(QEMU_EXT_REG_GAMMA_COMMAND, QEMU_EXT_GAMMA_APPLY);
+	lprintf("QEMU display gamma table applied (%lu channels, %lu entries, %lu-bit)\n",
+		channels, count, bits);
+	return noErr;
+}
+
 void QemuVga_SetCursor(UInt32 *argb)
 {
 	UInt32 i;
@@ -347,12 +420,18 @@ OSStatus QemuVga_Init(void)
 		(GLOBAL.boardRegMappedSize >= 0x600 + QEMU_EXT_SIZE_CURSOR) &&
 		(ExtReadL(QEMU_EXT_REG_SIZE) >= QEMU_EXT_SIZE_CURSOR) &&
 		((ExtReadL(QEMU_EXT_REG_FEATURES) & QEMU_EXT_FEATURE_HARDWARE_CURSOR) != 0);
+	GLOBAL.gammaLUTAvail =
+		(GLOBAL.boardRegMappedSize >= 0x600 + QEMU_EXT_SIZE_CURSOR) &&
+		(ExtReadL(QEMU_EXT_REG_SIZE) >= QEMU_EXT_SIZE_CURSOR) &&
+		((ExtReadL(QEMU_EXT_REG_FEATURES) & QEMU_EXT_FEATURE_GAMMA_LUT) != 0);
 	GLOBAL.cursorSet = false;
 	GLOBAL.cursorVisible = false;
 	GLOBAL.cursorX = 0;
 	GLOBAL.cursorY = 0;
 	if (GLOBAL.hardwareCursorAvail)
 		lprintf("QEMU hardware cursor detected\n");
+	if (GLOBAL.gammaLUTAvail)
+		lprintf("QEMU display gamma table detected\n");
 	GLOBAL.numModes = GLOBAL.numBaseModes;
 	if (GLOBAL.hostResizeAvail) {
 		lprintf("QEMU host-resize channel detected\n");

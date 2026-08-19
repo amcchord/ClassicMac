@@ -7,7 +7,7 @@ ROOT_DIR := ../..
 RINCLUDES ?= $(ROOT_DIR)/vendor/Retro68-build/toolchain/universal/RIncludes
 RETRO68_RINCLUDES ?= $(RINCLUDES)/../../RIncludes
 
-CFLAGS := -std=gnu99 -Os -fPIC -Wall -Wextra -Werror \
+CFLAGS := -std=gnu99 -O2 -fPIC -Wall -Wextra -Werror \
           -Wno-multichar -ffunction-sections -fdata-sections \
           -Isrc -Iinclude -I../protocol
 LDFLAGS := -shared -Wl,-e,GXMetalCFMInitialize \

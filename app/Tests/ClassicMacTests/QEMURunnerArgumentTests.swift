@@ -43,6 +43,7 @@ final class QEMURunnerArgumentTests: XCTestCase {
         XCTAssertTrue(optionValues("-global", in: thousands).contains("VGA.hardware-cursor=on"))
         XCTAssertTrue(optionValues("-global", in: thousands).contains("VGA.untracked-vram=on"))
         XCTAssertTrue(optionValues("-global", in: thousands).contains("VGA.gxmetal=on"))
+        XCTAssertEqual(optionValues("-accel", in: thousands), ["tcg,tb-size=512"])
         XCTAssertEqual(optionValues("-cpu", in: thousands), ["7400"])
         XCTAssertEqual(optionValues("-g", in: thousands), ["1024x768x15"])
         XCTAssertEqual(optionValues("-g", in: millions), ["1024x768x32"])

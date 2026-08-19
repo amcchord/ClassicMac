@@ -25,7 +25,9 @@
  * table removes that artificial limit without increasing guest VRAM usage. */
 #define GXMETAL_METAL_MAX_RESOURCES 4096u
 #define GXMETAL_METAL_RESOURCE_HASH_SIZE 8192u
-#define GXMETAL_METAL_STACK_VERTICES 16u
+#define GXMETAL_METAL_STACK_VERTICES 256u
+#define GXMETAL_METAL_GL_SRC_FACTORS 9u
+#define GXMETAL_METAL_GL_DST_FACTORS 8u
 
 _Static_assert((GXMETAL_METAL_RESOURCE_HASH_SIZE &
                 (GXMETAL_METAL_RESOURCE_HASH_SIZE - 1)) == 0,
@@ -93,6 +95,16 @@ typedef struct GXMetalMetalAlphaTest {
 _Static_assert(sizeof(GXMetalMetalAlphaTest) == 8,
                "Metal alpha-test constants must match the shader layout");
 
+typedef struct GXMetalMetalMultiTexture {
+    uint32_t enabled;
+    uint32_t operation;
+    float factor;
+    uint32_t padding;
+} GXMetalMetalMultiTexture;
+
+_Static_assert(sizeof(GXMetalMetalMultiTexture) == 16,
+               "Metal multitexture constants must match the shader layout");
+
 typedef struct GXMetalMetalPresent {
     uint32_t framebuffer_offset;
     uint32_t row_bytes;
@@ -131,11 +143,20 @@ typedef struct GXMetalMetalContext {
     uint32_t z_function;
     uint32_t z_write;
     uint32_t blend;
+    uint32_t gl_blend_src;
+    uint32_t gl_blend_dst;
     uint32_t texture_id;
+    uint32_t secondary_texture_id;
     uint32_t texture_filter;
     uint32_t texture_op;
     uint32_t texture_wrap_u;
     uint32_t texture_wrap_v;
+    uint32_t secondary_texture_enable;
+    uint32_t secondary_texture_filter;
+    uint32_t secondary_texture_wrap_u;
+    uint32_t secondary_texture_wrap_v;
+    uint32_t ati_private;
+    GXMetalMetalMultiTexture multi_texture;
     uint32_t clip_left;
     uint32_t clip_top;
     uint32_t clip_right;
@@ -170,22 +191,44 @@ struct GXMetalMetalRenderer {
     uint64_t profile_draw_count;
     uint64_t profile_draw_vertex_count;
     uint64_t profile_single_triangle_count;
+    uint64_t profile_triangle_fan_count;
+    uint64_t profile_host_ati_uv_count;
+    uint64_t profile_draw_ns;
+    uint64_t profile_clear_count;
+    uint64_t profile_depth_clear_count;
+    float profile_last_depth_clear;
     uint64_t profile_resource_lookup_count;
     uint64_t profile_resource_lookup_probes;
     id<MTLDevice> device;
     id<MTLCommandQueue> command_queue;
+    id<MTLFunction> vertex_function;
+    id<MTLFunction> fragment_function;
+    id<MTLFunction> texture_vertex_function;
+    id<MTLFunction> texture_fragment_function;
     id<MTLRenderPipelineState> pipelines[3];
     id<MTLRenderPipelineState> texture_pipelines[3];
+    id<MTLRenderPipelineState>
+        gl_pipelines[GXMETAL_METAL_GL_SRC_FACTORS]
+                    [GXMETAL_METAL_GL_DST_FACTORS];
+    id<MTLRenderPipelineState>
+        gl_texture_pipelines[GXMETAL_METAL_GL_SRC_FACTORS]
+                            [GXMETAL_METAL_GL_DST_FACTORS];
     id<MTLRenderPipelineState> clear_pipeline;
     id<MTLRenderPipelineState> depth_clear_pipeline;
     id<MTLComputePipelineState> present_pipeline;
     id<MTLBuffer> framebuffer_buffer;
+    uint32_t gamma_table[256];
+    id<MTLBuffer> gamma_buffer;
     id<MTLDepthStencilState> depth_states[9][2];
     id<MTLSamplerState> samplers[3][4];
     GXMetalMetalContext contexts[GXMETAL_METAL_MAX_CONTEXTS];
     GXMetalMetalResource resources[GXMETAL_METAL_MAX_RESOURCES];
     uint32_t resource_hash[GXMETAL_METAL_RESOURCE_HASH_SIZE];
 };
+
+static id<MTLRenderPipelineState> gxmetal_metal_select_pipeline(
+    GXMetalMetalRenderer *renderer, const GXMetalMetalContext *context,
+    int textured);
 
 static uint64_t gxmetal_metal_now_ns(void)
 {
@@ -217,6 +260,13 @@ static void gxmetal_metal_profile_draw(GXMetalMetalRenderer *renderer,
     if (primitive == GXMETAL_PRIMITIVE_TRIANGLE && count == 3) {
         renderer->profile_single_triangle_count++;
     }
+    if (primitive == GXMETAL_PRIMITIVE_TRIANGLE_FAN) {
+        renderer->profile_triangle_fan_count++;
+    }
+    if ((gxmetal_load_le32(packet->payload + GXMETAL_DRAW_FLAGS_OFFSET) &
+         GXMETAL_DRAW_HOST_ATI_UV) != 0) {
+        renderer->profile_host_ati_uv_count++;
+    }
 }
 
 static void gxmetal_metal_profile_present(GXMetalMetalRenderer *renderer,
@@ -231,6 +281,9 @@ static void gxmetal_metal_profile_present(GXMetalMetalRenderer *renderer,
     double draws_per_frame;
     double vertices_per_draw;
     double single_triangle_percent;
+    double triangle_fan_percent;
+    double host_ati_uv_percent;
+    double draw_ms_per_frame;
     double probes_per_lookup;
 
     if (!renderer->profile_enabled) {
@@ -273,20 +326,40 @@ static void gxmetal_metal_profile_present(GXMetalMetalRenderer *renderer,
     single_triangle_percent = renderer->profile_draw_count != 0 ?
         (double)renderer->profile_single_triangle_count * 100.0 /
             (double)renderer->profile_draw_count : 0.0;
+    triangle_fan_percent = renderer->profile_draw_count != 0 ?
+        (double)renderer->profile_triangle_fan_count * 100.0 /
+            (double)renderer->profile_draw_count : 0.0;
+    host_ati_uv_percent = renderer->profile_draw_count != 0 ?
+        (double)renderer->profile_host_ati_uv_count * 100.0 /
+            (double)renderer->profile_draw_count : 0.0;
+    draw_ms_per_frame = renderer->profile_present_count != 0 ?
+        (double)renderer->profile_draw_ns /
+            (double)renderer->profile_present_count / 1000000.0 : 0.0;
     probes_per_lookup = renderer->profile_resource_lookup_count != 0 ?
         (double)renderer->profile_resource_lookup_probes /
             (double)renderer->profile_resource_lookup_count : 0.0;
     fprintf(stderr,
             "GXMetal profile: fps=%.2f frames=%llu direct=%llu "
             "fallback=%llu present_ms=%.3f draws_per_frame=%.2f "
-            "vertices_per_draw=%.2f single_triangle_pct=%.2f "
-            "resource_probes_per_lookup=%.2f\n",
+            "draw_ms_per_frame=%.3f vertices_per_draw=%.2f "
+            "single_triangle_pct=%.2f triangle_fan_pct=%.2f "
+            "host_ati_uv_pct=%.2f "
+            "clears_per_frame=%.2f depth_clears_per_frame=%.2f "
+            "depth_clear=%.6f resource_probes_per_lookup=%.2f\n",
             frames_per_second,
             (unsigned long long)renderer->profile_present_count,
             (unsigned long long)renderer->profile_direct_present_count,
             (unsigned long long)renderer->profile_fallback_present_count,
-            present_ms, draws_per_frame, vertices_per_draw,
-            single_triangle_percent, probes_per_lookup);
+            present_ms, draws_per_frame, draw_ms_per_frame,
+            vertices_per_draw, single_triangle_percent,
+            triangle_fan_percent, host_ati_uv_percent,
+            renderer->profile_present_count != 0 ?
+                (double)renderer->profile_clear_count /
+                    (double)renderer->profile_present_count : 0.0,
+            renderer->profile_present_count != 0 ?
+                (double)renderer->profile_depth_clear_count /
+                    (double)renderer->profile_present_count : 0.0,
+            renderer->profile_last_depth_clear, probes_per_lookup);
     renderer->profile_window_start_ns = now_ns;
     renderer->profile_present_count = 0;
     renderer->profile_direct_present_count = 0;
@@ -295,6 +368,11 @@ static void gxmetal_metal_profile_present(GXMetalMetalRenderer *renderer,
     renderer->profile_draw_count = 0;
     renderer->profile_draw_vertex_count = 0;
     renderer->profile_single_triangle_count = 0;
+    renderer->profile_triangle_fan_count = 0;
+    renderer->profile_host_ati_uv_count = 0;
+    renderer->profile_draw_ns = 0;
+    renderer->profile_clear_count = 0;
+    renderer->profile_depth_clear_count = 0;
     renderer->profile_resource_lookup_count = 0;
     renderer->profile_resource_lookup_probes = 0;
 }
@@ -352,8 +430,9 @@ static NSString *const kGXMetalShaderSource = @
     "                            uint index [[vertex_id]]) {\n"
     "  GXVertex v = vertices[index];\n"
     "  GXOut out;\n"
+    "  float depth = min(v.z, 0.99999994);\n"
     "  out.position = float4(v.x / viewport.width * 2.0 - 1.0, "
-    "                        1.0 - v.y / viewport.height * 2.0, v.z, 1.0);\n"
+    "                        1.0 - v.y / viewport.height * 2.0, depth, 1.0);\n"
     "  out.color = float4(v.r, v.g, v.b, v.a);\n"
     "  out.invW = v.invW;\n"
     "  return out;\n"
@@ -377,6 +456,7 @@ static NSString *const kGXMetalTextureShaderSource = @
     "};\n"
     "struct GXTextureOut {\n"
     "  float4 position [[position]]; float4 color; float2 uv;\n"
+    "  float2 secondaryUV;\n"
     "  float3 kd; float3 ks; float invW [[center_no_perspective]];\n"
     "};\n"
     "vertex GXTextureOut gxmetal_texture_vertex(\n"
@@ -385,17 +465,21 @@ static NSString *const kGXMetalTextureShaderSource = @
     "    uint index [[vertex_id]]) {\n"
     "  GXTextureVertex v = vertices[index];\n"
     "  float safeInvW = max(v.invW, 0.000001);\n"
+    "  float safeSecondaryQ = max(v.ks_b, 0.000001);\n"
     "  float clipW = 1.0 / safeInvW;\n"
     "  float ndcX = v.x / viewport.width * 2.0 - 1.0;\n"
     "  float ndcY = 1.0 - v.y / viewport.height * 2.0;\n"
     "  GXTextureOut out;\n"
+    "  float depth = min(v.z, 0.99999994);\n"
     "  out.position = float4(ndcX * clipW, ndcY * clipW,\n"
-    "                        v.z * clipW, clipW);\n"
+    "                        depth * clipW, clipW);\n"
     "  out.color = float4(v.r, v.g, v.b, v.a);\n"
     /* RAVE texture coordinates use the lower edge as V=0, whereas Metal
      * normalized texture coordinates use the upper edge.  Flip V before
      * perspective interpolation while preserving the u/w, v/w wire form. */
     "  out.uv = float2(v.uOverW, v.invW - v.vOverW) / safeInvW;\n"
+    "  out.secondaryUV = float2(v.ks_r, v.ks_b - v.ks_g) /\n"
+    "                    safeSecondaryQ;\n"
     "  out.kd = float3(v.kd_r, v.kd_g, v.kd_b);\n"
     "  out.ks = float3(v.ks_r, v.ks_g, v.ks_b);\n"
     "  out.invW = v.invW;\n"
@@ -404,10 +488,13 @@ static NSString *const kGXMetalTextureShaderSource = @
     "fragment float4 gxmetal_texture_fragment(\n"
     "    GXTextureOut in [[stage_in]],\n"
     "    texture2d<float> image [[texture(0)]],\n"
+    "    texture2d<float> secondaryImage [[texture(1)]],\n"
     "    sampler imageSampler [[sampler(0)]],\n"
+    "    sampler secondarySampler [[sampler(1)]],\n"
     "    constant uint &operation [[buffer(0)]],\n"
     "    constant GXFog &fog [[buffer(1)]],\n"
-    "    constant GXAlphaTest &alphaTest [[buffer(2)]]) {\n"
+    "    constant GXAlphaTest &alphaTest [[buffer(2)]],\n"
+    "    constant uint4 &multiTextureBits [[buffer(3)]]) {\n"
     "  float4 texel = image.sample(imageSampler, in.uv);\n"
     "  float4 result = texel;\n"
     "  if ((operation & 4u) != 0u) {\n"
@@ -418,6 +505,22 @@ static NSString *const kGXMetalTextureShaderSource = @
     "  }\n"
     "  if ((operation & 1u) != 0u) result.rgb *= in.kd;\n"
     "  if ((operation & 2u) != 0u) result.rgb += in.ks;\n"
+    "  if (multiTextureBits.x != 0u) {\n"
+    "    float4 secondary = secondaryImage.sample(secondarySampler,\n"
+    "                                             in.secondaryUV);\n"
+    "    uint secondaryOperation = multiTextureBits.y;\n"
+    "    float secondaryFactor = as_type<float>(multiTextureBits.z);\n"
+    "    if (secondaryOperation == 0u) {\n"
+    "      result += secondary;\n"
+    "    } else if (secondaryOperation == 1u) {\n"
+    "      result *= secondary;\n"
+    "    } else if (secondaryOperation == 2u) {\n"
+    "      result = mix(result, secondary, secondary.a);\n"
+    "    } else {\n"
+    "      result = mix(result, secondary,\n"
+    "                   clamp(secondaryFactor, 0.0, 1.0));\n"
+    "    }\n"
+    "  }\n"
     "  result = clamp(result, 0.0, 1.0);\n"
     "  if (!gxmetal_alpha_visible(result.a, alphaTest)) discard_fragment();\n"
     "  float fogDepth = gxmetal_fog_depth(in.position.z, in.invW, fog);\n"
@@ -433,12 +536,16 @@ static NSString *const kGXMetalPresentShaderSource = @
     "    texture2d<float, access::read> image [[texture(0)]],\n"
     "    device uchar *framebuffer [[buffer(0)]],\n"
     "    constant GXPresent &present [[buffer(1)]],\n"
+    "    constant uint *gammaTable [[buffer(2)]],\n"
     "    uint2 position [[thread_position_in_grid]]) {\n"
     "  if (position.x >= present.width || position.y >= present.height) return;\n"
     "  uint x = present.left + position.x;\n"
     "  uint y = present.top + position.y;\n"
     "  float4 color = clamp(image.read(uint2(x, y)), 0.0, 1.0);\n"
     "  uchar4 rgba = uchar4(color * 255.0 + 0.5);\n"
+    "  rgba.r = uchar((gammaTable[rgba.r] >> 16) & 255u);\n"
+    "  rgba.g = uchar((gammaTable[rgba.g] >> 8) & 255u);\n"
+    "  rgba.b = uchar(gammaTable[rgba.b] & 255u);\n"
     "  uint bytesPerPixel = present.pixelFormat == 1u ? 2u : 4u;\n"
     "  uint offset = present.framebufferOffset + y * present.rowBytes +\n"
     "                x * bytesPerPixel;\n"
@@ -475,6 +582,13 @@ static uint32_t gxmetal_metal_bytes_per_pixel(uint32_t format)
     default:
         return 0;
     }
+}
+
+static int gxmetal_metal_texture_format_is_opaque(uint32_t format)
+{
+    return format == GXMETAL_PIXEL_RGB555 ||
+           format == GXMETAL_PIXEL_RGB565 ||
+           format == GXMETAL_PIXEL_RGB8888;
 }
 
 static GXMetalMetalContext *gxmetal_metal_find_context(
@@ -782,6 +896,12 @@ static uint32_t gxmetal_metal_context_create(
         GXMETAL_Z_LT : GXMETAL_Z_NONE;
     context->z_write = 1;
     context->blend = GXMETAL_BLEND_INTERPOLATE;
+    context->gl_blend_src = GXMETAL_GL_SRC_ALPHA;
+    context->gl_blend_dst = GXMETAL_GL_ONE_MINUS_SRC_ALPHA;
+    context->secondary_texture_enable = 1;
+    context->secondary_texture_filter = GXMETAL_TEXTURE_FILTER_FAST;
+    context->multi_texture.operation = GXMETAL_MULTI_TEXTURE_MODULATE;
+    context->multi_texture.factor = 0.5f;
     context->fog.color[3] = 1.0f;
     context->fog.end = 1.0f;
     context->fog.max_depth = 1.0f;
@@ -1002,6 +1122,10 @@ static uint32_t gxmetal_metal_resource_destroy(
             renderer->contexts[i].texture_id == resource->id) {
             renderer->contexts[i].texture_id = 0;
         }
+        if (renderer->contexts[i].active &&
+            renderer->contexts[i].secondary_texture_id == resource->id) {
+            renderer->contexts[i].secondary_texture_id = 0;
+        }
     }
     gxmetal_metal_remove_resource(renderer, resource);
     [resource->texture release];
@@ -1082,6 +1206,13 @@ static uint32_t gxmetal_metal_clear(GXMetalMetalRenderer *renderer,
         packet->payload + GXMETAL_CLEAR_COLOR_A_OFFSET);
     depth = gxmetal_metal_load_float(
         packet->payload + GXMETAL_CLEAR_DEPTH_OFFSET);
+    if (renderer->profile_enabled) {
+        renderer->profile_clear_count++;
+        if (flags & GXMETAL_CLEAR_DEPTH) {
+            renderer->profile_depth_clear_count++;
+            renderer->profile_last_depth_clear = depth;
+        }
+    }
     color = MTLClearColorMake(components[0], components[1], components[2],
                               components[3]);
     if (left == 0 && top == 0 && right == (int32_t)context->width &&
@@ -1173,6 +1304,7 @@ static uint32_t gxmetal_metal_draw(GXMetalMetalRenderer *renderer,
     GXMetalMetalVertex *vertices;
     GXMetalMetalVertex *draw_vertices;
     GXMetalMetalViewport viewport;
+    id<MTLRenderPipelineState> pipeline;
     MTLPrimitiveType metal_primitive;
     uint32_t primitive = gxmetal_load_le32(
         packet->payload + GXMETAL_DRAW_PRIMITIVE_OFFSET);
@@ -1256,9 +1388,17 @@ static uint32_t gxmetal_metal_draw(GXMetalMetalRenderer *renderer,
     }
     viewport.width = (float)context->width;
     viewport.height = (float)context->height;
-    [context->encoder setRenderPipelineState:
-        renderer->pipelines[context->blend <= GXMETAL_BLEND_INTERPOLATE ?
-                            context->blend : GXMETAL_BLEND_INTERPOLATE]];
+    pipeline = gxmetal_metal_select_pipeline(renderer, context, 0);
+    if (pipeline == nil) {
+        if (draw_vertices != vertices) {
+            free(draw_vertices);
+        }
+        if (vertices != stack_vertices) {
+            free(vertices);
+        }
+        return GXMETAL_ERROR_RENDERER;
+    }
+    [context->encoder setRenderPipelineState:pipeline];
     [context->encoder setDepthStencilState:
         renderer->depth_states[context->z_function <= GXMETAL_Z_FALSE ?
                                context->z_function : GXMETAL_Z_NONE]
@@ -1284,7 +1424,7 @@ static uint32_t gxmetal_metal_draw(GXMetalMetalRenderer *renderer,
 
 static int gxmetal_metal_read_texture_vertex(
     const GXMetalMetalContext *context, const uint8_t *source,
-    GXMetalMetalTextureVertex *vertex)
+    GXMetalMetalTextureVertex *vertex, int host_ati_uv_transform)
 {
     uint32_t texture_op = context->texture_op;
 
@@ -1303,6 +1443,10 @@ static int gxmetal_metal_read_texture_vertex(
         source + GXMETAL_VERTEX_U_OVER_W_OFFSET);
     vertex->v_over_w = gxmetal_metal_load_float(
         source + GXMETAL_VERTEX_V_OVER_W_OFFSET);
+    if (host_ati_uv_transform &&
+        !(vertex->a >= 0.0f && vertex->a <= 1.0f)) {
+        vertex->a = 1.0f;
+    }
 
     if (!isfinite(vertex->x) || !isfinite(vertex->y) ||
         !isfinite(vertex->z) || !isfinite(vertex->inv_w) ||
@@ -1342,7 +1486,8 @@ static int gxmetal_metal_read_texture_vertex(
             return 0;
         }
     }
-    if (texture_op & GXMETAL_TEXTURE_HIGHLIGHT) {
+    if ((texture_op & GXMETAL_TEXTURE_HIGHLIGHT) ||
+        context->secondary_texture_id != 0) {
         vertex->ks_r = gxmetal_metal_load_float(
             source + GXMETAL_VERTEX_KS_R_OFFSET);
         vertex->ks_g = gxmetal_metal_load_float(
@@ -1364,13 +1509,20 @@ static uint32_t gxmetal_metal_draw_textured(
     const uint8_t *source = packet->payload + GXMETAL_DRAW_VERTICES_OFFSET;
     GXMetalMetalResource *resource = gxmetal_metal_find_resource(
         renderer, context->texture_id);
+    GXMetalMetalResource *secondary_resource =
+        context->secondary_texture_id != 0 ?
+            gxmetal_metal_find_resource(renderer,
+                                        context->secondary_texture_id) : NULL;
     GXMetalMetalTextureVertex stack_vertices[GXMETAL_METAL_STACK_VERTICES];
     GXMetalMetalTextureVertex *vertices;
     GXMetalMetalTextureVertex *draw_vertices;
     GXMetalMetalViewport viewport;
+    id<MTLRenderPipelineState> pipeline;
     MTLPrimitiveType metal_primitive;
     uint32_t primitive = gxmetal_load_le32(
         packet->payload + GXMETAL_DRAW_PRIMITIVE_OFFSET);
+    uint32_t draw_flags = gxmetal_load_le32(
+        packet->payload + GXMETAL_DRAW_FLAGS_OFFSET);
     uint32_t count = gxmetal_load_le32(
         packet->payload + GXMETAL_DRAW_VERTEX_COUNT_OFFSET);
     uint32_t draw_count = count;
@@ -1378,14 +1530,34 @@ static uint32_t gxmetal_metal_draw_textured(
         context->texture_filter : GXMETAL_TEXTURE_FILTER_FAST;
     uint32_t address_mode = context->texture_wrap_u |
                             (context->texture_wrap_v << 1);
+    uint32_t secondary_filter =
+        context->secondary_texture_filter <= GXMETAL_TEXTURE_FILTER_BEST ?
+            context->secondary_texture_filter : GXMETAL_TEXTURE_FILTER_FAST;
+    uint32_t secondary_address_mode = context->secondary_texture_wrap_u |
+                                      (context->secondary_texture_wrap_v << 1);
+    uint32_t texture_operation = context->texture_op;
+    GXMetalMetalMultiTexture multi_texture;
+    GXMetalMetalContext pipeline_context;
     uint32_t i;
+    int host_ati_uv_transform =
+        (draw_flags & GXMETAL_DRAW_HOST_ATI_UV) != 0;
+    int ati_texel_coordinates = 0;
 
-    if (resource == NULL) {
+    if (resource == NULL ||
+        (context->secondary_texture_id != 0 && secondary_resource == NULL)) {
         return GXMETAL_ERROR_BAD_RESOURCE;
+    }
+    if (host_ati_uv_transform &&
+        resource->pixel_format != GXMETAL_PIXEL_ATI_ARGB4444) {
+        return GXMETAL_ERROR_BAD_PACKET;
     }
     if (context->texture_op & GXMETAL_TEXTURE_SHRINK) {
         address_mode = 3;
     }
+    context->multi_texture.enabled =
+        secondary_resource != NULL &&
+        context->secondary_texture_id != context->texture_id &&
+        context->secondary_texture_enable != 0;
     vertices = stack_vertices;
     if (count > GXMETAL_METAL_STACK_VERTICES) {
         vertices = malloc((size_t)count * sizeof(*vertices));
@@ -1396,11 +1568,32 @@ static uint32_t gxmetal_metal_draw_textured(
     for (i = 0; i < count; i++) {
         if (!gxmetal_metal_read_texture_vertex(
                 context, source + i * GXMETAL_TEXTURE_VERTEX_BYTES,
-                &vertices[i])) {
+                &vertices[i], host_ati_uv_transform)) {
             if (vertices != stack_vertices) {
                 free(vertices);
             }
             return GXMETAL_ERROR_BAD_PACKET;
+        }
+    }
+    if (host_ati_uv_transform) {
+        for (i = 0; i < count; i++) {
+            float limit = vertices[i].inv_w * 2.0f;
+
+            if (vertices[i].u_over_w < -limit ||
+                vertices[i].u_over_w > limit ||
+                vertices[i].v_over_w < -limit ||
+                vertices[i].v_over_w > limit) {
+                ati_texel_coordinates = 1;
+                break;
+            }
+        }
+        for (i = 0; i < count; i++) {
+            if (ati_texel_coordinates) {
+                vertices[i].u_over_w /= (float)resource->width;
+                vertices[i].v_over_w /= (float)resource->height;
+            }
+            vertices[i].v_over_w =
+                vertices[i].inv_w + vertices[i].v_over_w;
         }
     }
     draw_vertices = vertices;
@@ -1460,10 +1653,31 @@ static uint32_t gxmetal_metal_draw_textured(
     }
     viewport.width = (float)context->width;
     viewport.height = (float)context->height;
-    [context->encoder setRenderPipelineState:
-        renderer->texture_pipelines[
-            context->blend <= GXMETAL_BLEND_INTERPOLATE ?
-            context->blend : GXMETAL_BLEND_INTERPOLATE]];
+    pipeline_context = *context;
+    multi_texture = context->multi_texture;
+    if (context->ati_private && multi_texture.enabled &&
+        multi_texture.operation == GXMETAL_MULTI_TEXTURE_BLEND_ALPHA &&
+        gxmetal_metal_texture_format_is_opaque(resource->pixel_format) &&
+        gxmetal_metal_texture_format_is_opaque(
+            secondary_resource->pixel_format)) {
+        /* OpenGLRendererATI collapses compatible GL_ONE/GL_ONE passes into
+         * one private two-texture draw and reports RAVE BlendAlpha as its
+         * operation.  Opaque RGB stages have no alpha to interpolate with;
+         * the native ATI path composes this case additively (Quake III's
+         * two-layer skies are the canonical example). */
+        multi_texture.operation = GXMETAL_MULTI_TEXTURE_ADD;
+    }
+    pipeline = gxmetal_metal_select_pipeline(renderer, &pipeline_context, 1);
+    if (pipeline == nil) {
+        if (draw_vertices != vertices) {
+            free(draw_vertices);
+        }
+        if (vertices != stack_vertices) {
+            free(vertices);
+        }
+        return GXMETAL_ERROR_RENDERER;
+    }
+    [context->encoder setRenderPipelineState:pipeline];
     [context->encoder setDepthStencilState:
         renderer->depth_states[context->z_function <= GXMETAL_Z_FALSE ?
                                context->z_function : GXMETAL_Z_NONE]
@@ -1473,14 +1687,22 @@ static uint32_t gxmetal_metal_draw_textured(
     [context->encoder setVertexBytes:&viewport length:sizeof(viewport)
         atIndex:1];
     [context->encoder setFragmentTexture:resource->texture atIndex:0];
+    [context->encoder setFragmentTexture:
+        secondary_resource != NULL ? secondary_resource->texture :
+                                     resource->texture
+        atIndex:1];
     [context->encoder setFragmentSamplerState:
         renderer->samplers[filter][address_mode] atIndex:0];
-    [context->encoder setFragmentBytes:&context->texture_op
-        length:sizeof(context->texture_op) atIndex:0];
+    [context->encoder setFragmentSamplerState:
+        renderer->samplers[secondary_filter][secondary_address_mode] atIndex:1];
+    [context->encoder setFragmentBytes:&texture_operation
+        length:sizeof(texture_operation) atIndex:0];
     [context->encoder setFragmentBytes:&context->fog
         length:sizeof(context->fog) atIndex:1];
     [context->encoder setFragmentBytes:&context->alpha_test
         length:sizeof(context->alpha_test) atIndex:2];
+    [context->encoder setFragmentBytes:&multi_texture
+        length:sizeof(multi_texture) atIndex:3];
     [context->encoder drawPrimitives:metal_primitive vertexStart:0
         vertexCount:draw_count];
     if (draw_vertices != vertices) {
@@ -1547,6 +1769,7 @@ static int gxmetal_metal_present_direct(GXMetalMetalRenderer *renderer,
     [encoder setTexture:context->texture atIndex:0];
     [encoder setBuffer:renderer->framebuffer_buffer offset:0 atIndex:0];
     [encoder setBytes:&present length:sizeof(present) atIndex:1];
+    [encoder setBuffer:renderer->gamma_buffer offset:0 atIndex:2];
     thread_width = renderer->present_pipeline.threadExecutionWidth;
     if (thread_width == 0) {
         thread_width = 1;
@@ -1684,6 +1907,9 @@ static uint32_t gxmetal_metal_present(GXMetalMetalRenderer *renderer,
             uint8_t g = gxmetal_metal_to_u8(source[x * 4 + 1]);
             uint8_t b = gxmetal_metal_to_u8(source[x * 4 + 2]);
             uint8_t a = gxmetal_metal_to_u8(source[x * 4 + 3]);
+            r = (uint8_t)(renderer->gamma_table[r] >> 16);
+            g = (uint8_t)(renderer->gamma_table[g] >> 8);
+            b = (uint8_t)renderer->gamma_table[b];
             if (context->pixel_format == GXMETAL_PIXEL_RGB555) {
                 uint16_t value = (uint16_t)(((uint16_t)(r >> 3) << 10) |
                                             ((uint16_t)(g >> 3) << 5) |
@@ -1757,6 +1983,149 @@ static id<MTLRenderPipelineState> gxmetal_metal_make_pipeline(
     return pipeline;
 }
 
+static int gxmetal_metal_gl_source_index(uint32_t factor)
+{
+    switch (factor) {
+    case GXMETAL_GL_ZERO:                       return 0;
+    case GXMETAL_GL_ONE:                        return 1;
+    case GXMETAL_GL_DST_COLOR:                  return 2;
+    case GXMETAL_GL_ONE_MINUS_DST_COLOR:        return 3;
+    case GXMETAL_GL_SRC_ALPHA:                  return 4;
+    case GXMETAL_GL_ONE_MINUS_SRC_ALPHA:        return 5;
+    case GXMETAL_GL_DST_ALPHA:                  return 6;
+    case GXMETAL_GL_ONE_MINUS_DST_ALPHA:        return 7;
+    case GXMETAL_GL_SRC_ALPHA_SATURATE:         return 8;
+    default:                                    return -1;
+    }
+}
+
+static int gxmetal_metal_gl_destination_index(uint32_t factor)
+{
+    switch (factor) {
+    case GXMETAL_GL_ZERO:                       return 0;
+    case GXMETAL_GL_ONE:                        return 1;
+    case GXMETAL_GL_SRC_COLOR:                  return 2;
+    case GXMETAL_GL_ONE_MINUS_SRC_COLOR:        return 3;
+    case GXMETAL_GL_SRC_ALPHA:                  return 4;
+    case GXMETAL_GL_ONE_MINUS_SRC_ALPHA:        return 5;
+    case GXMETAL_GL_DST_ALPHA:                  return 6;
+    case GXMETAL_GL_ONE_MINUS_DST_ALPHA:        return 7;
+    default:                                    return -1;
+    }
+}
+
+static MTLBlendFactor gxmetal_metal_gl_blend_factor(uint32_t factor)
+{
+    switch (factor) {
+    case GXMETAL_GL_ZERO:
+        return MTLBlendFactorZero;
+    case GXMETAL_GL_ONE:
+        return MTLBlendFactorOne;
+    case GXMETAL_GL_SRC_COLOR:
+        return MTLBlendFactorSourceColor;
+    case GXMETAL_GL_ONE_MINUS_SRC_COLOR:
+        return MTLBlendFactorOneMinusSourceColor;
+    case GXMETAL_GL_SRC_ALPHA:
+        return MTLBlendFactorSourceAlpha;
+    case GXMETAL_GL_ONE_MINUS_SRC_ALPHA:
+        return MTLBlendFactorOneMinusSourceAlpha;
+    case GXMETAL_GL_DST_ALPHA:
+        return MTLBlendFactorDestinationAlpha;
+    case GXMETAL_GL_ONE_MINUS_DST_ALPHA:
+        return MTLBlendFactorOneMinusDestinationAlpha;
+    case GXMETAL_GL_DST_COLOR:
+        return MTLBlendFactorDestinationColor;
+    case GXMETAL_GL_ONE_MINUS_DST_COLOR:
+        return MTLBlendFactorOneMinusDestinationColor;
+    case GXMETAL_GL_SRC_ALPHA_SATURATE:
+        return MTLBlendFactorSourceAlphaSaturated;
+    default:
+        return MTLBlendFactorZero;
+    }
+}
+
+static id<MTLRenderPipelineState> gxmetal_metal_make_opengl_pipeline(
+    GXMetalMetalRenderer *renderer, id<MTLFunction> vertex,
+    id<MTLFunction> fragment, uint32_t source_factor,
+    uint32_t destination_factor, NSError **error)
+{
+    MTLRenderPipelineDescriptor *descriptor =
+        [[MTLRenderPipelineDescriptor alloc] init];
+    MTLRenderPipelineColorAttachmentDescriptor *attachment =
+        descriptor.colorAttachments[0];
+    id<MTLRenderPipelineState> pipeline;
+
+    descriptor.vertexFunction = vertex;
+    descriptor.fragmentFunction = fragment;
+    attachment.pixelFormat = MTLPixelFormatRGBA8Unorm;
+    descriptor.depthAttachmentPixelFormat = MTLPixelFormatDepth32Float;
+    attachment.writeMask = MTLColorWriteMaskAll;
+    attachment.blendingEnabled = YES;
+    attachment.rgbBlendOperation = MTLBlendOperationAdd;
+    attachment.alphaBlendOperation = MTLBlendOperationAdd;
+    attachment.sourceRGBBlendFactor =
+        gxmetal_metal_gl_blend_factor(source_factor);
+    attachment.destinationRGBBlendFactor =
+        gxmetal_metal_gl_blend_factor(destination_factor);
+    attachment.sourceAlphaBlendFactor =
+        gxmetal_metal_gl_blend_factor(source_factor);
+    attachment.destinationAlphaBlendFactor =
+        gxmetal_metal_gl_blend_factor(destination_factor);
+    pipeline = [renderer->device
+        newRenderPipelineStateWithDescriptor:descriptor error:error];
+    [descriptor release];
+    return pipeline;
+}
+
+static id<MTLRenderPipelineState> gxmetal_metal_select_pipeline(
+    GXMetalMetalRenderer *renderer, const GXMetalMetalContext *context,
+    int textured)
+{
+    id<MTLRenderPipelineState> *slot;
+    id<MTLFunction> vertex;
+    id<MTLFunction> fragment;
+    NSError *error = nil;
+    int source_index;
+    int destination_index;
+
+    if (context->blend <= GXMETAL_BLEND_INTERPOLATE) {
+        return textured ? renderer->texture_pipelines[context->blend] :
+                          renderer->pipelines[context->blend];
+    }
+    if (context->blend != GXMETAL_BLEND_OPENGL) {
+        return nil;
+    }
+    source_index = gxmetal_metal_gl_source_index(context->gl_blend_src);
+    destination_index =
+        gxmetal_metal_gl_destination_index(context->gl_blend_dst);
+    if (source_index < 0 || destination_index < 0) {
+        fprintf(stderr,
+                "GXMetal: unsupported OpenGL blend factors 0x%x/0x%x\n",
+                context->gl_blend_src, context->gl_blend_dst);
+        return nil;
+    }
+    slot = textured ?
+        &renderer->gl_texture_pipelines[source_index][destination_index] :
+        &renderer->gl_pipelines[source_index][destination_index];
+    if (*slot != nil) {
+        return *slot;
+    }
+    vertex = textured ? renderer->texture_vertex_function :
+                        renderer->vertex_function;
+    fragment = textured ? renderer->texture_fragment_function :
+                          renderer->fragment_function;
+    *slot = gxmetal_metal_make_opengl_pipeline(
+        renderer, vertex, fragment, context->gl_blend_src,
+        context->gl_blend_dst, &error);
+    if (*slot == nil) {
+        fprintf(stderr,
+                "GXMetal: cannot create OpenGL blend pipeline 0x%x/0x%x: "
+                "%s\n", context->gl_blend_src, context->gl_blend_dst,
+                error.localizedDescription.UTF8String);
+    }
+    return *slot;
+}
+
 static int gxmetal_metal_make_depth_states(GXMetalMetalRenderer *renderer)
 {
     uint32_t function;
@@ -1789,12 +2158,18 @@ static uint32_t gxmetal_metal_set_state(GXMetalMetalContext *context,
         packet->payload + GXMETAL_STATE_TYPE_OFFSET);
     uint32_t value = gxmetal_load_le32(
         packet->payload + GXMETAL_STATE_VALUE_OFFSET);
+    uint32_t normalized_filter;
 
-    if (tag == GXMETAL_STATE_TEXTURE) {
+    if (tag == GXMETAL_STATE_TEXTURE ||
+        tag == GXMETAL_STATE_MULTI_TEXTURE) {
         if (type != GXMETAL_STATE_RESOURCE) {
             return GXMETAL_ERROR_BAD_PACKET;
         }
-        context->texture_id = value;
+        if (tag == GXMETAL_STATE_TEXTURE) {
+            context->texture_id = value;
+        } else {
+            context->secondary_texture_id = value;
+        }
         return GXMETAL_ERROR_NONE;
     }
     if (type == GXMETAL_STATE_FLOAT32) {
@@ -1832,6 +2207,9 @@ static uint32_t gxmetal_metal_set_state(GXMetalMetalContext *context,
         case GXMETAL_STATE_ALPHA_TEST_REFERENCE:
             context->alpha_test.reference = float_value;
             break;
+        case GXMETAL_STATE_MULTI_TEXTURE_FACTOR:
+            context->multi_texture.factor = float_value;
+            break;
         default:
             break;
         }
@@ -1859,11 +2237,43 @@ static uint32_t gxmetal_metal_set_state(GXMetalMetalContext *context,
         }
         context->blend = value;
         break;
+    case GXMETAL_STATE_GL_BLEND_SRC:
+        context->gl_blend_src = value;
+        break;
+    case GXMETAL_STATE_GL_BLEND_DST:
+        context->gl_blend_dst = value;
+        break;
     case GXMETAL_STATE_TEXTURE_FILTER:
-        if (value > GXMETAL_TEXTURE_FILTER_BEST) {
+        normalized_filter = value;
+        if (value == GXMETAL_GL_NEAREST ||
+            value == GXMETAL_GL_NEAREST_MIPMAP_NEAREST) {
+            normalized_filter = GXMETAL_TEXTURE_FILTER_FAST;
+        } else if (value == GXMETAL_GL_LINEAR ||
+                   value == GXMETAL_GL_LINEAR_MIPMAP_NEAREST) {
+            normalized_filter = GXMETAL_TEXTURE_FILTER_MID;
+        } else if (value == GXMETAL_GL_NEAREST_MIPMAP_LINEAR ||
+                   value == GXMETAL_GL_LINEAR_MIPMAP_LINEAR) {
+            normalized_filter = GXMETAL_TEXTURE_FILTER_BEST;
+        }
+        if (normalized_filter > GXMETAL_TEXTURE_FILTER_BEST) {
             return GXMETAL_ERROR_BAD_PACKET;
         }
-        context->texture_filter = value;
+        context->texture_filter = normalized_filter;
+        break;
+    case GXMETAL_STATE_GL_TEXTURE_MAG_FILTER:
+    case GXMETAL_STATE_GL_TEXTURE_MIN_FILTER:
+        if (value == GXMETAL_GL_NEAREST ||
+            value == GXMETAL_GL_NEAREST_MIPMAP_NEAREST) {
+            context->texture_filter = GXMETAL_TEXTURE_FILTER_FAST;
+        } else if (value == GXMETAL_GL_LINEAR ||
+                   value == GXMETAL_GL_LINEAR_MIPMAP_NEAREST) {
+            context->texture_filter = GXMETAL_TEXTURE_FILTER_MID;
+        } else if (value == GXMETAL_GL_NEAREST_MIPMAP_LINEAR ||
+                   value == GXMETAL_GL_LINEAR_MIPMAP_LINEAR) {
+            context->texture_filter = GXMETAL_TEXTURE_FILTER_BEST;
+        } else {
+            return GXMETAL_ERROR_BAD_PACKET;
+        }
         break;
     case GXMETAL_STATE_TEXTURE_OP:
         context->texture_op = value;
@@ -1900,6 +2310,52 @@ static uint32_t gxmetal_metal_set_state(GXMetalMetalContext *context,
             return GXMETAL_ERROR_BAD_PACKET;
         }
         context->texture_wrap_v = value;
+        break;
+    case GXMETAL_STATE_MULTI_TEXTURE_ENABLE:
+        context->secondary_texture_enable = value;
+        break;
+    case GXMETAL_STATE_MULTI_TEXTURE_OP:
+        if (value > GXMETAL_MULTI_TEXTURE_FIXED) {
+            return GXMETAL_ERROR_BAD_PACKET;
+        }
+        context->multi_texture.operation = value;
+        break;
+    case GXMETAL_STATE_ATI_PRIVATE:
+        if (value > 1) {
+            return GXMETAL_ERROR_BAD_PACKET;
+        }
+        context->ati_private = value;
+        break;
+    case GXMETAL_STATE_MULTI_TEXTURE_FILTER:
+    case GXMETAL_STATE_MULTI_TEXTURE_MAG_FILTER:
+    case GXMETAL_STATE_MULTI_TEXTURE_MIN_FILTER:
+        normalized_filter = value;
+        if (value == GXMETAL_GL_NEAREST ||
+            value == GXMETAL_GL_NEAREST_MIPMAP_NEAREST) {
+            normalized_filter = GXMETAL_TEXTURE_FILTER_FAST;
+        } else if (value == GXMETAL_GL_LINEAR ||
+                   value == GXMETAL_GL_LINEAR_MIPMAP_NEAREST) {
+            normalized_filter = GXMETAL_TEXTURE_FILTER_MID;
+        } else if (value == GXMETAL_GL_NEAREST_MIPMAP_LINEAR ||
+                   value == GXMETAL_GL_LINEAR_MIPMAP_LINEAR) {
+            normalized_filter = GXMETAL_TEXTURE_FILTER_BEST;
+        }
+        if (normalized_filter > GXMETAL_TEXTURE_FILTER_BEST) {
+            return GXMETAL_ERROR_BAD_PACKET;
+        }
+        context->secondary_texture_filter = normalized_filter;
+        break;
+    case GXMETAL_STATE_MULTI_TEXTURE_WRAP_U:
+        if (value > GXMETAL_TEXTURE_WRAP_CLAMP) {
+            return GXMETAL_ERROR_BAD_PACKET;
+        }
+        context->secondary_texture_wrap_u = value;
+        break;
+    case GXMETAL_STATE_MULTI_TEXTURE_WRAP_V:
+        if (value > GXMETAL_TEXTURE_WRAP_CLAMP) {
+            return GXMETAL_ERROR_BAD_PACKET;
+        }
+        context->secondary_texture_wrap_v = value;
         break;
     case GXMETAL_STATE_SCISSOR_LEFT:
         context->scissor_left = value < context->width ?
@@ -1962,6 +2418,13 @@ GXMetalMetalRenderer *gxmetal_metal_create(void *framebuffer,
         return NULL;
     }
     renderer->command_queue = [renderer->device newCommandQueue];
+    for (i = 0; i < 256; i++) {
+        renderer->gamma_table[i] = (i << 16) | (i << 8) | i;
+    }
+    renderer->gamma_buffer = [renderer->device
+        newBufferWithBytes:renderer->gamma_table
+        length:sizeof(renderer->gamma_table)
+        options:MTLResourceStorageModeShared];
     page_size = sysconf(_SC_PAGESIZE);
     if (page_size > 0 &&
         ((uintptr_t)framebuffer % (uintptr_t)page_size) == 0 &&
@@ -1990,6 +2453,10 @@ GXMetalMetalRenderer *gxmetal_metal_create(void *framebuffer,
     texture_fragment = [library
         newFunctionWithName:@"gxmetal_texture_fragment"];
     present_function = [library newFunctionWithName:@"gxmetal_present"];
+    renderer->vertex_function = vertex;
+    renderer->fragment_function = fragment;
+    renderer->texture_vertex_function = texture_vertex;
+    renderer->texture_fragment_function = texture_fragment;
     for (i = 0; i < 3; i++) {
         renderer->pipelines[i] = gxmetal_metal_make_pipeline(
             renderer, vertex, fragment, i, 1, &error);
@@ -2005,10 +2472,6 @@ GXMetalMetalRenderer *gxmetal_metal_create(void *framebuffer,
             newComputePipelineStateWithFunction:present_function
             error:&error];
     }
-    [vertex release];
-    [fragment release];
-    [texture_vertex release];
-    [texture_fragment release];
     [present_function release];
     [library release];
     if (renderer->pipelines[0] == nil || renderer->pipelines[1] == nil ||
@@ -2068,10 +2531,25 @@ void gxmetal_metal_destroy(GXMetalMetalRenderer *renderer)
             }
         }
     }
+    for (i = 0; i < GXMETAL_METAL_GL_SRC_FACTORS; i++) {
+        uint32_t destination_index;
+
+        for (destination_index = 0;
+             destination_index < GXMETAL_METAL_GL_DST_FACTORS;
+             destination_index++) {
+            [renderer->gl_pipelines[i][destination_index] release];
+            [renderer->gl_texture_pipelines[i][destination_index] release];
+        }
+    }
+    [renderer->vertex_function release];
+    [renderer->fragment_function release];
+    [renderer->texture_vertex_function release];
+    [renderer->texture_fragment_function release];
     [renderer->clear_pipeline release];
     [renderer->depth_clear_pipeline release];
     [renderer->present_pipeline release];
     [renderer->framebuffer_buffer release];
+    [renderer->gamma_buffer release];
     for (i = 0; i < 9; i++) {
         uint32_t write;
         for (write = 0; write < 2; write++) {
@@ -2087,7 +2565,8 @@ int gxmetal_metal_direct_present_available(
     const GXMetalMetalRenderer *renderer)
 {
     return renderer != NULL && renderer->present_pipeline != nil &&
-           renderer->framebuffer_buffer != nil;
+           renderer->framebuffer_buffer != nil &&
+           renderer->gamma_buffer != nil;
 }
 
 uint64_t gxmetal_metal_direct_present_count(
@@ -2100,6 +2579,34 @@ uint64_t gxmetal_metal_fallback_present_count(
     const GXMetalMetalRenderer *renderer)
 {
     return renderer != NULL ? renderer->fallback_present_count : 0;
+}
+
+void gxmetal_metal_set_gamma(GXMetalMetalRenderer *renderer,
+                             const uint8_t red[256],
+                             const uint8_t green[256],
+                             const uint8_t blue[256])
+{
+    uint32_t i;
+
+    if (renderer == NULL || red == NULL || green == NULL || blue == NULL) {
+        return;
+    }
+    for (i = 0; i < 256; i++) {
+        renderer->gamma_table[i] = ((uint32_t)red[i] << 16) |
+                                   ((uint32_t)green[i] << 8) |
+                                   blue[i];
+    }
+    if (renderer->gamma_buffer != nil) {
+        memcpy(renderer->gamma_buffer.contents, renderer->gamma_table,
+               sizeof(renderer->gamma_table));
+    }
+    if (renderer->profile_enabled) {
+        fprintf(stderr,
+                "GXMetal gamma: r64=%u r128=%u r255=%u "
+                "g64=%u g128=%u g255=%u b64=%u b128=%u b255=%u\n",
+                red[64], red[128], red[255], green[64], green[128],
+                green[255], blue[64], blue[128], blue[255]);
+    }
 }
 
 void gxmetal_metal_reset(GXMetalMetalRenderer *renderer)
@@ -2170,12 +2677,32 @@ uint32_t gxmetal_metal_dispatch(void *opaque,
             return gxmetal_metal_set_state(context, packet);
         case GXMETAL_OP_CLEAR:
             return gxmetal_metal_clear(renderer, context, packet);
-        case GXMETAL_OP_DRAW_GOURAUD:
+        case GXMETAL_OP_DRAW_GOURAUD: {
+            uint64_t start_ns = renderer->profile_enabled ?
+                gxmetal_metal_now_ns() : 0;
+            uint32_t result;
+
             gxmetal_metal_profile_draw(renderer, packet);
-            return gxmetal_metal_draw(renderer, context, packet);
-        case GXMETAL_OP_DRAW_TEXTURED:
+            result = gxmetal_metal_draw(renderer, context, packet);
+            if (start_ns != 0) {
+                renderer->profile_draw_ns +=
+                    gxmetal_metal_now_ns() - start_ns;
+            }
+            return result;
+        }
+        case GXMETAL_OP_DRAW_TEXTURED: {
+            uint64_t start_ns = renderer->profile_enabled ?
+                gxmetal_metal_now_ns() : 0;
+            uint32_t result;
+
             gxmetal_metal_profile_draw(renderer, packet);
-            return gxmetal_metal_draw_textured(renderer, context, packet);
+            result = gxmetal_metal_draw_textured(renderer, context, packet);
+            if (start_ns != 0) {
+                renderer->profile_draw_ns +=
+                    gxmetal_metal_now_ns() - start_ns;
+            }
+            return result;
+        }
         default:
             return GXMETAL_ERROR_BAD_OPCODE;
         }

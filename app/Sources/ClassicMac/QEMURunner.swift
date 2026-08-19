@@ -456,6 +456,11 @@ final class QEMUManager: ObservableObject {
         // original G3 identity advertised by the bundled OpenBIOS. The ADB
         // mouse is also a working captured fallback until the optional Virtio
         // tablet driver loads.
+        // Large PowerPC games generate far more translated code than QEMU's
+        // small default TCG cache can retain. Quake III reaches roughly
+        // 195 MB during a single arena; a 512 MB cache prevents translation
+        // churn across longer sessions and multiple maps.
+        args += ["-accel", "tcg,tb-size=512"]
         args += ["-M", "mac99,via=cuda,audiodev=snd0"]
         args += ["-cpu", config.useG4CPU ? "7400" : "g3"]
         args += ["-m", String(config.ramMB)]
