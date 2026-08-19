@@ -1,5 +1,25 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- ClassicMac's Shut Down command now uses the emulated ADB Power key and
+  confirms Mac OS's native shutdown dialog. HFS/HFS+ volumes are cleanly
+  unmounted, avoiding the recovery work that added roughly 5–6 seconds to the
+  next tested Mac OS 9 startup. A 15-second forced-off fallback remains for an
+  unresponsive guest.
+
+### Performance
+
+- PowerPC BAT updates now use QEMU's range-aware TLB invalidation instead of
+  flushing hundreds of pages one at a time. On a clean controlled Mac OS 9.2
+  image this reduced mean time to Finder from 28.82 to 26.78 seconds (-7.1%).
+- Added a disposable-disk boot benchmark and documented an optional
+  emulator-specific Extension Manager profile. The full profile saved another
+  0.67 seconds in the tested universal Mac OS 9.2 install, so it is not applied
+  automatically.
+
 ## 2.0.1 — 2026-08-19
 
 ### Added

@@ -41,14 +41,14 @@ struct ContentView: View {
             isPresented: stopConfirmationBinding,
             titleVisibility: .visible
         ) {
-            Button("Shut Down Now", role: .destructive) {
+            Button("Shut Down", role: .destructive) {
                 manager.confirmStop()
             }
             Button("Cancel", role: .cancel) {
                 manager.cancelStop()
             }
         } message: {
-            Text("This turns the machine off immediately and may lose unsaved work. When possible, shut down from inside Mac OS instead.")
+            Text("ClassicMac will ask Mac OS to shut down safely so its disk stays healthy and the next startup is faster. If Mac OS does not respond, the machine will turn off after 15 seconds and unsaved work may be lost.")
         }
     }
 

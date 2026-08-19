@@ -1,0 +1,32 @@
+diff --git a/target/ppc/mmu_helper.c b/target/ppc/mmu_helper.c
+index ac607054027..551923ccbc3 100644
+--- a/target/ppc/mmu_helper.c
++++ b/target/ppc/mmu_helper.c
+@@ -150,23 +150,16 @@ static inline void do_invalidate_BAT(CPUPPCState *env, target_ulong BATu,
+                                      target_ulong mask)
+ {
+     CPUState *cs = env_cpu(env);
+-    target_ulong base, end, page;
++    target_ulong base, end;
+ 
+     base = BATu & ~0x0001FFFF;
+     end = base + mask + 0x00020000;
+-    if (((end - base) >> TARGET_PAGE_BITS) > 1024) {
+-        /* Flushing 1024 4K pages is slower than a complete flush */
+-        qemu_log_mask(CPU_LOG_MMU, "Flush all BATs\n");
+-        tlb_flush(cs);
+-        qemu_log_mask(CPU_LOG_MMU, "Flush done\n");
+-        return;
+-    }
+     qemu_log_mask(CPU_LOG_MMU, "Flush BAT from " TARGET_FMT_lx
+                   " to " TARGET_FMT_lx " (" TARGET_FMT_lx ")\n",
+                   base, end, mask);
+-    for (page = base; page != end; page += TARGET_PAGE_SIZE) {
+-        tlb_flush_page(cs, page);
+-    }
++    tlb_flush_range_by_mmuidx(cs, base, end - base,
++                              (1u << NB_MMU_MODES) - 1,
++                              TARGET_LONG_BITS);
+     qemu_log_mask(CPU_LOG_MMU, "Flush done\n");
+ }
+ #endif

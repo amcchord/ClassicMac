@@ -42,6 +42,7 @@ final class QEMUManager: ObservableObject {
     private var processes: [UUID: Process] = [:]
     private var qmpMonitors: [UUID: QMPEventMonitor] = [:]
     private var previewTimers: [UUID: Timer] = [:]
+    private var forcedStopWorkItems: [UUID: DispatchWorkItem] = [:]
 
     func isRunning(_ id: UUID) -> Bool {
         runningIDs.contains(id)
@@ -133,6 +134,7 @@ final class QEMUManager: ObservableObject {
                     self.pendingStopID = nil
                 }
                 self.processes.removeValue(forKey: config.id)
+                self.forcedStopWorkItems.removeValue(forKey: config.id)?.cancel()
                 self.stopPreviewUpdates(for: config.id)
                 self.persistPreview(config)
                 if proc.terminationStatus != 0 && proc.terminationReason == .exit {
@@ -272,7 +274,54 @@ final class QEMUManager: ObservableObject {
 
     private func stop(_ id: UUID) {
         guard let process = processes[id] else { return }
-        process.terminate()
+        let socketPath = QEMUManager.monitorSocketURL(for: id).path
+        let wasPaused = pausedIDs.remove(id) != nil
+
+        // An immediate SIGTERM leaves a mounted HFS/HFS+ volume marked dirty.
+        // Mac OS checks that volume on its next startup, adding several seconds
+        // and risking data loss. The ADB power key opens the guest's native
+        // one-button Shut Down dialog; Return confirms it and lets Mac OS flush
+        // the disk before CUDA/PMU asks QEMU to exit.
+        DispatchQueue.global(qos: .userInitiated).async { [weak self, weak process] in
+            if wasPaused {
+                _ = HMPClient.send("cont", socketPath: socketPath)
+                usleep(100_000)
+            }
+            guard HMPClient.send("sendkey power", socketPath: socketPath) else {
+                Task { @MainActor in
+                    process?.terminate()
+                    self?.forcedStopWorkItems.removeValue(forKey: id)?.cancel()
+                }
+                return
+            }
+            usleep(750_000)
+            guard process?.isRunning == true,
+                  HMPClient.send("sendkey ret", socketPath: socketPath) else {
+                Task { @MainActor in
+                    if process?.isRunning == true {
+                        process?.terminate()
+                    }
+                    self?.forcedStopWorkItems.removeValue(forKey: id)?.cancel()
+                }
+                return
+            }
+        }
+
+        // A crashed guest or an application blocking shutdown must not leave
+        // the emulator stuck forever. This preserves the old forced-off
+        // behavior as a bounded fallback, after giving Mac OS ample time to
+        // finish an ordinary shutdown.
+        let fallback = DispatchWorkItem { [weak self, weak process] in
+            if process?.isRunning == true {
+                process?.terminate()
+            }
+            Task { @MainActor in
+                self?.forcedStopWorkItems.removeValue(forKey: id)
+            }
+        }
+        forcedStopWorkItems[id]?.cancel()
+        forcedStopWorkItems[id] = fallback
+        DispatchQueue.main.asyncAfter(deadline: .now() + 15, execute: fallback)
     }
 
     func pause(_ id: UUID) {

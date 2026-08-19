@@ -71,6 +71,9 @@ ClassicMac exists because of years of brilliant work by other engineers. The pat
   game is launched. A classic puzzle-piece M appears in the startup extension
   row when GXMetal's companion loads.
 - **Native machine control.** Pause / Resume, Restart, and Shut Down from the app, live screen previews in the library, and a "Match Display" button that sizes the Mac to your screen.
+- **Safe, faster shutdown cycles.** The app's Shut Down command presses the
+  virtual Mac's Power key and confirms Mac OS's own dialog, allowing HFS/HFS+
+  to unmount cleanly so the next boot does not pay the recovery penalty.
 - **Machine window shortcuts that always work.** Control-Option-T hides or restores the title bar for a clean borderless look, Control-Option-F toggles Full Screen, and Control-Option-R matches the Mac screen to the window again. All three keep working even while the emulator has grabbed the keyboard, and they also live in the **View** menu and the machine's Dock icon menu.
 - **Signed, notarized, stapled DMG** for distribution — recipients get a clean Gatekeeper experience even offline.
 

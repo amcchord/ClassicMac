@@ -68,6 +68,7 @@ PATCHED_FILES=(
   hw/nvram/mac_nvram.c
   accel/tcg/cputlb.c
   accel/tcg/tb-maint.c
+  target/ppc/mmu_helper.c
 )
 SCREAMER_DIR="$ROOT_DIR/screamer"
 PPCVID_DIR="$ROOT_DIR/ppcvid"
@@ -242,6 +243,12 @@ git -C "$QEMU_DIR" apply "$POWERMAC_DIR/classic-macos-8.patch" || die "Failed to
 # the small victim-TLB scan into hundreds of outlined helper calls.
 log "Installing TCG graphics-workload fast path"
 git -C "$QEMU_DIR" apply "$POWERMAC_DIR/tcg-graphics-fast-path.patch" || die "Failed to apply TCG graphics fast-path patch"
+# PowerPC BAT remaps cover contiguous guest-address ranges. Use QEMU's
+# range-aware TLB invalidation so a BAT update takes one lock and one bounded
+# scan instead of invalidating hundreds of pages independently. This keeps the
+# exact invalidation semantics while materially shortening Mac OS 9 startup.
+log "Installing PowerPC BAT range-invalidation fast path"
+git -C "$QEMU_DIR" apply "$POWERMAC_DIR/tcg-ppc-bat-range-flush.patch" || die "Failed to apply PowerPC BAT range-invalidation patch"
 # MacIO IDE/DBDMA completion timing: cached host I/O can otherwise complete
 # before classic Mac OS arms its synchronous wait, losing the wakeup and
 # freezing Mac OS 9.2.x Installer mid-copy. This also fixes the ordinary ATA
