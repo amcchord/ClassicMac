@@ -67,8 +67,27 @@ PATCHED_FILES=(
   include/hw/misc/macio/cuda.h
   hw/nvram/mac_nvram.c
   accel/tcg/cputlb.c
+  accel/tcg/cpu-exec.c
+  accel/tcg/icount-common.c
   accel/tcg/tb-maint.c
+  accel/tcg/tcg-accel-ops-rr.c
+  accel/tcg/tcg-accel-ops.c
+  accel/tcg/tcg-accel-ops.h
+  accel/tcg/tcg-runtime.h
+  accel/tcg/translate-all.c
+  hmp-commands.hx
+  hw/ppc/ppc.c
+  include/exec/icount.h
+  include/exec/translation-block.h
+  include/hw/ppc/ppc.h
+  include/monitor/hmp.h
+  include/system/cpu-timers.h
+  include/tcg/tcg-op-common.h
+  monitor/hmp-cmds.c
+  system/cpu-timers.c
   target/ppc/mmu_helper.c
+  target/ppc/translate.c
+  tcg/tcg-op.c
 )
 SCREAMER_DIR="$ROOT_DIR/screamer"
 PPCVID_DIR="$ROOT_DIR/ppcvid"
@@ -249,6 +268,17 @@ git -C "$QEMU_DIR" apply "$POWERMAC_DIR/tcg-graphics-fast-path.patch" || die "Fa
 # exact invalidation semantics while materially shortening Mac OS 9 startup.
 log "Installing PowerPC BAT range-invalidation fast path"
 git -C "$QEMU_DIR" apply "$POWERMAC_DIR/tcg-ppc-bat-range-flush.patch" || die "Failed to apply PowerPC BAT range-invalidation patch"
+# Mac OS 9 reads the PowerPC timebase and returns through indirect branches
+# unusually often during startup. The runtime patch accelerates those paths
+# and adds ClassicMac's accounted instruction-clock to real-time handoff. The
+# handoff preserves QEMU virtual time and the architectural 25 MHz timebase,
+# then removes icount translation flags before Finder applications can run.
+log "Installing Mac OS 9 PowerPC runtime fast paths"
+git -C "$QEMU_DIR" apply "$POWERMAC_DIR/os9-boot-runtime.patch" || die "Failed to apply Mac OS 9 runtime fast paths"
+# Expose the exact host-time handoff instant for repeatable cold-boot metrics,
+# and use the Power Mac's exact 40 ns timebase period instead of generic
+# 128-bit scaling in Mac OS 9's heavily polled timebase path.
+git -C "$QEMU_DIR" apply "$POWERMAC_DIR/os9-boot-handoff-metrics.patch" || die "Failed to apply Mac OS 9 boot handoff metrics"
 # MacIO IDE/DBDMA completion timing: cached host I/O can otherwise complete
 # before classic Mac OS arms its synchronous wait, losing the wakeup and
 # freezing Mac OS 9.2.x Installer mid-copy. This also fixes the ordinary ATA
@@ -330,6 +360,10 @@ cp "$GXMETAL_DIR/host/gxmetal_renderer.c" "$QEMU_DIR/hw/display/gxmetal_renderer
 cp "$GXMETAL_DIR/qemu/gxmetal_qemu.h" "$QEMU_DIR/hw/display/gxmetal_qemu.h"
 cp "$GXMETAL_DIR/qemu/gxmetal_qemu.c" "$QEMU_DIR/hw/display/gxmetal_qemu.c"
 git -C "$QEMU_DIR" apply "$GXMETAL_DIR/qemu-integration.patch" || die "Failed to apply GXMetal integration patch"
+# Recognize Finder's menu bar directly in guest VRAM so startup acceleration
+# ends automatically even in headless/VNC sessions and at arbitrary supported
+# resolutions. The app keeps a conservative HMP fallback for custom themes.
+git -C "$QEMU_DIR" apply "$POWERMAC_DIR/classicmac-boot-handoff-display.patch" || die "Failed to apply ClassicMac Finder handoff detector"
 if [ -f "$PPCVID_DIR/qemu_vga.ndrv" ]; then
   cp "$PPCVID_DIR/qemu_vga.ndrv" "$QEMU_DIR/pc-bios/qemu_vga.ndrv"
 else
@@ -362,8 +396,13 @@ else
       --disable-curses \
       --disable-guest-agent \
       --disable-debug-info \
-      --extra-cflags=-O2
+      --enable-lto \
+      --extra-cflags=-O3 \
+      --extra-cxxflags=-O3 \
+      --extra-objcflags=-O3
   )
+  "$BUILD_DIR/pyvenv/bin/meson" configure "$BUILD_DIR" \
+    -Doptimization=3 -Db_lto_mode=thin
 fi
 
 # ---------------------------------------------------------------------------
@@ -432,6 +471,12 @@ if "$QEMU_PPC_BIN" -device VGA,help 2>&1 | grep -q "untracked-vram"; then
   printf '    OK  VGA untracked direct scanout (ppc)\n'
 else
   die "VGA untracked-vram property missing from the ppc build"
+fi
+if "$QEMU_PPC_BIN" -device VGA,help 2>&1 | grep -q "classicmac-boot-handoff" && \
+   strings "$QEMU_PPC_BIN" | grep "classicmac-boot-complete" >/dev/null; then
+  printf '    OK  Mac OS 9 automatic Finder clock handoff (ppc)\n'
+else
+  die "Mac OS 9 automatic Finder clock handoff missing from the ppc build"
 fi
 if "$QEMU_PPC_BIN" -device VGA,help 2>&1 | grep -q "gxmetal"; then
   printf '    OK  GXMetal command transport (ppc)\n'

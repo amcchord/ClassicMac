@@ -1,0 +1,80 @@
+--- a/accel/tcg/icount-common.c
++++ b/accel/tcg/icount-common.c
+@@ -32,6 +32,7 @@
+ #include "qemu/main-loop.h"
+ #include "qemu/option.h"
+ #include "qemu/seqlock.h"
++#include "qemu/timer.h"
+ #include "system/replay.h"
+ #include "system/runstate.h"
+ #include "hw/core/cpu.h"
+@@ -54,6 +55,7 @@
+ /* Do not count executed instructions */
+ ICountMode use_icount = ICOUNT_DISABLED;
+ static bool runtime_disable_requested;
++static int64_t runtime_disable_host_ns = -1;
+ 
+ static void icount_enable_precise(void)
+ {
+@@ -556,6 +558,12 @@
+     icount_sleep = true;
+     icount_align_option = false;
+     use_icount = ICOUNT_DISABLED;
++    runtime_disable_host_ns = qemu_clock_get_ns(QEMU_CLOCK_REALTIME);
+     qemu_clock_notify(QEMU_CLOCK_VIRTUAL);
+     return true;
++}
++
++int64_t icount_runtime_disable_host_ns(void)
++{
++    return qatomic_read(&runtime_disable_host_ns);
+ }
+--- a/include/exec/icount.h
++++ b/include/exec/icount.h
+@@ -83,5 +83,6 @@
+ bool icount_request_runtime_disable(void);
+ bool icount_runtime_disable_requested(void);
+ bool icount_complete_runtime_disable(void);
++int64_t icount_runtime_disable_host_ns(void);
+ 
+ #endif /* EXEC_ICOUNT_H */
+--- a/monitor/hmp-cmds.c
++++ b/monitor/hmp-cmds.c
+@@ -32,6 +32,7 @@
+ #include "qobject/qdict.h"
+ #include "qemu/cutils.h"
+ #include "qemu/log.h"
++#include "qemu/timer.h"
+ #include "system/hw_accel.h"
+ #include "system/memory.h"
+ #include "system/system.h"
+@@ -105,6 +106,10 @@
+ #ifdef CONFIG_TCG
+     if (!icount_enabled()) {
+         monitor_printf(mon, "classicmac clock: real-time\n");
++        monitor_printf(mon, "classicmac handoff host ns: %" PRId64 "\n",
++                       icount_runtime_disable_host_ns());
++        monitor_printf(mon, "classicmac current host ns: %" PRId64 "\n",
++                       qemu_clock_get_ns(QEMU_CLOCK_REALTIME));
+     } else if (icount_request_runtime_disable()) {
+         monitor_printf(mon, "classicmac clock: handoff requested\n");
+     } else {
+--- a/hw/ppc/ppc.c
++++ b/hw/ppc/ppc.c
+@@ -501,6 +501,16 @@
+  */
+ static uint64_t ns_to_tb(uint32_t freq, int64_t clock)
+ {
++    /*
++     * Mac99's architectural timebase is exactly 25 MHz, so one tick is
++     * exactly 40 ns.  The generic muldiv64 path performs a 128-bit divide;
++     * Mac OS 9 reads TBU/TBL continuously while polling startup services,
++     * making that otherwise-correct generic conversion a measurable TCG
++     * bottleneck.  Preserve the same floor semantics with a native divide.
++     */
++    if (likely(freq == 25000000)) {
++        return clock / 40;
++    }
+     return muldiv64(clock, freq, NANOSECONDS_PER_SECOND);
+ }
+ 

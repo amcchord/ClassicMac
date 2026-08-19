@@ -49,6 +49,43 @@ final class QEMURunnerArgumentTests: XCTestCase {
         XCTAssertEqual(optionValues("-g", in: millions), ["1024x768x32"])
     }
 
+    func testPowerMacIDECompletionDelayOnlyProtectsInstallerBoots() {
+        let installer = QEMUManager.buildArguments(for: config())
+        let hardDisk = QEMUManager.buildArguments(
+            for: config(cdImagePath: nil, bootFromCD: false)
+        )
+
+        XCTAssertTrue(
+            optionValues("-global", in: installer)
+                .contains("macio-ide.dma-completion-delay-ns=1000000")
+        )
+        XCTAssertTrue(
+            optionValues("-global", in: hardDisk)
+                .contains("macio-ide.dma-completion-delay-ns=0")
+        )
+    }
+
+    func testPowerMacInstructionClockOnlyAcceleratesHardDiskStartup() {
+        let installer = QEMUManager.buildArguments(for: config())
+        let hardDisk = QEMUManager.buildArguments(
+            for: config(cdImagePath: nil, bootFromCD: false)
+        )
+
+        XCTAssertTrue(optionValues("-icount", in: installer).isEmpty)
+        XCTAssertEqual(
+            optionValues("-icount", in: hardDisk),
+            ["shift=4,sleep=off"]
+        )
+        XCTAssertFalse(
+            optionValues("-global", in: installer)
+                .contains("VGA.classicmac-boot-handoff=on")
+        )
+        XCTAssertTrue(
+            optionValues("-global", in: hardDisk)
+                .contains("VGA.classicmac-boot-handoff=on")
+        )
+    }
+
     func testPowerMacCanRetainG3ForMacOS85Compatibility() {
         let arguments = QEMUManager.buildArguments(for: config(useG4CPU: false))
 

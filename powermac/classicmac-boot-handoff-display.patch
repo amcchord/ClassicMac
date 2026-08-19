@@ -1,0 +1,242 @@
+--- a/hw/display/vga.c
++++ b/hw/display/vga.c
+@@ -38,6 +38,7 @@
+ #include "qemu/timer.h"
+ #include "hw/xen/xen.h"
+ #include "migration/vmstate.h"
++#include "exec/icount.h"
+ #include "trace.h"
+ 
+ //#define DEBUG_VGA_MEM
+@@ -1890,6 +1891,173 @@
+ #define GMODE_TEXT     0
+ #define GMODE_GRAPH    1
+ #define GMODE_BLANK 2
++
++static void vga_classicmac_boot_handoff(VGACommonState *s);
++
++static void vga_classicmac_boot_handoff_refresh(void *opaque)
++{
++    VGACommonState *s = opaque;
++
++    if (!s->classicmac_boot_handoff || !icount_enabled()) {
++        return;
++    }
++
++    /*
++     * A headless VNC server has no display-refresh consumer until a client
++     * connects.  Inspect only Finder's top 20 guest-framebuffer rows during
++     * the final startup window so recognition is independent of screendumps
++     * without converting a full 1920x1080 display on every check.
++     */
++    vga_classicmac_boot_handoff(s);
++    if (s->classicmac_boot_handoff && icount_enabled()) {
++        timer_mod(s->classicmac_boot_handoff_timer,
++                  qemu_clock_get_ms(QEMU_CLOCK_REALTIME) + 50);
++    }
++}
++
++void vga_classicmac_boot_handoff_start(VGACommonState *s)
++{
++    int64_t now;
++
++    if (!s->classicmac_boot_handoff || s->classicmac_boot_handoff_timer) {
++        return;
++    }
++
++    now = qemu_clock_get_ns(QEMU_CLOCK_REALTIME);
++    s->classicmac_boot_handoff_started_ns = now;
++    s->classicmac_boot_handoff_timer = timer_new_ms(
++        QEMU_CLOCK_REALTIME, vga_classicmac_boot_handoff_refresh, s);
++    timer_mod(s->classicmac_boot_handoff_timer,
++              now / SCALE_MS + 7 * 1000);
++}
++
++static void vga_classicmac_boot_handoff(VGACommonState *s)
++{
++    int width, height, rows, depth, bytes_per_pixel, x, y;
++    int dark = 0;
++    int bright = 0;
++    int total;
++    int dark_required;
++    int bright_required;
++    int64_t now;
++
++    if (!s->classicmac_boot_handoff || !icount_enabled()) {
++        return;
++    }
++
++    /*
++     * Firmware, the Happy Mac, and resolution transitions can briefly leave
++     * stale black/white scanout fragments that resemble menu-bar text.  The
++     * measured OS 9 Finder path cannot appear during its first seven real
++     * seconds, so do not inspect those transitional surfaces.  This is only a
++     * false-positive guard: the actual handoff still requires the Finder
++     * pixels below and is not tied to a fixed completion time.
++     */
++    now = qemu_clock_get_ns(QEMU_CLOCK_REALTIME);
++    if (s->classicmac_boot_handoff_started_ns <= 0 ||
++        now - s->classicmac_boot_handoff_started_ns <
++            7 * NANOSECONDS_PER_SECOND) {
++        return;
++    }
++
++    update_basic_params(s);
++    s->get_resolution(s, &width, &height);
++    depth = s->get_bpp(s);
++    if (width < 512 || height < 384 ||
++        (depth != 8 && depth != 15 && depth != 16 &&
++         depth != 24 && depth != 32)) {
++        return;
++    }
++
++    bytes_per_pixel = (depth + 7) / 8;
++
++    rows = MIN(20, height);
++    total = width * rows;
++    for (y = 0; y < rows; y++) {
++        uint32_t row_addr = s->params.start_addr * 4 +
++                            y * s->params.line_offset;
++
++        for (x = 0; x < width; x++) {
++            uint32_t addr = row_addr + x * bytes_per_pixel;
++            uint32_t pixel;
++            uint32_t red, green, blue;
++
++            switch (depth) {
++            case 8: {
++                uint32_t index = vga_read_byte(s, addr) * 3;
++
++                if (s->dac_8bit) {
++                    red = s->palette[index];
++                    green = s->palette[index + 1];
++                    blue = s->palette[index + 2];
++                } else {
++                    red = c6_to_8(s->palette[index]);
++                    green = c6_to_8(s->palette[index + 1]);
++                    blue = c6_to_8(s->palette[index + 2]);
++                }
++                break;
++            }
++            case 15:
++                pixel = s->big_endian_fb ? vga_read_word_be(s, addr) :
++                                           vga_read_word_le(s, addr);
++                red = (pixel >> 7) & 0xf8;
++                green = (pixel >> 2) & 0xf8;
++                blue = (pixel << 3) & 0xf8;
++                break;
++            case 16:
++                pixel = s->big_endian_fb ? vga_read_word_be(s, addr) :
++                                           vga_read_word_le(s, addr);
++                red = (pixel >> 8) & 0xf8;
++                green = (pixel >> 3) & 0xfc;
++                blue = (pixel << 3) & 0xf8;
++                break;
++            case 24:
++                if (s->big_endian_fb) {
++                    red = vga_read_byte(s, addr);
++                    green = vga_read_byte(s, addr + 1);
++                    blue = vga_read_byte(s, addr + 2);
++                } else {
++                    blue = vga_read_byte(s, addr);
++                    green = vga_read_byte(s, addr + 1);
++                    red = vga_read_byte(s, addr + 2);
++                }
++                break;
++            case 32:
++                if (s->big_endian_fb) {
++                    red = vga_read_byte(s, addr + 1);
++                    green = vga_read_byte(s, addr + 2);
++                    blue = vga_read_byte(s, addr + 3);
++                } else {
++                    blue = vga_read_byte(s, addr);
++                    green = vga_read_byte(s, addr + 1);
++                    red = vga_read_byte(s, addr + 2);
++                }
++                break;
++            default:
++                g_assert_not_reached();
++            }
++            if (MAX(red, MAX(green, blue)) < 50) {
++                dark++;
++            }
++            if (MIN(red, MIN(green, blue)) > 170) {
++                bright++;
++            }
++        }
++    }
++
++    /*
++     * A wider desktop adds blank menu-bar background, not more menu titles.
++     * Keep the dark-text proof bounded while requiring at least half of the
++     * sampled band to be the bright Finder bar at every resolution.
++     */
++    dark_required = MIN(800, MAX(200, total / 25));
++    bright_required = MAX(2000, total / 2);
++    if (dark >= dark_required && bright >= bright_required) {
++        /* One request is enough; reset/reboot creates a fresh VGA device. */
++        s->classicmac_boot_handoff = false;
++        icount_request_runtime_disable();
++    }
++}
+ 
+ static void vga_update_display(void *opaque)
+ {
+@@ -1924,6 +2092,9 @@
+         default:
+             vga_draw_blank(s, full_update);
+             break;
++        }
++        if (graphic_mode == GMODE_GRAPH) {
++            vga_classicmac_boot_handoff(s);
+         }
+     }
+ }
+--- a/hw/display/vga-pci.c
++++ b/hw/display/vga-pci.c
+@@ -519,6 +519,7 @@
+     }
+ 
+     s->con = graphic_console_init(DEVICE(dev), 0, s->hw_ops, s);
++    vga_classicmac_boot_handoff_start(s);
+ 
+     /* XXX: VGA_RAM_SIZE must be a power of two */
+     pci_register_bar(&d->dev, 0, PCI_BASE_ADDRESS_MEM_PREFETCH, &s->vram);
+@@ -626,6 +627,8 @@
+     DEFINE_PROP_BOOL("host-resize", PCIVGAState, host_resize, false),
+     DEFINE_PROP_BOOL("packed-lowbpp", PCIVGAState, vga.packed_lowbpp, false),
+     DEFINE_PROP_BOOL("untracked-vram", PCIVGAState, vga.untracked_vram, false),
++    DEFINE_PROP_BOOL("classicmac-boot-handoff", PCIVGAState,
++                     vga.classicmac_boot_handoff, false),
+     DEFINE_PROP_BOOL("hardware-cursor", PCIVGAState, hardware_cursor, false),
+     DEFINE_PROP_BOOL("gxmetal", PCIVGAState, gxmetal_enabled, false),
+     DEFINE_EDID_PROPERTIES(PCIVGAState, edid_info),
+--- a/hw/display/vga_int.h
++++ b/hw/display/vga_int.h
+@@ -26,6 +26,7 @@
+ #define HW_VGA_INT_H
+ 
+ #include "ui/console.h"
++#include "qemu/timer.h"
+ #include "system/ioport.h"
+ #include "system/memory.h"
+ 
+@@ -150,6 +151,9 @@
+      */
+     bool untracked_vram;
+     bool untracked_vram_active;
++    bool classicmac_boot_handoff;
++    int64_t classicmac_boot_handoff_started_ns;
++    QEMUTimer *classicmac_boot_handoff_timer;
+     bool dirty_log_enabled;
+     bool global_vmstate;
+     /* hardware mouse cursor support */
+@@ -168,6 +172,8 @@
+     uint8_t is_vbe_vmstate;
+ } VGACommonState;
+ 
++void vga_classicmac_boot_handoff_start(VGACommonState *s);
++
+ static inline int c6_to_8(int v)
+ {
+     int b;

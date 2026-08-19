@@ -27,9 +27,9 @@ resource 'BNDL' (128, purgeable) {
 };
 
 resource 'vers' (1) {
-    2, 0, release, 1, verUS,
-    "2.0.1",
-    "GXMetal Test 2.0.1"
+    2, 0, release, 2, verUS,
+    "2.0.2",
+    "GXMetal Test 2.0.2"
 };
 
 resource 'cfrg' (0) {

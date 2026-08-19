@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+import re
 import shutil
 import socket
 import subprocess
@@ -31,6 +32,45 @@ def receive_until_prompt(connection: socket.socket) -> bytes:
             raise RuntimeError("QEMU monitor closed unexpectedly")
         response.extend(chunk)
     return bytes(response)
+
+
+def hmp_command(connection: socket.socket, command: str) -> bytes:
+    connection.sendall(f"{command}\n".encode("utf-8"))
+    response = receive_until_prompt(connection)
+    if b"Error" in response:
+        raise RuntimeError(response.decode("utf-8", "replace"))
+    return response
+
+
+def classicmac_clock_status(response: bytes) -> str:
+    match = re.search(rb"classicmac clock: ([a-z -]+)", response)
+    if match is None:
+        return "unknown"
+    return match.group(1).decode("ascii")
+
+
+def classicmac_handoff_host_ns(response: bytes) -> int | None:
+    match = re.search(rb"classicmac handoff host ns: (-?\d+)", response)
+    if match is None:
+        return None
+    value = int(match.group(1))
+    return value if value >= 0 else None
+
+
+def classicmac_current_host_ns(response: bytes) -> int | None:
+    match = re.search(rb"classicmac current host ns: (-?\d+)", response)
+    if match is None:
+        return None
+    value = int(match.group(1))
+    return value if value >= 0 else None
+
+
+def timebase_from_registers(connection: socket.socket) -> int:
+    response = hmp_command(connection, "info registers")
+    match = re.search(rb"\bTB\s+\d+\s+(\d+)\s+DECR\b", response)
+    if match is None:
+        raise RuntimeError("PowerPC timebase is missing from info registers")
+    return int(match.group(1))
 
 
 def capture_frame(connection: socket.socket, path: Path) -> tuple[int, int, bytes]:
@@ -60,7 +100,10 @@ def finder_is_ready(width: int, rgb: bytes) -> bool:
             dark += 1
         if min(red, green, blue) > 170:
             bright += 1
-    return dark >= FINDER_DARK_PIXELS and bright >= FINDER_BRIGHT_PIXELS
+    total = width * band_height
+    dark_required = min(FINDER_DARK_PIXELS, max(200, total // 25))
+    bright_required = max(2_000, total // 2)
+    return dark >= dark_required and bright >= bright_required
 
 
 def welcome_is_visible(width: int, height: int, rgb: bytes) -> bool:
@@ -248,8 +291,25 @@ def main() -> int:
     )
     parser.add_argument("--timeout", type=float, default=60.0)
     parser.add_argument("--poll-interval", type=float, default=0.25)
+    parser.add_argument(
+        "--poll-start-delay",
+        type=float,
+        default=0.0,
+        help="let the guest run unobserved for this many seconds before framebuffer polling",
+    )
+    parser.add_argument(
+        "--pause-resume-seconds",
+        type=float,
+        default=0.0,
+        help="pause at Finder and verify the PowerPC timebase remains frozen",
+    )
     parser.add_argument("--shared-folder", type=Path)
     parser.add_argument("--icount")
+    parser.add_argument(
+        "--handoff-at-finder",
+        action="store_true",
+        help="restore real-time emulation through ClassicMac's QEMU handoff once Finder appears",
+    )
     parser.add_argument(
         "--save-state",
         type=Path,
@@ -290,8 +350,11 @@ def main() -> int:
         parser.error(f"disk image does not exist: {source}")
     if args.dma_delay_ns < 0:
         parser.error("--dma-delay-ns must be nonnegative")
-    if args.poll_interval <= 0 or args.timeout <= 0:
-        parser.error("timeout and poll interval must be positive")
+    if (args.poll_interval <= 0 or args.timeout <= 0 or
+            args.poll_start_delay < 0 or args.pause_resume_seconds < 0):
+        parser.error(
+            "timeout and poll interval must be positive; delays must be nonnegative"
+        )
 
     source_before = source.stat()
     qemu = (
@@ -321,10 +384,13 @@ def main() -> int:
         args.minimal_devices,
     )
     log = (scratch / "qemu.log").open("wb")
-    started = time.monotonic()
+    started_ns = time.monotonic_ns()
+    started = started_ns / 1_000_000_000
     process = subprocess.Popen(command, cwd=root, stdout=log, stderr=subprocess.STDOUT)
     finder_seconds: float | None = None
     milestones: dict[str, float] = {}
+    pause_resume: dict[str, int | float] = {}
+    handoff: dict[str, int | float | str] = {}
     failure: Exception | None = None
     monitor_path = scratch / "monitor.sock"
     frame_path = scratch / "frame.ppm"
@@ -335,6 +401,9 @@ def main() -> int:
             monitor.connect(str(monitor_path))
             receive_until_prompt(monitor)
             deadline = started + args.timeout
+            poll_start = started + args.poll_start_delay
+            if time.monotonic() < poll_start:
+                time.sleep(poll_start - time.monotonic())
             while time.monotonic() < deadline:
                 width, height, rgb = capture_frame(monitor, frame_path)
                 elapsed = time.monotonic() - started
@@ -351,6 +420,68 @@ def main() -> int:
                     shutil.copyfile(frame_path, scratch / "finder.ppm")
                     break
                 time.sleep(args.poll_interval)
+            if finder_seconds is not None and args.handoff_at_finder:
+                before = timebase_from_registers(monitor)
+                requested_at = time.monotonic()
+                response = hmp_command(monitor, "classicmac-boot-complete")
+                initial_status = classicmac_clock_status(response)
+                status = initial_status
+                handoff_deadline = time.monotonic() + 2.0
+                while status != "real-time":
+                    if time.monotonic() >= handoff_deadline:
+                        raise RuntimeError(
+                            "instruction-count clock did not hand off within two seconds"
+                        )
+                    time.sleep(0.01)
+                    response = hmp_command(monitor, "classicmac-boot-complete")
+                    status = classicmac_clock_status(response)
+                after = timebase_from_registers(monitor)
+                observed_ns = time.monotonic_ns()
+                handoff = {
+                    "requested_seconds": round(requested_at - started, 3),
+                    "completed_seconds": round(time.monotonic() - started, 3),
+                    "timebase_delta": after - before,
+                    "initial_status": initial_status,
+                    "final_status": status,
+                }
+                handoff_host_ns = classicmac_handoff_host_ns(response)
+                current_host_ns = classicmac_current_host_ns(response)
+                if handoff_host_ns is not None and current_host_ns is not None:
+                    handoff["auto_finder_seconds"] = round(
+                        ((observed_ns - started_ns) -
+                         (current_host_ns - handoff_host_ns)) /
+                        1_000_000_000,
+                        3,
+                    )
+            if finder_seconds is not None and args.pause_resume_seconds > 0:
+                hmp_command(monitor, "stop")
+                before = timebase_from_registers(monitor)
+                time.sleep(args.pause_resume_seconds)
+                during = timebase_from_registers(monitor)
+                hmp_command(monitor, "cont")
+                resumed_at = time.monotonic()
+                time.sleep(1.0)
+                hmp_command(monitor, "stop")
+                after = timebase_from_registers(monitor)
+                resumed_seconds = time.monotonic() - resumed_at
+                hmp_command(monitor, "cont")
+                frozen_delta = during - before
+                resumed_delta = after - during
+                pause_resume = {
+                    "pause_seconds": args.pause_resume_seconds,
+                    "frozen_tb_delta": frozen_delta,
+                    "resume_seconds": round(resumed_seconds, 3),
+                    "resumed_tb_delta": resumed_delta,
+                }
+                if frozen_delta != 0:
+                    raise RuntimeError(
+                        f"PowerPC timebase advanced {frozen_delta} ticks while paused"
+                    )
+                expected = 25_000_000 * resumed_seconds
+                if not expected * 0.5 <= resumed_delta <= expected * 2.0:
+                    raise RuntimeError(
+                        "PowerPC timebase did not resume at its 25 MHz guest rate"
+                    )
             if finder_seconds is not None and (
                 args.power_dialog or args.graceful_shutdown
             ):
@@ -408,6 +539,8 @@ def main() -> int:
         "disk_cache": args.disk_cache or "default",
         "accel": args.accel,
         "cpu": args.cpu,
+        "icount": args.icount,
+        "handoff_at_finder": args.handoff_at_finder,
         "boot_disk_virtio": args.boot_disk_virtio,
         "boot_cd": str(boot_cd) if boot_cd is not None else None,
         "load_state": str(load_state) if load_state is not None else None,
@@ -418,6 +551,10 @@ def main() -> int:
         "evidence": str(scratch),
     }
     result.update({name: round(value, 3) for name, value in milestones.items()})
+    if pause_resume:
+        result["pause_resume"] = pause_resume
+    if handoff:
+        result["handoff"] = handoff
     print(json.dumps(result, sort_keys=True))
     if not args.keep:
         shutil.rmtree(scratch)

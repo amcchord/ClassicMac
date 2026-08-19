@@ -1,0 +1,730 @@
+diff --git a/accel/tcg/cpu-exec.c b/accel/tcg/cpu-exec.c
+index ad94f96b252..ca94d337b43 100644
+--- a/accel/tcg/cpu-exec.c
++++ b/accel/tcg/cpu-exec.c
+@@ -404,6 +404,28 @@ const void *HELPER(lookup_tb_ptr)(CPUArchState *env)
+     return tb->tc.ptr;
+ }
+ 
++const void *HELPER(lookup_tb_ptr_fast)(CPUArchState *env, uint64_t pc,
++                                       uint32_t flags)
++{
++    CPUState *cpu = env_cpu(env);
++    TCGTBCPUState s = {
++        .pc = pc,
++        .flags = flags,
++        .cflags = curr_cflags(cpu),
++    };
++    TranslationBlock *tb;
++
++    cpu->neg.can_do_io = true;
++
++    if (unlikely(!QTAILQ_EMPTY(&cpu->breakpoints)) ||
++        unlikely(qemu_loglevel_mask(CPU_LOG_TB_CPU | CPU_LOG_EXEC))) {
++        return tcg_code_gen_epilogue;
++    }
++
++    tb = tb_lookup(cpu, s);
++    return tb ? tb->tc.ptr : tcg_code_gen_epilogue;
++}
++
+ /* Return the current PC from CPU, which may be cached in TB. */
+ static vaddr log_pc(CPUState *cpu, const TranslationBlock *tb)
+ {
+@@ -633,6 +655,10 @@ static inline void tb_add_jump(TranslationBlock *tb, int n,
+         goto out_unlock_next;
+     }
+ 
++    if (tb->indirect_jmp_mask & (1u << n)) {
++        qatomic_set(&tb->indirect_pc[n], tb_next->pc);
++    }
++
+     /* patch the native jump address */
+     tb_set_jmp_target(tb, n, (uintptr_t)tb_next->tc.ptr);
+ 
+diff --git a/accel/tcg/icount-common.c b/accel/tcg/icount-common.c
+index b1b6c005fe7..a748e8371b6 100644
+--- a/accel/tcg/icount-common.c
++++ b/accel/tcg/icount-common.c
+@@ -37,6 +37,7 @@
+ #include "hw/core/cpu.h"
+ #include "exec/icount.h"
+ #include "system/cpu-timers-internal.h"
++#include "system/cpu-timers.h"
+ 
+ /*
+  * ICOUNT: Instruction Counter
+@@ -52,6 +53,7 @@ bool icount_align_option;
+ 
+ /* Do not count executed instructions */
+ ICountMode use_icount = ICOUNT_DISABLED;
++static bool runtime_disable_requested;
+ 
+ static void icount_enable_precise(void)
+ {
+@@ -500,3 +502,60 @@ void icount_notify_exit(void)
+         qemu_clock_notify(QEMU_CLOCK_VIRTUAL);
+     }
+ }
++
++bool icount_request_runtime_disable(void)
++{
++    if (!icount_enabled() || replay_mode != REPLAY_MODE_NONE) {
++        return false;
++    }
++
++    qatomic_set(&runtime_disable_requested, true);
++    if (first_cpu) {
++        qemu_cpu_kick(first_cpu);
++    }
++    qemu_notify_event();
++    return true;
++}
++
++bool icount_runtime_disable_requested(void)
++{
++    return qatomic_read(&runtime_disable_requested);
++}
++
++bool icount_complete_runtime_disable(void)
++{
++    int64_t virtual_time;
++
++    if (!qatomic_xchg(&runtime_disable_requested, false) ||
++        !icount_enabled()) {
++        return false;
++    }
++
++    /*
++     * The caller has already run icount_process_data(), so this samples a
++     * fully-accounted boundary.  Rebase the normal clock before publishing
++     * ICOUNT_DISABLED: readers then see the same virtual nanosecond on either
++     * side of the switch.
++     */
++    virtual_time = icount_get();
++    cpu_set_clock(virtual_time);
++
++    if (timers_state.icount_warp_timer) {
++        timer_free(timers_state.icount_warp_timer);
++        timers_state.icount_warp_timer = NULL;
++    }
++    if (timers_state.icount_rt_timer) {
++        timer_free(timers_state.icount_rt_timer);
++        timers_state.icount_rt_timer = NULL;
++    }
++    if (timers_state.icount_vm_timer) {
++        timer_free(timers_state.icount_vm_timer);
++        timers_state.icount_vm_timer = NULL;
++    }
++    timers_state.vm_clock_warp_start = -1;
++    icount_sleep = true;
++    icount_align_option = false;
++    use_icount = ICOUNT_DISABLED;
++    qemu_clock_notify(QEMU_CLOCK_VIRTUAL);
++    return true;
++}
+diff --git a/accel/tcg/tcg-accel-ops-rr.c b/accel/tcg/tcg-accel-ops-rr.c
+index f84342e0449..d3ec30b0ccc 100644
+--- a/accel/tcg/tcg-accel-ops-rr.c
++++ b/accel/tcg/tcg-accel-ops-rr.c
+@@ -277,17 +277,24 @@ static void *rr_cpu_thread_fn(void *arg)
+ 
+             if (cpu_can_run(cpu)) {
+                 int r;
++                bool ran_with_icount = icount_enabled();
+ 
+                 bql_unlock();
+-                if (icount_enabled()) {
++                if (ran_with_icount) {
+                     icount_prepare_for_run(cpu, cpu_budget);
+                 }
+                 r = tcg_cpu_exec(cpu);
+-                if (icount_enabled()) {
++                if (ran_with_icount) {
+                     icount_process_data(cpu);
+                 }
+                 bql_lock();
+ 
++                if (ran_with_icount &&
++                    icount_runtime_disable_requested() &&
++                    icount_complete_runtime_disable()) {
++                    tcg_cpu_clear_icount_cflags();
++                }
++
+                 if (r == EXCP_DEBUG) {
+                     cpu_handle_guest_debug(cpu);
+                     break;
+diff --git a/accel/tcg/tcg-accel-ops.c b/accel/tcg/tcg-accel-ops.c
+index 3bd98005042..f4d2b69b5ba 100644
+--- a/accel/tcg/tcg-accel-ops.c
++++ b/accel/tcg/tcg-accel-ops.c
+@@ -34,6 +34,7 @@
+ #include "qemu/main-loop.h"
+ #include "qemu/guest-random.h"
+ #include "qemu/timer.h"
++#include "system/cpu-timers.h"
+ #include "exec/cputlb.h"
+ #include "exec/hwaddr.h"
+ #include "exec/tb-flush.h"
+@@ -69,6 +70,17 @@ void tcg_cpu_init_cflags(CPUState *cpu, bool parallel)
+     tcg_cflags_set(cpu, cflags);
+ }
+ 
++void tcg_cpu_clear_icount_cflags(void)
++{
++    CPUState *cpu;
++
++    CPU_FOREACH(cpu) {
++        cpu->tcg_cflags &= ~CF_USE_ICOUNT;
++        cpu->cflags_next_tb = -1;
++        tcg_flush_jmp_cache(cpu);
++    }
++}
++
+ void tcg_cpu_destroy(CPUState *cpu)
+ {
+     cpu_thread_signal_destroyed(cpu);
+@@ -108,6 +120,25 @@ void tcg_handle_interrupt(CPUState *cpu, int mask)
+     }
+ }
+ 
++static void tcg_runtime_handle_interrupt(CPUState *cpu, int mask)
++{
++    if (icount_enabled()) {
++        icount_handle_interrupt(cpu, mask);
++    } else {
++        tcg_handle_interrupt(cpu, mask);
++    }
++}
++
++static int64_t tcg_runtime_get_virtual_clock(void)
++{
++    return icount_enabled() ? icount_get() : cpu_get_clock();
++}
++
++static int64_t tcg_runtime_get_elapsed_ticks(void)
++{
++    return icount_enabled() ? icount_get() : cpu_get_ticks();
++}
++
+ static bool tcg_supports_guest_debug(void)
+ {
+     return true;
+@@ -209,14 +240,9 @@ static void tcg_accel_ops_init(AccelClass *ac)
+     } else {
+         ops->create_vcpu_thread = rr_start_vcpu_thread;
+         ops->kick_vcpu_thread = rr_kick_vcpu_thread;
+-
+-        if (icount_enabled()) {
+-            ops->handle_interrupt = icount_handle_interrupt;
+-            ops->get_virtual_clock = icount_get;
+-            ops->get_elapsed_ticks = icount_get;
+-        } else {
+-            ops->handle_interrupt = tcg_handle_interrupt;
+-        }
++        ops->handle_interrupt = tcg_runtime_handle_interrupt;
++        ops->get_virtual_clock = tcg_runtime_get_virtual_clock;
++        ops->get_elapsed_ticks = tcg_runtime_get_elapsed_ticks;
+     }
+ 
+     ops->cpu_reset_hold = tcg_cpu_reset_hold;
+diff --git a/accel/tcg/tcg-accel-ops.h b/accel/tcg/tcg-accel-ops.h
+index aecce605d7b..8011d3977ee 100644
+--- a/accel/tcg/tcg-accel-ops.h
++++ b/accel/tcg/tcg-accel-ops.h
+@@ -18,6 +18,7 @@ void tcg_cpu_destroy(CPUState *cpu);
+ int tcg_cpu_exec(CPUState *cpu);
+ void tcg_handle_interrupt(CPUState *cpu, int mask);
+ void tcg_cpu_init_cflags(CPUState *cpu, bool parallel);
++void tcg_cpu_clear_icount_cflags(void);
+ void tcg_kick_vcpu_thread(CPUState *cpu);
+ 
+ #endif /* TCG_ACCEL_OPS_H */
+diff --git a/accel/tcg/tcg-runtime.h b/accel/tcg/tcg-runtime.h
+index 0b832176b33..91fb6c62579 100644
+--- a/accel/tcg/tcg-runtime.h
++++ b/accel/tcg/tcg-runtime.h
+@@ -21,6 +21,7 @@ DEF_HELPER_FLAGS_1(ctpop_i32, TCG_CALL_NO_RWG_SE, i32, i32)
+ DEF_HELPER_FLAGS_1(ctpop_i64, TCG_CALL_NO_RWG_SE, i64, i64)
+ 
+ DEF_HELPER_FLAGS_1(lookup_tb_ptr, TCG_CALL_NO_WG_SE, cptr, env)
++DEF_HELPER_FLAGS_3(lookup_tb_ptr_fast, TCG_CALL_NO_WG_SE, cptr, env, i64, i32)
+ 
+ DEF_HELPER_FLAGS_1(exit_atomic, TCG_CALL_NO_WG, noreturn, env)
+ 
+diff --git a/accel/tcg/translate-all.c b/accel/tcg/translate-all.c
+index fba4e9dc21c..a4170b45019 100644
+--- a/accel/tcg/translate-all.c
++++ b/accel/tcg/translate-all.c
+@@ -320,6 +320,9 @@ TranslationBlock *tb_gen_code(CPUState *cpu, TCGTBCPUState s)
+     tcg_ctx->guest_mo = cpu->cc->tcg_ops->guest_default_memory_order;
+ 
+  restart_translate:
++    tb->indirect_jmp_mask = 0;
++    tb->indirect_pc[0] = 0;
++    tb->indirect_pc[1] = 0;
+     trace_translate_block(tb, s.pc, tb->tc.ptr);
+ 
+     gen_code_size = setjmp_gen_code(env, tb, s.pc, host_pc, &max_insns, &ti);
+diff --git a/hmp-commands.hx b/hmp-commands.hx
+index 5cc4788f12d..6dce6ae6e44 100644
+--- a/hmp-commands.hx
++++ b/hmp-commands.hx
+@@ -398,6 +398,20 @@ SRST
+   If called with option off, the emulation returns to normal mode.
+ ERST
+ 
++    {
++        .name       = "classicmac-boot-complete",
++        .args_type  = "",
++        .params     = "",
++        .help       = "finish ClassicMac accelerated startup and restore real-time emulation",
++        .cmd        = hmp_classicmac_boot_complete,
++    },
++
++SRST
++``classicmac-boot-complete``
++  Switch an instruction-timed ClassicMac startup back to normal real-time
++  emulation.  The transition preserves the virtual and PowerPC timebases.
++ERST
++
+     {
+         .name       = "stop|s",
+         .args_type  = "",
+diff --git a/hw/ppc/ppc.c b/hw/ppc/ppc.c
+index a512d4fa647..5b558391ab3 100644
+--- a/hw/ppc/ppc.c
++++ b/hw/ppc/ppc.c
+@@ -37,6 +37,7 @@
+ #include "system/runstate.h"
+ #include "kvm_ppc.h"
+ #include "migration/vmstate.h"
++#include "exec/icount.h"
+ #include "trace.h"
+ 
+ static void cpu_ppc_tb_stop (CPUPPCState *env);
+@@ -515,6 +516,95 @@ uint64_t cpu_ppc_get_tb(ppc_tb_t *tb_env, uint64_t vmclk, int64_t tb_offset)
+     return ns_to_tb(tb_env->tb_freq, vmclk) + tb_offset;
+ }
+ 
++#if defined(__APPLE__) && defined(__aarch64__)
++static inline uint64_t cpu_ppc_host_counter(void)
++{
++    uint64_t counter;
++
++    __asm__ volatile("mrs %0, cntvct_el0" : "=r"(counter));
++    return counter;
++}
++
++static inline uint32_t cpu_ppc_host_counter_freq(void)
++{
++    uint64_t frequency;
++
++    __asm__ volatile("mrs %0, cntfrq_el0" : "=r"(frequency));
++    return frequency;
++}
++
++static inline uint64_t cpu_ppc_fast_tb(ppc_tb_t *tb_env)
++{
++    uint64_t host_ticks;
++
++    /*
++     * A VM that began in icount mode did not use the host counter while
++     * booting.  Rebase it on the first normal-clock read so the architectural
++     * PowerPC timebase remains continuous across ClassicMac's Finder handoff.
++     */
++    if (unlikely(tb_env->fast_tb_needs_rebase)) {
++        uint64_t virtual_ticks = cpu_ppc_get_tb(
++            tb_env, qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL), tb_env->tb_offset);
++
++        host_ticks = muldiv64(cpu_ppc_host_counter(), tb_env->tb_freq,
++                              tb_env->fast_tb_host_freq);
++        tb_env->fast_tb_bias = virtual_ticks - host_ticks - tb_env->tb_offset;
++        tb_env->fast_tb_pause_ticks = virtual_ticks;
++        tb_env->fast_tb_paused = !runstate_is_running();
++        tb_env->fast_tb_needs_rebase = false;
++    }
++
++    if (unlikely(tb_env->fast_tb_paused)) {
++        return tb_env->fast_tb_pause_ticks;
++    }
++
++    /*
++     * Apple Silicon exposes CNTVCT_EL0 at 1 GHz while the Mac99 timebase is
++     * 25 MHz.  Keep the common conversion as an exact constant divide so
++     * clang emits a multiply-high sequence instead of libcompiler_rt's
++     * 128-bit __udivmodti4 on every guest mftb/mftbu.  Retain the generic
++     * conversion for any future Apple CPU with a different counter rate.
++     */
++    if (likely(tb_env->fast_tb_host_freq == 1000000000 &&
++               tb_env->tb_freq == 25000000)) {
++        host_ticks = cpu_ppc_host_counter() / 40;
++    } else {
++        host_ticks = muldiv64(cpu_ppc_host_counter(), tb_env->tb_freq,
++                              tb_env->fast_tb_host_freq);
++    }
++
++    return host_ticks + tb_env->fast_tb_bias + tb_env->tb_offset;
++}
++
++static void cpu_ppc_fast_tb_vm_state_change(void *opaque, bool running,
++                                            RunState state)
++{
++    ppc_tb_t *tb_env = opaque;
++    uint64_t host_ticks;
++
++    if (icount_enabled()) {
++        tb_env->fast_tb_needs_rebase = true;
++        return;
++    }
++
++    if (!running) {
++        if (!tb_env->fast_tb_paused) {
++            tb_env->fast_tb_pause_ticks = cpu_ppc_fast_tb(tb_env);
++            tb_env->fast_tb_paused = true;
++        }
++        return;
++    }
++
++    if (tb_env->fast_tb_paused) {
++        host_ticks = muldiv64(cpu_ppc_host_counter(), tb_env->tb_freq,
++                              tb_env->fast_tb_host_freq);
++        tb_env->fast_tb_bias = tb_env->fast_tb_pause_ticks - host_ticks -
++                               tb_env->tb_offset;
++        tb_env->fast_tb_paused = false;
++    }
++}
++#endif
++
+ uint64_t cpu_ppc_load_tbl (CPUPPCState *env)
+ {
+     ppc_tb_t *tb_env = env->tb_env;
+@@ -524,8 +614,15 @@ uint64_t cpu_ppc_load_tbl (CPUPPCState *env)
+         return env->spr[SPR_TBL];
+     }
+ 
+-    tb = cpu_ppc_get_tb(tb_env, qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL),
+-                        tb_env->tb_offset);
++#if defined(__APPLE__) && defined(__aarch64__)
++    if (!icount_enabled()) {
++        tb = cpu_ppc_fast_tb(tb_env);
++    } else
++#endif
++    {
++        tb = cpu_ppc_get_tb(tb_env, qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL),
++                            tb_env->tb_offset);
++    }
+     trace_ppc_tb_load(tb);
+ 
+     return tb;
+@@ -536,8 +633,15 @@ static inline uint32_t _cpu_ppc_load_tbu(CPUPPCState *env)
+     ppc_tb_t *tb_env = env->tb_env;
+     uint64_t tb;
+ 
+-    tb = cpu_ppc_get_tb(tb_env, qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL),
+-                        tb_env->tb_offset);
++#if defined(__APPLE__) && defined(__aarch64__)
++    if (!icount_enabled()) {
++        tb = cpu_ppc_fast_tb(tb_env);
++    } else
++#endif
++    {
++        tb = cpu_ppc_get_tb(tb_env, qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL),
++                            tb_env->tb_offset);
++    }
+     trace_ppc_tb_load(tb);
+ 
+     return tb >> 32;
+@@ -1112,6 +1216,19 @@ void cpu_ppc_tb_init(CPUPPCState *env, uint32_t freq)
+ 
+     tb_env->tb_freq = freq;
+     tb_env->decr_freq = freq;
++#if defined(__APPLE__) && defined(__aarch64__)
++    tb_env->fast_tb_host_freq = cpu_ppc_host_counter_freq();
++    tb_env->fast_tb_bias =
++        ns_to_tb(freq, qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL)) -
++        muldiv64(cpu_ppc_host_counter(), freq, tb_env->fast_tb_host_freq);
++    tb_env->fast_tb_pause_ticks =
++        cpu_ppc_get_tb(tb_env, qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL),
++                       tb_env->tb_offset);
++    tb_env->fast_tb_paused = !runstate_is_running();
++    tb_env->fast_tb_needs_rebase = icount_enabled();
++    tb_env->fast_tb_vmstate = qemu_add_vm_change_state_handler(
++        cpu_ppc_fast_tb_vm_state_change, tb_env);
++#endif
+ }
+ 
+ void cpu_ppc_tb_reset(CPUPPCState *env)
+@@ -1145,6 +1262,9 @@ void cpu_ppc_tb_reset(CPUPPCState *env)
+ 
+ void cpu_ppc_tb_free(CPUPPCState *env)
+ {
++#if defined(__APPLE__) && defined(__aarch64__)
++    qemu_del_vm_change_state_handler(env->tb_env->fast_tb_vmstate);
++#endif
+     timer_free(env->tb_env->decr_timer);
+     timer_free(env->tb_env->hdecr_timer);
+     g_free(env->tb_env);
+diff --git a/include/exec/icount.h b/include/exec/icount.h
+index 7a26b40084d..83661099868 100644
+--- a/include/exec/icount.h
++++ b/include/exec/icount.h
+@@ -73,4 +73,15 @@ void icount_start_warp_timer(void);
+ void icount_account_warp_timer(void);
+ void icount_notify_exit(void);
+ 
++/*
++ * ClassicMac starts selected guests with deterministic instruction timing,
++ * then returns to the normal real-time clock as soon as Finder is ready.
++ * The request may come from the I/O thread; completion must happen in the
++ * round-robin TCG vCPU thread after its current instruction budget has been
++ * fully accounted.
++ */
++bool icount_request_runtime_disable(void);
++bool icount_runtime_disable_requested(void);
++bool icount_complete_runtime_disable(void);
++
+ #endif /* EXEC_ICOUNT_H */
+diff --git a/include/exec/translation-block.h b/include/exec/translation-block.h
+index 4f83d5bec98..7a7421b151f 100644
+--- a/include/exec/translation-block.h
++++ b/include/exec/translation-block.h
+@@ -125,6 +125,8 @@ struct TranslationBlock {
+     uint16_t jmp_reset_offset[2]; /* offset of original jump target */
+     uint16_t jmp_insn_offset[2];  /* offset of direct jump insn */
+     uintptr_t jmp_target_addr[2]; /* target address */
++    uint8_t indirect_jmp_mask;
++    vaddr indirect_pc[2];
+ 
+     /*
+      * Each TB has a NULL-terminated list (jmp_list_head) of incoming jumps.
+diff --git a/include/hw/ppc/ppc.h b/include/hw/ppc/ppc.h
+index cb51d704c6d..7c94eb3b0d8 100644
+--- a/include/hw/ppc/ppc.h
++++ b/include/hw/ppc/ppc.h
+@@ -27,6 +27,14 @@ struct ppc_tb_t {
+     int64_t  atb_offset;   /* Compensation                    */
+     int64_t  vtb_offset;
+     uint32_t tb_freq;      /* TB frequency                    */
++#if defined(__APPLE__) && defined(__aarch64__)
++    int64_t fast_tb_bias;
++    uint64_t fast_tb_pause_ticks;
++    uint32_t fast_tb_host_freq;
++    bool fast_tb_paused;
++    bool fast_tb_needs_rebase;
++    VMChangeStateEntry *fast_tb_vmstate;
++#endif
+     /* Decrementer management */
+     uint64_t decr_next;    /* Tick for next decr interrupt    */
+     uint32_t decr_freq;    /* decrementer frequency           */
+diff --git a/include/monitor/hmp.h b/include/monitor/hmp.h
+index e222bea60cd..78153ab697b 100644
+--- a/include/monitor/hmp.h
++++ b/include/monitor/hmp.h
+@@ -42,6 +42,7 @@ void hmp_info_tpm(Monitor *mon, const QDict *qdict);
+ void hmp_info_iothreads(Monitor *mon, const QDict *qdict);
+ void hmp_quit(Monitor *mon, const QDict *qdict);
+ void hmp_stop(Monitor *mon, const QDict *qdict);
++void hmp_classicmac_boot_complete(Monitor *mon, const QDict *qdict);
+ void hmp_sync_profile(Monitor *mon, const QDict *qdict);
+ void hmp_system_reset(Monitor *mon, const QDict *qdict);
+ void hmp_system_powerdown(Monitor *mon, const QDict *qdict);
+diff --git a/include/system/cpu-timers.h b/include/system/cpu-timers.h
+index a1abed0d7a0..be63f61e71a 100644
+--- a/include/system/cpu-timers.h
++++ b/include/system/cpu-timers.h
+@@ -23,6 +23,8 @@ void cpu_timers_init(void);
+ void cpu_enable_ticks(void);
+ /* Caller must hold BQL */
+ void cpu_disable_ticks(void);
++/* Caller must hold BQL */
++void cpu_set_clock(int64_t new_time);
+ 
+ /*
+  * return the time elapsed in VM between vm_start and vm_stop.
+diff --git a/include/tcg/tcg-op-common.h b/include/tcg/tcg-op-common.h
+index e02f209c093..fda1757a5db 100644
+--- a/include/tcg/tcg-op-common.h
++++ b/include/tcg/tcg-op-common.h
+@@ -82,6 +82,7 @@ void tcg_gen_goto_tb(unsigned idx);
+  * this op is equivalent to calling tcg_gen_exit_tb() with 0 as the argument.
+  */
+ void tcg_gen_lookup_and_goto_ptr(void);
++void tcg_gen_lookup_and_goto_ptr_fast(TCGv_i64 pc, TCGv_i32 flags);
+ 
+ void tcg_gen_plugin_cb(unsigned from);
+ void tcg_gen_plugin_mem_cb(TCGv_i64 addr, unsigned meminfo);
+diff --git a/monitor/hmp-cmds.c b/monitor/hmp-cmds.c
+index bc26b39d708..51fa89125ba 100644
+--- a/monitor/hmp-cmds.c
++++ b/monitor/hmp-cmds.c
+@@ -17,6 +17,7 @@
+ #include "system/address-spaces.h"
+ #include "system/ioport.h"
+ #include "exec/gdbstub.h"
++#include "exec/icount.h"
+ #include "exec/target_page.h"
+ #include "gdbstub/enums.h"
+ #include "monitor/hmp.h"
+@@ -99,6 +100,21 @@ void hmp_stop(Monitor *mon, const QDict *qdict)
+     qmp_stop(NULL);
+ }
+ 
++void hmp_classicmac_boot_complete(Monitor *mon, const QDict *qdict)
++{
++#ifdef CONFIG_TCG
++    if (!icount_enabled()) {
++        monitor_printf(mon, "classicmac clock: real-time\n");
++    } else if (icount_request_runtime_disable()) {
++        monitor_printf(mon, "classicmac clock: handoff requested\n");
++    } else {
++        monitor_printf(mon, "classicmac clock: handoff unavailable\n");
++    }
++#else
++    monitor_printf(mon, "classicmac clock: real-time\n");
++#endif
++}
++
+ void hmp_sync_profile(Monitor *mon, const QDict *qdict)
+ {
+     const char *op = qdict_get_try_str(qdict, "op");
+diff --git a/system/cpu-timers.c b/system/cpu-timers.c
+index 9919b46230f..5eb24f75880 100644
+--- a/system/cpu-timers.c
++++ b/system/cpu-timers.c
+@@ -135,6 +135,23 @@ void cpu_disable_ticks(void)
+                          &timers_state.vm_clock_lock);
+ }
+ 
++/*
++ * Rebase the normal virtual clock without stopping it.  Runtime icount
++ * handoff uses this to preserve the guest-visible time accumulated during
++ * startup before switching back to the host monotonic clock.
++ */
++void cpu_set_clock(int64_t new_time)
++{
++    seqlock_write_lock(&timers_state.vm_clock_seqlock,
++                       &timers_state.vm_clock_lock);
++    timers_state.cpu_clock_offset = new_time;
++    if (timers_state.cpu_ticks_enabled) {
++        timers_state.cpu_clock_offset -= get_clock();
++    }
++    seqlock_write_unlock(&timers_state.vm_clock_seqlock,
++                         &timers_state.vm_clock_lock);
++}
++
+ static bool icount_state_needed(void *opaque)
+ {
+     return icount_enabled();
+diff --git a/target/ppc/translate.c b/target/ppc/translate.c
+index a09a6df93fd..f4b1ba09fdd 100644
+--- a/target/ppc/translate.c
++++ b/target/ppc/translate.c
+@@ -716,13 +716,23 @@ void spr_write_decr(DisasContext *ctx, int sprn, int gprn)
+ /* Time base */
+ void spr_read_tbl(DisasContext *ctx, int gprn, int sprn)
+ {
+-    translator_io_start(&ctx->base);
++    /*
++     * A timebase read only needs to terminate the TB when instruction-count
++     * mode must place I/O precisely. In normal real-time TCG execution the
++     * helper still samples the live clock at the instruction, so ending the
++     * TB merely turns TBU/TBL/TBU into three dispatcher round trips.
++     */
++    if (tb_cflags(ctx->base.tb) & CF_USE_ICOUNT) {
++        translator_io_start(&ctx->base);
++    }
+     gen_helper_load_tbl(cpu_gpr[gprn], tcg_env);
+ }
+ 
+ void spr_read_tbu(DisasContext *ctx, int gprn, int sprn)
+ {
+-    translator_io_start(&ctx->base);
++    if (tb_cflags(ctx->base.tb) & CF_USE_ICOUNT) {
++        translator_io_start(&ctx->base);
++    }
+     gen_helper_load_tbu(cpu_gpr[gprn], tcg_env);
+ }
+ 
+@@ -3668,6 +3678,48 @@ static void gen_lookup_and_goto_ptr(DisasContext *ctx)
+     }
+ }
+ 
++static void gen_fast_lookup_and_goto_ptr(DisasContext *ctx)
++{
++    TCGv_i64 next_pc = tcg_temp_new_i64();
++
++    if (ctx->base.tb->flags & CF_NO_GOTO_PTR) {
++        pmu_count_insns(ctx);
++    }
++    tcg_gen_extu_tl_i64(next_pc, cpu_nip);
++    tcg_gen_lookup_and_goto_ptr_fast(
++        next_pc, tcg_constant_i32(ctx->base.tb->flags));
++}
++
++static void gen_guarded_indirect_goto(DisasContext *ctx, TCGv target)
++{
++    TCGLabel *chain = gen_new_label();
++    TCGLabel *miss = gen_new_label();
++    TCGv cached = tcg_temp_new();
++    TCGv page_delta = tcg_temp_new();
++
++    if (unlikely(ctx->singlestep_enabled) ||
++        (ctx->base.tb->cflags & CF_NO_GOTO_TB)) {
++        gen_lookup_and_goto_ptr(ctx);
++        return;
++    }
++
++    ctx->base.tb->indirect_jmp_mask |= 1u;
++    tcg_gen_ld_tl(cached,
++                  tcg_constant_ptr(&ctx->base.tb->indirect_pc[0]), 0);
++    tcg_gen_brcondi_tl(TCG_COND_EQ, cached, 0, chain);
++    tcg_gen_xori_tl(page_delta, target, ctx->cia);
++    tcg_gen_andi_tl(page_delta, page_delta, TARGET_PAGE_MASK);
++    tcg_gen_brcondi_tl(TCG_COND_NE, page_delta, 0, miss);
++    tcg_gen_brcond_tl(TCG_COND_NE, target, cached, miss);
++
++    gen_set_label(chain);
++    tcg_gen_goto_tb(0);
++    tcg_gen_exit_tb(ctx->base.tb, 0);
++
++    gen_set_label(miss);
++    gen_fast_lookup_and_goto_ptr(ctx);
++}
++
+ /***                                Branch                                 ***/
+ static void gen_goto_tb(DisasContext *ctx, unsigned tb_slot_idx,
+                         target_ulong dest)
+@@ -3831,7 +3883,7 @@ static void gen_bcond(DisasContext *ctx, int type)
+         } else {
+             tcg_gen_andi_tl(cpu_nip, target, ~3);
+         }
+-        gen_lookup_and_goto_ptr(ctx);
++        gen_guarded_indirect_goto(ctx, target);
+     }
+     if ((bo & 0x14) != 0x14) {
+         /* fallthrough case */
+diff --git a/tcg/tcg-op.c b/tcg/tcg-op.c
+index d8ae57d6047..951854a8a34 100644
+--- a/tcg/tcg-op.c
++++ b/tcg/tcg-op.c
+@@ -2568,3 +2568,19 @@ void tcg_gen_lookup_and_goto_ptr(void)
+     tcg_gen_op1i(INDEX_op_goto_ptr, TCG_TYPE_PTR, tcgv_ptr_arg(ptr));
+     tcg_temp_free_ptr(ptr);
+ }
++
++void tcg_gen_lookup_and_goto_ptr_fast(TCGv_i64 pc, TCGv_i32 flags)
++{
++    TCGv_ptr ptr;
++
++    if (tcg_ctx->gen_tb->cflags & CF_NO_GOTO_PTR) {
++        tcg_gen_exit_tb(NULL, 0);
++        return;
++    }
++
++    plugin_gen_disable_mem_helpers();
++    ptr = tcg_temp_ebb_new_ptr();
++    gen_helper_lookup_tb_ptr_fast(ptr, tcg_env, pc, flags);
++    tcg_gen_op1i(INDEX_op_goto_ptr, TCG_TYPE_PTR, tcgv_ptr_arg(ptr));
++    tcg_temp_free_ptr(ptr);
++}

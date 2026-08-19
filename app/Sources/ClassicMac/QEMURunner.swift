@@ -25,6 +25,47 @@ final class DataBox: @unchecked Sendable {
     }
 }
 
+// QEMU recognizes the Finder menu bar directly in guest VRAM and atomically
+// hands its startup-only instruction clock back to real time. This bounded
+// host fallback guarantees an unusual theme or unsupported guest never stays
+// instruction-timed after startup.
+final class BootClockHandoff: @unchecked Sendable {
+    private let socketPath: String
+    private let started = ProcessInfo.processInfo.systemUptime
+    private let lock = NSLock()
+    private var cancelled = false
+
+    init(socketPath: String) {
+        self.socketPath = socketPath
+    }
+
+    func cancel() {
+        lock.lock()
+        cancelled = true
+        lock.unlock()
+    }
+
+    private var isCancelled: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return cancelled
+    }
+
+    private func wait(until target: TimeInterval) -> Bool {
+        while ProcessInfo.processInfo.systemUptime - started < target {
+            if isCancelled { return false }
+            usleep(25_000)
+        }
+        return !isCancelled
+    }
+
+    func run() {
+        guard wait(until: 15.0) else { return }
+        _ = HMPClient.command("classicmac-boot-complete",
+                              socketPath: socketPath)
+    }
+}
+
 // Launches and tracks emulator processes, and builds qemu-img and
 // qemu-system-m68k / qemu-system-ppc command lines from a VMConfig.
 @MainActor
@@ -42,6 +83,7 @@ final class QEMUManager: ObservableObject {
     private var processes: [UUID: Process] = [:]
     private var qmpMonitors: [UUID: QMPEventMonitor] = [:]
     private var previewTimers: [UUID: Timer] = [:]
+    private var bootClockHandoffs: [UUID: BootClockHandoff] = [:]
     private var forcedStopWorkItems: [UUID: DispatchWorkItem] = [:]
 
     func isRunning(_ id: UUID) -> Bool {
@@ -135,6 +177,7 @@ final class QEMUManager: ObservableObject {
                 }
                 self.processes.removeValue(forKey: config.id)
                 self.forcedStopWorkItems.removeValue(forKey: config.id)?.cancel()
+                self.stopBootClockHandoff(for: config.id)
                 self.stopPreviewUpdates(for: config.id)
                 self.persistPreview(config)
                 if proc.terminationStatus != 0 && proc.terminationReason == .exit {
@@ -179,7 +222,20 @@ final class QEMUManager: ObservableObject {
             qmpMonitors[config.id] = monitor
         }
 
-        startPreviewUpdates(for: config)
+        let bootingFromUserCD = config.bootFromCD &&
+            config.cdImagePath?.isEmpty == false
+        let acceleratedHardDiskBoot = config.machineFamily == .powerMacG4 &&
+            !bootingFromUserCD
+        if acceleratedHardDiskBoot {
+            startBootClockHandoff(for: config)
+        }
+        // Avoid copying three full framebuffers at 3, 6, and 9 seconds while
+        // the CPU is busy starting Mac OS. QEMU's direct VRAM detector does
+        // not need a screendump; ordinary library previews begin afterward.
+        startPreviewUpdates(
+            for: config,
+            firstCaptureAfter: acceleratedHardDiskBoot ? 12.0 : 3.0
+        )
 
         // Bring the machine window to the front once it exists. The window
         // appears a moment after the process spawns, so try twice.
@@ -212,13 +268,33 @@ final class QEMUManager: ObservableObject {
         return dir.appendingPathComponent("\(id.uuidString).screen.ppm")
     }
 
-    private func startPreviewUpdates(for config: VMConfig) {
+    private func startBootClockHandoff(for config: VMConfig) {
+        stopBootClockHandoff(for: config.id)
+        let handoff = BootClockHandoff(
+            socketPath: QEMUManager.monitorSocketURL(for: config.id).path
+        )
+        bootClockHandoffs[config.id] = handoff
+        DispatchQueue.global(qos: .userInitiated).async {
+            handoff.run()
+        }
+    }
+
+    private func stopBootClockHandoff(for id: UUID) {
+        bootClockHandoffs.removeValue(forKey: id)?.cancel()
+    }
+
+    private func startPreviewUpdates(
+        for config: VMConfig,
+        firstCaptureAfter delay: TimeInterval = 3.0
+    ) {
         stopPreviewUpdates(for: config.id)
-        let timer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: true) { [weak self] _ in
+        let timer = Timer(timeInterval: 3.0, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 self?.capturePreview(config)
             }
         }
+        timer.fireDate = Date().addingTimeInterval(delay)
+        RunLoop.main.add(timer, forMode: .common)
         previewTimers[config.id] = timer
     }
 
@@ -510,6 +586,14 @@ final class QEMUManager: ObservableObject {
         // 195 MB during a single arena; a 512 MB cache prevents translation
         // churn across longer sessions and multiple maps.
         args += ["-accel", "tcg,tb-size=512"]
+        if !bootingFromUserCD {
+            // Mac OS 9 spends much of hard-disk startup polling timers for
+            // hardware that mac99 does not expose. Instruction timing lets
+            // those waits finish without sleeping on the host. The Finder
+            // watcher above then invokes QEMU's atomic real-time handoff, so
+            // applications, games, sound, and the system clock run normally.
+            args += ["-icount", "shift=4,sleep=off"]
+        }
         args += ["-M", "mac99,via=cuda,audiodev=snd0"]
         args += ["-cpu", config.useG4CPU ? "7400" : "g3"]
         args += ["-m", String(config.ramMB)]
@@ -550,11 +634,22 @@ final class QEMUManager: ObservableObject {
         // bits before claiming a context, so unfinished or unsupported drawing
         // paths continue through the system software renderer.
         args += ["-global", "VGA.gxmetal=on"]
-        // Cached host I/O can complete a MacIO DBDMA command before classic
-        // Mac OS has armed its synchronous wait. Keep the final descriptor
-        // active for 1 ms so IDE and DBDMA completion arrive after the guest
-        // is ready; without this, Mac OS 9.2.x Installer can wait forever.
-        args += ["-global", "macio-ide.dma-completion-delay-ns=1000000"]
+        if !bootingFromUserCD {
+            // Let QEMU recognize Finder directly in guest VRAM and perform
+            // the clock handoff without full-frame screenshots or a VNC
+            // client. BootClockHandoff above remains a 15-second fallback.
+            args += ["-global", "VGA.classicmac-boot-handoff=on"]
+        }
+        // Cached host I/O can complete a MacIO DBDMA command before the Mac OS
+        // 9.2.x Installer arms its synchronous wait. Installer starts retain
+        // the 1 ms safeguard that closes that race. A normal hard-disk start
+        // completes immediately, avoiding thousands of main-loop timers on
+        // the Finder boot path.
+        let ideDMACompletionDelay = bootingFromUserCD ? 1_000_000 : 0
+        args += [
+            "-global",
+            "macio-ide.dma-completion-delay-ns=\(ideDMACompletionDelay)"
+        ]
         // Route the OpenBIOS firmware console to the (disconnected) serial
         // port so the firmware text screens never appear. Together with the
         // bundled OpenBIOS's console background being repainted black (see
