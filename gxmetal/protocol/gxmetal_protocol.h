@@ -22,7 +22,7 @@ extern "C" {
 
 #define GXMETAL_PROTOCOL_MAGIC            UINT32_C(0x47584d54) /* "GXMT" */
 #define GXMETAL_PROTOCOL_VERSION_MAJOR    1u
-#define GXMETAL_PROTOCOL_VERSION_MINOR    6u
+#define GXMETAL_PROTOCOL_VERSION_MINOR    7u
 #define GXMETAL_PROTOCOL_VERSION \
     ((GXMETAL_PROTOCOL_VERSION_MAJOR << 16) | GXMETAL_PROTOCOL_VERSION_MINOR)
 
@@ -78,7 +78,10 @@ enum GXMetalFeature {
     GXMETAL_FEATURE_METAL         = UINT64_C(1) << 9,
     GXMETAL_FEATURE_FOG_DEPTH     = UINT64_C(1) << 10,
     GXMETAL_FEATURE_ALPHA_TEST    = UINT64_C(1) << 11,
-    GXMETAL_FEATURE_RECT_CLIP     = UINT64_C(1) << 12
+    GXMETAL_FEATURE_RECT_CLIP     = UINT64_C(1) << 12,
+    /* The host can normalize ATI type-1001 texel coordinates and translate
+     * OpenGL's homogeneous T coordinate natively. */
+    GXMETAL_FEATURE_ATI_UV_TRANSFORM = UINT64_C(1) << 13
 };
 
 /* C11 enum constants are restricted to int even though the feature word is 64-bit. */
@@ -195,16 +198,34 @@ enum GXMetalStateTag {
     GXMETAL_STATE_FOG_END      = 23,
     GXMETAL_STATE_FOG_DENSITY  = 24,
     GXMETAL_STATE_FOG_MAX_DEPTH = 25,
+    GXMETAL_STATE_MULTI_TEXTURE = 26,
+    GXMETAL_STATE_MULTI_TEXTURE_ENABLE = 33,
+    GXMETAL_STATE_MULTI_TEXTURE_OP = 35,
+    GXMETAL_STATE_MULTI_TEXTURE_FILTER = 36,
+    GXMETAL_STATE_MULTI_TEXTURE_WRAP_U = 37,
+    GXMETAL_STATE_MULTI_TEXTURE_WRAP_V = 38,
+    GXMETAL_STATE_MULTI_TEXTURE_MAG_FILTER = 39,
+    GXMETAL_STATE_MULTI_TEXTURE_MIN_FILTER = 40,
+    GXMETAL_STATE_MULTI_TEXTURE_FACTOR = 51,
+    /* Marks draws translated from ATI's private OpenGL/RAVE bridge.  The
+     * bridge overloads BlendAlpha for additive composition when both stages
+     * are opaque RGB textures; public RAVE contexts retain the documented
+     * BlendAlpha semantics. */
+    GXMETAL_STATE_ATI_PRIVATE = 52,
     GXMETAL_STATE_Z_BUFFER_MASK = 28,
     GXMETAL_STATE_ALPHA_TEST_FUNCTION = 31,
     GXMETAL_STATE_DONT_SWAP    = 32,
     GXMETAL_STATE_ALPHA_TEST_REFERENCE = 46,
     GXMETAL_STATE_TEXTURE_WRAP_U = 101,
     GXMETAL_STATE_TEXTURE_WRAP_V = 102,
+    GXMETAL_STATE_GL_TEXTURE_MAG_FILTER = 103,
+    GXMETAL_STATE_GL_TEXTURE_MIN_FILTER = 104,
     GXMETAL_STATE_SCISSOR_LEFT   = 105,
     GXMETAL_STATE_SCISSOR_TOP    = 106,
     GXMETAL_STATE_SCISSOR_RIGHT  = 107,
-    GXMETAL_STATE_SCISSOR_BOTTOM = 108
+    GXMETAL_STATE_SCISSOR_BOTTOM = 108,
+    GXMETAL_STATE_GL_BLEND_SRC   = 109,
+    GXMETAL_STATE_GL_BLEND_DST   = 110
 };
 
 enum GXMetalZFunction {
@@ -225,10 +246,35 @@ enum GXMetalBlendMode {
     GXMETAL_BLEND_OPENGL      = 2
 };
 
+/* Raw OpenGL 1.x blend factors carried by RAVE's kQATagGL_BlendSrc/Dst. */
+enum GXMetalOpenGLBlendFactor {
+    GXMETAL_GL_ZERO                = 0,
+    GXMETAL_GL_ONE                 = 1,
+    GXMETAL_GL_SRC_COLOR           = 0x0300,
+    GXMETAL_GL_ONE_MINUS_SRC_COLOR = 0x0301,
+    GXMETAL_GL_SRC_ALPHA           = 0x0302,
+    GXMETAL_GL_ONE_MINUS_SRC_ALPHA = 0x0303,
+    GXMETAL_GL_DST_ALPHA           = 0x0304,
+    GXMETAL_GL_ONE_MINUS_DST_ALPHA = 0x0305,
+    GXMETAL_GL_DST_COLOR           = 0x0306,
+    GXMETAL_GL_ONE_MINUS_DST_COLOR = 0x0307,
+    GXMETAL_GL_SRC_ALPHA_SATURATE  = 0x0308
+};
+
 enum GXMetalTextureFilter {
     GXMETAL_TEXTURE_FILTER_FAST = 0,
     GXMETAL_TEXTURE_FILTER_MID  = 1,
     GXMETAL_TEXTURE_FILTER_BEST = 2
+};
+
+/* Raw OpenGL 1.x texture filters carried by ATI's RAVE bridge. */
+enum GXMetalOpenGLTextureFilter {
+    GXMETAL_GL_NEAREST                = 0x2600,
+    GXMETAL_GL_LINEAR                 = 0x2601,
+    GXMETAL_GL_NEAREST_MIPMAP_NEAREST = 0x2700,
+    GXMETAL_GL_LINEAR_MIPMAP_NEAREST  = 0x2701,
+    GXMETAL_GL_NEAREST_MIPMAP_LINEAR  = 0x2702,
+    GXMETAL_GL_LINEAR_MIPMAP_LINEAR   = 0x2703
 };
 
 enum GXMetalTextureWrap {
@@ -242,6 +288,13 @@ enum GXMetalTextureOperation {
     GXMETAL_TEXTURE_DECAL = 1u << 2,
     GXMETAL_TEXTURE_SHRINK = 1u << 3,
     GXMETAL_TEXTURE_BLEND = 1u << 4
+};
+
+enum GXMetalMultiTextureOperation {
+    GXMETAL_MULTI_TEXTURE_ADD = 0,
+    GXMETAL_MULTI_TEXTURE_MODULATE = 1,
+    GXMETAL_MULTI_TEXTURE_BLEND_ALPHA = 2,
+    GXMETAL_MULTI_TEXTURE_FIXED = 3
 };
 
 enum GXMetalFogMode {
@@ -323,7 +376,9 @@ enum GXMetalResourceFlag {
 enum {
     GXMETAL_DRAW_NONE          = 0,
     GXMETAL_DRAW_BACKFACING    = 1u << 0,
-    GXMETAL_DRAW_FLAGS_VALID   = GXMETAL_DRAW_BACKFACING
+    GXMETAL_DRAW_HOST_ATI_UV   = 1u << 1,
+    GXMETAL_DRAW_FLAGS_VALID   = GXMETAL_DRAW_BACKFACING |
+                                 GXMETAL_DRAW_HOST_ATI_UV
 };
 
 /* Both vertex forms start with x, y, z, invW, r, g, b, a. */

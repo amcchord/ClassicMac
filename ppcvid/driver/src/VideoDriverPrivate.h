@@ -91,6 +91,7 @@ struct DriverGlobal {
 	 * a 16x16 non-premultiplied ARGB sprite, then sent through QEXT for host
 	 * composition so cursor movement no longer dirties the framebuffer. */
 	Boolean				hardwareCursorAvail;
+	Boolean				gammaLUTAvail;
 	Boolean				cursorSet;
 	Boolean				cursorVisible;
 	SInt32				cursorX;

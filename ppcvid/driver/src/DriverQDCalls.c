@@ -103,8 +103,11 @@ OSStatus
 GraphicsCoreSetGamma(VDGammaRecord *gammaRec)
 {
 	CHECK_OPEN( controlErr );
-		
-	return noErr;
+	if (gammaRec == NULL || gammaRec->csGTable == NULL)
+		return paramErr;
+
+	Trace(GraphicsCoreSetGamma);
+	return QemuVga_SetGamma((const GammaTbl *)gammaRec->csGTable);
 }
 
 OSStatus

@@ -24,6 +24,10 @@ uint64_t gxmetal_metal_direct_present_count(
     const GXMetalMetalRenderer *renderer);
 uint64_t gxmetal_metal_fallback_present_count(
     const GXMetalMetalRenderer *renderer);
+void gxmetal_metal_set_gamma(GXMetalMetalRenderer *renderer,
+                             const uint8_t red[256],
+                             const uint8_t green[256],
+                             const uint8_t blue[256]);
 void gxmetal_metal_reset(GXMetalMetalRenderer *renderer);
 uint32_t gxmetal_metal_dispatch(void *opaque,
                                 const GXMetalPacketView *packet);
