@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+## 2.0.3 — 2026-08-21
+
+### Changed
+
+- The GXMetal extension, InputSprocket bridge, startup companion, installer,
+  and conformance app now share the exact supplied red-accented puzzle-piece
+  M artwork at every classic icon depth and size.
+- The original 32-pixel GIF is the canonical tracked artwork. The GXMetal
+  package build verifies its SHA-256 and compares every generated icon-family
+  payload across all five guest components, preventing future visual drift.
+
+## 2.0.2 — 2026-08-19
+
 ### Changed
 
 - ClassicMac's Shut Down command now uses the emulated ADB Power key and
