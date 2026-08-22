@@ -473,18 +473,30 @@ static TQABoolean GXMetalTextureFormat(TQAImagePixelType pixelType,
     }
 }
 
-static TQABoolean GXMetalPaletteFormat(TQAImagePixelType pixelType,
-                                       uint32_t *bytesPerPixel)
+static TQABoolean GXMetalPaletteFormat(TQAImagePixelType pixelType)
 {
-    if (pixelType == kQAPixel_CL8) {
-        *bytesPerPixel = 1;
+    switch (pixelType) {
+    case kQAPixel_CL4:
+    case kQAPixel_CL8:
+    case kQAPixel_ACL16_88:
         return 1;
+    default:
+        return 0;
     }
-    if (pixelType == kQAPixel_ACL16_88) {
-        *bytesPerPixel = 2;
-        return 1;
+}
+
+static uint32_t GXMetalPaletteMinimumRowBytes(TQAImagePixelType pixelType,
+                                               uint32_t width)
+{
+    if (pixelType == kQAPixel_CL4) {
+        return (width + 1u) / 2u;
     }
-    return 0;
+    return pixelType == kQAPixel_ACL16_88 ? width * 2u : width;
+}
+
+static uint32_t GXMetalPaletteEntries(TQAImagePixelType pixelType)
+{
+    return pixelType == kQAPixel_CL4 ? 16u : 256u;
 }
 
 static void GXMetalDestroyTextureResource(uint32_t resourceID)
@@ -565,7 +577,7 @@ static TQAError GXMetalTextureNew(unsigned long flags,
         return kQAParamErr;
     }
     *newTexture = NULL;
-    indexed = GXMetalPaletteFormat(pixelType, &bytesPerPixel);
+    indexed = GXMetalPaletteFormat(pixelType);
     if (images == NULL || images[0].pixmap == NULL ||
         images[0].width <= 0 || images[0].height <= 0 ||
         images[0].width > (long)GXMETAL_MAX_DIMENSION ||
@@ -596,9 +608,9 @@ static TQAError GXMetalTextureNew(unsigned long flags,
         return kQANotSupported;
     }
     if (indexed) {
-        /* RAVE binds the CL8/ACL16_88 palette after creating the texture.
-         * Keep a private copy of the indices (and ACL alpha) and expose a
-         * direct-color host resource which the bind method fills. */
+        /* RAVE binds the CL4/CL8/ACL16_88 palette after creating the texture.
+         * Keep a private copy of the packed indices (and ACL alpha) and expose
+         * a direct-color host resource which the bind method fills. */
         format = GXMETAL_PIXEL_ARGB8888;
     }
     width = (uint32_t)images[0].width;
@@ -688,7 +700,9 @@ static TQAError GXMetalTextureNew(unsigned long flags,
         }
         rowBytes = (uint32_t)images[level].rowBytes;
         length = (uint64_t)rowBytes * levelHeight;
-        if (rowBytes < levelWidth * bytesPerPixel ||
+        if (rowBytes < (indexed ?
+                GXMetalPaletteMinimumRowBytes(pixelType, levelWidth) :
+                levelWidth * bytesPerPixel) ||
             length > GXMETAL_UPLOAD_BYTES) {
             GXMetalDestroyTextureResource(texture->resource_id);
             GXMetalFreeTextureSources(texture);
@@ -855,8 +869,9 @@ static void GXMetalColorTableDelete(TQAColorTable *table)
     DisposePtr((Ptr)table);
 }
 
-static void GXMetalExpandPalettePixel(const uint8_t *source,
+static void GXMetalExpandPalettePixel(const uint8_t *sourceRow,
                                       TQAImagePixelType pixelType,
+                                      uint32_t x,
                                       const TQAColorTable *table,
                                       uint8_t *destination)
 {
@@ -867,11 +882,17 @@ static void GXMetalExpandPalettePixel(const uint8_t *source,
     if (pixelType == kQAPixel_ACL16_88) {
         /* RAVE's ACL16_88 word is big-endian on PowerPC: alpha first,
          * followed by the eight-bit color-table index. */
-        alpha = source[0];
-        index = source[1];
+        alpha = sourceRow[x * 2u];
+        index = sourceRow[x * 2u + 1u];
+    } else if (pixelType == kQAPixel_CL4) {
+        /* Universal Interfaces specifies the packed order explicitly: the
+         * high nibble is the left/even pixel and the low nibble is right. */
+        alpha = 255;
+        index = (uint8_t)((sourceRow[x / 2u] >>
+                           ((x & 1u) == 0 ? 4 : 0)) & 0x0f);
     } else {
         alpha = 255;
-        index = source[0];
+        index = sourceRow[x];
     }
     if (table->transparent_index_zero && index == 0) {
         alpha = 0;
@@ -889,7 +910,6 @@ static TQAError GXMetalTextureBindColorTable(TQATexture *texture,
     GXMetalGuestPacket packet;
     uint8_t *payload;
     uint32_t level;
-    uint32_t sourceBytesPerPixel;
 
     gDiagnostics.texture_bind_color_table_count++;
     gDiagnostics.resource_stage = 20;
@@ -900,9 +920,10 @@ static TQAError GXMetalTextureBindColorTable(TQATexture *texture,
         return kQAParamErr;
     }
     if (!GXMetalPaletteFormat(
-            (TQAImagePixelType)texture->source_pixel_type,
-            &sourceBytesPerPixel) ||
-        table->entries != 256 || !GXMetalTransportAvailable()) {
+            (TQAImagePixelType)texture->source_pixel_type) ||
+        table->entries != GXMetalPaletteEntries(
+            (TQAImagePixelType)texture->source_pixel_type) ||
+        !GXMetalTransportAvailable()) {
         gDiagnostics.last_texture_bind_error = kQANotSupported;
         return kQANotSupported;
     }
@@ -926,7 +947,8 @@ static TQAError GXMetalTextureBindColorTable(TQATexture *texture,
         length = (uint64_t)rowBytes * height;
         if (texture->source_pixels[level] == NULL ||
             texture->source_row_bytes[level] <
-                width * sourceBytesPerPixel ||
+                GXMetalPaletteMinimumRowBytes(
+                    (TQAImagePixelType)texture->source_pixel_type, width) ||
             length > GXMETAL_UPLOAD_BYTES) {
             gDiagnostics.last_texture_bind_error = kQAOutOfVideoMemory;
             return kQAOutOfVideoMemory;
@@ -938,10 +960,9 @@ static TQAError GXMetalTextureBindColorTable(TQATexture *texture,
                 uint8_t *pixel = destination + y * rowBytes + x * 4;
 
                 GXMetalExpandPalettePixel(
-                    source + y * texture->source_row_bytes[level] +
-                        x * sourceBytesPerPixel,
+                    source + y * texture->source_row_bytes[level],
                     (TQAImagePixelType)texture->source_pixel_type,
-                    table, pixel);
+                    x, table, pixel);
             }
         }
         gDiagnostics.resource_stage = 21;
@@ -990,7 +1011,6 @@ static TQAError GXMetalBitmapBindColorTable(TQABitmap *bitmap,
     uint64_t length;
     const uint8_t *source;
     uint8_t *destination;
-    uint32_t sourceBytesPerPixel;
 
     gDiagnostics.bitmap_bind_color_table_count++;
     gDiagnostics.last_bitmap_bind_error = kQAError;
@@ -1000,16 +1020,18 @@ static TQAError GXMetalBitmapBindColorTable(TQABitmap *bitmap,
         return kQAParamErr;
     }
     if (!GXMetalPaletteFormat(
-            (TQAImagePixelType)bitmap->source_pixel_type,
-            &sourceBytesPerPixel) ||
-        bitmap->source_pixels == NULL || table->entries != 256 ||
+            (TQAImagePixelType)bitmap->source_pixel_type) ||
+        bitmap->source_pixels == NULL ||
+        table->entries != GXMetalPaletteEntries(
+            (TQAImagePixelType)bitmap->source_pixel_type) ||
         !GXMetalTransportAvailable()) {
         gDiagnostics.last_bitmap_bind_error = kQANotSupported;
         return kQANotSupported;
     }
     rowBytes = bitmap->width * 4;
     length = (uint64_t)rowBytes * bitmap->height;
-    if (bitmap->source_row_bytes < bitmap->width * sourceBytesPerPixel ||
+    if (bitmap->source_row_bytes < GXMetalPaletteMinimumRowBytes(
+            (TQAImagePixelType)bitmap->source_pixel_type, bitmap->width) ||
         length > GXMETAL_UPLOAD_BYTES) {
         gDiagnostics.last_bitmap_bind_error = kQAOutOfVideoMemory;
         return kQAOutOfVideoMemory;
@@ -1021,10 +1043,9 @@ static TQAError GXMetalBitmapBindColorTable(TQABitmap *bitmap,
             uint8_t *pixel = destination + y * rowBytes + x * 4;
 
             GXMetalExpandPalettePixel(
-                source + y * bitmap->source_row_bytes +
-                    x * sourceBytesPerPixel,
+                source + y * bitmap->source_row_bytes,
                 (TQAImagePixelType)bitmap->source_pixel_type,
-                table, pixel);
+                x, table, pixel);
         }
     }
     if (!GXMetalGlobalPacket(GXMETAL_OP_TEXTURE_UPLOAD,
@@ -1084,7 +1105,7 @@ static TQAError GXMetalBitmapNew(unsigned long flags,
         return kQAParamErr;
     }
     *newBitmap = NULL;
-    indexed = GXMetalPaletteFormat(pixelType, &bytesPerPixel);
+    indexed = GXMetalPaletteFormat(pixelType);
     if (image == NULL || image->pixmap == NULL || image->width <= 0 ||
         image->height <= 0 ||
         image->width > (long)GXMETAL_MAX_DIMENSION ||
@@ -1103,15 +1124,17 @@ static TQAError GXMetalBitmapNew(unsigned long flags,
         return kQANotSupported;
     }
     if (indexed) {
-        /* QABitmapBindColorTable supplies the CL8/ACL16_88 palette after
-         * creation. Preserve indices and ACL alpha until then. */
+        /* QABitmapBindColorTable supplies the CL4/CL8/ACL16_88 palette after
+         * creation. Preserve packed indices and ACL alpha until then. */
         format = GXMETAL_PIXEL_ARGB8888;
     }
     width = (uint32_t)image->width;
     height = (uint32_t)image->height;
     rowBytes = (uint32_t)image->rowBytes;
     length = (uint64_t)rowBytes * height;
-    if (rowBytes < width * bytesPerPixel || length > GXMETAL_UPLOAD_BYTES) {
+    if (rowBytes < (indexed ?
+            GXMetalPaletteMinimumRowBytes(pixelType, width) :
+            width * bytesPerPixel) || length > GXMETAL_UPLOAD_BYTES) {
         gDiagnostics.last_bitmap_error = kQAOutOfVideoMemory;
         return kQAOutOfVideoMemory;
     }
@@ -4397,7 +4420,8 @@ static TQAError GXMetalEngineGestalt(TQAGestaltSelector selector,
         }
         if (features & GXMETAL_FEATURE_TEXTURE) {
             value |= kQAOptional_Texture | kQAOptional_TextureHQ |
-                     kQAOptional_TextureColor | kQAOptional_CL8;
+                     kQAOptional_TextureColor | kQAOptional_CL4 |
+                     kQAOptional_CL8;
         }
         if (features & GXMETAL_FEATURE_Z16) {
             value |= kQAOptional_ZBufferMask | kQAOptional_ClearZBuffer;
@@ -4422,7 +4446,8 @@ static TQAError GXMetalEngineGestalt(TQAGestaltSelector selector,
             value |= kQAFast_Blend;
         }
         if (features & GXMETAL_FEATURE_TEXTURE) {
-            value |= kQAFast_Texture | kQAFast_TextureHQ | kQAFast_CL8;
+            value |= kQAFast_Texture | kQAFast_TextureHQ |
+                     kQAFast_CL4 | kQAFast_CL8;
         }
         if (features & GXMETAL_FEATURE_FOG_DEPTH) {
             value |= kQAFast_FogDepth;
@@ -4490,6 +4515,7 @@ static TQAError GXMetalEngineGestalt(TQAGestaltSelector selector,
             (UINT32_C(1) << kQAPixel_ARGB16) |
             (UINT32_C(1) << kQAPixel_RGB32) |
             (UINT32_C(1) << kQAPixel_ARGB32) |
+            (UINT32_C(1) << kQAPixel_CL4) |
             (UINT32_C(1) << kQAPixel_CL8) |
             (UINT32_C(1) << kQAPixel_ARGB16_4444) : 0;
         if (features & GXMETAL_FEATURE_INTENSITY_FORMATS) {
@@ -4509,6 +4535,7 @@ static TQAError GXMetalEngineGestalt(TQAGestaltSelector selector,
             (UINT32_C(1) << kQAPixel_RGB16) |
             (UINT32_C(1) << kQAPixel_RGB32) |
             (UINT32_C(1) << kQAPixel_ARGB32) |
+            (UINT32_C(1) << kQAPixel_CL4) |
             (UINT32_C(1) << kQAPixel_CL8) : 0;
         if (features & GXMETAL_FEATURE_INTENSITY_FORMATS) {
             value |= (UINT32_C(1) << kQAPixel_I8) |
