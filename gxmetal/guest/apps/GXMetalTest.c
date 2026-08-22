@@ -1590,6 +1590,117 @@ static TQAError GXMetalRenderAlpha1Format(
     return error;
 }
 
+static TQAError GXMetalRenderRGB332Format(
+    TQADrawContext *context, const TQAEngine *engine,
+    GDHandle graphicsDevice, const TQARect *deviceRect)
+{
+    /* RAVE defines each byte as RRR GGG BB. A three-pixel row proves all
+     * channels independently while the fourth byte proves row padding is
+     * not interpreted as another texel. */
+    static unsigned char pixels[4] = {0xe0, 0x1c, 0x03, 0xff};
+    TQAImage image;
+    TQATexture *texture = NULL;
+    TQABitmap *bitmap = NULL;
+    TQAVTexture quad[4];
+    TQAVGouraud bitmapVertex;
+    unsigned long vertexFlags[4] = {0, 0, 0, 0};
+    TQARect dirty = {0, GXMETAL_WIDTH, 0, GXMETAL_HEIGHT};
+    TQAError error;
+
+    image.width = 3;
+    image.height = 1;
+    image.rowBytes = 4;
+    image.pixmap = pixels;
+    error = QATextureNew(engine, kQATexture_None, kQAPixel_RGB8_332,
+                         &image, &texture);
+    if (error == kQANoErr) {
+        error = QABitmapNew(engine, kQABitmap_None, kQAPixel_RGB8_332,
+                            &image, &bitmap);
+    }
+    if (error != kQANoErr) {
+        GXMetalRecordResult("FAIL: RGB8_332 resource creation");
+        if (bitmap != NULL) {
+            QABitmapDelete(engine, bitmap);
+        }
+        if (texture != NULL) {
+            QATextureDelete(engine, texture);
+        }
+        return error;
+    }
+
+    quad[0] = GXMetalTextureVertex(16.0f, 24.0f, 0.5f, 0.0f, 0.0f);
+    quad[1] = GXMetalTextureVertex(145.0f, 24.0f, 0.5f, 1.0f, 0.0f);
+    quad[2] = GXMetalTextureVertex(16.0f, 196.0f, 0.5f, 0.0f, 1.0f);
+    quad[3] = GXMetalTextureVertex(145.0f, 196.0f, 0.5f, 1.0f, 1.0f);
+    bitmapVertex = GXMetalGouraud(160.0f, 100.0f, 0.4f,
+                                  1.0f, 1.0f, 1.0f, 1.0f);
+    QASetFloat(context, kQATag_ColorBG_r, 0.0f);
+    QASetFloat(context, kQATag_ColorBG_g, 0.0f);
+    QASetFloat(context, kQATag_ColorBG_b, 0.0f);
+    QASetFloat(context, kQATag_ColorBG_a, 1.0f);
+    QASetInt(context, kQATag_ZFunction, kQAZFunction_None);
+    QASetInt(context, kQATag_ZBufferMask, kQAZBufferMask_Disable);
+    QASetInt(context, kQATag_Blend, kQABlend_Interpolate);
+    QASetInt(context, kQATag_AlphaTestFunc, kQAAlphaTest_None);
+    QASetInt(context, kQATag_TextureFilter, kQATextureFilter_Fast);
+    QASetInt(context, kQATag_TextureOp, kQATextureOp_None);
+    QASetInt(context, kQATagGL_TextureWrapU, kQAGL_Clamp);
+    QASetInt(context, kQATagGL_TextureWrapV, kQAGL_Clamp);
+    QARenderStart(context, &dirty, NULL);
+    QASetPtr(context, kQATag_Texture, texture);
+    QADrawVTexture(context, 4, kQAVertexMode_Strip, quad, vertexFlags);
+    QADrawBitmap(context, &bitmapVertex, bitmap);
+    error = QARenderEnd(context, &dirty);
+    if (error == kQANoErr) {
+        error = QASync(context);
+    }
+    if (error == kQANoErr &&
+        !GXMetalPixelMatches(graphicsDevice, deviceRect->left + 37,
+                             deviceRect->top + 110,
+                             kGXMetalPixelRed)) {
+        GXMetalRecordResult("FAIL: RGB8_332 red texture pixel");
+        error = kQAError;
+    }
+    if (error == kQANoErr &&
+        !GXMetalPixelMatches(graphicsDevice, deviceRect->left + 80,
+                             deviceRect->top + 110,
+                             kGXMetalPixelGreen)) {
+        GXMetalRecordResult("FAIL: RGB8_332 green texture pixel");
+        error = kQAError;
+    }
+    if (error == kQANoErr &&
+        !GXMetalPixelMatches(graphicsDevice, deviceRect->left + 123,
+                             deviceRect->top + 110,
+                             kGXMetalPixelBlue)) {
+        GXMetalRecordResult("FAIL: RGB8_332 blue texture pixel");
+        error = kQAError;
+    }
+    if (error == kQANoErr &&
+        !GXMetalPixelMatches(graphicsDevice, deviceRect->left + 160,
+                             deviceRect->top + 100,
+                             kGXMetalPixelRed)) {
+        GXMetalRecordResult("FAIL: RGB8_332 red bitmap pixel");
+        error = kQAError;
+    }
+    if (error == kQANoErr &&
+        !GXMetalPixelMatches(graphicsDevice, deviceRect->left + 161,
+                             deviceRect->top + 100,
+                             kGXMetalPixelGreen)) {
+        GXMetalRecordResult("FAIL: RGB8_332 green bitmap pixel");
+        error = kQAError;
+    }
+    if (error == kQANoErr &&
+        !GXMetalPixelMatches(graphicsDevice, deviceRect->left + 162,
+                             deviceRect->top + 100,
+                             kGXMetalPixelBlue)) {
+        GXMetalRecordResult("FAIL: RGB8_332 blue bitmap pixel");
+        error = kQAError;
+    }
+    QABitmapDelete(engine, bitmap);
+    QATextureDelete(engine, texture);
+    return error;
+}
+
 static TQAError GXMetalRenderCL4Format(
     TQADrawContext *context, const TQAEngine *engine,
     GDHandle graphicsDevice, const TQARect *deviceRect)
@@ -1884,7 +1995,7 @@ static void GXMetalBuildPassResult(char *result, size_t resultCapacity,
     GXMetalAppendText(&cursor, end, "PASS: version=");
     GXMetalAppendVersion(&cursor, end, revision);
     GXMetalAppendText(&cursor, end,
-        " RAVE discovery capability-contract depth perspective-z blend alpha-test backface clip texture intensity-formats acl16-88 alpha1-byte cl4 public-multitexture dynamic-resources ATI-private-nocopy bitmap dirty-present double-buffer framebuffer gx_us=");
+        " RAVE discovery capability-contract depth perspective-z blend alpha-test backface clip texture intensity-formats acl16-88 alpha1-byte cl4 rgb8-332 public-multitexture dynamic-resources ATI-private-nocopy bitmap dirty-present double-buffer framebuffer gx_us=");
     GXMetalAppendDecimal(&cursor, end, gxMetalMicroseconds);
     GXMetalAppendText(&cursor, end, " sw_us=");
     GXMetalAppendDecimal(&cursor, end, softwareMicroseconds);
@@ -1988,7 +2099,7 @@ int main(void)
     uint64_t softwareMicroseconds = 0;
     uint64_t speedupTimes100;
     char softwareEngineName[64];
-    char passResult[320];
+    char passResult[384];
     char passMessage[320];
     char versionMessage[256];
 
@@ -2203,6 +2314,7 @@ int main(void)
                                 (1UL << kQAPixel_CL8) |
                                 (1UL << kQAPixel_ARGB16_4444) |
                                 (1UL << kQAPixel_ACL16_88) |
+                                (1UL << kQAPixel_RGB8_332) |
                                 (1UL << kQAPixel_I8) |
                                 (1UL << kQAPixel_AI16_88);
     requiredBitmapPixelTypes = (1UL << kQAPixel_RGB16) |
@@ -2212,6 +2324,7 @@ int main(void)
                                (1UL << kQAPixel_CL4) |
                                (1UL << kQAPixel_CL8) |
                                (1UL << kQAPixel_ACL16_88) |
+                               (1UL << kQAPixel_RGB8_332) |
                                (1UL << kQAPixel_I8) |
                                (1UL << kQAPixel_AI16_88);
     if (textureMemory == 0 || fastTextureMemory != textureMemory ||
@@ -2319,6 +2432,10 @@ int main(void)
         }
         if (error == kQANoErr) {
             error = GXMetalRenderCL4Format(
+                context, engine, device.device.gDevice, &deviceRect);
+        }
+        if (error == kQANoErr) {
+            error = GXMetalRenderRGB332Format(
                 context, engine, device.device.gDevice, &deviceRect);
         }
     } else {

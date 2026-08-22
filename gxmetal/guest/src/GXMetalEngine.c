@@ -468,6 +468,10 @@ static TQABoolean GXMetalTextureFormat(TQAImagePixelType pixelType,
         *format = GXMETAL_PIXEL_ALPHA_INTENSITY88;
         *bytesPerPixel = 2;
         return 1;
+    case kQAPixel_RGB8_332:
+        *format = GXMETAL_PIXEL_RGB332;
+        *bytesPerPixel = 1;
+        return 1;
     default:
         return 0;
     }
@@ -590,7 +594,9 @@ static TQAError GXMetalTextureNew(unsigned long flags,
         ((pixelType == kQAPixel_I8 || pixelType == kQAPixel_AI16_88) &&
          (gTransport.features & GXMETAL_FEATURE_INTENSITY_FORMATS) == 0) ||
         (pixelType == kQAPixel_Alpha1 &&
-         (gTransport.features & GXMETAL_FEATURE_ALPHA1_FORMAT) == 0)) {
+         (gTransport.features & GXMETAL_FEATURE_ALPHA1_FORMAT) == 0) ||
+        (pixelType == kQAPixel_RGB8_332 &&
+         (gTransport.features & GXMETAL_FEATURE_RGB332_FORMAT) == 0)) {
         if (images == NULL || images[0].pixmap == NULL ||
             images[0].width <= 0 || images[0].height <= 0 ||
             images[0].width > (long)GXMETAL_MAX_DIMENSION ||
@@ -1119,7 +1125,9 @@ static TQAError GXMetalBitmapNew(unsigned long flags,
         ((pixelType == kQAPixel_I8 || pixelType == kQAPixel_AI16_88) &&
          (gTransport.features & GXMETAL_FEATURE_INTENSITY_FORMATS) == 0) ||
         (pixelType == kQAPixel_Alpha1 &&
-         (gTransport.features & GXMETAL_FEATURE_ALPHA1_FORMAT) == 0)) {
+         (gTransport.features & GXMETAL_FEATURE_ALPHA1_FORMAT) == 0) ||
+        (pixelType == kQAPixel_RGB8_332 &&
+         (gTransport.features & GXMETAL_FEATURE_RGB332_FORMAT) == 0)) {
         gDiagnostics.last_bitmap_error = kQANotSupported;
         return kQANotSupported;
     }
@@ -4528,6 +4536,9 @@ static TQAError GXMetalEngineGestalt(TQAGestaltSelector selector,
         if (features & GXMETAL_FEATURE_ALPHA1_FORMAT) {
             value |= UINT32_C(1) << kQAPixel_Alpha1;
         }
+        if (features & GXMETAL_FEATURE_RGB332_FORMAT) {
+            value |= UINT32_C(1) << kQAPixel_RGB8_332;
+        }
         break;
     case kQAGestalt_BitmapPixelTypesAllowed:
     case kQAGestalt_BitmapPixelTypesPreferred:
@@ -4546,6 +4557,9 @@ static TQAError GXMetalEngineGestalt(TQAGestaltSelector selector,
         }
         if (features & GXMETAL_FEATURE_ALPHA1_FORMAT) {
             value |= UINT32_C(1) << kQAPixel_Alpha1;
+        }
+        if (features & GXMETAL_FEATURE_RGB332_FORMAT) {
+            value |= UINT32_C(1) << kQAPixel_RGB8_332;
         }
         break;
     default:

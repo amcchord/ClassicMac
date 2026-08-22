@@ -686,6 +686,7 @@ static uint32_t gxmetal_metal_resource_bytes_per_pixel(uint32_t format)
         return 2;
     case GXMETAL_PIXEL_ALPHA8:
     case GXMETAL_PIXEL_INTENSITY8:
+    case GXMETAL_PIXEL_RGB332:
         return 1;
     case GXMETAL_PIXEL_ARGB8888:
     case GXMETAL_PIXEL_RGB8888:
@@ -1066,6 +1067,14 @@ static void gxmetal_metal_convert_pixel(uint32_t format,
         destination[1] = source[1];
         destination[2] = source[1];
         destination[3] = source[0];
+        break;
+    case GXMETAL_PIXEL_RGB332:
+        /* RAVE defines the direct-color byte as RRR GGG BB. Expand each
+         * component across the full normalized channel range. */
+        destination[0] = (uint8_t)(((source[0] >> 5) & 7) * 255 / 7);
+        destination[1] = (uint8_t)(((source[0] >> 2) & 7) * 255 / 7);
+        destination[2] = (uint8_t)((source[0] & 3) * 255 / 3);
+        destination[3] = 255;
         break;
     default:
         memset(destination, 0, 4);

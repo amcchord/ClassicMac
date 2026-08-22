@@ -22,7 +22,7 @@ extern "C" {
 
 #define GXMETAL_PROTOCOL_MAGIC            UINT32_C(0x47584d54) /* "GXMT" */
 #define GXMETAL_PROTOCOL_VERSION_MAJOR    1u
-#define GXMETAL_PROTOCOL_VERSION_MINOR    12u
+#define GXMETAL_PROTOCOL_VERSION_MINOR    13u
 #define GXMETAL_PROTOCOL_VERSION \
     ((GXMETAL_PROTOCOL_VERSION_MAJOR << 16) | GXMETAL_PROTOCOL_VERSION_MINOR)
 
@@ -96,7 +96,9 @@ enum GXMetalFeature {
     GXMETAL_FEATURE_INTENSITY_FORMATS = UINT64_C(1) << 17,
     /* Apple Software RAVE treats Alpha1 as one byte per texel: zero is
      * transparent, every nonzero value is opaque, and RGB is neutral white. */
-    GXMETAL_FEATURE_ALPHA1_FORMAT = UINT64_C(1) << 18
+    GXMETAL_FEATURE_ALPHA1_FORMAT = UINT64_C(1) << 18,
+    /* The host expands RAVE's direct-color RRR GGG BB byte layout. */
+    GXMETAL_FEATURE_RGB332_FORMAT = UINT64_C(1) << 19
 };
 
 /* C11 enum constants are restricted to int even though the feature word is 64-bit. */
@@ -169,7 +171,8 @@ enum GXMetalPixelFormat {
     /* ATI's private Mac RAVE type-1001 surface: big-endian ARGB4444. */
     GXMETAL_PIXEL_ATI_ARGB4444 = 10,
     GXMETAL_PIXEL_INTENSITY8 = 11,
-    GXMETAL_PIXEL_ALPHA_INTENSITY88 = 12
+    GXMETAL_PIXEL_ALPHA_INTENSITY88 = 12,
+    GXMETAL_PIXEL_RGB332 = 13
 };
 
 enum GXMetalPrimitive {

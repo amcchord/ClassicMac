@@ -718,12 +718,14 @@ static void test_metal_texture_upload_and_sampling(void)
      * byte order. I8 expands to opaque gray; AI16_88 stores alpha before
      * intensity, so this half-alpha white texel fails a 0.75 alpha test.
      * Alpha1 follows Apple Software RAVE's byte-per-texel contract: any
-     * nonzero first byte is opaque white and padding is ignored. */
+     * nonzero first byte is opaque white and padding is ignored. RGB8_332
+     * expands the explicitly documented RRR GGG BB layout. */
     {
         const uint8_t intensity[4] = {0x80, 0x11, 0x22, 0x33};
         const uint8_t alpha_intensity[4] = {0x80, 0xff, 0x44, 0x55};
         const uint8_t alpha1_on[4] = {0x01, 0xa5, 0x5a, 0xc3};
         const uint8_t alpha1_off[4] = {0x00, 0xff, 0xff, 0xff};
+        const uint8_t rgb332[4] = {0xab, 0x11, 0x22, 0x33};
 
         upload_single_pixel_texture(renderer, packet, shared, 12,
                                     GXMETAL_PIXEL_INTENSITY8, intensity);
@@ -745,6 +747,12 @@ static void test_metal_texture_upload_and_sampling(void)
         set_int_state(renderer, packet, 3,
                       GXMETAL_STATE_ALPHA_TEST_FUNCTION,
                       GXMETAL_ALPHA_TEST_NONE);
+
+        upload_single_pixel_texture(renderer, packet, shared, 16,
+                                    GXMETAL_PIXEL_RGB332, rgb332);
+        set_resource_state(renderer, packet, 3, GXMETAL_STATE_TEXTURE, 16);
+        draw_textured_test_quad(renderer, 3, 0);
+        CHECK(framebuffer_pixel(framebuffer, 16, 16) == 0x593f);
 
         upload_single_pixel_texture(renderer, packet, shared, 14,
                                     GXMETAL_PIXEL_ALPHA8, alpha1_on);
@@ -781,6 +789,10 @@ static void test_metal_texture_upload_and_sampling(void)
         make_packet(packet, GXMETAL_OP_TEXTURE_DESTROY, 32, 0);
         payload = packet + GXMETAL_PACKET_HEADER_BYTES;
         gxmetal_store_le32(payload + GXMETAL_DESTROY_RESOURCE_ID_OFFSET, 15);
+        CHECK(dispatch(renderer, packet, 32) == GXMETAL_ERROR_NONE);
+        make_packet(packet, GXMETAL_OP_TEXTURE_DESTROY, 32, 0);
+        payload = packet + GXMETAL_PACKET_HEADER_BYTES;
+        gxmetal_store_le32(payload + GXMETAL_DESTROY_RESOURCE_ID_OFFSET, 16);
         CHECK(dispatch(renderer, packet, 32) == GXMETAL_ERROR_NONE);
         set_resource_state(renderer, packet, 3, GXMETAL_STATE_TEXTURE, 7);
     }
