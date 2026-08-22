@@ -27,7 +27,7 @@ early enough for the RAVE manager to select Apple Software RAVE.
 | Public RAVE multitexture | One RAVE 1.6 secondary stage, `QASubmitMultiTextureParams`, independent reciprocal-W/UV values, add/modulate/alpha/fixed composition, filter, wrap, and enable/disable | Supported and advertised as one accelerated stage | Native Metal tests plus signed-bundle Mac OS 9 conformance |
 | Perspective Z | `kQATag_PerspectiveZ` | Reciprocal-W hidden-surface removal and fog, with ordinary Z-function semantics preserved | Host and guest tests make normalized Z and reciprocal W disagree |
 | Extended OpenGL state | Wrap, filters, scissor, and blend factors are honored | Draw-buffer selection, line/area stipple, border color, and environment color are not yet implemented | Required GLD paths are covered; unimplemented state must not become a silent dependency |
-| Resource access | `QAAccessTexture`, `QAAccessBitmap`, draw-buffer access, and Z-buffer access | Not exposed | Games use immutable uploads or the guarded NoCopy refresh path |
+| Resource access | `QAAccessTexture`, `QAAccessBitmap`, draw-buffer access, and Z-buffer access | Texture and bitmap access are supported for direct-color resources, including mip levels and dirty-rectangle uploads; framebuffer and Z-buffer access remain unavailable | Native partial-upload preservation test plus signed-bundle Mac OS 9 conformance |
 | Offscreen and scaled contexts | Offscreen allocation, draw-context copy, and scaling | Deliberately declined | Software fallback |
 | Deep Z, CSG, antialias, chromakey, channel mask, Z sorting | Optional RAVE features | Not advertised | Software fallback |
 
@@ -40,13 +40,10 @@ early enough for the RAVE manager to select Apple Software RAVE.
 2. Complete or narrow extended OpenGL semantics. In particular, either
    implement draw-buffer and stipple behavior or document why the system GLD
    never exposes it to applications.
-3. Add dynamic-resource access methods with dirty-rectangle uploads. This is
-   the public RAVE mechanism for frequently changing textures and bitmaps and
-   avoids game-specific memory watching.
-4. Expand common sprite and UI formats in measured order: I8, AI16_88,
+3. Expand common sprite and UI formats in measured order: I8, AI16_88,
    ACL16_88, Alpha1, then CL4. Each format needs endian, alpha, palette, and
    row-padding tests before it is advertised.
-5. Add bitmap scale/filter and chromakey before attempting more specialized
+4. Add bitmap scale/filter and chromakey before attempting more specialized
    features such as CSG or Z-sorted transparency.
 
 ## Game qualification

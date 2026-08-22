@@ -486,6 +486,22 @@ static void test_metal_texture_upload_and_sampling(void)
     gxmetal_store_le32(payload + GXMETAL_UPLOAD_HEIGHT_OFFSET, 2);
     CHECK(dispatch(renderer, packet, 48) == GXMETAL_ERROR_NONE);
 
+    /* Dynamic RAVE resources update only their dirty rectangle. Replace the
+     * upper-right texel with magenta and leave the other three untouched. */
+    memcpy(shared + GXMETAL_UPLOAD_OFFSET, "\xff\xff\0\xff", 4);
+    make_packet(packet, GXMETAL_OP_TEXTURE_UPLOAD, 48, 0);
+    payload = packet + 16;
+    gxmetal_store_le32(payload + GXMETAL_UPLOAD_RESOURCE_ID_OFFSET, 7);
+    gxmetal_store_le32(payload + GXMETAL_UPLOAD_SHARED_OFFSET_OFFSET,
+                       GXMETAL_UPLOAD_OFFSET);
+    gxmetal_store_le32(payload + GXMETAL_UPLOAD_LENGTH_OFFSET, 4);
+    gxmetal_store_le32(payload + GXMETAL_UPLOAD_ROW_BYTES_OFFSET, 4);
+    gxmetal_store_le32(payload + GXMETAL_UPLOAD_WIDTH_OFFSET, 1);
+    gxmetal_store_le32(payload + GXMETAL_UPLOAD_HEIGHT_OFFSET, 1);
+    gxmetal_store_le32(payload +
+                       GXMETAL_UPLOAD_DESTINATION_ORIGIN_OFFSET, 1);
+    CHECK(dispatch(renderer, packet, 48) == GXMETAL_ERROR_NONE);
+
     make_packet(packet, GXMETAL_OP_CONTEXT_CREATE, 48, 3);
     payload = packet + 16;
     gxmetal_store_le32(payload + GXMETAL_CONTEXT_WIDTH_OFFSET, 64);
@@ -554,7 +570,7 @@ static void test_metal_texture_upload_and_sampling(void)
     present_rect(renderer, control, 3, 0, 0, 64, 64);
 
     CHECK(framebuffer_pixel(framebuffer, 16, 16) == 0x001f);
-    CHECK(framebuffer_pixel(framebuffer, 48, 48) == 0x03e0);
+    CHECK(framebuffer_pixel(framebuffer, 48, 48) == 0x7c1f);
 
     make_packet(control, GXMETAL_OP_BEGIN_FRAME, 32, 3);
     CHECK(dispatch(renderer, control, 32) == GXMETAL_ERROR_NONE);
@@ -570,7 +586,7 @@ static void test_metal_texture_upload_and_sampling(void)
     CHECK(framebuffer_pixel(framebuffer, 16, 16) == 0x001f);
     CHECK(framebuffer_pixel(framebuffer, 48, 16) == 0x7fff);
     CHECK(framebuffer_pixel(framebuffer, 16, 48) == 0x7c00);
-    CHECK(framebuffer_pixel(framebuffer, 48, 48) == 0x03e0);
+    CHECK(framebuffer_pixel(framebuffer, 48, 48) == 0x7c1f);
 
     /* OpenGLRendererATI exposes Quake III's lightmap as a second texture.
      * The guest carries that stage's homogeneous S/T/Q in the specular wire
@@ -639,7 +655,7 @@ static void test_metal_texture_upload_and_sampling(void)
     CHECK(dispatch(renderer, packet, 32) == GXMETAL_ERROR_NONE);
     present_rect(renderer, packet, 3, 0, 0, 64, 64);
     CHECK(framebuffer_pixel(framebuffer, 16, 16) == 0x0010);
-    CHECK(framebuffer_pixel(framebuffer, 48, 48) == 0x0200);
+    CHECK(framebuffer_pixel(framebuffer, 48, 48) == 0x4010);
 
     /* The RAVE 1.6 wire form keeps secondary homogeneous coordinates out of
      * ks_r/g/b, so a game can combine public multitexture with highlights. */
@@ -737,7 +753,7 @@ static void test_metal_texture_upload_and_sampling(void)
     CHECK(dispatch(renderer, packet, 32) == GXMETAL_ERROR_NONE);
     present_rect(renderer, packet, 3, 0, 0, 64, 64);
     CHECK(framebuffer_pixel(framebuffer, 16, 16) == 0x001f);
-    CHECK(framebuffer_pixel(framebuffer, 48, 48) == 0x03e0);
+    CHECK(framebuffer_pixel(framebuffer, 48, 48) == 0x7c1f);
 
     /* Carmageddon II's ATI RAVE path reports private pixel type 1001 for
      * big-endian ARGB4444 surfaces. Verify channel order and that a zero

@@ -1064,6 +1064,13 @@ static uint32_t gxmetal_metal_resource_upload(
         packet->payload + GXMETAL_UPLOAD_WIDTH_OFFSET);
     uint32_t height = gxmetal_load_le32(
         packet->payload + GXMETAL_UPLOAD_HEIGHT_OFFSET);
+    uint32_t destination_origin = gxmetal_load_le32(
+        packet->payload + GXMETAL_UPLOAD_DESTINATION_ORIGIN_OFFSET);
+    uint32_t destination_x =
+        destination_origin & GXMETAL_UPLOAD_DESTINATION_X_MASK;
+    uint32_t source_y = destination_origin >>
+        GXMETAL_UPLOAD_DESTINATION_Y_SHIFT;
+    uint32_t destination_y;
     uint32_t expected_width;
     uint32_t expected_height;
     uint32_t bytes_per_pixel;
@@ -1087,11 +1094,15 @@ static uint32_t gxmetal_metal_resource_upload(
     }
     bytes_per_pixel = gxmetal_metal_resource_bytes_per_pixel(
         resource->pixel_format);
-    if (width != expected_width || height != expected_height ||
+    if (destination_x >= expected_width || source_y >= expected_height ||
+        width > expected_width - destination_x ||
+        height > expected_height - source_y ||
         row_bytes < width * bytes_per_pixel ||
         (uint64_t)row_bytes * height > length) {
         return GXMETAL_ERROR_BAD_RESOURCE;
     }
+    destination_y = (resource->flags & GXMETAL_RESOURCE_FLIP_ORIGIN) ?
+        expected_height - source_y - height : source_y;
     converted = malloc((size_t)width * height * 4);
     if (converted == NULL) {
         return GXMETAL_ERROR_RENDERER;
@@ -1108,7 +1119,8 @@ static uint32_t gxmetal_metal_resource_upload(
                 converted + ((size_t)y * width + x) * 4);
         }
     }
-    [resource->texture replaceRegion:MTLRegionMake2D(0, 0, width, height)
+    [resource->texture replaceRegion:MTLRegionMake2D(
+            destination_x, destination_y, width, height)
         mipmapLevel:level withBytes:converted bytesPerRow:width * 4];
     free(converted);
     return GXMETAL_ERROR_NONE;

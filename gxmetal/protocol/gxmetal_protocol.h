@@ -22,7 +22,7 @@ extern "C" {
 
 #define GXMETAL_PROTOCOL_MAGIC            UINT32_C(0x47584d54) /* "GXMT" */
 #define GXMETAL_PROTOCOL_VERSION_MAJOR    1u
-#define GXMETAL_PROTOCOL_VERSION_MINOR    9u
+#define GXMETAL_PROTOCOL_VERSION_MINOR    10u
 #define GXMETAL_PROTOCOL_VERSION \
     ((GXMETAL_PROTOCOL_VERSION_MAJOR << 16) | GXMETAL_PROTOCOL_VERSION_MINOR)
 
@@ -88,7 +88,10 @@ enum GXMetalFeature {
     GXMETAL_FEATURE_RELATIVE_INPUT = UINT64_C(1) << 14,
     /* Textured draw packets may carry an independent RAVE 1.6 secondary
      * invW/uOverW/vOverW tuple without borrowing the specular channels. */
-    GXMETAL_FEATURE_MULTI_TEXTURE_VERTEX = UINT64_C(1) << 15
+    GXMETAL_FEATURE_MULTI_TEXTURE_VERTEX = UINT64_C(1) << 15,
+    /* Resource uploads may replace a rectangular subregion. The destination
+     * X/Y origin is packed into the final resource-upload payload word. */
+    GXMETAL_FEATURE_RESOURCE_SUBREGION = UINT64_C(1) << 16
 };
 
 /* C11 enum constants are restricted to int even though the feature word is 64-bit. */
@@ -429,7 +432,9 @@ enum {
 #define GXMETAL_UPLOAD_ROW_BYTES_OFFSET           16u
 #define GXMETAL_UPLOAD_WIDTH_OFFSET               20u
 #define GXMETAL_UPLOAD_HEIGHT_OFFSET              24u
-#define GXMETAL_UPLOAD_RESERVED_OFFSET            28u
+#define GXMETAL_UPLOAD_DESTINATION_ORIGIN_OFFSET  28u
+#define GXMETAL_UPLOAD_DESTINATION_X_MASK          UINT32_C(0x0000ffff)
+#define GXMETAL_UPLOAD_DESTINATION_Y_SHIFT         16u
 
 #define GXMETAL_RESOURCE_DESTROY_PACKET_BYTES     32u
 #define GXMETAL_DESTROY_RESOURCE_ID_OFFSET         0u

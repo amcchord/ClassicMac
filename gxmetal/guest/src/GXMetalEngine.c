@@ -94,6 +94,8 @@ struct TQATexture {
     Ptr source_pixels[GXMETAL_MAX_MIP_LEVELS];
     const void *live_pixels[GXMETAL_MAX_MIP_LEVELS];
     uint32_t last_refresh_epoch;
+    uint32_t access_active;
+    uint32_t access_level;
 };
 
 /* GCC's may_alias type lets the packet encoder read the object
@@ -112,6 +114,7 @@ struct TQABitmap {
     uint32_t palette_bound;
     uint32_t source_row_bytes;
     Ptr source_pixels;
+    uint32_t access_active;
 };
 
 struct TQAColorTable {
@@ -360,6 +363,62 @@ static TQABoolean GXMetalCommitUploadPacket(GXMetalGuestPacket *packet)
            GXMETAL_STATUS_READY;
 }
 
+static TQAError GXMetalUploadResourceRegion(
+    uint32_t resourceID, uint32_t level, const void *source,
+    uint32_t sourceRowBytes, uint32_t bytesPerPixel,
+    uint32_t left, uint32_t top, uint32_t width, uint32_t height)
+{
+    GXMetalGuestPacket packet;
+    uint8_t *payload;
+    uint8_t *destination;
+    const uint8_t *sourceBytes = (const uint8_t *)source;
+    uint32_t uploadRowBytes;
+    uint64_t length;
+    uint32_t y;
+
+    if (source == NULL || bytesPerPixel == 0 || width == 0 || height == 0 ||
+        left > UINT16_MAX || top > UINT16_MAX ||
+        width > UINT16_MAX || height > UINT16_MAX) {
+        return kQAParamErr;
+    }
+    uploadRowBytes = width * bytesPerPixel;
+    length = (uint64_t)uploadRowBytes * height;
+    if (sourceRowBytes < (left + width) * bytesPerPixel ||
+        length > GXMETAL_UPLOAD_BYTES ||
+        !GXMetalTransportAvailable() ||
+        (gTransport.features & GXMETAL_FEATURE_RESOURCE_SUBREGION) == 0) {
+        return kQANotSupported;
+    }
+    destination = gTransport.shared + GXMETAL_UPLOAD_OFFSET;
+    for (y = 0; y < height; y++) {
+        memcpy(destination + y * uploadRowBytes,
+               sourceBytes + (top + y) * sourceRowBytes +
+                   left * bytesPerPixel,
+               uploadRowBytes);
+    }
+    if (!GXMetalGlobalPacket(GXMETAL_OP_TEXTURE_UPLOAD,
+                             GXMETAL_RESOURCE_UPLOAD_PACKET_BYTES,
+                             &packet)) {
+        return kQAError;
+    }
+    payload = packet.bytes + GXMETAL_PACKET_HEADER_BYTES;
+    gxmetal_store_le32(payload + GXMETAL_UPLOAD_RESOURCE_ID_OFFSET,
+                       resourceID);
+    gxmetal_store_le32(payload + GXMETAL_UPLOAD_LEVEL_OFFSET, level);
+    gxmetal_store_le32(payload + GXMETAL_UPLOAD_SHARED_OFFSET_OFFSET,
+                       GXMETAL_UPLOAD_OFFSET);
+    gxmetal_store_le32(payload + GXMETAL_UPLOAD_LENGTH_OFFSET,
+                       (uint32_t)length);
+    gxmetal_store_le32(payload + GXMETAL_UPLOAD_ROW_BYTES_OFFSET,
+                       uploadRowBytes);
+    gxmetal_store_le32(payload + GXMETAL_UPLOAD_WIDTH_OFFSET, width);
+    gxmetal_store_le32(payload + GXMETAL_UPLOAD_HEIGHT_OFFSET, height);
+    gxmetal_store_le32(payload +
+                       GXMETAL_UPLOAD_DESTINATION_ORIGIN_OFFSET,
+                       left | (top << GXMETAL_UPLOAD_DESTINATION_Y_SHIFT));
+    return GXMetalCommitUploadPacket(&packet) ? kQANoErr : kQAError;
+}
+
 static TQABoolean GXMetalTextureFormat(TQAImagePixelType pixelType,
                                        uint32_t *format,
                                        uint32_t *bytesPerPixel)
@@ -603,18 +662,18 @@ static TQAError GXMetalTextureNew(unsigned long flags,
             gDiagnostics.last_texture_error = kQAOutOfVideoMemory;
             return kQAOutOfVideoMemory;
         }
+        texture->source_pixels[level] = NewPtr((Size)length);
+        if (texture->source_pixels[level] == NULL) {
+            GXMetalDestroyTextureResource(texture->resource_id);
+            GXMetalFreeTextureSources(texture);
+            DisposePtr((Ptr)texture);
+            gDiagnostics.last_texture_error = kQAOutOfMemory;
+            return kQAOutOfMemory;
+        }
+        texture->source_row_bytes[level] = rowBytes;
+        memcpy(texture->source_pixels[level], images[level].pixmap,
+               (size_t)length);
         if (indexed) {
-            texture->source_pixels[level] = NewPtr((Size)length);
-            if (texture->source_pixels[level] == NULL) {
-                GXMetalDestroyTextureResource(texture->resource_id);
-                GXMetalFreeTextureSources(texture);
-                DisposePtr((Ptr)texture);
-                gDiagnostics.last_texture_error = kQAOutOfMemory;
-                return kQAOutOfMemory;
-            }
-            texture->source_row_bytes[level] = rowBytes;
-            memcpy(texture->source_pixels[level], images[level].pixmap,
-                   (size_t)length);
             gDiagnostics.resource_stage = 3;
             continue;
         }
@@ -625,22 +684,10 @@ static TQAError GXMetalTextureNew(unsigned long flags,
              * textures are immutable after QATextureNew; scanning all of them
              * once per frame is especially expensive under PPC emulation and
              * can also dereference memory the caller has already released. */
-            texture->source_pixels[level] = NewPtr((Size)length);
-            if (texture->source_pixels[level] == NULL) {
-                GXMetalDestroyTextureResource(texture->resource_id);
-                GXMetalFreeTextureSources(texture);
-                DisposePtr((Ptr)texture);
-                gDiagnostics.last_texture_error = kQAOutOfMemory;
-                return kQAOutOfMemory;
-            }
-            texture->source_row_bytes[level] = rowBytes;
             texture->live_pixels[level] = images[level].pixmap;
-            memcpy(texture->source_pixels[level], images[level].pixmap,
-                   (size_t)length);
         }
         memcpy(gTransport.shared + GXMETAL_UPLOAD_OFFSET,
-               texture->source_pixels[level] != NULL ?
-                   texture->source_pixels[level] : images[level].pixmap,
+               texture->source_pixels[level],
                (size_t)length);
         if (!GXMetalGlobalPacket(GXMETAL_OP_TEXTURE_UPLOAD,
                                  GXMETAL_RESOURCE_UPLOAD_PACKET_BYTES,
@@ -1042,16 +1089,16 @@ static TQAError GXMetalBitmapNew(unsigned long flags,
         return kQAError;
     }
 
+    bitmap->source_pixels = NewPtr((Size)length);
+    if (bitmap->source_pixels == NULL) {
+        GXMetalDestroyTextureResource(bitmap->resource_id);
+        DisposePtr((Ptr)bitmap);
+        gDiagnostics.last_bitmap_error = kQAOutOfMemory;
+        return kQAOutOfMemory;
+    }
+    bitmap->source_row_bytes = rowBytes;
+    memcpy(bitmap->source_pixels, image->pixmap, (size_t)length);
     if (indexed) {
-        bitmap->source_pixels = NewPtr((Size)length);
-        if (bitmap->source_pixels == NULL) {
-            GXMetalDestroyTextureResource(bitmap->resource_id);
-            DisposePtr((Ptr)bitmap);
-            gDiagnostics.last_bitmap_error = kQAOutOfMemory;
-            return kQAOutOfMemory;
-        }
-        bitmap->source_row_bytes = rowBytes;
-        memcpy(bitmap->source_pixels, image->pixmap, (size_t)length);
         *newBitmap = bitmap;
         gDiagnostics.last_bitmap_error = kQANoErr;
         GXMetalCountPixelType(gDiagnostics.bitmap_new_success_by_type,
@@ -1060,11 +1107,12 @@ static TQAError GXMetalBitmapNew(unsigned long flags,
     }
 
     memcpy(gTransport.shared + GXMETAL_UPLOAD_OFFSET,
-           image->pixmap, (size_t)length);
+           bitmap->source_pixels, (size_t)length);
     if (!GXMetalGlobalPacket(GXMETAL_OP_TEXTURE_UPLOAD,
                              GXMETAL_RESOURCE_UPLOAD_PACKET_BYTES,
                              &packet)) {
         GXMetalDestroyTextureResource(bitmap->resource_id);
+        DisposePtr(bitmap->source_pixels);
         DisposePtr((Ptr)bitmap);
         gDiagnostics.last_bitmap_error = kQAError;
         return kQAError;
@@ -1082,6 +1130,7 @@ static TQAError GXMetalBitmapNew(unsigned long flags,
     gxmetal_store_le32(payload + GXMETAL_UPLOAD_HEIGHT_OFFSET, height);
     if (!GXMetalCommitUploadPacket(&packet)) {
         GXMetalDestroyTextureResource(bitmap->resource_id);
+        DisposePtr(bitmap->source_pixels);
         DisposePtr((Ptr)bitmap);
         gDiagnostics.last_bitmap_error = kQAError;
         return kQAError;
@@ -1112,6 +1161,181 @@ static void GXMetalBitmapDelete(TQABitmap *bitmap)
     bitmap->magic = 0;
     gDiagnostics.bitmap_delete_count++;
     DisposePtr((Ptr)bitmap);
+}
+
+static TQAError GXMetalAccessRect(const TQARect *dirtyRect,
+                                  uint32_t resourceWidth,
+                                  uint32_t resourceHeight,
+                                  uint32_t *left, uint32_t *top,
+                                  uint32_t *width, uint32_t *height)
+{
+    if (left == NULL || top == NULL || width == NULL || height == NULL) {
+        return kQAParamErr;
+    }
+    if (dirtyRect == NULL) {
+        *left = 0;
+        *top = 0;
+        *width = resourceWidth;
+        *height = resourceHeight;
+        return kQANoErr;
+    }
+    if (dirtyRect->left < 0 || dirtyRect->top < 0 ||
+        dirtyRect->right < dirtyRect->left ||
+        dirtyRect->bottom < dirtyRect->top ||
+        (uint32_t)dirtyRect->right > resourceWidth ||
+        (uint32_t)dirtyRect->bottom > resourceHeight) {
+        return kQAParamErr;
+    }
+    *left = (uint32_t)dirtyRect->left;
+    *top = (uint32_t)dirtyRect->top;
+    *width = (uint32_t)(dirtyRect->right - dirtyRect->left);
+    *height = (uint32_t)(dirtyRect->bottom - dirtyRect->top);
+    return kQANoErr;
+}
+
+static TQAError GXMetalAccessTexture(TQATexture *texture,
+                                     long mipmapLevel, long flags,
+                                     TQAPixelBuffer *buffer)
+{
+    uint32_t level;
+    uint32_t width;
+    uint32_t height;
+    uint32_t format;
+    uint32_t bytesPerPixel;
+
+    if (texture == NULL || texture->magic != GXMETAL_TEXTURE_MAGIC ||
+        buffer == NULL || mipmapLevel < 0 ||
+        (uint32_t)mipmapLevel >= texture->levels ||
+        (flags & ~kQANoCopyNeeded) != 0 || texture->access_active != 0 ||
+        (texture->source_flags & kQATexture_NoCopy) != 0 ||
+        !GXMetalTextureFormat((TQAImagePixelType)texture->source_pixel_type,
+                              &format, &bytesPerPixel) ||
+        format != texture->pixel_format ||
+        texture->source_pixels[mipmapLevel] == NULL ||
+        texture->source_row_bytes[mipmapLevel] < bytesPerPixel ||
+        !GXMetalTransportAvailable() ||
+        (gTransport.features & GXMETAL_FEATURE_RESOURCE_SUBREGION) == 0) {
+        return kQANotSupported;
+    }
+    level = (uint32_t)mipmapLevel;
+    width = texture->width >> level;
+    height = texture->height >> level;
+    if (width == 0) {
+        width = 1;
+    }
+    if (height == 0) {
+        height = 1;
+    }
+    buffer->rowBytes = (long)texture->source_row_bytes[level];
+    buffer->pixelType = (TQAImagePixelType)texture->source_pixel_type;
+    buffer->width = (long)width;
+    buffer->height = (long)height;
+    buffer->baseAddr = texture->source_pixels[level];
+    texture->access_level = level;
+    texture->access_active = 1;
+    return kQANoErr;
+}
+
+static TQAError GXMetalAccessTextureEnd(TQATexture *texture,
+                                        const TQARect *dirtyRect)
+{
+    uint32_t level;
+    uint32_t resourceWidth;
+    uint32_t resourceHeight;
+    uint32_t format;
+    uint32_t bytesPerPixel;
+    uint32_t left;
+    uint32_t top;
+    uint32_t width;
+    uint32_t height;
+    TQAError error;
+
+    if (texture == NULL || texture->magic != GXMETAL_TEXTURE_MAGIC ||
+        texture->access_active == 0) {
+        return kQAParamErr;
+    }
+    level = texture->access_level;
+    texture->access_active = 0;
+    resourceWidth = texture->width >> level;
+    resourceHeight = texture->height >> level;
+    if (resourceWidth == 0) {
+        resourceWidth = 1;
+    }
+    if (resourceHeight == 0) {
+        resourceHeight = 1;
+    }
+    error = GXMetalAccessRect(dirtyRect, resourceWidth, resourceHeight,
+                              &left, &top, &width, &height);
+    if (error != kQANoErr || width == 0 || height == 0) {
+        return error;
+    }
+    if (!GXMetalTextureFormat(
+            (TQAImagePixelType)texture->source_pixel_type,
+            &format, &bytesPerPixel) || format != texture->pixel_format) {
+        return kQANotSupported;
+    }
+    return GXMetalUploadResourceRegion(
+        texture->resource_id, level, texture->source_pixels[level],
+        texture->source_row_bytes[level], bytesPerPixel,
+        left, top, width, height);
+}
+
+static TQAError GXMetalAccessBitmap(TQABitmap *bitmap, long flags,
+                                    TQAPixelBuffer *buffer)
+{
+    uint32_t format;
+    uint32_t bytesPerPixel;
+
+    if (bitmap == NULL || bitmap->magic != GXMETAL_BITMAP_MAGIC ||
+        buffer == NULL || (flags & ~kQANoCopyNeeded) != 0 ||
+        bitmap->access_active != 0 ||
+        !GXMetalTextureFormat((TQAImagePixelType)bitmap->source_pixel_type,
+                              &format, &bytesPerPixel) ||
+        format != bitmap->pixel_format || bitmap->source_pixels == NULL ||
+        bitmap->source_row_bytes < bytesPerPixel ||
+        !GXMetalTransportAvailable() ||
+        (gTransport.features & GXMETAL_FEATURE_RESOURCE_SUBREGION) == 0) {
+        return kQANotSupported;
+    }
+    buffer->rowBytes = (long)bitmap->source_row_bytes;
+    buffer->pixelType = (TQAImagePixelType)bitmap->source_pixel_type;
+    buffer->width = (long)bitmap->width;
+    buffer->height = (long)bitmap->height;
+    buffer->baseAddr = bitmap->source_pixels;
+    bitmap->access_active = 1;
+    return kQANoErr;
+}
+
+static TQAError GXMetalAccessBitmapEnd(TQABitmap *bitmap,
+                                       const TQARect *dirtyRect)
+{
+    uint32_t format;
+    uint32_t bytesPerPixel;
+    uint32_t left;
+    uint32_t top;
+    uint32_t width;
+    uint32_t height;
+    TQAError error;
+
+    if (bitmap == NULL || bitmap->magic != GXMETAL_BITMAP_MAGIC ||
+        bitmap->access_active == 0) {
+        return kQAParamErr;
+    }
+    bitmap->access_active = 0;
+    error = GXMetalAccessRect(dirtyRect, bitmap->width, bitmap->height,
+                              &left, &top, &width, &height);
+    if (error != kQANoErr || width == 0 || height == 0) {
+        return error;
+    }
+    if (!GXMetalTextureFormat((TQAImagePixelType)bitmap->source_pixel_type,
+                              &format, &bytesPerPixel) ||
+        format != bitmap->pixel_format) {
+        return kQANotSupported;
+    }
+    return GXMetalUploadResourceRegion(
+        bitmap->resource_id, 0, bitmap->source_pixels,
+        bitmap->source_row_bytes, bytesPerPixel,
+        left, top, width, height);
 }
 
 static GXMetalDrawState *GXMetalGetState(const TQADrawContext *drawContext)
@@ -4100,6 +4324,10 @@ static TQAError GXMetalEngineGestalt(TQAGestaltSelector selector,
         if (features & GXMETAL_FEATURE_MULTI_TEXTURE_VERTEX) {
             value |= kQAOptional_MultiTextures;
         }
+        if (features & GXMETAL_FEATURE_RESOURCE_SUBREGION) {
+            value |= kQAOptional_AccessTexture |
+                     kQAOptional_AccessBitmap;
+        }
         break;
     case kQAGestalt_FastFeatures:
         value = kQAFast_Line | kQAFast_Gouraud;
@@ -4249,6 +4477,38 @@ TQAError GXMetalEngineGetMethod(TQAEngineMethodTag methodTag,
         break;
     case kQABitmapBindColorTable:
         method->bitmapBindColorTable = GXMetalBitmapBindColorTable;
+        break;
+    case kQAAccessTexture:
+        if (!GXMetalTransportAvailable() ||
+            (gTransport.features &
+             GXMETAL_FEATURE_RESOURCE_SUBREGION) == 0) {
+            return kQANotSupported;
+        }
+        method->accessTexture = GXMetalAccessTexture;
+        break;
+    case kQAAccessTextureEnd:
+        if (!GXMetalTransportAvailable() ||
+            (gTransport.features &
+             GXMETAL_FEATURE_RESOURCE_SUBREGION) == 0) {
+            return kQANotSupported;
+        }
+        method->accessTextureEnd = GXMetalAccessTextureEnd;
+        break;
+    case kQAAccessBitmap:
+        if (!GXMetalTransportAvailable() ||
+            (gTransport.features &
+             GXMETAL_FEATURE_RESOURCE_SUBREGION) == 0) {
+            return kQANotSupported;
+        }
+        method->accessBitmap = GXMetalAccessBitmap;
+        break;
+    case kQAAccessBitmapEnd:
+        if (!GXMetalTransportAvailable() ||
+            (gTransport.features &
+             GXMETAL_FEATURE_RESOURCE_SUBREGION) == 0) {
+            return kQANotSupported;
+        }
+        method->accessBitmapEnd = GXMetalAccessBitmapEnd;
         break;
     default:
         GXMetalPersistDiagnostics();

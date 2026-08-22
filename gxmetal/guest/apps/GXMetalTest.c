@@ -1077,6 +1077,152 @@ static TQAError GXMetalRenderATITextureMutation(
     return error;
 }
 
+static TQAError GXMetalRenderDynamicResources(
+    TQADrawContext *context, const TQAEngine *engine,
+    GDHandle graphicsDevice, const TQARect *deviceRect)
+{
+    unsigned long texturePixels[16];
+    unsigned long bitmapPixels[16];
+    TQAImage textureImage;
+    TQAImage bitmapImage;
+    TQATexture *texture = NULL;
+    TQABitmap *bitmap = NULL;
+    TQAPixelBuffer access;
+    TQARect textureDirty = {0, 2, 0, 4};
+    TQARect bitmapDirty = {0, 4, 0, 2};
+    TQARect frameDirty = {0, GXMETAL_WIDTH, 0, GXMETAL_HEIGHT};
+    TQAVTexture quad[4];
+    TQAVGouraud bitmapVertex;
+    unsigned long vertexFlags[4] = {0, 0, 0, 0};
+    TQAError error;
+    int x;
+    int y;
+
+    for (y = 0; y < 4; y++) {
+        for (x = 0; x < 4; x++) {
+            texturePixels[y * 4 + x] = 0xff0000ffUL;
+            bitmapPixels[y * 4 + x] = 0xff0000ffUL;
+        }
+    }
+    textureImage.width = 4;
+    textureImage.height = 4;
+    textureImage.rowBytes = 16;
+    textureImage.pixmap = texturePixels;
+    bitmapImage = textureImage;
+    bitmapImage.pixmap = bitmapPixels;
+    error = QATextureNew(engine, kQATexture_None, kQAPixel_ARGB32,
+                         &textureImage, &texture);
+    if (error == kQANoErr) {
+        error = QABitmapNew(engine, kQABitmap_None, kQAPixel_ARGB32,
+                            &bitmapImage, &bitmap);
+    }
+    memset(&access, 0, sizeof(access));
+    if (error == kQANoErr) {
+        error = QAAccessTexture(engine, texture, 0, 0, &access);
+    }
+    if (error == kQANoErr &&
+        (access.pixelType != kQAPixel_ARGB32 || access.width != 4 ||
+         access.height != 4 || access.rowBytes < 16 ||
+         access.baseAddr == NULL)) {
+        error = kQAError;
+    }
+    if (error == kQANoErr) {
+        for (y = 0; y < 4; y++) {
+            unsigned long *row = (unsigned long *)
+                ((unsigned char *)access.baseAddr + y * access.rowBytes);
+            row[0] = 0xffff0000UL;
+            row[1] = 0xffff0000UL;
+        }
+        error = QAAccessTextureEnd(engine, texture, &textureDirty);
+    }
+    memset(&access, 0, sizeof(access));
+    if (error == kQANoErr) {
+        error = QAAccessBitmap(engine, bitmap, 0, &access);
+    }
+    if (error == kQANoErr &&
+        (access.pixelType != kQAPixel_ARGB32 || access.width != 4 ||
+         access.height != 4 || access.rowBytes < 16 ||
+         access.baseAddr == NULL)) {
+        error = kQAError;
+    }
+    if (error == kQANoErr) {
+        for (y = 0; y < 2; y++) {
+            unsigned long *row = (unsigned long *)
+                ((unsigned char *)access.baseAddr + y * access.rowBytes);
+            for (x = 0; x < 4; x++) {
+                row[x] = 0xffff0000UL;
+            }
+        }
+        error = QAAccessBitmapEnd(engine, bitmap, &bitmapDirty);
+    }
+    if (error != kQANoErr) {
+        GXMetalRecordResult("FAIL: dynamic RAVE resource access");
+        if (bitmap != NULL) {
+            QABitmapDelete(engine, bitmap);
+        }
+        if (texture != NULL) {
+            QATextureDelete(engine, texture);
+        }
+        return error;
+    }
+
+    quad[0] = GXMetalTextureVertex(16.0f, 24.0f, 0.5f, 0.0f, 0.0f);
+    quad[1] = GXMetalTextureVertex(144.0f, 24.0f, 0.5f, 1.0f, 0.0f);
+    quad[2] = GXMetalTextureVertex(16.0f, 196.0f, 0.5f, 0.0f, 1.0f);
+    quad[3] = GXMetalTextureVertex(144.0f, 196.0f, 0.5f, 1.0f, 1.0f);
+    bitmapVertex = GXMetalGouraud(200.0f, 100.0f, 0.4f,
+                                  1.0f, 1.0f, 1.0f, 1.0f);
+    QASetFloat(context, kQATag_ColorBG_r, 0.0f);
+    QASetFloat(context, kQATag_ColorBG_g, 0.0f);
+    QASetFloat(context, kQATag_ColorBG_b, 0.0f);
+    QASetFloat(context, kQATag_ColorBG_a, 1.0f);
+    QASetInt(context, kQATag_ZFunction, kQAZFunction_None);
+    QASetInt(context, kQATag_ZBufferMask, kQAZBufferMask_Disable);
+    QASetInt(context, kQATag_TextureFilter, kQATextureFilter_Fast);
+    QASetInt(context, kQATag_TextureOp, kQATextureOp_None);
+    QASetInt(context, kQATagGL_TextureWrapU, kQAGL_Clamp);
+    QASetInt(context, kQATagGL_TextureWrapV, kQAGL_Clamp);
+    QARenderStart(context, &frameDirty, NULL);
+    QASetPtr(context, kQATag_Texture, texture);
+    QADrawVTexture(context, 4, kQAVertexMode_Strip, quad, vertexFlags);
+    QADrawBitmap(context, &bitmapVertex, bitmap);
+    error = QARenderEnd(context, &frameDirty);
+    if (error == kQANoErr) {
+        error = QASync(context);
+    }
+    if (error == kQANoErr &&
+        !GXMetalPixelMatches(graphicsDevice, deviceRect->left + 48,
+                             deviceRect->top + 110,
+                             kGXMetalPixelRed)) {
+        GXMetalRecordResult("FAIL: dynamic texture dirty-region pixel");
+        error = kQAError;
+    }
+    if (error == kQANoErr &&
+        !GXMetalPixelMatches(graphicsDevice, deviceRect->left + 112,
+                             deviceRect->top + 110,
+                             kGXMetalPixelBlue)) {
+        GXMetalRecordResult("FAIL: dynamic texture preserved pixel");
+        error = kQAError;
+    }
+    if (error == kQANoErr &&
+        !GXMetalPixelMatches(graphicsDevice, deviceRect->left + 201,
+                             deviceRect->top + 101,
+                             kGXMetalPixelRed)) {
+        GXMetalRecordResult("FAIL: dynamic bitmap dirty-region pixel");
+        error = kQAError;
+    }
+    if (error == kQANoErr &&
+        !GXMetalPixelMatches(graphicsDevice, deviceRect->left + 201,
+                             deviceRect->top + 103,
+                             kGXMetalPixelBlue)) {
+        GXMetalRecordResult("FAIL: dynamic bitmap preserved pixel");
+        error = kQAError;
+    }
+    QABitmapDelete(engine, bitmap);
+    QATextureDelete(engine, texture);
+    return error;
+}
+
 static TQAError GXMetalBenchmarkFrame(TQADrawContext *context,
                                       TQATexture *texture,
                                       unsigned long frame)
@@ -1239,7 +1385,7 @@ static void GXMetalBuildPassResult(char *result, size_t resultCapacity,
     GXMetalAppendText(&cursor, end, "PASS: version=");
     GXMetalAppendVersion(&cursor, end, revision);
     GXMetalAppendText(&cursor, end,
-        " RAVE discovery capability-contract depth perspective-z blend alpha-test backface clip texture public-multitexture ATI-private-nocopy bitmap dirty-present double-buffer framebuffer gx_us=");
+        " RAVE discovery capability-contract depth perspective-z blend alpha-test backface clip texture public-multitexture dynamic-resources ATI-private-nocopy bitmap dirty-present double-buffer framebuffer gx_us=");
     GXMetalAppendDecimal(&cursor, end, gxMetalMicroseconds);
     GXMetalAppendText(&cursor, end, " sw_us=");
     GXMetalAppendDecimal(&cursor, end, softwareMicroseconds);
@@ -1259,7 +1405,7 @@ static void GXMetalBuildPassMessage(char *message, size_t messageCapacity,
     GXMetalAppendText(&cursor, end, "GXMetal ");
     GXMetalAppendVersion(&cursor, end, revision);
     GXMetalAppendText(&cursor, end,
-        " passed automatic RAVE discovery, public RAVE 1.6 multitexture rendering, framebuffer correctness, ATI private static/NoCopy texture mutation, bitmap drawing, presentation, and fallback. The repeatable mixed texture/Gouraud workload ran ");
+        " passed automatic RAVE discovery, public RAVE 1.6 multitexture and dynamic-resource rendering, framebuffer correctness, ATI private static/NoCopy texture mutation, bitmap drawing, presentation, and fallback. The repeatable mixed texture/Gouraud workload ran ");
     GXMetalAppendDecimal(&cursor, end, speedupTimes100 / 100);
     GXMetalAppendText(&cursor, end, ".");
     if (speedupTimes100 % 100 < 10) {
@@ -1527,7 +1673,9 @@ int main(void)
                        kQAOptional_CL8 | kQAOptional_ZBufferMask |
                        kQAOptional_ClearZBuffer | kQAOptional_FogDepth |
                        kQAOptional_AlphaTest |
-                       kQAOptional_MultiTextures;
+                       kQAOptional_MultiTextures |
+                       kQAOptional_AccessTexture |
+                       kQAOptional_AccessBitmap;
     requiredFeatures2 = kQAOptional2_SwapBuffers | kQAOptional2_FlipOrigin;
     requiredFastFeatures = kQAFast_Line | kQAFast_Gouraud |
                            kQAFast_Blend | kQAFast_Texture |
@@ -1641,6 +1789,10 @@ int main(void)
         }
         if (error == kQANoErr) {
             error = GXMetalRenderATITextureMutation(
+                context, engine, device.device.gDevice, &deviceRect);
+        }
+        if (error == kQANoErr) {
+            error = GXMetalRenderDynamicResources(
                 context, engine, device.device.gDevice, &deviceRect);
         }
     } else {
