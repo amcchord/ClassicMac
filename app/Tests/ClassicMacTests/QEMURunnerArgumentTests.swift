@@ -127,7 +127,7 @@ final class QEMURunnerArgumentTests: XCTestCase {
         return try body()
     }
 
-    func testPowerMacCDStartupKeepsToolsTrayEmpty() throws {
+    func testPowerMacCDStartupUsesSingleVirtioInstallerVolume() throws {
         try withTemporaryToolsCD {
             let arguments = QEMUManager.buildArguments(for: config())
             let toolsDrive = optionValues("-drive", in: arguments)
@@ -141,7 +141,7 @@ final class QEMURunnerArgumentTests: XCTestCase {
                 .first { $0.contains("id=cd0") }
             XCTAssertEqual(
                 userDisc,
-                "if=ide,index=2,media=cdrom,id=cd0,readonly=on,file=/tmp/install.iso,format=raw"
+                "if=ide,index=2,media=cdrom,id=cd0,readonly=on"
             )
             let devices = optionValues("-device", in: arguments)
             XCTAssertFalse(devices.contains { $0.contains("classicmac-tools") })
@@ -156,6 +156,10 @@ final class QEMURunnerArgumentTests: XCTestCase {
             XCTAssertTrue(
                 optionValues("-device", in: arguments)
                     .contains("virtio-blk-pci,drive=classicmac-cd-boot")
+            )
+            XCTAssertEqual(
+                arguments.filter { $0.contains("/tmp/install.iso") }.count,
+                1
             )
         }
     }
@@ -209,7 +213,7 @@ final class QEMURunnerArgumentTests: XCTestCase {
             XCTAssertEqual(
                 optionValues("-drive", in: arguments)
                     .first { $0.contains("id=cd0") },
-                "if=ide,index=2,media=cdrom,id=cd0,readonly=on,file=/tmp/install.iso,format=raw"
+                "if=ide,index=2,media=cdrom,id=cd0,readonly=on"
             )
             XCTAssertEqual(optionValues("-nic", in: arguments), ["none"])
         }
@@ -223,7 +227,7 @@ final class QEMURunnerArgumentTests: XCTestCase {
         XCTAssertEqual(
             optionValues("-drive", in: arguments)
                 .first { $0.contains("id=cd0") },
-            "if=ide,index=2,media=cdrom,id=cd0,readonly=on,file=/tmp/Mac OS 8,,5.iso,format=raw"
+            "if=ide,index=2,media=cdrom,id=cd0,readonly=on"
         )
         XCTAssertTrue(
             optionValues("-blockdev", in: arguments).contains(

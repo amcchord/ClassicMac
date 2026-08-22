@@ -695,15 +695,17 @@ final class QEMUManager: ObservableObject {
         var userDisc = "if=ide,index=\(userDiscIndex),media=cdrom,id=cd0,readonly=on"
         let escapedCDPath = config.cdImagePath?
             .replacingOccurrences(of: ",", with: ",,")
-        if let escapedCDPath, !escapedCDPath.isEmpty {
+        if let escapedCDPath, !escapedCDPath.isEmpty, !bootingFromUserCD {
             userDisc += ",file=\(escapedCDPath),format=raw"
         }
         args += ["-drive", userDisc]
         if bootingFromUserCD {
             // Mac OS 8.5/8.6 cannot use mac99's KeyLargo IDE controller while
-            // the ROM is starting. Mirror the selected disc read-only through
-            // Virtio for startup; the ordinary IDE CD remains visible to the
-            // installer once Mac OS is running.
+            // the ROM is starting. Expose the selected disc read-only through
+            // Virtio for the entire installer boot and leave the ordinary IDE
+            // tray empty. Attaching both paths makes Mac OS mount two identical
+            // installer volumes. The IDE tray receives the selected image on
+            // the next normal hard-disk start.
             args += [
                 "-blockdev",
                 "driver=file,node-name=classicmac-cd-file,filename=\(escapedCDPath!),read-only=on",
