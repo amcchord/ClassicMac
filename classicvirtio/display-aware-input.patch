@@ -1,0 +1,65 @@
+diff --git a/device-input.c b/device-input.c
+index 16851d3..4e625d2 100644
+--- a/device-input.c
++++ b/device-input.c
+@@ -23,6 +23,11 @@
+ 
+ #include <string.h>
+ 
++/* Read the current main GDevice without calling through InterfaceLib from the
++ * VirtIO completion path. Unlike RowBits/ColLines at 0xc20, gdRect follows
++ * Display Manager mode changes after startup. */
++MAKE_LM_ACCESSOR(0x8a4, GDHandle, MainDevice)
++
+ struct event {
+ 	int16_t type;
+ 	int16_t code;
+@@ -39,6 +44,32 @@ static struct event *lpage;
+ static uint32_t ppage;
+ static volatile uint32_t retlens[4096 / sizeof (struct event)];
+ 
++static Rect currentScreenBounds(void) {
++	GDHandle mainDevice = XLMGetMainDevice();
++	Rect bounds = {0, 0, XLMGetColLines(), XLMGetRowBits()};
++
++	if (mainDevice != NULL && *mainDevice != NULL) {
++		Rect deviceBounds = (**mainDevice).gdRect;
++		if (deviceBounds.right > deviceBounds.left &&
++				deviceBounds.bottom > deviceBounds.top) {
++			bounds = deviceBounds;
++		}
++	}
++	return bounds;
++}
++
++static short scaleAbsoluteAxis(long value, short minimum, short maximum) {
++	unsigned long extent = (unsigned short)(maximum - minimum);
++	unsigned long scaled;
++
++	if (value < 0) value = 0;
++	if (value > 0x7fff) value = 0x7fff;
++	if (extent == 0) return minimum;
++	scaled = (unsigned long)value * extent / 0x8000;
++	if (scaled >= extent) scaled = extent - 1;
++	return minimum + scaled;
++}
++
+ DriverDescription TheDriverDescription = {
+ 	kTheDescriptionSignature,
+ 	kInitialDriverDescriptor,
+@@ -161,9 +192,12 @@ static void handleEvent(struct event e) {
+ 		Scroll(e.value);
+ 	} else if (e.type == EV_SYN) {
+ 		if (knowpos) {
+-			// Scale to screen size (in lowmem globals)
+-			unsigned long realx = x * XLMGetRowBits() / 0x8000 + 1;
+-			unsigned long realy = y * XLMGetColLines() / 0x8000 + 1;
++			/* Scale against the live main-device rectangle. RowBits and
++			 * ColLines keep their startup values after Display Manager changes
++			 * resolution, limiting the seamless pointer to the old desktop. */
++			Rect bounds = currentScreenBounds();
++			short realx = scaleAbsoluteAxis(x, bounds.left, bounds.right);
++			short realy = scaleAbsoluteAxis(y, bounds.top, bounds.bottom);
+ 
+ 			LMSetMouseTemp((Point){realy, realx});
+ 			LMSetRawMouseLocation((Point){realy, realx});
