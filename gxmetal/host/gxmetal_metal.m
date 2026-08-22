@@ -684,6 +684,7 @@ static uint32_t gxmetal_metal_resource_bytes_per_pixel(uint32_t format)
     case GXMETAL_PIXEL_ARGB4444:
     case GXMETAL_PIXEL_ALPHA_INTENSITY88:
         return 2;
+    case GXMETAL_PIXEL_ALPHA8:
     case GXMETAL_PIXEL_INTENSITY8:
         return 1;
     case GXMETAL_PIXEL_ARGB8888:
@@ -1042,6 +1043,15 @@ static void gxmetal_metal_convert_pixel(uint32_t format,
         destination[1] = source[2];
         destination[2] = source[3];
         destination[3] = 255;
+        break;
+    case GXMETAL_PIXEL_ALPHA8:
+        /* Mac OS 9's Apple Software RAVE is the format oracle: Alpha1 uses
+         * one source byte per texel, treats any nonzero value as opaque, and
+         * supplies neutral white RGB for texture modulation. */
+        destination[0] = 255;
+        destination[1] = 255;
+        destination[2] = 255;
+        destination[3] = source[0] != 0 ? 255 : 0;
         break;
     case GXMETAL_PIXEL_INTENSITY8:
         destination[0] = source[0];

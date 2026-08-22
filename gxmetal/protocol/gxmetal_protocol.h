@@ -22,7 +22,7 @@ extern "C" {
 
 #define GXMETAL_PROTOCOL_MAGIC            UINT32_C(0x47584d54) /* "GXMT" */
 #define GXMETAL_PROTOCOL_VERSION_MAJOR    1u
-#define GXMETAL_PROTOCOL_VERSION_MINOR    11u
+#define GXMETAL_PROTOCOL_VERSION_MINOR    12u
 #define GXMETAL_PROTOCOL_VERSION \
     ((GXMETAL_PROTOCOL_VERSION_MAJOR << 16) | GXMETAL_PROTOCOL_VERSION_MINOR)
 
@@ -93,7 +93,10 @@ enum GXMetalFeature {
      * X/Y origin is packed into the final resource-upload payload word. */
     GXMETAL_FEATURE_RESOURCE_SUBREGION = UINT64_C(1) << 16,
     /* The host converts RAVE I8 and big-endian AI16_88 source pixels. */
-    GXMETAL_FEATURE_INTENSITY_FORMATS = UINT64_C(1) << 17
+    GXMETAL_FEATURE_INTENSITY_FORMATS = UINT64_C(1) << 17,
+    /* Apple Software RAVE treats Alpha1 as one byte per texel: zero is
+     * transparent, every nonzero value is opaque, and RGB is neutral white. */
+    GXMETAL_FEATURE_ALPHA1_FORMAT = UINT64_C(1) << 18
 };
 
 /* C11 enum constants are restricted to int even though the feature word is 64-bit. */

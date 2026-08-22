@@ -253,7 +253,8 @@ bool gxmetal_qemu_init(GXMetalQemuState *state, Object *owner,
                            GXMETAL_FEATURE_RELATIVE_INPUT |
                            GXMETAL_FEATURE_MULTI_TEXTURE_VERTEX |
                            GXMETAL_FEATURE_RESOURCE_SUBREGION |
-                           GXMETAL_FEATURE_INTENSITY_FORMATS;
+                           GXMETAL_FEATURE_INTENSITY_FORMATS |
+                           GXMETAL_FEATURE_ALPHA1_FORMAT;
     } else {
         state->features |= GXMETAL_FEATURE_TRACE;
     }
