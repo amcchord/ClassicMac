@@ -1096,7 +1096,7 @@ static void GXMetalBuildPassResult(char *result, size_t resultCapacity,
     GXMetalAppendText(&cursor, end, "PASS: version=");
     GXMetalAppendVersion(&cursor, end, revision);
     GXMetalAppendText(&cursor, end,
-        " RAVE discovery depth perspective-z blend alpha-test backface clip texture ATI-private-nocopy bitmap dirty-present double-buffer framebuffer gx_us=");
+        " RAVE discovery capability-contract depth perspective-z blend alpha-test backface clip texture ATI-private-nocopy bitmap dirty-present double-buffer framebuffer gx_us=");
     GXMetalAppendDecimal(&cursor, end, gxMetalMicroseconds);
     GXMetalAppendText(&cursor, end, " sw_us=");
     GXMetalAppendDecimal(&cursor, end, softwareMicroseconds);
@@ -1169,10 +1169,26 @@ int main(void)
     TQADrawContext *unexpectedContext = NULL;
     unsigned long optionalFeatures = 0;
     unsigned long optionalFeatures2 = 0;
+    unsigned long fastFeatures = 0;
+    unsigned long textureMemory = 0;
+    unsigned long fastTextureMemory = 0;
+    unsigned long multiTextureMax = 0;
+    unsigned long drawPixelTypes = 0;
+    unsigned long preferredDrawPixelTypes = 0;
+    unsigned long texturePixelTypes = 0;
+    unsigned long preferredTexturePixelTypes = 0;
+    unsigned long bitmapPixelTypes = 0;
+    unsigned long preferredBitmapPixelTypes = 0;
+    unsigned long unknownGestaltResponse = 0x47584d54UL;
     unsigned long vendorID = 0;
     unsigned long engineID = 0;
     unsigned long revision = 0;
     unsigned long requiredFeatures;
+    unsigned long requiredFeatures2;
+    unsigned long requiredFastFeatures;
+    unsigned long requiredDrawPixelTypes;
+    unsigned long requiredTexturePixelTypes;
+    unsigned long requiredBitmapPixelTypes;
     TQAError error;
     OSErr loadError;
     int32_t diagnosticStatus;
@@ -1303,6 +1319,26 @@ int main(void)
                         &optionalFeatures) != kQANoErr ||
         QAEngineGestalt(engine, kQAGestalt_OptionalFeatures2,
                         &optionalFeatures2) != kQANoErr ||
+        QAEngineGestalt(engine, kQAGestalt_FastFeatures,
+                        &fastFeatures) != kQANoErr ||
+        QAEngineGestalt(engine, kQAGestalt_TextureMemory,
+                        &textureMemory) != kQANoErr ||
+        QAEngineGestalt(engine, kQAGestalt_FastTextureMemory,
+                        &fastTextureMemory) != kQANoErr ||
+        QAEngineGestalt(engine, kQAGestalt_MultiTextureMax,
+                        &multiTextureMax) != kQANoErr ||
+        QAEngineGestalt(engine, kQAGestalt_DrawContextPixelTypesAllowed,
+                        &drawPixelTypes) != kQANoErr ||
+        QAEngineGestalt(engine, kQAGestalt_DrawContextPixelTypesPreferred,
+                        &preferredDrawPixelTypes) != kQANoErr ||
+        QAEngineGestalt(engine, kQAGestalt_TexturePixelTypesAllowed,
+                        &texturePixelTypes) != kQANoErr ||
+        QAEngineGestalt(engine, kQAGestalt_TexturePixelTypesPreferred,
+                        &preferredTexturePixelTypes) != kQANoErr ||
+        QAEngineGestalt(engine, kQAGestalt_BitmapPixelTypesAllowed,
+                        &bitmapPixelTypes) != kQANoErr ||
+        QAEngineGestalt(engine, kQAGestalt_BitmapPixelTypesPreferred,
+                        &preferredBitmapPixelTypes) != kQANoErr ||
         QAEngineGestalt(engine, kQAGestalt_VendorID,
                         &vendorID) != kQANoErr ||
         QAEngineGestalt(engine, kQAGestalt_EngineID,
@@ -1340,16 +1376,64 @@ int main(void)
         QAExit();
         return 1;
     }
-    requiredFeatures = kQAOptional_Texture | kQAOptional_TextureHQ |
-                       kQAOptional_Blend | kQAOptional_ClearDrawBuffer |
+    requiredFeatures = kQAOptional_BoundToDevice | kQAOptional_NoDither |
+                       kQAOptional_ClearDrawBuffer | kQAOptional_OpenGL |
+                       kQAOptional_PerspectiveZ | kQAOptional_Blend |
+                       kQAOptional_BlendAlpha | kQAOptional_Texture |
+                       kQAOptional_TextureHQ | kQAOptional_TextureColor |
+                       kQAOptional_CL8 | kQAOptional_ZBufferMask |
                        kQAOptional_ClearZBuffer | kQAOptional_FogDepth |
                        kQAOptional_AlphaTest;
-    if ((optionalFeatures & requiredFeatures) != requiredFeatures ||
-        (optionalFeatures2 & kQAOptional2_SwapBuffers) == 0) {
-        GXMetalRecordResult("FAIL: incomplete RAVE feature set");
+    requiredFeatures2 = kQAOptional2_SwapBuffers | kQAOptional2_FlipOrigin;
+    requiredFastFeatures = kQAFast_Line | kQAFast_Gouraud |
+                           kQAFast_Blend | kQAFast_Texture |
+                           kQAFast_TextureHQ | kQAFast_CL8 |
+                           kQAFast_FogDepth;
+    if (optionalFeatures != requiredFeatures ||
+        optionalFeatures2 != requiredFeatures2 ||
+        fastFeatures != requiredFastFeatures || multiTextureMax != 0 ||
+        (optionalFeatures & kQAOptional_MultiTextures) != 0) {
+        GXMetalRecordResult("FAIL: inaccurate RAVE capability declaration");
         DisposeWindow(window);
         GXMetalShowResult(false,
-            "GXMetal registered, but the host did not expose the complete depth, fog, alpha-test, blend, texture, and double-buffer feature set.");
+            "GXMetal's advertised RAVE features do not exactly match its tested capability contract.");
+        QAExit();
+        return 1;
+    }
+    requiredDrawPixelTypes = (1UL << kQAPixel_RGB16) |
+                             (1UL << kQAPixel_RGB32) |
+                             (1UL << kQAPixel_ARGB32);
+    requiredTexturePixelTypes = (1UL << kQAPixel_RGB16) |
+                                (1UL << kQAPixel_ARGB16) |
+                                (1UL << kQAPixel_RGB32) |
+                                (1UL << kQAPixel_ARGB32) |
+                                (1UL << kQAPixel_CL8) |
+                                (1UL << kQAPixel_ARGB16_4444);
+    requiredBitmapPixelTypes = (1UL << kQAPixel_RGB16) |
+                               (1UL << kQAPixel_RGB32) |
+                               (1UL << kQAPixel_ARGB32) |
+                               (1UL << kQAPixel_CL8);
+    if (textureMemory == 0 || fastTextureMemory != textureMemory ||
+        drawPixelTypes != requiredDrawPixelTypes ||
+        preferredDrawPixelTypes != requiredDrawPixelTypes ||
+        texturePixelTypes != requiredTexturePixelTypes ||
+        preferredTexturePixelTypes != requiredTexturePixelTypes ||
+        bitmapPixelTypes != requiredBitmapPixelTypes ||
+        preferredBitmapPixelTypes != requiredBitmapPixelTypes) {
+        GXMetalRecordResult("FAIL: inaccurate RAVE resource declaration");
+        DisposeWindow(window);
+        GXMetalShowResult(false,
+            "GXMetal's texture memory or pixel-format declaration does not match its tested resource contract.");
+        QAExit();
+        return 1;
+    }
+    if (QAEngineGestalt(engine, (TQAGestaltSelector)999,
+                        &unknownGestaltResponse) != kQAGestaltUnknown ||
+        unknownGestaltResponse != 0x47584d54UL) {
+        GXMetalRecordResult("FAIL: unsafe unknown RAVE gestalt probe");
+        DisposeWindow(window);
+        GXMetalShowResult(false,
+            "GXMetal did not safely decline an unknown RAVE capability probe.");
         QAExit();
         return 1;
     }
