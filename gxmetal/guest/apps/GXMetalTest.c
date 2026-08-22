@@ -1371,6 +1371,121 @@ static TQAError GXMetalRenderIntensityFormats(
     return error;
 }
 
+static TQAError GXMetalRenderAlphaPaletteFormat(
+    TQADrawContext *context, const TQAEngine *engine,
+    GDHandle graphicsDevice, const TQARect *deviceRect)
+{
+    static unsigned char pixels[8] = {
+        0x80, 0x01, 0xff, 0x00, 0x33, 0x44, 0x55, 0x66
+    };
+    static unsigned long palette[256] = {
+        [0] = 0x00ff0000UL,
+        [1] = 0x00ffffffUL
+    };
+    TQAImage image;
+    TQAColorTable *colorTable = NULL;
+    TQATexture *texture = NULL;
+    TQABitmap *bitmap = NULL;
+    TQAVTexture quad[4];
+    TQAVGouraud bitmapVertex;
+    unsigned long vertexFlags[4] = {0, 0, 0, 0};
+    TQARect dirty = {0, GXMETAL_WIDTH, 0, GXMETAL_HEIGHT};
+    TQAError error;
+
+    image.width = 2;
+    image.height = 1;
+    image.rowBytes = 8;
+    image.pixmap = pixels;
+    error = QAColorTableNew(engine, kQAColorTable_CL8_RGB32,
+                            palette, true, &colorTable);
+    if (error == kQANoErr) {
+        error = QATextureNew(engine, kQATexture_None,
+                             kQAPixel_ACL16_88, &image, &texture);
+    }
+    if (error == kQANoErr) {
+        error = QATextureBindColorTable(engine, texture, colorTable);
+    }
+    if (error == kQANoErr) {
+        error = QABitmapNew(engine, kQABitmap_None,
+                            kQAPixel_ACL16_88, &image, &bitmap);
+    }
+    if (error == kQANoErr) {
+        error = QABitmapBindColorTable(engine, bitmap, colorTable);
+    }
+    if (error != kQANoErr) {
+        GXMetalRecordResult("FAIL: ACL16_88 palette resource creation");
+        if (bitmap != NULL) {
+            QABitmapDelete(engine, bitmap);
+        }
+        if (texture != NULL) {
+            QATextureDelete(engine, texture);
+        }
+        if (colorTable != NULL) {
+            QAColorTableDelete(engine, colorTable);
+        }
+        return error;
+    }
+
+    quad[0] = GXMetalTextureVertex(16.0f, 24.0f, 0.5f, 0.0f, 0.0f);
+    quad[1] = GXMetalTextureVertex(144.0f, 24.0f, 0.5f, 1.0f, 0.0f);
+    quad[2] = GXMetalTextureVertex(16.0f, 196.0f, 0.5f, 0.0f, 1.0f);
+    quad[3] = GXMetalTextureVertex(144.0f, 196.0f, 0.5f, 1.0f, 1.0f);
+    bitmapVertex = GXMetalGouraud(160.0f, 100.0f, 0.4f,
+                                  1.0f, 1.0f, 1.0f, 1.0f);
+    QASetFloat(context, kQATag_ColorBG_r, 0.0f);
+    QASetFloat(context, kQATag_ColorBG_g, 0.0f);
+    QASetFloat(context, kQATag_ColorBG_b, 1.0f);
+    QASetFloat(context, kQATag_ColorBG_a, 1.0f);
+    QASetInt(context, kQATag_ZFunction, kQAZFunction_None);
+    QASetInt(context, kQATag_ZBufferMask, kQAZBufferMask_Disable);
+    QASetInt(context, kQATag_Blend, kQABlend_Interpolate);
+    QASetInt(context, kQATag_AlphaTestFunc, kQAAlphaTest_None);
+    QASetInt(context, kQATag_TextureFilter, kQATextureFilter_Fast);
+    QASetInt(context, kQATag_TextureOp, kQATextureOp_None);
+    QASetInt(context, kQATagGL_TextureWrapU, kQAGL_Clamp);
+    QASetInt(context, kQATagGL_TextureWrapV, kQAGL_Clamp);
+    QARenderStart(context, &dirty, NULL);
+    QASetPtr(context, kQATag_Texture, texture);
+    QADrawVTexture(context, 4, kQAVertexMode_Strip, quad, vertexFlags);
+    QADrawBitmap(context, &bitmapVertex, bitmap);
+    error = QARenderEnd(context, &dirty);
+    if (error == kQANoErr) {
+        error = QASync(context);
+    }
+    if (error == kQANoErr &&
+        !GXMetalPixelMatches(graphicsDevice, deviceRect->left + 48,
+                             deviceRect->top + 110,
+                             kGXMetalPixelLightBlue)) {
+        GXMetalRecordResult("FAIL: ACL16_88 per-pixel alpha");
+        error = kQAError;
+    }
+    if (error == kQANoErr &&
+        !GXMetalPixelMatches(graphicsDevice, deviceRect->left + 112,
+                             deviceRect->top + 110,
+                             kGXMetalPixelBlue)) {
+        GXMetalRecordResult("FAIL: ACL16_88 transparent palette index");
+        error = kQAError;
+    }
+    if (error == kQANoErr &&
+        !GXMetalPixelMatches(graphicsDevice, deviceRect->left + 160,
+                             deviceRect->top + 100,
+                             kGXMetalPixelLightBlue)) {
+        GXMetalRecordResult("FAIL: ACL16_88 bitmap alpha");
+        error = kQAError;
+    }
+    if (error == kQANoErr &&
+        !GXMetalPixelMatches(graphicsDevice, deviceRect->left + 161,
+                             deviceRect->top + 100,
+                             kGXMetalPixelBlue)) {
+        GXMetalRecordResult("FAIL: ACL16_88 bitmap transparency");
+        error = kQAError;
+    }
+    QABitmapDelete(engine, bitmap);
+    QATextureDelete(engine, texture);
+    QAColorTableDelete(engine, colorTable);
+    return error;
+}
+
 static TQAError GXMetalBenchmarkFrame(TQADrawContext *context,
                                       TQATexture *texture,
                                       unsigned long frame)
@@ -1533,7 +1648,7 @@ static void GXMetalBuildPassResult(char *result, size_t resultCapacity,
     GXMetalAppendText(&cursor, end, "PASS: version=");
     GXMetalAppendVersion(&cursor, end, revision);
     GXMetalAppendText(&cursor, end,
-        " RAVE discovery capability-contract depth perspective-z blend alpha-test backface clip texture intensity-formats public-multitexture dynamic-resources ATI-private-nocopy bitmap dirty-present double-buffer framebuffer gx_us=");
+        " RAVE discovery capability-contract depth perspective-z blend alpha-test backface clip texture intensity-formats acl16-88 public-multitexture dynamic-resources ATI-private-nocopy bitmap dirty-present double-buffer framebuffer gx_us=");
     GXMetalAppendDecimal(&cursor, end, gxMetalMicroseconds);
     GXMetalAppendText(&cursor, end, " sw_us=");
     GXMetalAppendDecimal(&cursor, end, softwareMicroseconds);
@@ -1553,7 +1668,7 @@ static void GXMetalBuildPassMessage(char *message, size_t messageCapacity,
     GXMetalAppendText(&cursor, end, "GXMetal ");
     GXMetalAppendVersion(&cursor, end, revision);
     GXMetalAppendText(&cursor, end,
-        " passed automatic RAVE discovery, I8/AI16_88 textures, public RAVE 1.6 multitexture and dynamic-resource rendering, framebuffer correctness, ATI private static/NoCopy texture mutation, bitmap drawing, presentation, and fallback. The repeatable mixed texture/Gouraud workload ran ");
+        " passed automatic RAVE discovery, I8/AI16_88 and ACL16_88 textures, public RAVE 1.6 multitexture and dynamic-resource rendering, framebuffer correctness, ATI private static/NoCopy texture mutation, bitmap drawing, presentation, and fallback. The repeatable mixed texture/Gouraud workload ran ");
     GXMetalAppendDecimal(&cursor, end, speedupTimes100 / 100);
     GXMetalAppendText(&cursor, end, ".");
     if (speedupTimes100 % 100 < 10) {
@@ -1848,12 +1963,14 @@ int main(void)
                                 (1UL << kQAPixel_ARGB32) |
                                 (1UL << kQAPixel_CL8) |
                                 (1UL << kQAPixel_ARGB16_4444) |
+                                (1UL << kQAPixel_ACL16_88) |
                                 (1UL << kQAPixel_I8) |
                                 (1UL << kQAPixel_AI16_88);
     requiredBitmapPixelTypes = (1UL << kQAPixel_RGB16) |
                                (1UL << kQAPixel_RGB32) |
                                (1UL << kQAPixel_ARGB32) |
                                (1UL << kQAPixel_CL8) |
+                               (1UL << kQAPixel_ACL16_88) |
                                (1UL << kQAPixel_I8) |
                                (1UL << kQAPixel_AI16_88);
     if (textureMemory == 0 || fastTextureMemory != textureMemory ||
@@ -1949,6 +2066,10 @@ int main(void)
         }
         if (error == kQANoErr) {
             error = GXMetalRenderIntensityFormats(
+                context, engine, device.device.gDevice, &deviceRect);
+        }
+        if (error == kQANoErr) {
+            error = GXMetalRenderAlphaPaletteFormat(
                 context, engine, device.device.gDevice, &deviceRect);
         }
     } else {

@@ -466,6 +466,20 @@ static TQABoolean GXMetalTextureFormat(TQAImagePixelType pixelType,
     }
 }
 
+static TQABoolean GXMetalPaletteFormat(TQAImagePixelType pixelType,
+                                       uint32_t *bytesPerPixel)
+{
+    if (pixelType == kQAPixel_CL8) {
+        *bytesPerPixel = 1;
+        return 1;
+    }
+    if (pixelType == kQAPixel_ACL16_88) {
+        *bytesPerPixel = 2;
+        return 1;
+    }
+    return 0;
+}
+
 static void GXMetalDestroyTextureResource(uint32_t resourceID)
 {
     GXMetalGuestPacket packet;
@@ -544,7 +558,7 @@ static TQAError GXMetalTextureNew(unsigned long flags,
         return kQAParamErr;
     }
     *newTexture = NULL;
-    indexed = pixelType == kQAPixel_CL8;
+    indexed = GXMetalPaletteFormat(pixelType, &bytesPerPixel);
     if (images == NULL || images[0].pixmap == NULL ||
         images[0].width <= 0 || images[0].height <= 0 ||
         images[0].width > (long)GXMETAL_MAX_DIMENSION ||
@@ -573,11 +587,10 @@ static TQAError GXMetalTextureNew(unsigned long flags,
         return kQANotSupported;
     }
     if (indexed) {
-        /* RAVE binds the CL8 palette after creating the texture. Keep a
-         * private copy of the indices and expose a direct-color host resource
-         * which GXMetalTextureBindColorTable fills once the palette arrives. */
+        /* RAVE binds the CL8/ACL16_88 palette after creating the texture.
+         * Keep a private copy of the indices (and ACL alpha) and expose a
+         * direct-color host resource which the bind method fills. */
         format = GXMETAL_PIXEL_ARGB8888;
-        bytesPerPixel = 1;
     }
     width = (uint32_t)images[0].width;
     height = (uint32_t)images[0].height;
@@ -833,12 +846,41 @@ static void GXMetalColorTableDelete(TQAColorTable *table)
     DisposePtr((Ptr)table);
 }
 
+static void GXMetalExpandPalettePixel(const uint8_t *source,
+                                      TQAImagePixelType pixelType,
+                                      const TQAColorTable *table,
+                                      uint8_t *destination)
+{
+    uint8_t alpha;
+    uint8_t index;
+    uint32_t color;
+
+    if (pixelType == kQAPixel_ACL16_88) {
+        /* RAVE's ACL16_88 word is big-endian on PowerPC: alpha first,
+         * followed by the eight-bit color-table index. */
+        alpha = source[0];
+        index = source[1];
+    } else {
+        alpha = 255;
+        index = source[0];
+    }
+    if (table->transparent_index_zero && index == 0) {
+        alpha = 0;
+    }
+    color = table->colors[index];
+    destination[0] = alpha;
+    destination[1] = (uint8_t)(color >> 16);
+    destination[2] = (uint8_t)(color >> 8);
+    destination[3] = (uint8_t)color;
+}
+
 static TQAError GXMetalTextureBindColorTable(TQATexture *texture,
                                               TQAColorTable *table)
 {
     GXMetalGuestPacket packet;
     uint8_t *payload;
     uint32_t level;
+    uint32_t sourceBytesPerPixel;
 
     gDiagnostics.texture_bind_color_table_count++;
     gDiagnostics.resource_stage = 20;
@@ -848,7 +890,9 @@ static TQAError GXMetalTextureBindColorTable(TQATexture *texture,
         gDiagnostics.last_texture_bind_error = kQAParamErr;
         return kQAParamErr;
     }
-    if (texture->source_pixel_type != (uint32_t)kQAPixel_CL8 ||
+    if (!GXMetalPaletteFormat(
+            (TQAImagePixelType)texture->source_pixel_type,
+            &sourceBytesPerPixel) ||
         table->entries != 256 || !GXMetalTransportAvailable()) {
         gDiagnostics.last_texture_bind_error = kQANotSupported;
         return kQANotSupported;
@@ -872,7 +916,8 @@ static TQAError GXMetalTextureBindColorTable(TQATexture *texture,
         rowBytes = width * 4;
         length = (uint64_t)rowBytes * height;
         if (texture->source_pixels[level] == NULL ||
-            texture->source_row_bytes[level] < width ||
+            texture->source_row_bytes[level] <
+                width * sourceBytesPerPixel ||
             length > GXMETAL_UPLOAD_BYTES) {
             gDiagnostics.last_texture_bind_error = kQAOutOfVideoMemory;
             return kQAOutOfVideoMemory;
@@ -881,16 +926,13 @@ static TQAError GXMetalTextureBindColorTable(TQATexture *texture,
         destination = gTransport.shared + GXMETAL_UPLOAD_OFFSET;
         for (y = 0; y < height; y++) {
             for (x = 0; x < width; x++) {
-                uint8_t index = source[y *
-                    texture->source_row_bytes[level] + x];
-                uint32_t color = table->colors[index];
                 uint8_t *pixel = destination + y * rowBytes + x * 4;
 
-                pixel[0] = table->transparent_index_zero && index == 0 ?
-                    0 : 255;
-                pixel[1] = (uint8_t)(color >> 16);
-                pixel[2] = (uint8_t)(color >> 8);
-                pixel[3] = (uint8_t)color;
+                GXMetalExpandPalettePixel(
+                    source + y * texture->source_row_bytes[level] +
+                        x * sourceBytesPerPixel,
+                    (TQAImagePixelType)texture->source_pixel_type,
+                    table, pixel);
             }
         }
         gDiagnostics.resource_stage = 21;
@@ -939,6 +981,7 @@ static TQAError GXMetalBitmapBindColorTable(TQABitmap *bitmap,
     uint64_t length;
     const uint8_t *source;
     uint8_t *destination;
+    uint32_t sourceBytesPerPixel;
 
     gDiagnostics.bitmap_bind_color_table_count++;
     gDiagnostics.last_bitmap_bind_error = kQAError;
@@ -947,7 +990,9 @@ static TQAError GXMetalBitmapBindColorTable(TQABitmap *bitmap,
         gDiagnostics.last_bitmap_bind_error = kQAParamErr;
         return kQAParamErr;
     }
-    if (bitmap->source_pixel_type != (uint32_t)kQAPixel_CL8 ||
+    if (!GXMetalPaletteFormat(
+            (TQAImagePixelType)bitmap->source_pixel_type,
+            &sourceBytesPerPixel) ||
         bitmap->source_pixels == NULL || table->entries != 256 ||
         !GXMetalTransportAvailable()) {
         gDiagnostics.last_bitmap_bind_error = kQANotSupported;
@@ -955,7 +1000,7 @@ static TQAError GXMetalBitmapBindColorTable(TQABitmap *bitmap,
     }
     rowBytes = bitmap->width * 4;
     length = (uint64_t)rowBytes * bitmap->height;
-    if (bitmap->source_row_bytes < bitmap->width ||
+    if (bitmap->source_row_bytes < bitmap->width * sourceBytesPerPixel ||
         length > GXMETAL_UPLOAD_BYTES) {
         gDiagnostics.last_bitmap_bind_error = kQAOutOfVideoMemory;
         return kQAOutOfVideoMemory;
@@ -964,14 +1009,13 @@ static TQAError GXMetalBitmapBindColorTable(TQABitmap *bitmap,
     destination = gTransport.shared + GXMETAL_UPLOAD_OFFSET;
     for (y = 0; y < bitmap->height; y++) {
         for (x = 0; x < bitmap->width; x++) {
-            uint8_t index = source[y * bitmap->source_row_bytes + x];
-            uint32_t color = table->colors[index];
             uint8_t *pixel = destination + y * rowBytes + x * 4;
 
-            pixel[0] = table->transparent_index_zero && index == 0 ? 0 : 255;
-            pixel[1] = (uint8_t)(color >> 16);
-            pixel[2] = (uint8_t)(color >> 8);
-            pixel[3] = (uint8_t)color;
+            GXMetalExpandPalettePixel(
+                source + y * bitmap->source_row_bytes +
+                    x * sourceBytesPerPixel,
+                (TQAImagePixelType)bitmap->source_pixel_type,
+                table, pixel);
         }
     }
     if (!GXMetalGlobalPacket(GXMETAL_OP_TEXTURE_UPLOAD,
@@ -1031,7 +1075,7 @@ static TQAError GXMetalBitmapNew(unsigned long flags,
         return kQAParamErr;
     }
     *newBitmap = NULL;
-    indexed = pixelType == kQAPixel_CL8;
+    indexed = GXMetalPaletteFormat(pixelType, &bytesPerPixel);
     if (image == NULL || image->pixmap == NULL || image->width <= 0 ||
         image->height <= 0 ||
         image->width > (long)GXMETAL_MAX_DIMENSION ||
@@ -1048,11 +1092,9 @@ static TQAError GXMetalBitmapNew(unsigned long flags,
         return kQANotSupported;
     }
     if (indexed) {
-        /* QABitmapBindColorTable supplies the CL8 palette after creation.
-         * Preserve the indices until then and expose an ARGB host resource,
-         * matching the indexed-texture path. */
+        /* QABitmapBindColorTable supplies the CL8/ACL16_88 palette after
+         * creation. Preserve indices and ACL alpha until then. */
         format = GXMETAL_PIXEL_ARGB8888;
-        bytesPerPixel = 1;
     }
     width = (uint32_t)image->width;
     height = (uint32_t)image->height;
@@ -4443,6 +4485,9 @@ static TQAError GXMetalEngineGestalt(TQAGestaltSelector selector,
             value |= (UINT32_C(1) << kQAPixel_I8) |
                      (UINT32_C(1) << kQAPixel_AI16_88);
         }
+        if (features & GXMETAL_FEATURE_TEXTURE) {
+            value |= UINT32_C(1) << kQAPixel_ACL16_88;
+        }
         break;
     case kQAGestalt_BitmapPixelTypesAllowed:
     case kQAGestalt_BitmapPixelTypesPreferred:
@@ -4454,6 +4499,9 @@ static TQAError GXMetalEngineGestalt(TQAGestaltSelector selector,
         if (features & GXMETAL_FEATURE_INTENSITY_FORMATS) {
             value |= (UINT32_C(1) << kQAPixel_I8) |
                      (UINT32_C(1) << kQAPixel_AI16_88);
+        }
+        if (features & GXMETAL_FEATURE_TEXTURE) {
+            value |= UINT32_C(1) << kQAPixel_ACL16_88;
         }
         break;
     default:
