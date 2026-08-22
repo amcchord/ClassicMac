@@ -137,7 +137,8 @@ static int gxmetal_primitive_count_valid(uint32_t primitive, uint32_t count)
 }
 
 static uint32_t gxmetal_validate_draw(const GXMetalPacketView *packet,
-                                      uint32_t vertex_bytes)
+                                      uint32_t vertex_bytes,
+                                      uint32_t alternate_vertex_bytes)
 {
     uint32_t primitive;
     uint32_t count;
@@ -155,10 +156,12 @@ static uint32_t gxmetal_validate_draw(const GXMetalPacketView *packet,
     stride = gxmetal_load_le32(packet->payload +
                                GXMETAL_DRAW_VERTEX_STRIDE_OFFSET);
     flags = gxmetal_load_le32(packet->payload + GXMETAL_DRAW_FLAGS_OFFSET);
+    if (stride != vertex_bytes && stride != alternate_vertex_bytes) {
+        return GXMETAL_ERROR_BAD_PACKET;
+    }
     expected = GXMETAL_PACKET_HEADER_BYTES + GXMETAL_DRAW_HEADER_BYTES +
-               (uint64_t)count * vertex_bytes;
-    if (stride != vertex_bytes ||
-        (flags & ~GXMETAL_DRAW_FLAGS_VALID) != 0 ||
+               (uint64_t)count * stride;
+    if ((flags & ~GXMETAL_DRAW_FLAGS_VALID) != 0 ||
         (flags != GXMETAL_DRAW_NONE &&
          primitive != GXMETAL_PRIMITIVE_TRIANGLE) ||
         !gxmetal_primitive_count_valid(primitive, count) ||
@@ -231,12 +234,14 @@ uint32_t gxmetal_validate_packet(const GXMetalPacketView *packet,
         if (packet->context_id == 0) {
             return GXMETAL_ERROR_BAD_PACKET;
         }
-        return gxmetal_validate_draw(packet, GXMETAL_GOURAUD_VERTEX_BYTES);
+        return gxmetal_validate_draw(packet, GXMETAL_GOURAUD_VERTEX_BYTES,
+                                     GXMETAL_GOURAUD_VERTEX_BYTES);
     case GXMETAL_OP_DRAW_TEXTURED:
         if (packet->context_id == 0) {
             return GXMETAL_ERROR_BAD_PACKET;
         }
-        return gxmetal_validate_draw(packet, GXMETAL_TEXTURE_VERTEX_BYTES);
+        return gxmetal_validate_draw(packet, GXMETAL_TEXTURE_VERTEX_BYTES,
+                                     GXMETAL_MULTI_TEXTURE_VERTEX_BYTES);
     case GXMETAL_OP_DRAW_BITMAP:
         return packet->packet_bytes == 64 && packet->context_id != 0 ?
             GXMETAL_ERROR_NONE : GXMETAL_ERROR_BAD_PACKET;

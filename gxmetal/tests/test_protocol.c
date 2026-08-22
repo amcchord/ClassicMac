@@ -44,11 +44,13 @@ static void test_endian_helpers(void)
 
 static void test_protocol_contract(void)
 {
-    CHECK(GXMETAL_PROTOCOL_VERSION == UINT32_C(0x00010008));
+    CHECK(GXMETAL_PROTOCOL_VERSION == UINT32_C(0x00010009));
     CHECK(GXMETAL_REG_RELATIVE_INPUT == 0x40);
     CHECK(GXMETAL_REG_RELATIVE_INPUT + sizeof(uint32_t) <=
           GXMETAL_REGISTER_BYTES);
     CHECK(GXMETAL_FEATURE_RELATIVE_INPUT == (UINT64_C(1) << 14));
+    CHECK(GXMETAL_FEATURE_MULTI_TEXTURE_VERTEX == (UINT64_C(1) << 15));
+    CHECK(GXMETAL_MULTI_TEXTURE_VERTEX_BYTES == 80);
 }
 
 static void test_valid_packet(void)
@@ -133,16 +135,16 @@ static void test_shared_ranges(void)
 
 static void test_semantic_validation(void)
 {
-    uint8_t packet[128];
+    uint8_t packet[272];
     GXMetalPacketView view;
 
-    make_packet(packet, GXMETAL_OP_DRAW_GOURAUD, sizeof(packet), 2, 9);
+    make_packet(packet, GXMETAL_OP_DRAW_GOURAUD, 128, 2, 9);
     gxmetal_store_le32(packet + 16 + GXMETAL_DRAW_PRIMITIVE_OFFSET,
                        GXMETAL_PRIMITIVE_TRIANGLE);
     gxmetal_store_le32(packet + 16 + GXMETAL_DRAW_VERTEX_COUNT_OFFSET, 3);
     gxmetal_store_le32(packet + 16 + GXMETAL_DRAW_VERTEX_STRIDE_OFFSET,
                        GXMETAL_GOURAUD_VERTEX_BYTES);
-    CHECK(gxmetal_decode_packet(packet, sizeof(packet), &view) ==
+    CHECK(gxmetal_decode_packet(packet, 128, &view) ==
           GXMETAL_DECODE_OK);
     CHECK(gxmetal_validate_packet(&view, GXMETAL_SHARED_BYTES) ==
           GXMETAL_ERROR_NONE);
@@ -159,6 +161,20 @@ static void test_semantic_validation(void)
                        GXMETAL_DRAW_NONE);
 
     gxmetal_store_le32(packet + 16 + GXMETAL_DRAW_VERTEX_COUNT_OFFSET, 4);
+    CHECK(gxmetal_validate_packet(&view, GXMETAL_SHARED_BYTES) ==
+          GXMETAL_ERROR_BAD_PACKET);
+
+    make_packet(packet, GXMETAL_OP_DRAW_TEXTURED, sizeof(packet), 2, 10);
+    gxmetal_store_le32(packet + 16 + GXMETAL_DRAW_PRIMITIVE_OFFSET,
+                       GXMETAL_PRIMITIVE_TRIANGLE);
+    gxmetal_store_le32(packet + 16 + GXMETAL_DRAW_VERTEX_COUNT_OFFSET, 3);
+    gxmetal_store_le32(packet + 16 + GXMETAL_DRAW_VERTEX_STRIDE_OFFSET,
+                       GXMETAL_MULTI_TEXTURE_VERTEX_BYTES);
+    CHECK(gxmetal_decode_packet(packet, sizeof(packet), &view) ==
+          GXMETAL_DECODE_OK);
+    CHECK(gxmetal_validate_packet(&view, GXMETAL_SHARED_BYTES) ==
+          GXMETAL_ERROR_NONE);
+    gxmetal_store_le32(packet + 16 + GXMETAL_DRAW_VERTEX_STRIDE_OFFSET, 76);
     CHECK(gxmetal_validate_packet(&view, GXMETAL_SHARED_BYTES) ==
           GXMETAL_ERROR_BAD_PACKET);
 

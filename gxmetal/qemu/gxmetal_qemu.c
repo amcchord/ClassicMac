@@ -250,7 +250,8 @@ bool gxmetal_qemu_init(GXMetalQemuState *state, Object *owner,
                            GXMETAL_FEATURE_ALPHA_TEST |
                            GXMETAL_FEATURE_RECT_CLIP |
                            GXMETAL_FEATURE_ATI_UV_TRANSFORM |
-                           GXMETAL_FEATURE_RELATIVE_INPUT;
+                           GXMETAL_FEATURE_RELATIVE_INPUT |
+                           GXMETAL_FEATURE_MULTI_TEXTURE_VERTEX;
     } else {
         state->features |= GXMETAL_FEATURE_TRACE;
     }

@@ -22,7 +22,7 @@ extern "C" {
 
 #define GXMETAL_PROTOCOL_MAGIC            UINT32_C(0x47584d54) /* "GXMT" */
 #define GXMETAL_PROTOCOL_VERSION_MAJOR    1u
-#define GXMETAL_PROTOCOL_VERSION_MINOR    8u
+#define GXMETAL_PROTOCOL_VERSION_MINOR    9u
 #define GXMETAL_PROTOCOL_VERSION \
     ((GXMETAL_PROTOCOL_VERSION_MAJOR << 16) | GXMETAL_PROTOCOL_VERSION_MINOR)
 
@@ -85,7 +85,10 @@ enum GXMetalFeature {
     /* The host can normalize ATI type-1001 texel coordinates and translate
      * OpenGL's homogeneous T coordinate natively. */
     GXMETAL_FEATURE_ATI_UV_TRANSFORM = UINT64_C(1) << 13,
-    GXMETAL_FEATURE_RELATIVE_INPUT = UINT64_C(1) << 14
+    GXMETAL_FEATURE_RELATIVE_INPUT = UINT64_C(1) << 14,
+    /* Textured draw packets may carry an independent RAVE 1.6 secondary
+     * invW/uOverW/vOverW tuple without borrowing the specular channels. */
+    GXMETAL_FEATURE_MULTI_TEXTURE_VERTEX = UINT64_C(1) << 15
 };
 
 /* C11 enum constants are restricted to int even though the feature word is 64-bit. */
@@ -375,6 +378,7 @@ enum GXMetalResourceFlag {
 #define GXMETAL_DRAW_VERTICES_OFFSET              16u
 #define GXMETAL_GOURAUD_VERTEX_BYTES              32u
 #define GXMETAL_TEXTURE_VERTEX_BYTES              64u
+#define GXMETAL_MULTI_TEXTURE_VERTEX_BYTES        80u
 
 /* RAVE triangle attributes applying to every triangle in a draw packet. */
 enum {
@@ -402,6 +406,10 @@ enum {
 #define GXMETAL_VERTEX_KS_R_OFFSET                52u
 #define GXMETAL_VERTEX_KS_G_OFFSET                56u
 #define GXMETAL_VERTEX_KS_B_OFFSET                60u
+#define GXMETAL_VERTEX_MULTI_INV_W_OFFSET         64u
+#define GXMETAL_VERTEX_MULTI_U_OVER_W_OFFSET      68u
+#define GXMETAL_VERTEX_MULTI_V_OVER_W_OFFSET      72u
+#define GXMETAL_VERTEX_MULTI_RESERVED_OFFSET      76u
 
 #define GXMETAL_RESOURCE_CREATE_PACKET_BYTES      48u
 #define GXMETAL_RESOURCE_ID_OFFSET                 0u

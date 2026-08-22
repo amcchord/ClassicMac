@@ -209,6 +209,65 @@ static void draw_textured_test_quad(GXMetalMetalRenderer *renderer,
     present_rect(renderer, packet, context, 0, 0, 64, 64);
 }
 
+static void draw_public_multitexture_test_quad(
+    GXMetalMetalRenderer *renderer, uint32_t context)
+{
+    uint8_t packet[512];
+    uint8_t *payload;
+    uint8_t *vertices;
+    uint32_t i;
+
+    make_packet(packet, GXMETAL_OP_BEGIN_FRAME, 32, context);
+    CHECK(dispatch(renderer, packet, 32) == GXMETAL_ERROR_NONE);
+    make_packet(packet, GXMETAL_OP_CLEAR, 64, context);
+    payload = packet + GXMETAL_PACKET_HEADER_BYTES;
+    gxmetal_store_le32(payload + GXMETAL_CLEAR_FLAGS_OFFSET,
+                       GXMETAL_CLEAR_COLOR);
+    store_float(payload + GXMETAL_CLEAR_COLOR_A_OFFSET, 1.0f);
+    gxmetal_store_le32(payload + GXMETAL_CLEAR_RECT_OFFSET +
+                       GXMETAL_RECT_RIGHT_OFFSET, 64);
+    gxmetal_store_le32(payload + GXMETAL_CLEAR_RECT_OFFSET +
+                       GXMETAL_RECT_BOTTOM_OFFSET, 64);
+    CHECK(dispatch(renderer, packet, 64) == GXMETAL_ERROR_NONE);
+
+    make_packet(packet, GXMETAL_OP_DRAW_TEXTURED, sizeof(packet), context);
+    payload = packet + GXMETAL_PACKET_HEADER_BYTES;
+    gxmetal_store_le32(payload + GXMETAL_DRAW_PRIMITIVE_OFFSET,
+                       GXMETAL_PRIMITIVE_TRIANGLE);
+    gxmetal_store_le32(payload + GXMETAL_DRAW_VERTEX_COUNT_OFFSET, 6);
+    gxmetal_store_le32(payload + GXMETAL_DRAW_VERTEX_STRIDE_OFFSET,
+                       GXMETAL_MULTI_TEXTURE_VERTEX_BYTES);
+    vertices = payload + GXMETAL_DRAW_VERTICES_OFFSET;
+    set_texture_vertex(vertices + 0 * GXMETAL_MULTI_TEXTURE_VERTEX_BYTES,
+                       0, 0, 0, 0);
+    set_texture_vertex(vertices + 1 * GXMETAL_MULTI_TEXTURE_VERTEX_BYTES,
+                       64, 0, 1, 0);
+    set_texture_vertex(vertices + 2 * GXMETAL_MULTI_TEXTURE_VERTEX_BYTES,
+                       0, 64, 0, 1);
+    set_texture_vertex(vertices + 3 * GXMETAL_MULTI_TEXTURE_VERTEX_BYTES,
+                       64, 0, 1, 0);
+    set_texture_vertex(vertices + 4 * GXMETAL_MULTI_TEXTURE_VERTEX_BYTES,
+                       64, 64, 1, 1);
+    set_texture_vertex(vertices + 5 * GXMETAL_MULTI_TEXTURE_VERTEX_BYTES,
+                       0, 64, 0, 1);
+    for (i = 0; i < 6; i++) {
+        uint8_t *vertex = vertices +
+            i * GXMETAL_MULTI_TEXTURE_VERTEX_BYTES;
+
+        /* Highlight is intentionally independent from the second UV set. */
+        store_float(vertex + GXMETAL_VERTEX_KS_R_OFFSET, 0.25f);
+        store_float(vertex + GXMETAL_VERTEX_KS_G_OFFSET, 0.0f);
+        store_float(vertex + GXMETAL_VERTEX_KS_B_OFFSET, 0.0f);
+        store_float(vertex + GXMETAL_VERTEX_MULTI_INV_W_OFFSET, 1.0f);
+        store_float(vertex + GXMETAL_VERTEX_MULTI_U_OVER_W_OFFSET, 0.0f);
+        store_float(vertex + GXMETAL_VERTEX_MULTI_V_OVER_W_OFFSET, 0.0f);
+    }
+    CHECK(dispatch(renderer, packet, sizeof(packet)) == GXMETAL_ERROR_NONE);
+    make_packet(packet, GXMETAL_OP_END_FRAME, 32, context);
+    CHECK(dispatch(renderer, packet, 32) == GXMETAL_ERROR_NONE);
+    present_rect(renderer, packet, context, 0, 0, 64, 64);
+}
+
 static void test_metal_triangle(void)
 {
     uint8_t framebuffer[64 * 64 * 2] = {0};
@@ -575,6 +634,14 @@ static void test_metal_texture_upload_and_sampling(void)
     present_rect(renderer, packet, 3, 0, 0, 64, 64);
     CHECK(framebuffer_pixel(framebuffer, 16, 16) == 0x0010);
     CHECK(framebuffer_pixel(framebuffer, 48, 48) == 0x0200);
+
+    /* The RAVE 1.6 wire form keeps secondary homogeneous coordinates out of
+     * ks_r/g/b, so a game can combine public multitexture with highlights. */
+    set_int_state(renderer, packet, 3, GXMETAL_STATE_TEXTURE_OP,
+                  GXMETAL_TEXTURE_HIGHLIGHT);
+    draw_public_multitexture_test_quad(renderer, 3);
+    CHECK(framebuffer_pixel(framebuffer, 16, 16) == 0x1010);
+    set_int_state(renderer, packet, 3, GXMETAL_STATE_TEXTURE_OP, 0);
 
     set_int_state(renderer, packet, 3, GXMETAL_STATE_MULTI_TEXTURE_OP,
                   GXMETAL_MULTI_TEXTURE_ADD);

@@ -69,10 +69,14 @@ typedef struct GXMetalMetalTextureVertex {
     float ks_r;
     float ks_g;
     float ks_b;
+    float secondary_inv_w;
+    float secondary_u_over_w;
+    float secondary_v_over_w;
+    float secondary_reserved;
 } GXMetalMetalTextureVertex;
 
 _Static_assert(sizeof(GXMetalMetalTextureVertex) ==
-               GXMETAL_TEXTURE_VERTEX_BYTES,
+               GXMETAL_MULTI_TEXTURE_VERTEX_BYTES,
                "Metal texture vertex must match the wire layout");
 
 typedef struct GXMetalMetalFog {
@@ -454,6 +458,8 @@ static NSString *const kGXMetalTextureShaderSource = @
     "  float uOverW; float vOverW;\n"
     "  float kd_r; float kd_g; float kd_b;\n"
     "  float ks_r; float ks_g; float ks_b;\n"
+    "  float secondaryInvW; float secondaryUOverW;\n"
+    "  float secondaryVOverW; float secondaryReserved;\n"
     "};\n"
     "struct GXTextureOut {\n"
     "  float4 position [[position]]; float4 color; float2 uv;\n"
@@ -466,7 +472,7 @@ static NSString *const kGXMetalTextureShaderSource = @
     "    uint index [[vertex_id]]) {\n"
     "  GXTextureVertex v = vertices[index];\n"
     "  float safeInvW = max(v.invW, 0.000001);\n"
-    "  float safeSecondaryQ = max(v.ks_b, 0.000001);\n"
+    "  float safeSecondaryQ = max(v.secondaryInvW, 0.000001);\n"
     "  float clipW = 1.0 / safeInvW;\n"
     "  float ndcX = v.x / viewport.width * 2.0 - 1.0;\n"
     "  float ndcY = 1.0 - v.y / viewport.height * 2.0;\n"
@@ -479,7 +485,8 @@ static NSString *const kGXMetalTextureShaderSource = @
      * normalized texture coordinates use the upper edge.  Flip V before
      * perspective interpolation while preserving the u/w, v/w wire form. */
     "  out.uv = float2(v.uOverW, v.invW - v.vOverW) / safeInvW;\n"
-    "  out.secondaryUV = float2(v.ks_r, v.ks_b - v.ks_g) /\n"
+    "  out.secondaryUV = float2(v.secondaryUOverW,\n"
+    "                           v.secondaryInvW - v.secondaryVOverW) /\n"
     "                    safeSecondaryQ;\n"
     "  out.kd = float3(v.kd_r, v.kd_g, v.kd_b);\n"
     "  out.ks = float3(v.ks_r, v.ks_g, v.ks_b);\n"
@@ -1435,7 +1442,8 @@ static uint32_t gxmetal_metal_draw(GXMetalMetalRenderer *renderer,
 
 static int gxmetal_metal_read_texture_vertex(
     const GXMetalMetalContext *context, const uint8_t *source,
-    GXMetalMetalTextureVertex *vertex, int host_ati_uv_transform)
+    uint32_t stride, GXMetalMetalTextureVertex *vertex,
+    int host_ati_uv_transform)
 {
     uint32_t texture_op = context->texture_op;
 
@@ -1502,7 +1510,8 @@ static int gxmetal_metal_read_texture_vertex(
         }
     }
     if ((texture_op & GXMETAL_TEXTURE_HIGHLIGHT) ||
-        context->secondary_texture_id != 0) {
+        (context->secondary_texture_id != 0 &&
+         stride == GXMETAL_TEXTURE_VERTEX_BYTES)) {
         vertex->ks_r = gxmetal_metal_load_float(
             source + GXMETAL_VERTEX_KS_R_OFFSET);
         vertex->ks_g = gxmetal_metal_load_float(
@@ -1513,6 +1522,31 @@ static int gxmetal_metal_read_texture_vertex(
             !isfinite(vertex->ks_b)) {
             return 0;
         }
+    }
+    if (context->secondary_texture_id != 0) {
+        if (stride == GXMETAL_MULTI_TEXTURE_VERTEX_BYTES) {
+            vertex->secondary_inv_w = gxmetal_metal_load_float(
+                source + GXMETAL_VERTEX_MULTI_INV_W_OFFSET);
+            vertex->secondary_u_over_w = gxmetal_metal_load_float(
+                source + GXMETAL_VERTEX_MULTI_U_OVER_W_OFFSET);
+            vertex->secondary_v_over_w = gxmetal_metal_load_float(
+                source + GXMETAL_VERTEX_MULTI_V_OVER_W_OFFSET);
+        } else {
+            /* ATI's private GL bridge predates the extended public wire
+             * vertex and carries secondary u/w, v/w, and 1/w in the three
+             * specular slots. Keep accepting that proven legacy layout. */
+            vertex->secondary_inv_w = vertex->ks_b;
+            vertex->secondary_u_over_w = vertex->ks_r;
+            vertex->secondary_v_over_w = vertex->ks_g;
+        }
+        if (!isfinite(vertex->secondary_inv_w) ||
+            !isfinite(vertex->secondary_u_over_w) ||
+            !isfinite(vertex->secondary_v_over_w) ||
+            vertex->secondary_inv_w <= 0.0f) {
+            return 0;
+        }
+    } else {
+        vertex->secondary_inv_w = 1.0f;
     }
     return 1;
 }
@@ -1540,6 +1574,8 @@ static uint32_t gxmetal_metal_draw_textured(
         packet->payload + GXMETAL_DRAW_FLAGS_OFFSET);
     uint32_t count = gxmetal_load_le32(
         packet->payload + GXMETAL_DRAW_VERTEX_COUNT_OFFSET);
+    uint32_t stride = gxmetal_load_le32(
+        packet->payload + GXMETAL_DRAW_VERTEX_STRIDE_OFFSET);
     uint32_t draw_count = count;
     uint32_t filter = context->texture_filter <= GXMETAL_TEXTURE_FILTER_BEST ?
         context->texture_filter : GXMETAL_TEXTURE_FILTER_FAST;
@@ -1563,7 +1599,8 @@ static uint32_t gxmetal_metal_draw_textured(
         return GXMETAL_ERROR_BAD_RESOURCE;
     }
     if (host_ati_uv_transform &&
-        resource->pixel_format != GXMETAL_PIXEL_ATI_ARGB4444) {
+        (resource->pixel_format != GXMETAL_PIXEL_ATI_ARGB4444 ||
+         stride != GXMETAL_TEXTURE_VERTEX_BYTES)) {
         return GXMETAL_ERROR_BAD_PACKET;
     }
     if (context->texture_op & GXMETAL_TEXTURE_SHRINK) {
@@ -1582,8 +1619,8 @@ static uint32_t gxmetal_metal_draw_textured(
     }
     for (i = 0; i < count; i++) {
         if (!gxmetal_metal_read_texture_vertex(
-                context, source + i * GXMETAL_TEXTURE_VERTEX_BYTES,
-                &vertices[i], host_ati_uv_transform)) {
+                context, source + i * stride, stride, &vertices[i],
+                host_ati_uv_transform)) {
             if (vertices != stack_vertices) {
                 free(vertices);
             }
