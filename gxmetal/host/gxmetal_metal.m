@@ -151,6 +151,7 @@ typedef struct GXMetalMetalContext {
     uint32_t texture_op;
     uint32_t texture_wrap_u;
     uint32_t texture_wrap_v;
+    uint32_t perspective_z;
     uint32_t secondary_texture_enable;
     uint32_t secondary_texture_filter;
     uint32_t secondary_texture_wrap_u;
@@ -1279,8 +1280,7 @@ static int gxmetal_metal_read_vertex(const GXMetalMetalContext *context,
     vertex->y = gxmetal_metal_load_float(source + GXMETAL_VERTEX_Y_OFFSET);
     vertex->z = gxmetal_metal_load_float(source + GXMETAL_VERTEX_Z_OFFSET);
     vertex->inv_w = 1.0f;
-    if (context->fog.mode_and_padding[0] >= GXMETAL_FOG_LINEAR &&
-        context->fog.mode_and_padding[1] != 0) {
+    if (context->perspective_z != 0) {
         vertex->inv_w = gxmetal_metal_load_float(
             source + GXMETAL_VERTEX_INV_W_OFFSET);
     }
@@ -1288,11 +1288,22 @@ static int gxmetal_metal_read_vertex(const GXMetalMetalContext *context,
     vertex->g = gxmetal_metal_load_float(source + GXMETAL_VERTEX_G_OFFSET);
     vertex->b = gxmetal_metal_load_float(source + GXMETAL_VERTEX_B_OFFSET);
     vertex->a = gxmetal_metal_load_float(source + GXMETAL_VERTEX_A_OFFSET);
-    return isfinite(vertex->x) && isfinite(vertex->y) &&
-           isfinite(vertex->z) && vertex->z >= 0.0f && vertex->z <= 1.0f &&
-           isfinite(vertex->inv_w) && vertex->inv_w > 0.0f &&
-           isfinite(vertex->r) && isfinite(vertex->g) &&
-           isfinite(vertex->b) && isfinite(vertex->a);
+    if (!isfinite(vertex->x) || !isfinite(vertex->y) ||
+        !isfinite(vertex->z) || vertex->z < 0.0f || vertex->z > 1.0f ||
+        !isfinite(vertex->inv_w) || vertex->inv_w <= 0.0f ||
+        !isfinite(vertex->r) || !isfinite(vertex->g) ||
+        !isfinite(vertex->b) || !isfinite(vertex->a)) {
+        return 0;
+    }
+    if (context->perspective_z != 0) {
+        /* Apple defines Perspective-Z as hidden-surface removal from invW,
+         * while retaining the ordinary Z-function result (LT still means
+         * nearer). Within the visible clip volume invW increases toward the
+         * eye, so one-minus-invW is the corresponding affine Metal depth. */
+        vertex->z = fmaxf(0.0f, fminf(0.99999994f,
+                                      1.0f - vertex->inv_w));
+    }
+    return 1;
 }
 
 static uint32_t gxmetal_metal_draw(GXMetalMetalRenderer *renderer,
@@ -1454,6 +1465,10 @@ static int gxmetal_metal_read_texture_vertex(
         !isfinite(vertex->v_over_w) || vertex->z < 0.0f ||
         vertex->z > 1.0f || vertex->inv_w <= 0.0f) {
         return 0;
+    }
+    if (context->perspective_z != 0) {
+        vertex->z = fmaxf(0.0f, fminf(0.99999994f,
+                                      1.0f - vertex->inv_w));
     }
 
     /* RAVE only requires color, diffuse, and specular components when the
@@ -2282,9 +2297,10 @@ static uint32_t gxmetal_metal_set_state(GXMetalMetalContext *context,
         if (value > 1) {
             return GXMETAL_ERROR_BAD_PACKET;
         }
+        context->perspective_z = value;
         /* The second word is shader-visible padding in the fog constants.
-         * RAVE only requires Gouraud invW when perspective-Z is enabled;
-         * otherwise depth fog is derived from the normalized Z coordinate. */
+         * It selects reciprocal-W fog in the same mode that selects invW
+         * hidden-surface removal. */
         context->fog.mode_and_padding[1] = value;
         break;
     case GXMETAL_STATE_FOG_MODE:

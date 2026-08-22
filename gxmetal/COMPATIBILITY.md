@@ -25,7 +25,7 @@ early enough for the RAVE manager to select Apple Software RAVE.
 | Bitmaps | Unscaled affine bitmap copy with the supported texture formats | Supported | Guest clipped-bitmap test |
 | ATI private bridge | OpenGLRendererATI hooks, two-stage lightmaps, NoCopy refresh, and private ARGB4444 | Supported compatibility path | Quake III, Carmageddon II, and host tests |
 | Public RAVE multitexture | `QASubmitMultiTextureParams` and `kQAOptional_MultiTextures` | Not yet exposed | Must remain unadvertised |
-| Perspective Z | `kQATag_PerspectiveZ` | Reciprocal-W fog is supported; hidden-surface removal still uses normalized Z | Do not broaden use until the depth contract has a dedicated test |
+| Perspective Z | `kQATag_PerspectiveZ` | Reciprocal-W hidden-surface removal and fog, with ordinary Z-function semantics preserved | Host and guest tests make normalized Z and reciprocal W disagree |
 | Extended OpenGL state | Wrap, filters, scissor, and blend factors are honored | Draw-buffer selection, line/area stipple, border color, and environment color are not yet implemented | Required GLD paths are covered; unimplemented state must not become a silent dependency |
 | Resource access | `QAAccessTexture`, `QAAccessBitmap`, draw-buffer access, and Z-buffer access | Not exposed | Games use immutable uploads or the guarded NoCopy refresh path |
 | Offscreen and scaled contexts | Offscreen allocation, draw-context copy, and scaling | Deliberately declined | Software fallback |
@@ -41,10 +41,9 @@ early enough for the RAVE manager to select Apple Software RAVE.
    should query every advertised bit and exercise its state, method, and
    fallback behavior. Unknown or malformed host state must never fault the
    command queue merely because an application probed an unadvertised feature.
-3. Complete or narrow perspective-Z and extended OpenGL semantics. In
-   particular, test reciprocal-W depth ordering independently from fog, and
-   either implement draw-buffer/stipple behavior or document why the system
-   GLD never exposes it to applications.
+3. Complete or narrow extended OpenGL semantics. In particular, either
+   implement draw-buffer and stipple behavior or document why the system GLD
+   never exposes it to applications.
 4. Add dynamic-resource access methods with dirty-rectangle uploads. This is
    the public RAVE mechanism for frequently changing textures and bitmaps and
    avoids game-specific memory watching.

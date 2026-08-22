@@ -302,9 +302,10 @@ static void test_metal_triangle(void)
     gxmetal_metal_destroy(renderer);
 }
 
-static void draw_triangle(GXMetalMetalRenderer *renderer, uint8_t *packet,
-                          uint32_t context, float z,
-                          float r, float g, float b, float a)
+static void draw_triangle_depth(GXMetalMetalRenderer *renderer,
+                                uint8_t *packet, uint32_t context,
+                                float z, float inv_w,
+                                float r, float g, float b, float a)
 {
     uint8_t *payload;
     uint8_t *vertices;
@@ -319,7 +320,18 @@ static void draw_triangle(GXMetalMetalRenderer *renderer, uint8_t *packet,
     set_vertex_z_alpha(vertices, 8, 8, z, r, g, b, a);
     set_vertex_z_alpha(vertices + 32, 56, 8, z, r, g, b, a);
     set_vertex_z_alpha(vertices + 64, 32, 56, z, r, g, b, a);
+    store_float(vertices + GXMETAL_VERTEX_INV_W_OFFSET, inv_w);
+    store_float(vertices + 32 + GXMETAL_VERTEX_INV_W_OFFSET, inv_w);
+    store_float(vertices + 64 + GXMETAL_VERTEX_INV_W_OFFSET, inv_w);
     CHECK(dispatch(renderer, packet, 128) == GXMETAL_ERROR_NONE);
+}
+
+static void draw_triangle(GXMetalMetalRenderer *renderer, uint8_t *packet,
+                          uint32_t context, float z,
+                          float r, float g, float b, float a)
+{
+    draw_triangle_depth(renderer, packet, context, z, 1.0f,
+                        r, g, b, a);
 }
 
 static void set_texture_vertex(uint8_t *bytes, float x, float y,
@@ -919,6 +931,34 @@ static void test_metal_depth_blend_and_double_buffer(void)
     CHECK(((pixel >> 10) & 31) >= 13 && ((pixel >> 10) & 31) <= 17);
     CHECK(((pixel >> 5) & 31) >= 13 && ((pixel >> 5) & 31) <= 17);
     CHECK((pixel & 31) == 0);
+
+    /* Apple requires Perspective-Z to use invW for hidden-surface removal
+     * while preserving the ordinary Z-function result: LT must still select
+     * the nearer surface. Deliberately make Z and invW disagree so this
+     * cannot pass by continuing to use normalized Z. */
+    make_packet(packet, GXMETAL_OP_BEGIN_FRAME, 32, 2);
+    CHECK(dispatch(renderer, packet, 32) == GXMETAL_ERROR_NONE);
+    make_packet(packet, GXMETAL_OP_CLEAR, 64, 2);
+    payload = packet + 16;
+    gxmetal_store_le32(payload + GXMETAL_CLEAR_FLAGS_OFFSET,
+                       GXMETAL_CLEAR_COLOR | GXMETAL_CLEAR_DEPTH);
+    store_float(payload + GXMETAL_CLEAR_COLOR_A_OFFSET, 1.0f);
+    store_float(payload + GXMETAL_CLEAR_DEPTH_OFFSET, 1.0f);
+    gxmetal_store_le32(payload + GXMETAL_CLEAR_RECT_OFFSET +
+                       GXMETAL_RECT_RIGHT_OFFSET, 64);
+    gxmetal_store_le32(payload + GXMETAL_CLEAR_RECT_OFFSET +
+                       GXMETAL_RECT_BOTTOM_OFFSET, 64);
+    CHECK(dispatch(renderer, packet, 64) == GXMETAL_ERROR_NONE);
+    set_int_state(renderer, packet, 2, GXMETAL_STATE_PERSPECTIVE_Z, 1);
+    draw_triangle_depth(renderer, packet, 2, 0.10f, 0.25f,
+                        0, 0, 1, 1);
+    draw_triangle_depth(renderer, packet, 2, 0.90f, 0.75f,
+                        1, 0, 0, 1);
+    make_packet(packet, GXMETAL_OP_END_FRAME, 32, 2);
+    CHECK(dispatch(renderer, packet, 32) == GXMETAL_ERROR_NONE);
+    present_rect(renderer, packet, 2, 0, 0, 64, 64);
+    CHECK(framebuffer_pixel(framebuffer, 32, 24) == 0x7c00);
+    set_int_state(renderer, packet, 2, GXMETAL_STATE_PERSPECTIVE_Z, 0);
 
     /* Alpha testing happens before blending and depth writes. A rejected
      * fragment leaves both the blue color and cleared depth untouched. */

@@ -514,6 +514,8 @@ static TQAError GXMetalRenderPattern(TQADrawContext *context,
     TQAVGouraud backfaceGouraudBase[3];
     TQAVGouraud backfaceGouraudOriented[3];
     TQAVGouraud backfaceTextureBase[3];
+    TQAVGouraud perspectiveFar[3];
+    TQAVGouraud perspectiveNear[3];
     TQAVGouraud fogTriangle[3];
     TQAVGouraud bitmapVertex;
     TQAVTexture backfaceTextureOriented[3];
@@ -629,6 +631,22 @@ static TQAError GXMetalRenderPattern(TQADrawContext *context,
         140.0f, 5.0f, 0.10f, 0.0f, 1.0f);
     backfaceTextureOriented[2] = GXMetalTextureVertex(
         165.0f, 55.0f, 0.10f, 0.0f, 1.0f);
+    perspectiveFar[0] = GXMetalGouraud(60.0f, 55.0f, 0.95f,
+                                       0.0f, 0.0f, 1.0f, 1.0f);
+    perspectiveFar[1] = GXMetalGouraud(85.0f, 5.0f, 0.95f,
+                                       0.0f, 0.0f, 1.0f, 1.0f);
+    perspectiveFar[2] = GXMetalGouraud(110.0f, 55.0f, 0.95f,
+                                       0.0f, 0.0f, 1.0f, 1.0f);
+    perspectiveNear[0] = GXMetalGouraud(60.0f, 55.0f, 0.95f,
+                                        1.0f, 0.0f, 0.0f, 1.0f);
+    perspectiveNear[1] = GXMetalGouraud(85.0f, 5.0f, 0.95f,
+                                        1.0f, 0.0f, 0.0f, 1.0f);
+    perspectiveNear[2] = GXMetalGouraud(110.0f, 55.0f, 0.95f,
+                                        1.0f, 0.0f, 0.0f, 1.0f);
+    perspectiveFar[0].invW = perspectiveFar[1].invW =
+        perspectiveFar[2].invW = 0.25f;
+    perspectiveNear[0].invW = perspectiveNear[1].invW =
+        perspectiveNear[2].invW = 0.75f;
     fogTriangle[0] = GXMetalGouraud(210.0f, 232.0f, 0.75f,
                                     1.0f, 0.0f, 0.0f, 1.0f);
     fogTriangle[1] = GXMetalGouraud(240.0f, 200.0f, 0.75f,
@@ -693,13 +711,21 @@ static TQAError GXMetalRenderPattern(TQADrawContext *context,
      * first scene texture. */
     QASetPtr(context, kQATag_Texture, NULL);
     QADrawBitmap(context, &bitmapVertex, bitmap);
+    /* Perspective-Z must use invW while preserving ordinary LT semantics.
+     * Both triangles deliberately carry the same losing normalized Z; the
+     * red triangle is visible only if its larger invW wins as the nearer
+     * surface. */
+    QASetInt(context, kQATag_PerspectiveZ, kQAPerspectiveZ_On);
+    QADrawTriGouraud(context, &perspectiveFar[0], &perspectiveFar[1],
+                     &perspectiveFar[2], kQATriFlags_None);
+    QADrawTriGouraud(context, &perspectiveNear[0], &perspectiveNear[1],
+                     &perspectiveNear[2], kQATriFlags_None);
     QASetFloat(context, kQATag_FogColor_a, 1.0f);
     QASetFloat(context, kQATag_FogColor_r, 0.0f);
     QASetFloat(context, kQATag_FogColor_g, 0.0f);
     QASetFloat(context, kQATag_FogColor_b, 1.0f);
     QASetFloat(context, kQATag_FogStart, 0.0f);
     QASetFloat(context, kQATag_FogEnd, 1.0f);
-    QASetInt(context, kQATag_PerspectiveZ, kQAPerspectiveZ_On);
     QASetInt(context, kQATag_FogMode, kQAFogMode_Linear);
     QADrawTriGouraud(context, &fogTriangle[0], &fogTriangle[1],
                      &fogTriangle[2], kQATriFlags_None);
@@ -746,6 +772,12 @@ static TQAError GXMetalRenderPattern(TQADrawContext *context,
                                     deviceRect->top + 218,
                                     kGXMetalPixelFogPurple)) {
         GXMetalRecordResult("FAIL: depth fog pixel");
+        error = kQAError;
+    } else if (!GXMetalPixelMatches(graphicsDevice,
+                                    deviceRect->left + 85,
+                                    deviceRect->top + 35,
+                                    kGXMetalPixelRed)) {
+        GXMetalRecordResult("FAIL: perspective-Z depth ordering pixel");
         error = kQAError;
     } else if (!GXMetalPixelMatches(graphicsDevice,
                                     deviceRect->left + 295,
@@ -1064,7 +1096,7 @@ static void GXMetalBuildPassResult(char *result, size_t resultCapacity,
     GXMetalAppendText(&cursor, end, "PASS: version=");
     GXMetalAppendVersion(&cursor, end, revision);
     GXMetalAppendText(&cursor, end,
-        " RAVE discovery depth blend alpha-test backface clip texture ATI-private-nocopy bitmap dirty-present double-buffer framebuffer gx_us=");
+        " RAVE discovery depth perspective-z blend alpha-test backface clip texture ATI-private-nocopy bitmap dirty-present double-buffer framebuffer gx_us=");
     GXMetalAppendDecimal(&cursor, end, gxMetalMicroseconds);
     GXMetalAppendText(&cursor, end, " sw_us=");
     GXMetalAppendDecimal(&cursor, end, softwareMicroseconds);
