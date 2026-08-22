@@ -179,6 +179,7 @@ detach_disk
 
 log "Booting Mac OS 9 and running the in-guest conformance workload"
 "$QEMU" \
+  -d guest_errors \
   -accel tcg,tb-size=512 \
   -M mac99,via=cuda,audiodev=snd0 \
   -cpu 7400 \
