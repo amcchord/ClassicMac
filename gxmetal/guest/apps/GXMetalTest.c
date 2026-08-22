@@ -1701,6 +1701,74 @@ static TQAError GXMetalRenderRGB332Format(
     return error;
 }
 
+static TQAError GXMetalRenderBitmapScale(
+    TQADrawContext *context, const TQAEngine *engine,
+    GDHandle graphicsDevice, const TQARect *deviceRect)
+{
+    static unsigned char pixels[4] = {0x00, 0xff, 0x00, 0x00};
+    TQAImage image;
+    TQABitmap *bitmap = NULL;
+    TQAVGouraud vertex;
+    TQARect dirty = {0, GXMETAL_WIDTH, 0, GXMETAL_HEIGHT};
+    TQAError error;
+
+    image.width = 1;
+    image.height = 1;
+    image.rowBytes = 4;
+    image.pixmap = pixels;
+    error = QABitmapNew(engine, kQABitmap_None, kQAPixel_RGB32,
+                        &image, &bitmap);
+    if (error != kQANoErr) {
+        GXMetalRecordResult("FAIL: scaled bitmap creation");
+        return error;
+    }
+
+    vertex = GXMetalGouraud(160.0f, 100.0f, 0.4f,
+                             1.0f, 1.0f, 1.0f, 1.0f);
+    QASetFloat(context, kQATag_ColorBG_r, 0.0f);
+    QASetFloat(context, kQATag_ColorBG_g, 0.0f);
+    QASetFloat(context, kQATag_ColorBG_b, 1.0f);
+    QASetFloat(context, kQATag_ColorBG_a, 1.0f);
+    QASetFloat(context, kQATag_BitmapScale_x, 3.0f);
+    QASetFloat(context, kQATag_BitmapScale_y, 2.0f);
+    QASetInt(context, kQATag_BitmapFilter, kQAFilter_Mid);
+    QASetInt(context, kQATag_ZFunction, kQAZFunction_None);
+    QASetInt(context, kQATag_ZBufferMask, kQAZBufferMask_Disable);
+    QASetInt(context, kQATag_Blend, kQABlend_Interpolate);
+    QARenderStart(context, &dirty, NULL);
+    QADrawBitmap(context, &vertex, bitmap);
+    error = QARenderEnd(context, &dirty);
+    if (error == kQANoErr) {
+        error = QASync(context);
+    }
+    if (error == kQANoErr &&
+        !GXMetalPixelMatches(graphicsDevice, deviceRect->left + 162,
+                             deviceRect->top + 101,
+                             kGXMetalPixelRed)) {
+        GXMetalRecordResult("FAIL: scaled bitmap interior pixel");
+        error = kQAError;
+    }
+    if (error == kQANoErr &&
+        !GXMetalPixelMatches(graphicsDevice, deviceRect->left + 163,
+                             deviceRect->top + 101,
+                             kGXMetalPixelBlue)) {
+        GXMetalRecordResult("FAIL: scaled bitmap horizontal extent");
+        error = kQAError;
+    }
+    if (error == kQANoErr &&
+        !GXMetalPixelMatches(graphicsDevice, deviceRect->left + 162,
+                             deviceRect->top + 102,
+                             kGXMetalPixelBlue)) {
+        GXMetalRecordResult("FAIL: scaled bitmap vertical extent");
+        error = kQAError;
+    }
+    QASetFloat(context, kQATag_BitmapScale_x, 1.0f);
+    QASetFloat(context, kQATag_BitmapScale_y, 1.0f);
+    QASetInt(context, kQATag_BitmapFilter, kQAFilter_Fast);
+    QABitmapDelete(engine, bitmap);
+    return error;
+}
+
 static TQAError GXMetalRenderCL4Format(
     TQADrawContext *context, const TQAEngine *engine,
     GDHandle graphicsDevice, const TQARect *deviceRect)
@@ -1995,7 +2063,7 @@ static void GXMetalBuildPassResult(char *result, size_t resultCapacity,
     GXMetalAppendText(&cursor, end, "PASS: version=");
     GXMetalAppendVersion(&cursor, end, revision);
     GXMetalAppendText(&cursor, end,
-        " RAVE discovery capability-contract depth perspective-z blend alpha-test backface clip texture intensity-formats acl16-88 alpha1-byte cl4 rgb8-332 public-multitexture dynamic-resources ATI-private-nocopy bitmap dirty-present double-buffer framebuffer gx_us=");
+        " RAVE discovery capability-contract depth perspective-z blend alpha-test backface clip texture intensity-formats acl16-88 alpha1-byte cl4 rgb8-332 public-multitexture dynamic-resources ATI-private-nocopy bitmap bitmap-scale dirty-present double-buffer framebuffer gx_us=");
     GXMetalAppendDecimal(&cursor, end, gxMetalMicroseconds);
     GXMetalAppendText(&cursor, end, " sw_us=");
     GXMetalAppendDecimal(&cursor, end, softwareMicroseconds);
@@ -2287,11 +2355,13 @@ int main(void)
                        kQAOptional_MultiTextures |
                        kQAOptional_AccessTexture |
                        kQAOptional_AccessBitmap;
-    requiredFeatures2 = kQAOptional2_SwapBuffers | kQAOptional2_FlipOrigin;
+    requiredFeatures2 = kQAOptional2_SwapBuffers | kQAOptional2_FlipOrigin |
+                        kQAOptional2_BitmapScale;
     requiredFastFeatures = kQAFast_Line | kQAFast_Gouraud |
                            kQAFast_Blend | kQAFast_Texture |
                            kQAFast_TextureHQ | kQAFast_CL4 | kQAFast_CL8 |
-                           kQAFast_FogDepth | kQAFast_MultiTextures;
+                           kQAFast_FogDepth | kQAFast_MultiTextures |
+                           kQAFast_BitmapScale;
     if (optionalFeatures != requiredFeatures ||
         optionalFeatures2 != requiredFeatures2 ||
         fastFeatures != requiredFastFeatures || multiTextureMax != 1) {
@@ -2436,6 +2506,10 @@ int main(void)
         }
         if (error == kQANoErr) {
             error = GXMetalRenderRGB332Format(
+                context, engine, device.device.gDevice, &deviceRect);
+        }
+        if (error == kQANoErr) {
+            error = GXMetalRenderBitmapScale(
                 context, engine, device.device.gDevice, &deviceRect);
         }
     } else {

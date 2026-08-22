@@ -3824,10 +3824,17 @@ static void GXMetalDrawBitmap(const TQADrawContext *drawContext,
     float top;
     float right;
     float bottom;
+    float drawWidth;
+    float drawHeight;
+    float destinationWidth;
+    float destinationHeight;
+    float scaleX;
+    float scaleY;
     float u0;
     float v0;
     float u1;
     float v1;
+    uint32_t bitmapFilter;
 
     GXMetalTraceDrawMethod(kQADrawBitmap);
     gDiagnostics.draw_bitmap_count++;
@@ -3840,12 +3847,24 @@ static void GXMetalDrawBitmap(const TQADrawContext *drawContext,
     if (!GXMetalFlushPendingDraws(state)) {
         return;
     }
+    scaleX = state->float_state[kQATag_BitmapScale_x];
+    scaleY = state->float_state[kQATag_BitmapScale_y];
+    drawWidth = (float)bitmap->width * scaleX;
+    drawHeight = (float)bitmap->height * scaleY;
+    bitmapFilter = state->int_state[kQATag_BitmapFilter];
+    if (!(scaleX > 0.0f) || !(scaleY > 0.0f) ||
+        !(drawWidth <= (float)GXMETAL_MAX_DIMENSION) ||
+        !(drawHeight <= (float)GXMETAL_MAX_DIMENSION) ||
+        bitmapFilter > kQAFilter_Best) {
+        gDiagnostics.draw_bitmap_reject_count++;
+        return;
+    }
     if (state->ati_private_enabled &&
         gxmetal_ati_uses_logical_bitmap_canvas(
-            v->x, v->y, (float)bitmap->width, (float)bitmap->height)) {
+            v->x, v->y, drawWidth, drawHeight)) {
         GXMetalBitmapRect rect = gxmetal_ati_bitmap_rect(
             state->width, state->height, v->x, v->y,
-            (float)bitmap->width, (float)bitmap->height);
+            drawWidth, drawHeight);
         left = rect.left;
         top = rect.top;
         right = rect.right;
@@ -3853,9 +3872,11 @@ static void GXMetalDrawBitmap(const TQADrawContext *drawContext,
     } else {
         left = v->x;
         top = v->y;
-        right = left + (float)bitmap->width;
-        bottom = top + (float)bitmap->height;
+        right = left + drawWidth;
+        bottom = top + drawHeight;
     }
+    destinationWidth = right - left;
+    destinationHeight = bottom - top;
     if (right <= 0.0f || bottom <= 0.0f ||
         left >= (float)state->width || top >= (float)state->height) {
         return;
@@ -3865,19 +3886,19 @@ static void GXMetalDrawBitmap(const TQADrawContext *drawContext,
     u1 = 1.0f;
     v1 = 1.0f;
     if (left < 0.0f) {
-        u0 = -left / (float)bitmap->width;
+        u0 = -left / destinationWidth;
         left = 0.0f;
     }
     if (top < 0.0f) {
-        v0 = -top / (float)bitmap->height;
+        v0 = -top / destinationHeight;
         top = 0.0f;
     }
     if (right > (float)state->width) {
-        u1 -= (right - (float)state->width) / (float)bitmap->width;
+        u1 -= (right - (float)state->width) / destinationWidth;
         right = (float)state->width;
     }
     if (bottom > (float)state->height) {
-        v1 -= (bottom - (float)state->height) / (float)bitmap->height;
+        v1 -= (bottom - (float)state->height) / destinationHeight;
         bottom = (float)state->height;
     }
     GXMetalBitmapVertex(&vertices[0], v, left, top, u0, v0);
@@ -3898,7 +3919,7 @@ static void GXMetalDrawBitmap(const TQADrawContext *drawContext,
         !GXMetalEmitState(state, kQATag_TextureOp, GXMETAL_STATE_UINT32,
                           kQATextureOp_None) ||
         !GXMetalEmitState(state, kQATag_TextureFilter, GXMETAL_STATE_UINT32,
-                          kQATextureFilter_Fast) ||
+                          bitmapFilter) ||
         !GXMetalEmitState(state, kQATagGL_TextureWrapU, GXMETAL_STATE_UINT32,
                           kQAGL_Clamp) ||
         !GXMetalEmitState(state, kQATagGL_TextureWrapV, GXMETAL_STATE_UINT32,
@@ -4239,10 +4260,13 @@ static TQAError GXMetalDrawPrivateNew(TQADrawContext *newDrawContext,
     }
     state->float_state[kQATag_ColorBG_a] = 1.0f;
     state->float_state[kQATag_Width] = 1.0f;
+    state->float_state[kQATag_BitmapScale_x] = 1.0f;
+    state->float_state[kQATag_BitmapScale_y] = 1.0f;
     state->float_state[kQATagGL_DepthBG] = 1.0f;
     state->int_state[kQATag_Blend] = kQABlend_Interpolate;
     state->int_state[kQATag_TextureFilter] = kQATextureFilter_Fast;
     state->int_state[kQATag_TextureOp] = kQATextureOp_None;
+    state->int_state[kQATag_BitmapFilter] = kQAFilter_Fast;
     state->int_state[kQATag_ZBufferMask] = kQAZBufferMask_Enable;
     if ((flags & kQAContext_NoZBuffer) == 0) {
         contextFlags |= GXMETAL_CONTEXT_Z16;
@@ -4463,6 +4487,9 @@ static TQAError GXMetalEngineGestalt(TQAGestaltSelector selector,
         if (features & GXMETAL_FEATURE_MULTI_TEXTURE_VERTEX) {
             value |= kQAFast_MultiTextures;
         }
+        if (features & GXMETAL_FEATURE_TEXTURE) {
+            value |= kQAFast_BitmapScale;
+        }
         break;
     case kQAGestalt_TextureMemory:
     case kQAGestalt_FastTextureMemory:
@@ -4487,6 +4514,9 @@ static TQAError GXMetalEngineGestalt(TQAGestaltSelector selector,
             kQAOptional2_SwapBuffers : 0;
         if (features & GXMETAL_FEATURE_TEXTURE) {
             value |= kQAOptional2_FlipOrigin;
+        }
+        if (features & GXMETAL_FEATURE_TEXTURE) {
+            value |= kQAOptional2_BitmapScale;
         }
         break;
     case kQAGestalt_VendorID:

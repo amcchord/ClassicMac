@@ -22,7 +22,7 @@ early enough for the RAVE manager to select Apple Software RAVE.
 | Clipping | Immutable rectangular context clip plus mutable OpenGL scissor | Supported | Host and guest preservation tests |
 | Complex regions | Arbitrary non-rectangular QuickDraw regions | Deliberately declined | Guest fallback test |
 | Presentation | Single and double buffer, dirty rectangles, RGB555/RGB32/ARGB32 scanout | Supported | Direct and fallback presentation tests |
-| Bitmaps | Unscaled affine bitmap copy with the supported texture formats | Supported | Guest clipped-bitmap test |
+| Bitmaps | Affine bitmap copy with positive independent X/Y scaling, nearest or linear filtering, clipping, and the supported texture formats | Supported | Guest scaled-extent, filter-state, and clipped-bitmap tests |
 | ATI private bridge | OpenGLRendererATI hooks, two-stage lightmaps, NoCopy refresh, and private ARGB4444 | Supported compatibility path | Quake III, Carmageddon II, and host tests |
 | Public RAVE multitexture | One RAVE 1.6 secondary stage, `QASubmitMultiTextureParams`, independent reciprocal-W/UV values, add/modulate/alpha/fixed composition, filter, wrap, and enable/disable | Supported and advertised as one accelerated stage | Native Metal tests plus signed-bundle Mac OS 9 conformance |
 | Perspective Z | `kQATag_PerspectiveZ` | Reciprocal-W hidden-surface removal and fog, with ordinary Z-function semantics preserved | Host and guest tests make normalized Z and reciprocal W disagree |
@@ -43,8 +43,8 @@ early enough for the RAVE manager to select Apple Software RAVE.
 3. Measure remaining specialized formats against real software before adding
    them. The packed YUV variants stay unadvertised until a game or standards
    probe establishes their value and exact conversion semantics.
-4. Add bitmap scale/filter and chromakey before attempting more specialized
-   features such as CSG or Z-sorted transparency.
+4. Add chromakey before attempting more specialized features such as CSG or
+   Z-sorted transparency.
 
 ## Game qualification
 
