@@ -54,6 +54,11 @@ struct VMDetailView: View {
                 if previewImage != nil {
                     screenSection
                 }
+                if vm.wrappedValue.machineFamily == .powerMacG4,
+                   vm.wrappedValue.bootFromCD,
+                   vm.wrappedValue.cdImagePath?.isEmpty == false {
+                    installationGuideSection
+                }
                 displaySection(vm)
                 hardwareSection(vm)
                 mediaSection(vm)
@@ -75,6 +80,17 @@ struct VMDetailView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Move to Trash deletes the machine file, including its disk and settings. Remove from Library keeps the file on disk but takes it out of ClassicMac.")
+        }
+    }
+
+    private var installationGuideSection: some View {
+        Section {
+            PowerMacInstallGuide(includeGXMetal: false)
+                .padding(.vertical, 4)
+        } header: {
+            Label("Installing Mac OS", systemImage: "list.number")
+        } footer: {
+            Text("After the first hard-disk boot, ClassicMac Tools mounts automatically so you can install and test GXMetal.")
         }
     }
 
@@ -450,7 +466,7 @@ struct VMDetailView: View {
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         } else if vm.wrappedValue.machineFamily == .powerMacG4 {
-                            Text("Mounts automatically at startup as a read-only disk using the same reliable Virtio transport as shared folders.")
+                            Text("Mounts automatically at startup. Open GXMetal, run Install GXMetal, restart, then run GXMetal Test before launching games.")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         } else {

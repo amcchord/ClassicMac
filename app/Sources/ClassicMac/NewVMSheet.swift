@@ -313,6 +313,17 @@ struct NewVMSheet: View {
                 Label("Shared Folder", systemImage: "folder.badge.person.crop")
             }
 
+            if family == .powerMacG4, isoURL != nil {
+                Section {
+                    PowerMacInstallGuide(includeGXMetal: true)
+                        .padding(.vertical, 4)
+                } header: {
+                    Label("From Blank Disk to GXMetal", systemImage: "list.number")
+                } footer: {
+                    Text("These steps remain available in the machine settings while you install Mac OS.")
+                }
+            }
+
             Section {
                 LabeledContent("Machine") {
                     Text(family.label)
@@ -576,6 +587,68 @@ struct NewVMSheet: View {
                 return "The install disc could not be copied. \(error.localizedDescription)"
             }
         }.value
+    }
+}
+
+// Keep the one-time Power Mac setup path in the app as well as the README.
+// A blank HFS disk is not self-initializing, and Apple's driver-update option
+// is inappropriate for ClassicMac's virtual IDE disk, so both details need to
+// be visible while the installer is on screen.
+struct PowerMacInstallGuide: View {
+    let includeGXMetal: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            InstallGuideStep(
+                number: 1,
+                title: "Initialize the blank disk",
+                detail: "On the install CD, open Utilities → Drive Setup. Select the uninitialized hard disk, then choose Initialize."
+            )
+            InstallGuideStep(
+                number: 2,
+                title: "Install Mac OS",
+                detail: "On Installer's Install Software screen, open Options… and turn off Update Apple Hard Disk Drivers before installing."
+            )
+            InstallGuideStep(
+                number: 3,
+                title: "Start from the hard disk",
+                detail: "When installation finishes, shut down. In ClassicMac, turn off Start up from this disc, then start the Mac again."
+            )
+            if includeGXMetal {
+                InstallGuideStep(
+                    number: 4,
+                    title: "Install and verify GXMetal",
+                    detail: "Open ClassicMac Tools → GXMetal, run Install GXMetal, restart, then run GXMetal Test before launching a game."
+                )
+            }
+        }
+    }
+}
+
+private struct InstallGuideStep: View {
+    let number: Int
+    let title: String
+    let detail: String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Text("\(number)")
+                .font(.caption.bold())
+                .foregroundStyle(.white)
+                .frame(width: 22, height: 22)
+                .background(Color.accentColor, in: Circle())
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.callout.weight(.semibold))
+                Text(detail)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Step \(number): \(title). \(detail)")
     }
 }
 
