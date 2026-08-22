@@ -1446,6 +1446,9 @@ static int gxmetal_metal_read_texture_vertex(
     int host_ati_uv_transform)
 {
     uint32_t texture_op = context->texture_op;
+    int secondary_active = context->secondary_texture_id != 0 &&
+        context->secondary_texture_id != context->texture_id &&
+        context->secondary_texture_enable != 0;
 
     memset(vertex, 0, sizeof(*vertex));
     vertex->x = gxmetal_metal_load_float(
@@ -1510,7 +1513,7 @@ static int gxmetal_metal_read_texture_vertex(
         }
     }
     if ((texture_op & GXMETAL_TEXTURE_HIGHLIGHT) ||
-        (context->secondary_texture_id != 0 &&
+        (secondary_active &&
          stride == GXMETAL_TEXTURE_VERTEX_BYTES)) {
         vertex->ks_r = gxmetal_metal_load_float(
             source + GXMETAL_VERTEX_KS_R_OFFSET);
@@ -1523,7 +1526,7 @@ static int gxmetal_metal_read_texture_vertex(
             return 0;
         }
     }
-    if (context->secondary_texture_id != 0) {
+    if (secondary_active) {
         if (stride == GXMETAL_MULTI_TEXTURE_VERTEX_BYTES) {
             vertex->secondary_inv_w = gxmetal_metal_load_float(
                 source + GXMETAL_VERTEX_MULTI_INV_W_OFFSET);

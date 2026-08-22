@@ -810,6 +810,149 @@ static TQAError GXMetalRenderPattern(TQADrawContext *context,
     return error;
 }
 
+static TQAError GXMetalRenderPublicMultiTexture(
+    TQADrawContext *context, const TQAEngine *engine,
+    GDHandle graphicsDevice, const TQARect *deviceRect)
+{
+    static unsigned long primaryPixels[4] = {
+        0xff0000ffUL, 0xff0000ffUL,
+        0xff0000ffUL, 0xff0000ffUL
+    };
+    static unsigned long secondaryPixels[4] = {
+        0xff00ff00UL, 0xffffffffUL,
+        0xff00ff00UL, 0xffffffffUL
+    };
+    TQAImage primaryImage;
+    TQAImage secondaryImage;
+    TQATexture *primaryTexture = NULL;
+    TQATexture *secondaryTexture = NULL;
+    TQAVTexture meshVertices[3];
+    TQAVTexture directVertices[3];
+    TQAVMultiTexture multiParams[3];
+    TQAIndexedTriangle triangle;
+    TQARect dirty = {0, GXMETAL_WIDTH, 0, GXMETAL_HEIGHT};
+    TQAError error;
+    int i;
+
+    if (context == NULL || context->version < kQAVersion_1_6 ||
+        context->submitMultiTextureParams == NULL) {
+        GXMetalRecordResult("FAIL: RAVE 1.6 multitexture draw method");
+        return kQANotSupported;
+    }
+    primaryImage.width = 2;
+    primaryImage.height = 2;
+    primaryImage.rowBytes = 8;
+    primaryImage.pixmap = primaryPixels;
+    secondaryImage.width = 2;
+    secondaryImage.height = 2;
+    secondaryImage.rowBytes = 8;
+    secondaryImage.pixmap = secondaryPixels;
+    error = QATextureNew(engine, kQATexture_None, kQAPixel_ARGB32,
+                         &primaryImage, &primaryTexture);
+    if (error == kQANoErr) {
+        error = QATextureNew(engine, kQATexture_None, kQAPixel_ARGB32,
+                             &secondaryImage, &secondaryTexture);
+    }
+    if (error != kQANoErr) {
+        GXMetalRecordResult("FAIL: public multitexture resource creation");
+        if (secondaryTexture != NULL) {
+            QATextureDelete(engine, secondaryTexture);
+        }
+        if (primaryTexture != NULL) {
+            QATextureDelete(engine, primaryTexture);
+        }
+        return error;
+    }
+
+    meshVertices[0] = GXMetalTextureVertex(20.0f, 190.0f, 0.5f,
+                                            0.25f, 0.5f);
+    meshVertices[1] = GXMetalTextureVertex(82.0f, 30.0f, 0.5f,
+                                            0.25f, 0.5f);
+    meshVertices[2] = GXMetalTextureVertex(145.0f, 190.0f, 0.5f,
+                                            0.25f, 0.5f);
+    directVertices[0] = GXMetalTextureVertex(175.0f, 190.0f, 0.5f,
+                                              0.25f, 0.5f);
+    directVertices[1] = GXMetalTextureVertex(237.0f, 30.0f, 0.5f,
+                                              0.25f, 0.5f);
+    directVertices[2] = GXMetalTextureVertex(300.0f, 190.0f, 0.5f,
+                                              0.25f, 0.5f);
+    for (i = 0; i < 3; i++) {
+        /* Red highlight proves the public secondary UVs do not borrow the
+         * TQAVTexture specular fields used by GXMetal's ATI compatibility
+         * bridge. The secondary stage deliberately samples the white column
+         * while the primary U coordinate points at the green column. */
+        meshVertices[i].ks_r = 0.75f;
+        directVertices[i].ks_r = 0.75f;
+        multiParams[i].invW = 1.0f;
+        multiParams[i].uOverW = 0.75f;
+        multiParams[i].vOverW = 0.5f;
+    }
+    triangle.triangleFlags = kQATriFlags_None;
+    triangle.vertices[0] = 0;
+    triangle.vertices[1] = 1;
+    triangle.vertices[2] = 2;
+
+    QASetFloat(context, kQATag_ColorBG_r, 0.0f);
+    QASetFloat(context, kQATag_ColorBG_g, 0.0f);
+    QASetFloat(context, kQATag_ColorBG_b, 0.0f);
+    QASetFloat(context, kQATag_ColorBG_a, 1.0f);
+    QASetInt(context, kQATag_ZFunction, kQAZFunction_None);
+    QASetPtr(context, kQATag_Texture, primaryTexture);
+    QASetInt(context, kQATag_TextureFilter, kQATextureFilter_Fast);
+    QASetInt(context, kQATag_TextureOp, kQATextureOp_Highlight);
+    QASetInt(context, kQATagGL_TextureWrapU, kQAGL_Clamp);
+    QASetInt(context, kQATagGL_TextureWrapV, kQAGL_Clamp);
+    QASetInt(context, kQATag_MultiTextureCurrent, 0);
+    QASetPtr(context, kQATag_MultiTexture, secondaryTexture);
+    QASetInt(context, kQATag_MultiTextureFilter, kQATextureFilter_Fast);
+    QASetInt(context, kQATag_MultiTextureWrapU, kQAGL_Clamp);
+    QASetInt(context, kQATag_MultiTextureWrapV, kQAGL_Clamp);
+    QASetInt(context, kQATag_MultiTextureOp, kQAMultiTexture_Modulate);
+    QASetInt(context, kQATag_MultiTextureEnable, 1);
+
+    QARenderStart(context, &dirty, NULL);
+    QASubmitVerticesTexture(context, 3, meshVertices);
+    QASubmitMultiTextureParams(context, 3, multiParams);
+    QADrawTriMeshTexture(context, 1, &triangle);
+    /* The same public secondary array must pair with immediate vertex arrays
+     * and scalar triangles, not only the indexed submission path. */
+    QADrawVTexture(context, 3, kQAVertexMode_Tri,
+                   directVertices, NULL);
+    QADrawTriTexture(context, &directVertices[0], &directVertices[1],
+                     &directVertices[2], kQATriFlags_None);
+    QASetInt(context, kQATag_MultiTextureEnable, 0);
+    QADrawTriTexture(context, &directVertices[0], &directVertices[1],
+                     &directVertices[2], kQATriFlags_None);
+    error = QARenderEnd(context, &dirty);
+    if (error == kQANoErr) {
+        error = QASync(context);
+    }
+    if (error != kQANoErr) {
+        GXMetalRecordResult("FAIL: public multitexture render completion");
+    } else if (!GXMetalPixelMatches(graphicsDevice,
+                                    deviceRect->left + 82,
+                                    deviceRect->top + 130,
+                                    kGXMetalPixelPurple)) {
+        GXMetalRecordResult(
+            "FAIL: public multitexture coordinates or highlight pixel");
+        error = kQAError;
+    } else if (!GXMetalPixelMatches(graphicsDevice,
+                                    deviceRect->left + 237,
+                                    deviceRect->top + 130,
+                                    kGXMetalPixelPurple)) {
+        GXMetalRecordResult("FAIL: public multitexture disable pixel");
+        error = kQAError;
+    }
+
+    QASetInt(context, kQATag_MultiTextureCurrent, 0);
+    QASetPtr(context, kQATag_MultiTexture, NULL);
+    QASetInt(context, kQATag_MultiTextureEnable, 0);
+    QASetPtr(context, kQATag_Texture, NULL);
+    QATextureDelete(engine, secondaryTexture);
+    QATextureDelete(engine, primaryTexture);
+    return error;
+}
+
 static void GXMetalFillATITexture(unsigned char pixels[8],
                                   unsigned char high,
                                   unsigned char low)
@@ -1096,7 +1239,7 @@ static void GXMetalBuildPassResult(char *result, size_t resultCapacity,
     GXMetalAppendText(&cursor, end, "PASS: version=");
     GXMetalAppendVersion(&cursor, end, revision);
     GXMetalAppendText(&cursor, end,
-        " RAVE discovery capability-contract depth perspective-z blend alpha-test backface clip texture ATI-private-nocopy bitmap dirty-present double-buffer framebuffer gx_us=");
+        " RAVE discovery capability-contract depth perspective-z blend alpha-test backface clip texture public-multitexture ATI-private-nocopy bitmap dirty-present double-buffer framebuffer gx_us=");
     GXMetalAppendDecimal(&cursor, end, gxMetalMicroseconds);
     GXMetalAppendText(&cursor, end, " sw_us=");
     GXMetalAppendDecimal(&cursor, end, softwareMicroseconds);
@@ -1116,7 +1259,7 @@ static void GXMetalBuildPassMessage(char *message, size_t messageCapacity,
     GXMetalAppendText(&cursor, end, "GXMetal ");
     GXMetalAppendVersion(&cursor, end, revision);
     GXMetalAppendText(&cursor, end,
-        " passed automatic RAVE discovery, framebuffer correctness, ATI private static/NoCopy texture mutation, bitmap drawing, presentation, and fallback. The repeatable mixed texture/Gouraud workload ran ");
+        " passed automatic RAVE discovery, public RAVE 1.6 multitexture rendering, framebuffer correctness, ATI private static/NoCopy texture mutation, bitmap drawing, presentation, and fallback. The repeatable mixed texture/Gouraud workload ran ");
     GXMetalAppendDecimal(&cursor, end, speedupTimes100 / 100);
     GXMetalAppendText(&cursor, end, ".");
     if (speedupTimes100 % 100 < 10) {
@@ -1200,8 +1343,8 @@ int main(void)
     uint64_t softwareMicroseconds = 0;
     uint64_t speedupTimes100;
     char softwareEngineName[64];
-    char passResult[240];
-    char passMessage[256];
+    char passResult[288];
+    char passMessage[320];
     char versionMessage[256];
 
     GXMetalInitToolbox();
@@ -1383,16 +1526,16 @@ int main(void)
                        kQAOptional_TextureHQ | kQAOptional_TextureColor |
                        kQAOptional_CL8 | kQAOptional_ZBufferMask |
                        kQAOptional_ClearZBuffer | kQAOptional_FogDepth |
-                       kQAOptional_AlphaTest;
+                       kQAOptional_AlphaTest |
+                       kQAOptional_MultiTextures;
     requiredFeatures2 = kQAOptional2_SwapBuffers | kQAOptional2_FlipOrigin;
     requiredFastFeatures = kQAFast_Line | kQAFast_Gouraud |
                            kQAFast_Blend | kQAFast_Texture |
                            kQAFast_TextureHQ | kQAFast_CL8 |
-                           kQAFast_FogDepth;
+                           kQAFast_FogDepth | kQAFast_MultiTextures;
     if (optionalFeatures != requiredFeatures ||
         optionalFeatures2 != requiredFeatures2 ||
-        fastFeatures != requiredFastFeatures || multiTextureMax != 0 ||
-        (optionalFeatures & kQAOptional_MultiTextures) != 0) {
+        fastFeatures != requiredFastFeatures || multiTextureMax != 1) {
         GXMetalRecordResult("FAIL: inaccurate RAVE capability declaration");
         DisposeWindow(window);
         GXMetalShowResult(false,
@@ -1493,6 +1636,10 @@ int main(void)
         error = GXMetalRenderPattern(context, engine,
                                      device.device.gDevice, &deviceRect);
         if (error == kQANoErr) {
+            error = GXMetalRenderPublicMultiTexture(
+                context, engine, device.device.gDevice, &deviceRect);
+        }
+        if (error == kQANoErr) {
             error = GXMetalRenderATITextureMutation(
                 context, engine, device.device.gDevice, &deviceRect);
         }
@@ -1508,7 +1655,7 @@ int main(void)
     if (error != kQANoErr) {
         DisposeWindow(window);
         GXMetalShowResult(false,
-            "GXMetal was selected, but the depth/texture/double-buffer render test did not complete.");
+            "GXMetal was selected, but the depth/texture/multitexture/double-buffer render test did not complete.");
         QAExit();
         return 1;
     }

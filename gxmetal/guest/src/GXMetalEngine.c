@@ -65,6 +65,8 @@ typedef struct GXMetalDrawState {
     uint32_t submitted_gouraud_count;
     Ptr submitted_texture_vertices;
     uint32_t submitted_texture_count;
+    Ptr submitted_multitexture_params;
+    uint32_t submitted_multitexture_count;
     Ptr pending_vertices;
     uint32_t pending_kind;
     uint32_t pending_count;
@@ -1442,6 +1444,20 @@ static void GXMetalStoreTexture(uint8_t *destination,
     }
 }
 
+static void GXMetalStoreMultiTexture(uint8_t *destination,
+                                     const TQAVTexture *vertex,
+                                     const TQAVMultiTexture *secondary)
+{
+    GXMetalStoreTexture(destination, vertex);
+    gxmetal_store_le32(destination + GXMETAL_VERTEX_MULTI_INV_W_OFFSET,
+                       GXMetalFloatBits(secondary->invW));
+    gxmetal_store_le32(destination + GXMETAL_VERTEX_MULTI_U_OVER_W_OFFSET,
+                       GXMetalFloatBits(secondary->uOverW));
+    gxmetal_store_le32(destination + GXMETAL_VERTEX_MULTI_V_OVER_W_OFFSET,
+                       GXMetalFloatBits(secondary->vOverW));
+    gxmetal_store_le32(destination + GXMETAL_VERTEX_MULTI_RESERVED_OFFSET, 0);
+}
+
 static void GXMetalStoreATIPrivateTexture(
     uint8_t *destination, const TQAVTexture *vertex,
     const TQATexture *texture, TQABoolean texelCoordinates)
@@ -1546,6 +1562,7 @@ static TQABoolean GXMetalEmitTexture(GXMetalDrawState *state,
                                      uint32_t primitive,
                                      uint32_t count,
                                      const TQAVTexture *vertices,
+                                     const TQAVMultiTexture *secondary,
                                      uint32_t flags,
                                      int32_t atiTexelCoordinatesOverride)
 {
@@ -1556,12 +1573,17 @@ static TQABoolean GXMetalEmitTexture(GXMetalDrawState *state,
     TQABoolean hostATIUVTransform;
     uint32_t drawFlags;
     uint32_t packetBytes;
+    uint32_t vertexBytes = secondary != NULL ?
+        GXMETAL_MULTI_TEXTURE_VERTEX_BYTES : GXMETAL_TEXTURE_VERTEX_BYTES;
     uint8_t *payload;
     uint32_t i;
 
-    if (count == 0 || vertices == NULL ||
+    if ((secondary != NULL &&
+         (state->transport->features &
+          GXMETAL_FEATURE_MULTI_TEXTURE_VERTEX) == 0) ||
+        count == 0 || vertices == NULL ||
         (uint64_t)GXMETAL_PACKET_HEADER_BYTES + GXMETAL_DRAW_HEADER_BYTES +
-            (uint64_t)count * GXMETAL_TEXTURE_VERTEX_BYTES >
+            (uint64_t)count * vertexBytes >
                 GXMETAL_MAX_PACKET_BYTES) {
         state->failed = 1;
         return 0;
@@ -1579,7 +1601,7 @@ static TQABoolean GXMetalEmitTexture(GXMetalDrawState *state,
         ((TQATexture *)texture)->last_refresh_epoch = gRenderEpoch;
     }
     packetBytes = GXMETAL_PACKET_HEADER_BYTES + GXMETAL_DRAW_HEADER_BYTES +
-                  count * GXMETAL_TEXTURE_VERTEX_BYTES;
+                  count * vertexBytes;
     if (!GXMetalBeginPacket(state, GXMETAL_OP_DRAW_TEXTURED, packetBytes,
                             &packet)) {
         return 0;
@@ -1588,7 +1610,7 @@ static TQABoolean GXMetalEmitTexture(GXMetalDrawState *state,
     gxmetal_store_le32(payload + GXMETAL_DRAW_PRIMITIVE_OFFSET, primitive);
     gxmetal_store_le32(payload + GXMETAL_DRAW_VERTEX_COUNT_OFFSET, count);
     gxmetal_store_le32(payload + GXMETAL_DRAW_VERTEX_STRIDE_OFFSET,
-                       GXMETAL_TEXTURE_VERTEX_BYTES);
+                       vertexBytes);
     atiPrivateTexture = texture != NULL &&
                         texture->magic == GXMETAL_TEXTURE_MAGIC &&
                         texture->source_pixel_type ==
@@ -1610,7 +1632,7 @@ static TQABoolean GXMetalEmitTexture(GXMetalDrawState *state,
             }
         }
     }
-    hostATIUVTransform = atiPrivateTexture &&
+    hostATIUVTransform = secondary == NULL && atiPrivateTexture &&
         primitive == GXMETAL_PRIMITIVE_TRIANGLE &&
         (state->transport->features &
              GXMETAL_FEATURE_ATI_UV_TRANSFORM) != 0;
@@ -1626,14 +1648,18 @@ static TQABoolean GXMetalEmitTexture(GXMetalDrawState *state,
          * negative, top-origin convention.  Detect texel coordinates per
          * primitive, normalize only those, then translate both forms into
          * the lower-origin RAVE convention consumed by the common shader. */
-        if (atiPrivateTexture && !hostATIUVTransform) {
+        if (secondary != NULL) {
+            GXMetalStoreMultiTexture(
+                payload + GXMETAL_DRAW_VERTICES_OFFSET + i * vertexBytes,
+                vertex, &secondary[i]);
+        } else if (atiPrivateTexture && !hostATIUVTransform) {
             GXMetalStoreATIPrivateTexture(
                 payload + GXMETAL_DRAW_VERTICES_OFFSET +
-                    i * GXMETAL_TEXTURE_VERTEX_BYTES,
+                    i * vertexBytes,
                 vertex, texture, atiTexelCoordinates);
         } else {
             GXMetalStoreTexture(payload + GXMETAL_DRAW_VERTICES_OFFSET +
-                                i * GXMETAL_TEXTURE_VERTEX_BYTES, vertex);
+                                i * vertexBytes, vertex);
         }
     }
     GXMetalCommitPacket(state, &packet);
@@ -1735,7 +1761,7 @@ static TQABoolean GXMetalFlushPendingDraws(GXMetalDrawState *state)
     if (kind == GXMETAL_DRAW_BATCH_TEXTURE) {
         return GXMetalEmitTexture(
             state, GXMETAL_PRIMITIVE_TRIANGLE, count,
-            (const TQAVTexture *)state->pending_vertices, flags,
+            (const TQAVTexture *)state->pending_vertices, NULL, flags,
             (int32_t)atiTexelCoordinates);
     }
     state->failed = 1;
@@ -1787,7 +1813,7 @@ static TQABoolean GXMetalQueueTextureTriangle(
     }
     if (state->pending_vertices == NULL) {
         return GXMetalEmitTexture(state, GXMETAL_PRIMITIVE_TRIANGLE, 3,
-                                  vertices, flags, -1);
+                                  vertices, NULL, flags, -1);
     }
     atiTexelCoordinates = atiTexelCoordinatesOverride >= 0 ?
         (uint32_t)(atiTexelCoordinatesOverride != 0) :
@@ -1913,6 +1939,11 @@ static void GXMetalSetInt(TQADrawContext *drawContext, TQATagInt tag,
     if (state == NULL || (uint32_t)tag >= GXMETAL_STATE_SLOTS) {
         return;
     }
+    if ((uint32_t)tag == kQATag_MultiTextureEnable && newValue > 1u) {
+        /* GXMetal advertises one secondary stage. Ignore probes for later
+         * stages without poisoning an otherwise valid draw context. */
+        return;
+    }
     if (state->int_state_valid[(uint32_t)tag] &&
         state->int_state[(uint32_t)tag] == (uint32_t)newValue) {
         return;
@@ -1943,13 +1974,18 @@ static void GXMetalSetPtr(TQADrawContext *drawContext, TQATagPtr tag,
     const TQATexture *texture = (const TQATexture *)newValue;
     uint32_t multiTextureStage = state != NULL ?
         state->int_state[kQATag_MultiTextureCurrent] : UINT32_MAX;
+    TQABoolean publicMultiTexture = state != NULL &&
+        (state->transport->features &
+         GXMETAL_FEATURE_MULTI_TEXTURE_VERTEX) != 0;
     TQABoolean primaryTextureTag = tag == kQATag_Texture ||
         (state != NULL && state->ati_private_enabled &&
          tag == kQATag_MultiTexture &&
          multiTextureStage == UINT32_MAX);
     TQABoolean secondaryTextureTag =
-        state != NULL && state->ati_private_enabled &&
+        state != NULL && (state->ati_private_enabled || publicMultiTexture) &&
         tag == kQATag_MultiTexture && multiTextureStage == 0u;
+    TQABoolean clearSecondaryTexture = primaryTextureTag &&
+        state != NULL && state->ati_private_enabled;
     GXMetalGuestPacket packet;
     uint8_t *payload;
 
@@ -1976,7 +2012,8 @@ static void GXMetalSetPtr(TQADrawContext *drawContext, TQATagPtr tag,
         return;
     }
     if (primaryTextureTag) {
-        if (state->texture == newValue && state->secondary_texture == NULL) {
+        if (state->texture == newValue &&
+            (!clearSecondaryTexture || state->secondary_texture == NULL)) {
             return;
         }
     } else if (state->secondary_texture == newValue) {
@@ -1990,8 +2027,18 @@ static void GXMetalSetPtr(TQADrawContext *drawContext, TQATagPtr tag,
         /* ATI only rebinds stage zero for a draw that actually uses a second
          * texture.  Do not let the preceding draw's lightmap leak across a
          * later primary-texture change. */
-        state->secondary_texture = NULL;
+        if (clearSecondaryTexture) {
+            state->secondary_texture = NULL;
+        }
     } else {
+        if (publicMultiTexture && !state->ati_private_enabled) {
+            /* The host's legacy ATI path starts enabled. Synchronize the
+             * public RAVE default (zero stages) before binding stage zero. */
+            (void)GXMetalEmitState(
+                state, GXMETAL_STATE_MULTI_TEXTURE_ENABLE,
+                GXMETAL_STATE_UINT32,
+                state->int_state[kQATag_MultiTextureEnable]);
+        }
         state->secondary_texture = newValue;
     }
     if (!GXMetalBeginPacket(state, GXMETAL_OP_SET_STATE,
@@ -2007,7 +2054,7 @@ static void GXMetalSetPtr(TQADrawContext *drawContext, TQATagPtr tag,
     gxmetal_store_le32(payload + GXMETAL_STATE_VALUE_OFFSET,
                        texture != NULL ? texture->resource_id : 0);
     GXMetalCommitPacket(state, &packet);
-    if (primaryTextureTag) {
+    if (clearSecondaryTexture) {
         (void)GXMetalEmitState(state, GXMETAL_STATE_MULTI_TEXTURE,
                                GXMETAL_STATE_RESOURCE, 0);
     }
@@ -2578,6 +2625,8 @@ static GXMetalATIEngineMethod gGXMetalATIEngineMethods[9] = {
 static void *GXMetalGetPtr(const TQADrawContext *drawContext, TQATagPtr tag)
 {
     GXMetalDrawState *state = GXMetalGetState(drawContext);
+    uint32_t multiTextureStage = state != NULL ?
+        state->int_state[kQATag_MultiTextureCurrent] : UINT32_MAX;
     gDiagnostics.draw_method_stage = 150;
     gDiagnostics.get_ptr_count++;
     gDiagnostics.last_get_ptr_tag = (uint32_t)tag;
@@ -2589,6 +2638,17 @@ static void *GXMetalGetPtr(const TQADrawContext *drawContext, TQATagPtr tag)
         gDiagnostics.draw_method_stage = 151;
         GXMetalPersistDiagnostics();
         return (void *)gGXMetalATIPrivateMethods;
+    }
+    if (state != NULL && tag == kQATag_MultiTexture &&
+        multiTextureStage == 0u &&
+        (state->ati_private_enabled ||
+         (state->transport->features &
+          GXMETAL_FEATURE_MULTI_TEXTURE_VERTEX) != 0)) {
+        gDiagnostics.last_get_ptr_value =
+            (uint32_t)(uintptr_t)state->secondary_texture;
+        gDiagnostics.draw_method_stage = 151;
+        GXMetalPersistDiagnostics();
+        return (void *)state->secondary_texture;
     }
     if (state == NULL || tag != kQATag_Texture) {
         gDiagnostics.last_get_ptr_value = 0;
@@ -2773,6 +2833,9 @@ static void GXMetalUnboundTextureVertex(const GXMetalDrawState *state,
     destination->a = GXMetalClampUnit(source->a);
 }
 
+static TQABoolean GXMetalPublicMultiTextureActive(
+    const GXMetalDrawState *state);
+
 static void GXMetalDrawTriTexture(const TQADrawContext *drawContext,
                                   const TQAVTexture *v0,
                                   const TQAVTexture *v1,
@@ -2819,6 +2882,19 @@ static void GXMetalDrawTriTexture(const TQADrawContext *drawContext,
     vertices[0] = *v0;
     vertices[1] = *v1;
     vertices[2] = *v2;
+    if (GXMetalPublicMultiTextureActive(state)) {
+        if (state->submitted_multitexture_count < 3u ||
+            !GXMetalFlushPendingDraws(state)) {
+            state->failed = 1;
+            return;
+        }
+        (void)GXMetalEmitTexture(
+            state, GXMETAL_PRIMITIVE_TRIANGLE, 3u, vertices,
+            (const TQAVMultiTexture *)
+                state->submitted_multitexture_params,
+            (uint32_t)flags, -1);
+        return;
+    }
     (void)GXMetalQueueTextureTriangle(
         state, vertices, (uint32_t)flags, -1);
 }
@@ -2889,12 +2965,58 @@ static void GXMetalSubmitVerticesTexture(
     state->submitted_texture_count = count;
 }
 
+static void GXMetalSubmitMultiTextureParams(
+    const TQADrawContext *drawContext, unsigned long nParams,
+    const TQAVMultiTexture *params)
+{
+    GXMetalDrawState *state = GXMetalGetState(drawContext);
+    Ptr replacement = NULL;
+    uint32_t count = (uint32_t)nParams;
+
+    GXMetalTraceDrawMethod(kQSubmitMultiTextureParams);
+    if (state == NULL ||
+        (state->transport->features &
+         GXMETAL_FEATURE_MULTI_TEXTURE_VERTEX) == 0) {
+        return;
+    }
+    if (state->int_state[kQATag_MultiTextureCurrent] != 0u ||
+        nParams != (unsigned long)count ||
+        count > GXMETAL_MAX_SUBMITTED_VERTICES ||
+        (count != 0 && params == NULL)) {
+        state->failed = 1;
+        return;
+    }
+    if (count != 0) {
+        replacement = NewPtr((Size)((uint64_t)count * sizeof(*params)));
+        if (replacement == NULL) {
+            state->failed = 1;
+            return;
+        }
+        memcpy(replacement, params, (size_t)count * sizeof(*params));
+    }
+    if (state->submitted_multitexture_params != NULL) {
+        DisposePtr(state->submitted_multitexture_params);
+    }
+    state->submitted_multitexture_params = replacement;
+    state->submitted_multitexture_count = count;
+}
+
 static TQABoolean GXMetalMeshTriangleIsValid(
     const TQAIndexedTriangle *triangle, uint32_t vertexCount)
 {
     return triangle != NULL && triangle->vertices[0] < vertexCount &&
            triangle->vertices[1] < vertexCount &&
            triangle->vertices[2] < vertexCount;
+}
+
+static TQABoolean GXMetalPublicMultiTextureActive(
+    const GXMetalDrawState *state)
+{
+    return state != NULL && !state->ati_private_enabled &&
+           (state->transport->features &
+           GXMETAL_FEATURE_MULTI_TEXTURE_VERTEX) != 0 &&
+           state->int_state[kQATag_MultiTextureEnable] != 0u &&
+           state->secondary_texture != NULL;
 }
 
 static void GXMetalDrawTriMeshGouraud(
@@ -2962,8 +3084,11 @@ static void GXMetalDrawTriMeshTexture(
 {
     GXMetalDrawState *state = GXMetalGetState(drawContext);
     const TQAVTexture *submitted;
+    const TQAVMultiTexture *submittedMulti = NULL;
     TQAVTexture *batch;
+    TQAVMultiTexture *multiBatch = NULL;
     TQAVGouraud *gouraudBatch;
+    TQABoolean multiTexture;
     uint32_t triangleCount = (uint32_t)nTriangles;
     uint32_t triangleIndex = 0;
 
@@ -2980,6 +3105,16 @@ static void GXMetalDrawTriMeshTexture(
         return;
     }
     submitted = (const TQAVTexture *)state->submitted_texture_vertices;
+    multiTexture = GXMetalPublicMultiTextureActive(state);
+    if (multiTexture) {
+        if (state->submitted_multitexture_count !=
+            state->submitted_texture_count) {
+            state->failed = 1;
+            return;
+        }
+        submittedMulti = (const TQAVMultiTexture *)
+            state->submitted_multitexture_params;
+    }
     if (state->texture == NULL) {
         gouraudBatch = (TQAVGouraud *)NewPtr(
             (Size)(GXMETAL_MESH_BATCH_TRIANGLES * 3u *
@@ -3034,6 +3169,16 @@ static void GXMetalDrawTriMeshTexture(
         state->failed = 1;
         return;
     }
+    if (multiTexture) {
+        multiBatch = (TQAVMultiTexture *)NewPtr(
+            (Size)(GXMETAL_MESH_BATCH_TRIANGLES * 3u *
+                   sizeof(*multiBatch)));
+        if (multiBatch == NULL) {
+            DisposePtr((Ptr)batch);
+            state->failed = 1;
+            return;
+        }
+    }
     while (triangleIndex < triangleCount && !state->failed) {
         uint32_t flags = (uint32_t)triangles[triangleIndex].triangleFlags;
         uint32_t batchTriangles = 0;
@@ -3052,14 +3197,26 @@ static void GXMetalDrawTriMeshTexture(
             batch[destination] = submitted[triangle->vertices[0]];
             batch[destination + 1] = submitted[triangle->vertices[1]];
             batch[destination + 2] = submitted[triangle->vertices[2]];
+            if (multiTexture) {
+                multiBatch[destination] =
+                    submittedMulti[triangle->vertices[0]];
+                multiBatch[destination + 1] =
+                    submittedMulti[triangle->vertices[1]];
+                multiBatch[destination + 2] =
+                    submittedMulti[triangle->vertices[2]];
+            }
             batchTriangles++;
         }
         if (batchTriangles != 0 &&
             !GXMetalEmitTexture(state, GXMETAL_PRIMITIVE_TRIANGLE,
-                                batchTriangles * 3u, batch, flags, -1)) {
+                                batchTriangles * 3u, batch, multiBatch,
+                                flags, -1)) {
             state->failed = 1;
         }
         triangleIndex += batchTriangles;
+    }
+    if (multiBatch != NULL) {
+        DisposePtr((Ptr)multiBatch);
     }
     DisposePtr((Ptr)batch);
 }
@@ -3150,6 +3307,8 @@ static void GXMetalDrawVTexture(const TQADrawContext *drawContext,
                                 const unsigned long flags[])
 {
     GXMetalDrawState *state = GXMetalGetState(drawContext);
+    const TQAVMultiTexture *secondary = NULL;
+    TQABoolean multiTexture = 0;
     uint32_t primitive;
     unsigned long i;
 
@@ -3180,6 +3339,16 @@ static void GXMetalDrawVTexture(const TQADrawContext *drawContext,
         DisposePtr((Ptr)gouraud);
         return;
     }
+    multiTexture = GXMetalPublicMultiTextureActive(state);
+    if (multiTexture) {
+        if (nVertices > GXMETAL_MAX_SUBMITTED_VERTICES ||
+            state->submitted_multitexture_count != (uint32_t)nVertices) {
+            state->failed = 1;
+            return;
+        }
+        secondary = (const TQAVMultiTexture *)
+            state->submitted_multitexture_params;
+    }
     if (!GXMetalFlushPendingDraws(state)) {
         return;
     }
@@ -3197,8 +3366,15 @@ static void GXMetalDrawVTexture(const TQADrawContext *drawContext,
         }
         if (flags != NULL) {
             for (i = 0; i < nVertices; i += 3) {
-                (void)GXMetalQueueTextureTriangle(
-                    state, &vertices[i], (uint32_t)flags[i / 3], -1);
+                if (multiTexture) {
+                    (void)GXMetalEmitTexture(
+                        state, GXMETAL_PRIMITIVE_TRIANGLE, 3u,
+                        &vertices[i], &secondary[i],
+                        (uint32_t)flags[i / 3], -1);
+                } else {
+                    (void)GXMetalQueueTextureTriangle(
+                        state, &vertices[i], (uint32_t)flags[i / 3], -1);
+                }
             }
             return;
         }
@@ -3207,12 +3383,23 @@ static void GXMetalDrawVTexture(const TQADrawContext *drawContext,
     case kQAVertexMode_Strip:
         if (flags != NULL) {
             TQAVTexture triangle[3];
+            TQAVMultiTexture multiTriangle[3];
             for (i = 0; i + 2 < nVertices; i++) {
                 triangle[0] = vertices[i + (i & 1)];
                 triangle[1] = vertices[i + ((i & 1) == 0)];
                 triangle[2] = vertices[i + 2];
-                (void)GXMetalQueueTextureTriangle(
-                    state, triangle, (uint32_t)flags[i], -1);
+                if (multiTexture) {
+                    multiTriangle[0] = secondary[i + (i & 1)];
+                    multiTriangle[1] =
+                        secondary[i + ((i & 1) == 0)];
+                    multiTriangle[2] = secondary[i + 2];
+                    (void)GXMetalEmitTexture(
+                        state, GXMETAL_PRIMITIVE_TRIANGLE, 3u, triangle,
+                        multiTriangle, (uint32_t)flags[i], -1);
+                } else {
+                    (void)GXMetalQueueTextureTriangle(
+                        state, triangle, (uint32_t)flags[i], -1);
+                }
             }
             return;
         }
@@ -3221,12 +3408,24 @@ static void GXMetalDrawVTexture(const TQADrawContext *drawContext,
     case kQAVertexMode_Fan:
         if (flags != NULL) {
             TQAVTexture triangle[3];
+            TQAVMultiTexture multiTriangle[3];
             triangle[0] = vertices[0];
+            if (multiTexture) {
+                multiTriangle[0] = secondary[0];
+            }
             for (i = 0; i + 2 < nVertices; i++) {
                 triangle[1] = vertices[i + 1];
                 triangle[2] = vertices[i + 2];
-                (void)GXMetalQueueTextureTriangle(
-                    state, triangle, (uint32_t)flags[i], -1);
+                if (multiTexture) {
+                    multiTriangle[1] = secondary[i + 1];
+                    multiTriangle[2] = secondary[i + 2];
+                    (void)GXMetalEmitTexture(
+                        state, GXMETAL_PRIMITIVE_TRIANGLE, 3u, triangle,
+                        multiTriangle, (uint32_t)flags[i], -1);
+                } else {
+                    (void)GXMetalQueueTextureTriangle(
+                        state, triangle, (uint32_t)flags[i], -1);
+                }
             }
             return;
         }
@@ -3235,7 +3434,9 @@ static void GXMetalDrawVTexture(const TQADrawContext *drawContext,
     case kQAVertexMode_Polyline:
         for (i = 0; i + 1 < nVertices; i++) {
             (void)GXMetalEmitTexture(state, GXMETAL_PRIMITIVE_LINE, 2,
-                                     &vertices[i], 0, -1);
+                                     &vertices[i], multiTexture ?
+                                         &secondary[i] : NULL,
+                                     0, -1);
         }
         return;
     default:
@@ -3243,7 +3444,7 @@ static void GXMetalDrawVTexture(const TQADrawContext *drawContext,
         return;
     }
     (void)GXMetalEmitTexture(state, primitive, (uint32_t)nVertices,
-                             vertices, 0, -1);
+                             vertices, secondary, 0, -1);
 }
 
 static void GXMetalBitmapVertex(TQAVTexture *vertex,
@@ -3363,7 +3564,7 @@ static void GXMetalDrawBitmap(const TQADrawContext *drawContext,
         !GXMetalEmitState(state, kQATagGL_TextureWrapV, GXMETAL_STATE_UINT32,
                           kQAGL_Clamp) ||
         !GXMetalEmitTexture(state, GXMETAL_PRIMITIVE_TRIANGLE_STRIP, 4,
-                            vertices, 0, -1)) {
+                            vertices, NULL, 0, -1)) {
         state->texture = savedTexture;
         return;
     }
@@ -3596,6 +3797,12 @@ static TQAError GXMetalRegisterMethods(TQADrawContext *drawContext)
     GXMETAL_REGISTER_METHOD(kQAGetNoticeMethod, getNoticeMethod,
                             GXMetalGetNoticeMethod);
     if (drawContext->version >= kQAVersion_1_6) {
+        if ((gTransport.features &
+             GXMETAL_FEATURE_MULTI_TEXTURE_VERTEX) != 0) {
+            GXMETAL_REGISTER_METHOD(kQSubmitMultiTextureParams,
+                                    submitMultiTextureParams,
+                                    GXMetalSubmitMultiTextureParams);
+        }
         GXMETAL_REGISTER_METHOD(kQClearDrawBuffer, clearDrawBuffer,
                                 GXMetalClearDrawBuffer);
         GXMETAL_REGISTER_METHOD(kQClearZBuffer, clearZBuffer,
@@ -3783,6 +3990,9 @@ static void GXMetalDrawPrivateDelete(TQADrawPrivate *drawPrivate)
     if (state->submitted_texture_vertices != NULL) {
         DisposePtr(state->submitted_texture_vertices);
     }
+    if (state->submitted_multitexture_params != NULL) {
+        DisposePtr(state->submitted_multitexture_params);
+    }
     if (state->pending_vertices != NULL) {
         DisposePtr(state->pending_vertices);
     }
@@ -3887,6 +4097,9 @@ static TQAError GXMetalEngineGestalt(TQAGestaltSelector selector,
         if (features & GXMETAL_FEATURE_ALPHA_TEST) {
             value |= kQAOptional_AlphaTest;
         }
+        if (features & GXMETAL_FEATURE_MULTI_TEXTURE_VERTEX) {
+            value |= kQAOptional_MultiTextures;
+        }
         break;
     case kQAGestalt_FastFeatures:
         value = kQAFast_Line | kQAFast_Gouraud;
@@ -3898,6 +4111,9 @@ static TQAError GXMetalEngineGestalt(TQAGestaltSelector selector,
         }
         if (features & GXMETAL_FEATURE_FOG_DEPTH) {
             value |= kQAFast_FogDepth;
+        }
+        if (features & GXMETAL_FEATURE_MULTI_TEXTURE_VERTEX) {
+            value |= kQAFast_MultiTextures;
         }
         break;
     case kQAGestalt_TextureMemory:
@@ -3916,7 +4132,7 @@ static TQAError GXMetalEngineGestalt(TQAGestaltSelector selector,
         value = 0;
         break;
     case kQAGestalt_MultiTextureMax:
-        value = 0;
+        value = (features & GXMETAL_FEATURE_MULTI_TEXTURE_VERTEX) ? 1u : 0u;
         break;
     case kQAGestalt_OptionalFeatures2:
         value = (features & GXMETAL_FEATURE_DOUBLE_BUFFER) ?

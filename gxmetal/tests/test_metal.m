@@ -165,7 +165,8 @@ static void set_texture_vertex(uint8_t *bytes, float x, float y,
                                float u, float v);
 
 static void draw_textured_test_quad(GXMetalMetalRenderer *renderer,
-                                    uint32_t context)
+                                    uint32_t context,
+                                    int valid_secondary_coordinates)
 {
     uint8_t packet[416];
     uint8_t *payload;
@@ -199,9 +200,14 @@ static void draw_textured_test_quad(GXMetalMetalRenderer *renderer,
     set_texture_vertex(vertices + 4 * 64, 64, 64, 1, 1);
     set_texture_vertex(vertices + 5 * 64, 0, 64, 0, 1);
     for (i = 0; i < 6; i++) {
-        store_float(vertices + i * 64 + GXMETAL_VERTEX_KS_R_OFFSET, 0.0f);
-        store_float(vertices + i * 64 + GXMETAL_VERTEX_KS_G_OFFSET, 0.0f);
-        store_float(vertices + i * 64 + GXMETAL_VERTEX_KS_B_OFFSET, 1.0f);
+        float coordinate = valid_secondary_coordinates ? 0.0f : NAN;
+
+        store_float(vertices + i * 64 + GXMETAL_VERTEX_KS_R_OFFSET,
+                    coordinate);
+        store_float(vertices + i * 64 + GXMETAL_VERTEX_KS_G_OFFSET,
+                    coordinate);
+        store_float(vertices + i * 64 + GXMETAL_VERTEX_KS_B_OFFSET,
+                    valid_secondary_coordinates ? 1.0f : NAN);
     }
     CHECK(dispatch(renderer, packet, 416) == GXMETAL_ERROR_NONE);
     make_packet(packet, GXMETAL_OP_END_FRAME, 32, context);
@@ -645,12 +651,12 @@ static void test_metal_texture_upload_and_sampling(void)
 
     set_int_state(renderer, packet, 3, GXMETAL_STATE_MULTI_TEXTURE_OP,
                   GXMETAL_MULTI_TEXTURE_ADD);
-    draw_textured_test_quad(renderer, 3);
+    draw_textured_test_quad(renderer, 3, 1);
     CHECK(framebuffer_pixel(framebuffer, 16, 16) == 0x421f);
 
     set_int_state(renderer, packet, 3, GXMETAL_STATE_MULTI_TEXTURE_OP,
                   GXMETAL_MULTI_TEXTURE_BLEND_ALPHA);
-    draw_textured_test_quad(renderer, 3);
+    draw_textured_test_quad(renderer, 3, 1);
     CHECK(framebuffer_pixel(framebuffer, 16, 16) == 0x4210);
 
     /* ATI's private OpenGL bridge reports its opaque GL_ONE/GL_ONE dual
@@ -658,7 +664,7 @@ static void test_metal_texture_upload_and_sampling(void)
      * only for that private opaque-RGB case; ordinary RAVE and alpha-bearing
      * textures retain documented BlendAlpha behavior. */
     set_int_state(renderer, packet, 3, GXMETAL_STATE_ATI_PRIVATE, 1);
-    draw_textured_test_quad(renderer, 3);
+    draw_textured_test_quad(renderer, 3, 1);
     CHECK(framebuffer_pixel(framebuffer, 16, 16) == 0x4210);
     {
         const uint8_t blue[4] = {0, 0, 0, 255};
@@ -671,10 +677,10 @@ static void test_metal_texture_upload_and_sampling(void)
     }
     set_resource_state(renderer, packet, 3, GXMETAL_STATE_TEXTURE, 10);
     set_resource_state(renderer, packet, 3, GXMETAL_STATE_MULTI_TEXTURE, 11);
-    draw_textured_test_quad(renderer, 3);
+    draw_textured_test_quad(renderer, 3, 1);
     CHECK(framebuffer_pixel(framebuffer, 16, 16) == 0x421f);
     set_int_state(renderer, packet, 3, GXMETAL_STATE_ATI_PRIVATE, 0);
-    draw_textured_test_quad(renderer, 3);
+    draw_textured_test_quad(renderer, 3, 1);
     CHECK(framebuffer_pixel(framebuffer, 16, 16) == 0x4210);
     set_resource_state(renderer, packet, 3, GXMETAL_STATE_TEXTURE, 7);
     set_resource_state(renderer, packet, 3, GXMETAL_STATE_MULTI_TEXTURE, 9);
@@ -683,11 +689,13 @@ static void test_metal_texture_upload_and_sampling(void)
                     0.25f);
     set_int_state(renderer, packet, 3, GXMETAL_STATE_MULTI_TEXTURE_OP,
                   GXMETAL_MULTI_TEXTURE_FIXED);
-    draw_textured_test_quad(renderer, 3);
+    draw_textured_test_quad(renderer, 3, 1);
     CHECK(framebuffer_pixel(framebuffer, 16, 16) == 0x109b);
 
     set_int_state(renderer, packet, 3, GXMETAL_STATE_MULTI_TEXTURE_ENABLE, 0);
-    draw_textured_test_quad(renderer, 3);
+    /* A bound-but-disabled secondary stage must not make ordinary public
+     * TQAVTexture draws consume undefined specular fields as ATI UVs. */
+    draw_textured_test_quad(renderer, 3, 0);
     CHECK(framebuffer_pixel(framebuffer, 16, 16) == 0x001f);
     set_int_state(renderer, packet, 3, GXMETAL_STATE_MULTI_TEXTURE_ENABLE, 1);
     set_int_state(renderer, packet, 3, GXMETAL_STATE_MULTI_TEXTURE_OP,
