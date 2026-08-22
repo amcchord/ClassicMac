@@ -127,7 +127,7 @@ final class QEMURunnerArgumentTests: XCTestCase {
         return try body()
     }
 
-    func testPowerMacCDStartupUsesSingleVirtioInstallerVolume() throws {
+    func testPowerMacG4CDStartupUsesSingleIDEInstallerVolume() throws {
         try withTemporaryToolsCD {
             let arguments = QEMUManager.buildArguments(for: config())
             let toolsDrive = optionValues("-drive", in: arguments)
@@ -141,27 +141,48 @@ final class QEMURunnerArgumentTests: XCTestCase {
                 .first { $0.contains("id=cd0") }
             XCTAssertEqual(
                 userDisc,
-                "if=ide,index=2,media=cdrom,id=cd0,readonly=on"
+                "if=ide,index=2,media=cdrom,id=cd0,readonly=on,file=/tmp/install.iso,format=raw"
             )
             let devices = optionValues("-device", in: arguments)
             XCTAssertFalse(devices.contains { $0.contains("classicmac-tools") })
             XCTAssertTrue(optionValues("-nic", in: arguments).contains("user,model=sungem"))
-            XCTAssertEqual(
-                optionValues("-blockdev", in: arguments),
-                [
-                    "driver=file,node-name=classicmac-cd-file,filename=/tmp/install.iso,read-only=on",
-                    "driver=raw,node-name=classicmac-cd-boot,file=classicmac-cd-file,read-only=on"
-                ]
-            )
-            XCTAssertTrue(
+            XCTAssertTrue(optionValues("-blockdev", in: arguments).isEmpty)
+            XCTAssertFalse(
                 optionValues("-device", in: arguments)
                     .contains("virtio-blk-pci,drive=classicmac-cd-boot")
             )
+            XCTAssertEqual(optionValues("-boot", in: arguments), ["d"])
             XCTAssertEqual(
                 arguments.filter { $0.contains("/tmp/install.iso") }.count,
                 1
             )
         }
+    }
+
+    func testPowerMacG3CDStartupKeepsIDEMediaAndVirtioBootMirror() {
+        let arguments = QEMUManager.buildArguments(
+            for: config(useG4CPU: false, tabletInput: false)
+        )
+
+        XCTAssertEqual(
+            optionValues("-drive", in: arguments)
+                .first { $0.contains("id=cd0") },
+            "if=ide,index=2,media=cdrom,id=cd0,readonly=on,file=/tmp/install.iso,format=raw"
+        )
+        XCTAssertTrue(
+            optionValues("-blockdev", in: arguments).contains(
+                "driver=file,node-name=classicmac-cd-file,filename=/tmp/install.iso,read-only=on"
+            )
+        )
+        XCTAssertTrue(
+            optionValues("-device", in: arguments)
+                .contains("virtio-blk-pci,drive=classicmac-cd-boot")
+        )
+        XCTAssertTrue(optionValues("-boot", in: arguments).isEmpty)
+        XCTAssertEqual(
+            arguments.filter { $0.contains("/tmp/install.iso") }.count,
+            2
+        )
     }
 
     func testPowerMacNormalStartupMountsToolsThroughVirtio() throws {
@@ -213,7 +234,7 @@ final class QEMURunnerArgumentTests: XCTestCase {
             XCTAssertEqual(
                 optionValues("-drive", in: arguments)
                     .first { $0.contains("id=cd0") },
-                "if=ide,index=2,media=cdrom,id=cd0,readonly=on"
+                "if=ide,index=2,media=cdrom,id=cd0,readonly=on,file=/tmp/install.iso,format=raw"
             )
             XCTAssertEqual(optionValues("-nic", in: arguments), ["none"])
         }
@@ -227,13 +248,9 @@ final class QEMURunnerArgumentTests: XCTestCase {
         XCTAssertEqual(
             optionValues("-drive", in: arguments)
                 .first { $0.contains("id=cd0") },
-            "if=ide,index=2,media=cdrom,id=cd0,readonly=on"
+            "if=ide,index=2,media=cdrom,id=cd0,readonly=on,file=/tmp/Mac OS 8,,5.iso,format=raw"
         )
-        XCTAssertTrue(
-            optionValues("-blockdev", in: arguments).contains(
-                "driver=file,node-name=classicmac-cd-file,filename=/tmp/Mac OS 8,,5.iso,read-only=on"
-            )
-        )
+        XCTAssertTrue(optionValues("-blockdev", in: arguments).isEmpty)
     }
 
     func testPowerMacToolsPreferenceOffKeepsRemovableDriveEmpty() throws {
@@ -488,7 +505,7 @@ final class QEMURunnerArgumentTests: XCTestCase {
             ["mac99,via=cuda,audiodev=snd0"]
         )
         XCTAssertEqual(optionValues("-cpu", in: arguments), ["7400"])
-        XCTAssertTrue(optionValues("-boot", in: arguments).isEmpty)
+        XCTAssertEqual(optionValues("-boot", in: arguments), ["d"])
         XCTAssertTrue(devices.contains("virtio-tablet-pci"))
         XCTAssertTrue(
             devices.contains { $0.hasPrefix("loader,addr=0x4000000,file=") }
@@ -513,7 +530,7 @@ final class QEMURunnerArgumentTests: XCTestCase {
         XCTAssertTrue(optionValues("-fsdev", in: arguments).isEmpty)
     }
 
-    func testPowerMacCDStartupWithoutTabletUsesCUDAMouseAndBootLoader() {
+    func testPowerMacG4CDStartupWithoutTabletUsesCUDAMouseAndIDEBoot() {
         let arguments = QEMUManager.buildArguments(
             for: config(tabletInput: false)
         )
@@ -524,17 +541,18 @@ final class QEMURunnerArgumentTests: XCTestCase {
             ["mac99,via=cuda,audiodev=snd0"]
         )
         XCTAssertFalse(devices.contains("virtio-tablet-pci"))
-        XCTAssertTrue(
+        XCTAssertFalse(
             devices.contains { $0.hasPrefix("loader,addr=0x4000000,file=") }
         )
-        XCTAssertTrue(
+        XCTAssertFalse(
             optionValues("-prom-env", in: arguments)
                 .contains("boot-command=init-program go")
         )
-        XCTAssertTrue(
+        XCTAssertFalse(
             optionValues("-prom-env", in: arguments)
                 .contains("boot-device=virtio0:\\\\:tbxi")
         )
+        XCTAssertEqual(optionValues("-boot", in: arguments), ["d"])
     }
 
     func testPowerMacNormalStartupKeepsTabletInputEnabled() {

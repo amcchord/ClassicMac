@@ -28,8 +28,10 @@
   payload across all five guest components, preventing future visual drift.
 - Fresh Power Mac setup now includes an in-app four-step Mac OS installation
   guide and points directly to the GXMetal folder on ClassicMac Tools after
-  the first hard-disk start. A selected Power Mac startup image is exposed as
-  one bootable volume, eliminating duplicate installer-disc icons.
+  the first hard-disk start. Default G4/Mac OS 9 starts keep the selected image
+  on one native IDE path, eliminating duplicate installer-disc icons while
+  preserving Installer's reliable source I/O. G3/Mac OS 8 compatibility starts
+  retain their read-only Virtio startup mirror alongside the IDE source.
 - GXMetal's installer now reports the exact driver, startup companion, and
   InputSprocket bridge it installed and gives an explicit restart/test path.
 
@@ -45,6 +47,10 @@
   order, packed CL4 nibbles, RGB8_332 channel expansion, and scaled bitmap
   clipping now match the documented RAVE behavior and tested software oracle.
 - Tools CD builds reject stale GXMetal component bundles before packaging.
+- A clean Mac OS 9.2.1 installation now completes from the selected startup
+  image instead of stalling during its file copy. The verified path continued
+  through first boot, the automatic Tools mount, GXMetal installation and
+  restart, and a successful GXMetal Test run.
 
 ## 2.0.2 — 2026-08-19
 

@@ -557,9 +557,12 @@ final class QEMUManager: ObservableObject {
         // OS: it installs the virtio NDRVs and then continues the normal boot.
         // Sharing stays inactive while booting an installer CD so the install
         // environment never sees the host folder. Tablet input uses the same
-        // loader, but remains enabled. CD starts also use the loader so the
-        // early Mac OS ROM can reach a read-only Virtio mirror of the disc.
+        // loader, but remains enabled. G3 compatibility starts also use the
+        // loader so the Mac OS 8.5/8.6 ROM can reach a read-only Virtio mirror
+        // before its IDE driver is active. Default G4/Mac OS 9 starts use the
+        // ordinary IDE CD directly so Installer keeps its native source path.
         let bootingFromUserCD = config.bootFromCD && config.cdImagePath?.isEmpty == false
+        let bootingG3CompatibilityCD = bootingFromUserCD && !config.useG4CPU
         let deferToolsMedia = bootingFromUserCD
         let sharing = config.hasSharedFolder && !bootingFromUserCD
         let tablet = config.tabletInput
@@ -568,7 +571,7 @@ final class QEMUManager: ObservableObject {
         // a normal desktop volume without relying on IDE hot-plug detection.
         let toolsViaVirtio = !deferToolsMedia && config.toolsCDInserted &&
             AppPaths.toolsCD != nil
-        let needsNdrvLoader = sharing || tablet || bootingFromUserCD ||
+        let needsNdrvLoader = sharing || tablet || bootingG3CompatibilityCD ||
             toolsViaVirtio
 
         // Input configuration. QEMU treats whichever pointing device the guest
@@ -695,17 +698,15 @@ final class QEMUManager: ObservableObject {
         var userDisc = "if=ide,index=\(userDiscIndex),media=cdrom,id=cd0,readonly=on"
         let escapedCDPath = config.cdImagePath?
             .replacingOccurrences(of: ",", with: ",,")
-        if let escapedCDPath, !escapedCDPath.isEmpty, !bootingFromUserCD {
+        if let escapedCDPath, !escapedCDPath.isEmpty {
             userDisc += ",file=\(escapedCDPath),format=raw"
         }
         args += ["-drive", userDisc]
-        if bootingFromUserCD {
+        if bootingG3CompatibilityCD {
             // Mac OS 8.5/8.6 cannot use mac99's KeyLargo IDE controller while
-            // the ROM is starting. Expose the selected disc read-only through
-            // Virtio for the entire installer boot and leave the ordinary IDE
-            // tray empty. Attaching both paths makes Mac OS mount two identical
-            // installer volumes. The IDE tray receives the selected image on
-            // the next normal hard-disk start.
+            // the ROM is starting. Mirror the selected disc read-only through
+            // Virtio for startup while retaining the ordinary IDE source that
+            // Installer needs after the system is running.
             args += [
                 "-blockdev",
                 "driver=file,node-name=classicmac-cd-file,filename=\(escapedCDPath!),read-only=on",
@@ -716,6 +717,11 @@ final class QEMUManager: ObservableObject {
                 "-prom-env",
                 "boot-device=virtio0:\\\\:tbxi"
             ]
+        } else if bootingFromUserCD {
+            // Mac OS 9 on the default G4 profile starts and installs reliably
+            // from KeyLargo IDE. Keeping the image on this one path avoids a
+            // duplicate desktop volume and preserves Installer's native I/O.
+            args += ["-boot", "d"]
         }
 
         // Keep the compatibility IDE tray present but empty. Mac OS 9 fails to
