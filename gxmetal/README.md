@@ -156,7 +156,8 @@ with the existing Retro68 toolchain and Apple Universal Interfaces:
 scripts/build-gxmetal.sh
 ```
 
-The RGBA icon master lives at `guest/art/GXMetalIcon-master.png`.
+The original supplied icon artwork lives unchanged at
+`guest/art/GXMetalIcon-master.gif`.
 `tools/build_icon_resources.py` crops its alpha silhouette and deterministically
 generates the tracked `guest/src/GXMetalIcon.r` with 32- and 16-pixel 8-bit,
 4-bit, and monochrome classic icon members. Regenerate it with a Pillow-enabled
@@ -164,7 +165,7 @@ Python when the master artwork changes:
 
 ```sh
 python3 gxmetal/tools/build_icon_resources.py \
-  gxmetal/guest/art/GXMetalIcon-master.png \
+  gxmetal/guest/art/GXMetalIcon-master.gif \
   gxmetal/guest/src/GXMetalIcon.r
 ```
 

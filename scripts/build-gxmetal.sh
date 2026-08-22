@@ -6,6 +6,8 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TOOLCHAIN="$ROOT_DIR/vendor/Retro68-build/toolchain"
 GUEST_DIR="$ROOT_DIR/gxmetal/guest"
+ICON_MASTER="$GUEST_DIR/art/GXMetalIcon-master.gif"
+ICON_MASTER_SHA256="e0cca2302487408cb78d5963354ecf14f1f7ccd903250be33d15a85535b17bf3"
 
 die() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 
@@ -17,6 +19,10 @@ done
     die "RAVE Universal Interfaces are missing; run scripts/build-ppcvid-ndrv.sh first"
 [ -f "$TOOLCHAIN/powerpc-apple-macos/lib/libQuickDraw3DRAVELib.a" ] || \
     die "QuickDraw 3D RAVE import library is missing"
+[ -f "$ICON_MASTER" ] || die "the canonical GXMetal icon master is missing"
+ACTUAL_ICON_SHA256="$(shasum -a 256 "$ICON_MASTER" | awk '{print $1}')"
+[ "$ACTUAL_ICON_SHA256" = "$ICON_MASTER_SHA256" ] || \
+    die "the canonical GXMetal icon no longer matches the supplied artwork"
 
 export PATH="$TOOLCHAIN/bin:$PATH"
 
@@ -68,6 +74,36 @@ DeRez -only ICN# "$GUEST_DIR/bin/GXMetal Input" | \
 DeRez -only ICN# "$GUEST_DIR/bin/GXMetal Startup" | \
     grep -F "data 'ICN#' (-16455" >/dev/null || \
     die "GXMetal Startup is missing its custom Finder icon"
+
+# All five visible GXMetal components must carry the same icon pixels. Resource
+# IDs legitimately differ between shared libraries/extensions and applications,
+# so compare only the hex payloads emitted by DeRez.
+ICON_CHECK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/gxmetal-icons.XXXXXX")"
+trap 'rm -rf "$ICON_CHECK_DIR"' EXIT
+ICON_ARTIFACTS=(
+    "$GUEST_DIR/bin/GXMetal"
+    "$GUEST_DIR/bin/GXMetal Input"
+    "$GUEST_DIR/bin/GXMetal Startup"
+    "$GUEST_DIR/bin/GXMetalInstaller"
+    "$GUEST_DIR/bin/GXMetalTest"
+)
+for resource_type in icl8 icl4 ICN# ics8 ics4 ics# ICON; do
+    reference_payload="$ICON_CHECK_DIR/$resource_type.reference"
+    DeRez -only "$resource_type" "${ICON_ARTIFACTS[0]}" | \
+        sed -n '/\$"/p' > "$reference_payload"
+    [ -s "$reference_payload" ] || \
+        die "GXMetal is missing its $resource_type icon member"
+    for artifact in "${ICON_ARTIFACTS[@]:1}"; do
+        artifact_payload="$ICON_CHECK_DIR/$resource_type.$(basename "$artifact")"
+        DeRez -only "$resource_type" "$artifact" | \
+            sed -n '/\$"/p' > "$artifact_payload"
+        cmp -s "$reference_payload" "$artifact_payload" || \
+            die "$(basename "$artifact") does not share GXMetal's $resource_type icon"
+    done
+done
+rm -rf "$ICON_CHECK_DIR"
+trap - EXIT
+
 for symbol in QARegisterEngine QARegisterDrawMethod RegistryEntrySearch; do
     strings "$GUEST_DIR/bin/GXMetal.pef" | grep -F "$symbol" >/dev/null ||
         die "GXMetal PEF is missing required import $symbol"
