@@ -63,7 +63,7 @@ remains a small Gouraud correctness oracle.
 
 ## Transport contract
 
-The backward-compatible version 1.6 wire contract is defined in
+The backward-compatible version 1.8 wire contract is defined in
 `protocol/gxmetal_protocol.h`. All registers and shared-memory packets are
 little-endian. Packet sizes are multiples of 16 bytes, packets never cross the
 end of the circular command ring, and offsets in commands refer only to the
@@ -176,8 +176,10 @@ survive transfer to HFS. `GXMetalStartup.bin` is a small 68K `INIT` companion:
 Mac OS 9 does not execute an `INIT` embedded in the required `shlb`/`tnsl` RAVE
 library, so the companion displays GXMetal's puzzle-piece M in the normal
 startup extension row. `GXMetalInput.bin` is an InputSprocket driver that
-translates ClassicMac's seamless system pointer into the relative mouse
-elements expected by classic games. The build verifies the driver's complete
+switches ClassicMac to captured relative host motion while a game owns its
+mouse, recenters the guest cursor for unlimited turning, and restores the
+seamless absolute pointer when the game releases input. Older hosts retain the
+original seamless-pointer bridge. The build verifies the driver's complete
 RAVE/CFM discovery resources and initialization descriptor, the InputSprocket
 driver's exported discovery callbacks, the companion's executable `INIT` and
 icon family, and the test app's public RAVE imports.
@@ -225,6 +227,11 @@ PRESENT-packet FPS, direct versus fallback presentation, presentation time,
 draw packets per frame, vertices per draw, the percentage of one-triangle
 packets, and resource-table probes per lookup. It is disabled by default and
 does not add logging to normal releases.
+
+`COMPATIBILITY.md` is the audited RAVE capability contract and prioritized
+general-purpose roadmap. It distinguishes standards-level support from the
+ATI private compatibility bridge and from features that must continue to fall
+back to Apple Software RAVE.
 
 On macOS, validate the exact Developer ID-signed application against a supplied
 Mac OS 9 disk without modifying the source image:

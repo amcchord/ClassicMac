@@ -102,8 +102,8 @@ resource 'DITL' (129, purgeable) {
             "GXMetal adds host-accelerated QuickDraw 3D RAVE to this "
             "ClassicMac Power Mac. Apple Software RAVE remains available "
             "as a safe fallback.\n\n"
-            "Install or update GXMetal, its startup icon, and seamless "
-            "game mouse support? Restart required."
+            "Install or update GXMetal, its startup icon, and automatic "
+            "game mouse capture? Restart required."
         };
     }
 };

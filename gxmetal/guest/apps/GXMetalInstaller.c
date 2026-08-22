@@ -312,7 +312,8 @@ static OSErr GXMetalInstallFiles(const FSSpec *driverSource,
                                  const FSSpec *startupSource,
                                  const FSSpec *inputSource,
                                  short extensionsVRef,
-                                 long extensionsDirID)
+                                 long extensionsDirID,
+                                 Boolean *updatedExistingInstall)
 {
     FSSpec driverTarget;
     FSSpec driverTemporary;
@@ -395,6 +396,9 @@ static OSErr GXMetalInstallFiles(const FSSpec *driverSource,
     hadDriver = GXMetalSpecExists(&driverTarget);
     hadStartup = GXMetalSpecExists(&startupTarget);
     hadInput = GXMetalSpecExists(&inputTarget);
+    if (updatedExistingInstall != NULL) {
+        *updatedExistingInstall = hadDriver || hadStartup || hadInput;
+    }
     if (hadDriver) {
         error = GXMetalBackupTarget(&driverTarget, kDriverPreviousName,
                                     &driverPrevious, &driverOriginalInfo);
@@ -509,6 +513,7 @@ int main(void)
     long extensionsDirID = 0;
     long systemVersion = 0;
     short installChoice;
+    Boolean updatedExistingInstall = false;
     OSErr error;
 
     GXMetalInitToolbox();
@@ -560,13 +565,19 @@ int main(void)
         return 0;
     }
     error = GXMetalInstallFiles(&driverSource, &startupSource, &inputSource,
-                                extensionsVRef, extensionsDirID);
+                                extensionsVRef, extensionsDirID,
+                                &updatedExistingInstall);
     if (error != noErr) {
         GXMetalShowResult(false,
             "GXMetal could not be installed. Make sure the startup disk is writable and has free space, then try again.");
         return 1;
     }
-    GXMetalShowResult(true,
-        "GXMetal " GXMETAL_PRODUCT_VERSION_STRING ", its startup icon, and seamless game mouse support are installed. The previous active copy is disabled and will be removed during restart. Then run GXMetal Test.");
+    if (updatedExistingInstall) {
+        GXMetalShowResult(true,
+            "GXMetal " GXMETAL_PRODUCT_VERSION_STRING " was updated safely. The previous active copy is disabled and will be removed during restart. Restart the Mac, then run GXMetal Test.");
+    } else {
+        GXMetalShowResult(true,
+            "GXMetal " GXMETAL_PRODUCT_VERSION_STRING " is installed. Restart the Mac to load the graphics driver and automatic game mouse capture, then run GXMetal Test.");
+    }
     return 0;
 }

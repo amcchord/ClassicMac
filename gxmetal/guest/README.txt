@@ -27,8 +27,9 @@ INSTALL OR UPDATE
 
 Keep the complete GXMetal folder together while the installer runs. GXMetal is
 the RAVE driver; GXMetal Startup draws the icon during boot; GXMetal Input is
-an InputSprocket bridge that lets games use ClassicMac's seamless mouse. You
-can install directly from the read-only Tools CD.
+an InputSprocket bridge that automatically captures relative mouse motion while
+a game owns the mouse and restores ClassicMac's seamless pointer afterward.
+You can install directly from the read-only Tools CD.
 
 WHAT THE STARTUP ICON MEANS
 ---------------------------
