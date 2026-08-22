@@ -2,7 +2,21 @@
 
 ## Unreleased
 
-## 2.0.3 — 2026-08-21
+## 2.0.3 — 2026-08-22
+
+### Added
+
+- Expanded GXMetal's public RAVE contract for games that have not been tested
+  explicitly: one accelerated multitexture stage, dynamic texture and bitmap
+  access, independent mip-level updates, perspective-Z, and positive X/Y
+  bitmap scaling with nearest or linear filtering.
+- Added deterministic support for Alpha1, RGB8_332, packed CL4, ACL16_88, I8,
+  and AI16_88 resources, including odd widths, padded rows, alpha palettes,
+  transparent indices, and dirty-rectangle uploads.
+- Added an executable compatibility contract. GXMetal Test now checks every
+  advertised capability while unsupported complex regions, offscreen/scaled
+  contexts, deep Z, CSG, antialiasing, chromakey, channel masks, and Z sorting
+  continue to fall back to Apple Software RAVE.
 
 ### Changed
 
@@ -12,6 +26,25 @@
 - The original 32-pixel GIF is the canonical tracked artwork. The GXMetal
   package build verifies its SHA-256 and compares every generated icon-family
   payload across all five guest components, preventing future visual drift.
+- Fresh Power Mac setup now includes an in-app four-step Mac OS installation
+  guide and points directly to the GXMetal folder on ClassicMac Tools after
+  the first hard-disk start. A selected Power Mac startup image is exposed as
+  one bootable volume, eliminating duplicate installer-disc icons.
+- GXMetal's installer now reports the exact driver, startup companion, and
+  InputSprocket bridge it installed and gives an explicit restart/test path.
+
+### Fixed
+
+- Games can temporarily hand ClassicMac's seamless absolute pointer to
+  captured relative input and restore it afterward. Display resizing updates
+  the tablet bounds live so host and guest coordinates do not drift.
+- Public multitexture now keeps each stage's reciprocal-W and texture
+  coordinates independent, and perspective depth no longer changes ordinary
+  RAVE Z-comparison semantics.
+- Resource replacement, detach/delete, mip updates, palette alpha, Alpha1 bit
+  order, packed CL4 nibbles, RGB8_332 channel expansion, and scaled bitmap
+  clipping now match the documented RAVE behavior and tested software oracle.
+- Tools CD builds reject stale GXMetal component bundles before packaging.
 
 ## 2.0.2 — 2026-08-19
 
