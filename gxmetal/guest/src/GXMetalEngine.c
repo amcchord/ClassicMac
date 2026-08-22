@@ -309,6 +309,17 @@ int32_t GXMetalProbeTransport(void)
     return gDiagnosticStatus;
 }
 
+OSErr GXMetalSetRelativeInputMode(Boolean relative)
+{
+    if (!GXMetalTransportAvailable() ||
+        (gTransport.features & GXMETAL_FEATURE_RELATIVE_INPUT) == 0) {
+        return unimpErr;
+    }
+    gxmetal_guest_register_write(&gTransport, GXMETAL_REG_RELATIVE_INPUT,
+                                 relative ? 1u : 0u);
+    return noErr;
+}
+
 static TQABoolean GXMetalGlobalPacket(uint16_t opcode, uint32_t bytes,
                                      GXMetalGuestPacket *packet)
 {

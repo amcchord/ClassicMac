@@ -1,0 +1,63 @@
+diff --git a/ui/input.c b/ui/input.c
+index 1f5be0b..d2c9462 100644
+--- a/ui/input.c
++++ b/ui/input.c
+@@ -38,6 +38,7 @@ static QTAILQ_HEAD(, QemuInputHandlerState) handlers =
+     QTAILQ_HEAD_INITIALIZER(handlers);
+ static NotifierList mouse_mode_notifiers =
+     NOTIFIER_LIST_INITIALIZER(mouse_mode_notifiers);
++static bool relative_mode_requested;
+ 
+ static QemuInputEventQueueHead kbd_queue = QTAILQ_HEAD_INITIALIZER(kbd_queue);
+ static QEMUTimer *kbd_timer;
+@@ -462,11 +463,23 @@ bool qemu_input_is_absolute(QemuConsole *con)
+ {
+     QemuInputHandlerState *s;
+ 
++    if (relative_mode_requested) {
++        return false;
++    }
+     s = qemu_input_find_handler(INPUT_EVENT_MASK_REL | INPUT_EVENT_MASK_ABS,
+                                 con);
+     return (s != NULL) && (s->handler->mask & INPUT_EVENT_MASK_ABS);
+ }
+ 
++void qemu_input_set_relative_mode(bool relative)
++{
++    if (relative_mode_requested == relative) {
++        return;
++    }
++    relative_mode_requested = relative;
++    notifier_list_notify(&mouse_mode_notifiers, NULL);
++}
++
+ int qemu_input_scale_axis(int value,
+                           int min_in, int max_in,
+                           int min_out, int max_out)
+diff --git a/include/ui/input.h b/include/ui/input.h
+index 6d1b0ca..8e5b53e 100644
+--- a/include/ui/input.h
++++ b/include/ui/input.h
+@@ -58,6 +58,7 @@ void qemu_input_queue_mtt_abs(QemuConsole *src, const char *axis,
+                                uint32_t button_old, uint32_t button_new);
+ 
+ bool qemu_input_is_absolute(QemuConsole *con);
++void qemu_input_set_relative_mode(bool relative);
+ int qemu_input_scale_axis(int value,
+                           int min_in, int max_in,
+                           int min_out, int max_out);
+diff --git a/ui/cocoa.m b/ui/cocoa.m
+index 7edc2bc..65293b1 100644
+--- a/ui/cocoa.m
++++ b/ui/cocoa.m
+@@ -1571,7 +1571,9 @@ COCOA_DEBUG("QemuCocoaView: ungrabMouse\n");
+     if (isMouseGrabbed) {
+         if (isAbsoluteEnabled) {
+             [self ungrabMouse];
++            [self grabMouse];
+         } else {
++            [[self window] setTitle:[NSString stringWithFormat:@"%@ — Press " UC_CTRL_KEY " " UC_ALT_KEY " G to release the mouse", classicmac_machine_name()]];
+             CGAssociateMouseAndMouseCursorPosition(isAbsoluteEnabled);
+         }
+     }
+ }

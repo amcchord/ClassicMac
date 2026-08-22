@@ -45,7 +45,8 @@ static void test_probe(void)
 
     initialize_device(GXMETAL_FEATURE_FENCE | GXMETAL_FEATURE_GOURAUD |
                       GXMETAL_FEATURE_ALPHA_TEST |
-                      GXMETAL_FEATURE_RECT_CLIP);
+                      GXMETAL_FEATURE_RECT_CLIP |
+                      GXMETAL_FEATURE_RELATIVE_INPUT);
     CHECK(sizeof(GXMetalRegistryInfo) == 32);
     CHECK(gxmetal_guest_transport_connect(
         &transport, registers, sizeof(registers), shared, sizeof(shared),
@@ -55,6 +56,9 @@ static void test_probe(void)
     CHECK(transport.features & GXMETAL_FEATURE_GOURAUD);
     CHECK(transport.features & GXMETAL_FEATURE_ALPHA_TEST);
     CHECK(transport.features & GXMETAL_FEATURE_RECT_CLIP);
+    CHECK(transport.features & GXMETAL_FEATURE_RELATIVE_INPUT);
+    gxmetal_guest_register_write(&transport, GXMETAL_REG_RELATIVE_INPUT, 1);
+    CHECK(registers[GXMETAL_REG_RELATIVE_INPUT / 4] == 1);
 
     set_register(GXMETAL_REG_VERSION, UINT32_C(0x00020000));
     CHECK(!gxmetal_guest_transport_connect(

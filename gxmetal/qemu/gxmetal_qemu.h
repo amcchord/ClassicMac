@@ -27,6 +27,7 @@ typedef struct GXMetalQemuState {
     GXMetalMetalRenderer *metal;
     GXMetalRenderer renderer;
     uint64_t features;
+    bool relative_input;
 } GXMetalQemuState;
 
 bool gxmetal_qemu_init(GXMetalQemuState *state, Object *owner,

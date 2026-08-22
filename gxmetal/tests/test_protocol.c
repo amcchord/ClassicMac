@@ -42,6 +42,15 @@ static void test_endian_helpers(void)
     CHECK(gxmetal_load_le32(bytes + 3) == UINT32_C(0x89abcdef));
 }
 
+static void test_protocol_contract(void)
+{
+    CHECK(GXMETAL_PROTOCOL_VERSION == UINT32_C(0x00010008));
+    CHECK(GXMETAL_REG_RELATIVE_INPUT == 0x40);
+    CHECK(GXMETAL_REG_RELATIVE_INPUT + sizeof(uint32_t) <=
+          GXMETAL_REGISTER_BYTES);
+    CHECK(GXMETAL_FEATURE_RELATIVE_INPUT == (UINT64_C(1) << 14));
+}
+
 static void test_valid_packet(void)
 {
     uint8_t packet[64];
@@ -177,6 +186,7 @@ static void test_semantic_validation(void)
 int main(void)
 {
     test_endian_helpers();
+    test_protocol_contract();
     test_valid_packet();
     test_rejected_packets();
     test_ring_boundaries();

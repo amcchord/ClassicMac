@@ -2,3 +2,4 @@ GXMetalEngineGetMethod
 GXMetalCopyDiagnostics
 GXMetalGetDiagnosticStatus
 GXMetalProbeTransport
+GXMetalSetRelativeInputMode

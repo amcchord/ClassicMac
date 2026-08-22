@@ -27,8 +27,21 @@ static Point gLastPosition;
 static UInt8 gLastButtons;
 static Boolean gHavePosition;
 static Boolean gActive;
+static Boolean gHostRelativeInput;
+static Point gRelativeAnchor;
 static TMTask gPollTimer;
 static Boolean gPollTimerInstalled;
+static CFragConnectionID gGXMetalConnection;
+typedef OSErr (*GXMetalInputModeProc)(Boolean relative);
+static GXMetalInputModeProc gSetRelativeInputMode;
+
+static const unsigned char kGXMetalLibraryName[] = {
+    7, 'G', 'X', 'M', 'e', 't', 'a', 'l'
+};
+static const unsigned char kGXMetalInputModeSymbol[] = {
+    27, 'G', 'X', 'M', 'e', 't', 'a', 'l', 'S', 'e', 't', 'R', 'e', 'l',
+    'a', 't', 'i', 'v', 'e', 'I', 'n', 'p', 'u', 't', 'M', 'o', 'd', 'e'
+};
 
 enum {
     kGXMetalInputPollIntervalMilliseconds = 8,
@@ -38,6 +51,70 @@ enum {
 };
 
 void ISpDriver_Tickle(void);
+
+static void GXMetalInputResolveHostBridge(void)
+{
+    Ptr mainAddress = NULL;
+    Ptr symbol = NULL;
+    Str255 errorName;
+    CFragSymbolClass symbolClass;
+
+    if (gSetRelativeInputMode != NULL || gGXMetalConnection != NULL) {
+        return;
+    }
+    if (GetSharedLibrary(kGXMetalLibraryName, kPowerPCCFragArch,
+                         kReferenceCFrag, &gGXMetalConnection,
+                         &mainAddress, errorName) != noErr ||
+        FindSymbol(gGXMetalConnection, kGXMetalInputModeSymbol, &symbol,
+                   &symbolClass) != noErr || symbol == NULL ||
+        symbolClass != kTVectorCFragSymbol) {
+        if (gGXMetalConnection != NULL) {
+            (void)CloseConnection(&gGXMetalConnection);
+        }
+        return;
+    }
+    gSetRelativeInputMode = (GXMetalInputModeProc)symbol;
+}
+
+static Boolean GXMetalInputSetHostMode(Boolean relative)
+{
+    OSErr error;
+
+    GXMetalInputResolveHostBridge();
+    if (gSetRelativeInputMode == NULL) {
+        return false;
+    }
+    error = gSetRelativeInputMode(relative);
+    return error == noErr;
+}
+
+static void GXMetalInputMoveCursor(Point position)
+{
+    /* Keep all three classic low-memory cursor locations together. The
+     * relative ADB mouse can then travel forever without hitting an edge. */
+    LMSetMouseTemp(position);
+    LMSetRawMouseLocation(position);
+    LMSetMouseLocation(position);
+}
+
+static void GXMetalInputBeginRelativeTracking(void)
+{
+    GDHandle mainDevice = GetMainDevice();
+    Rect bounds;
+
+    if (mainDevice != NULL && *mainDevice != NULL) {
+        bounds = (**mainDevice).gdRect;
+        gRelativeAnchor.h =
+            (short)(bounds.left + (bounds.right - bounds.left) / 2);
+        gRelativeAnchor.v =
+            (short)(bounds.top + (bounds.bottom - bounds.top) / 2);
+    } else {
+        gRelativeAnchor = LMGetMouseLocation();
+    }
+    GXMetalInputMoveCursor(gRelativeAnchor);
+    gLastPosition = gRelativeAnchor;
+    gHavePosition = true;
+}
 
 static pascal void GXMetalInputPollTimer(TMTaskPtr *task)
 {
@@ -92,10 +169,14 @@ static OSStatus GXMetalInputSetActive(UInt32 refCon, Boolean active)
     if (!active) {
         GXMetalInputStopPolling();
     }
+    gHostRelativeInput = GXMetalInputSetHostMode(active) && active;
     gActive = active;
     gHavePosition = false;
     gLastButtons = LMGetMouseButtonState();
     if (active) {
+        if (gHostRelativeInput) {
+            GXMetalInputBeginRelativeTracking();
+        }
         GXMetalInputStartPolling();
     }
     return noErr;
@@ -143,6 +224,8 @@ static OSStatus GXMetalInputCreateElement(
 static void GXMetalInputDispose(void)
 {
     GXMetalInputStopPolling();
+    (void)GXMetalInputSetHostMode(false);
+    gHostRelativeInput = false;
     if (gButton3 != NULL) {
         (void)ISpElement_Dispose(gButton3);
         gButton3 = NULL;
@@ -255,6 +338,7 @@ OSStatus ISpDriver_FindAndLoadDevices(Boolean *keepDriverLoaded)
     if (keepDriverLoaded == NULL) {
         return paramErr;
     }
+    GXMetalInputResolveHostBridge();
     error = GXMetalInputCreate();
     *keepDriverLoaded = error == noErr;
     return error;
@@ -288,8 +372,13 @@ void ISpDriver_Tickle(void)
         return;
     }
 
-    deltaX = (SInt32)position.h - (SInt32)gLastPosition.h;
-    deltaY = (SInt32)position.v - (SInt32)gLastPosition.v;
+    if (gHostRelativeInput) {
+        deltaX = (SInt32)position.h - (SInt32)gRelativeAnchor.h;
+        deltaY = (SInt32)position.v - (SInt32)gRelativeAnchor.v;
+    } else {
+        deltaX = (SInt32)position.h - (SInt32)gLastPosition.h;
+        deltaY = (SInt32)position.v - (SInt32)gLastPosition.v;
+    }
     if (deltaX != 0) {
         (void)ISpElement_PushSimpleData(
             gDeltaX, (UInt32)(deltaX * kGXMetalInputDeltaScale), &now);
@@ -306,6 +395,10 @@ void ISpDriver_Tickle(void)
                 kISpButtonUp : kISpButtonDown, &now);
     }
 
+    if (gHostRelativeInput) {
+        GXMetalInputMoveCursor(gRelativeAnchor);
+        position = gRelativeAnchor;
+    }
     gLastPosition = position;
     gLastButtons = buttons;
 }

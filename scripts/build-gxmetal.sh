@@ -104,7 +104,8 @@ done
 rm -rf "$ICON_CHECK_DIR"
 trap - EXIT
 
-for symbol in QARegisterEngine QARegisterDrawMethod RegistryEntrySearch; do
+for symbol in QARegisterEngine QARegisterDrawMethod RegistryEntrySearch \
+    GXMetalSetRelativeInputMode; do
     strings "$GUEST_DIR/bin/GXMetal.pef" | grep -F "$symbol" >/dev/null ||
         die "GXMetal PEF is missing required import $symbol"
 done

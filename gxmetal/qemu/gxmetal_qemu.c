@@ -12,6 +12,7 @@
 #include "qemu/timer.h"
 #include "system/reset.h"
 #include "ui/console.h"
+#include "ui/input.h"
 
 #include "gxmetal_qemu.h"
 
@@ -129,6 +130,8 @@ static uint64_t gxmetal_register_read(void *opaque, hwaddr address,
         return state->queue.completed_sequence;
     case GXMETAL_REG_DIAGNOSTIC:
         return state->queue.diagnostic;
+    case GXMETAL_REG_RELATIVE_INPUT:
+        return state->relative_input;
     default:
         return 0;
     }
@@ -177,6 +180,12 @@ static void gxmetal_register_write(void *opaque, hwaddr address,
     case GXMETAL_REG_RESET:
         if (value == GXMETAL_RESET_KEY) {
             gxmetal_qemu_reset(state);
+        }
+        break;
+    case GXMETAL_REG_RELATIVE_INPUT:
+        if (state->features & GXMETAL_FEATURE_RELATIVE_INPUT) {
+            state->relative_input = value != 0;
+            qemu_input_set_relative_mode(state->relative_input);
         }
         break;
     default:
@@ -240,7 +249,8 @@ bool gxmetal_qemu_init(GXMetalQemuState *state, Object *owner,
                            GXMETAL_FEATURE_FOG_DEPTH |
                            GXMETAL_FEATURE_ALPHA_TEST |
                            GXMETAL_FEATURE_RECT_CLIP |
-                           GXMETAL_FEATURE_ATI_UV_TRANSFORM;
+                           GXMETAL_FEATURE_ATI_UV_TRANSFORM |
+                           GXMETAL_FEATURE_RELATIVE_INPUT;
     } else {
         state->features |= GXMETAL_FEATURE_TRACE;
     }
@@ -256,6 +266,8 @@ bool gxmetal_qemu_init(GXMetalQemuState *state, Object *owner,
 
 void gxmetal_qemu_reset(GXMetalQemuState *state)
 {
+    state->relative_input = false;
+    qemu_input_set_relative_mode(false);
     timer_del(state->console_refresh_timer);
     state->last_console_refresh_ns = 0;
     gxmetal_queue_reset(&state->queue);

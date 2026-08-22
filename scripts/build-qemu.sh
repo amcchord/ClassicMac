@@ -40,6 +40,8 @@ PATCHED_FILES=(
   hw/display/meson.build
   pc-bios/meson.build
   ui/cocoa.m
+  ui/input.c
+  include/ui/input.h
   qapi/ui.json
   hw/audio/asc.c
   audio/coreaudio.m
@@ -226,6 +228,11 @@ git -C "$QEMU_DIR" apply "$ROOT_DIR/cocoaui/floppy-menu.patch" || die "Failed to
 # Faster 32-bit Power Mac scanout: let Cocoa consume a big-endian framebuffer
 # directly, and poll display updates at roughly the guest's 60 Hz VBL cadence.
 git -C "$QEMU_DIR" apply "$ROOT_DIR/cocoaui/display-performance.patch" || die "Failed to apply Cocoa display performance patch"
+# GXMetal InputSprocket activation switches Cocoa from the seamless absolute
+# tablet to captured relative motion at runtime, then restores the tablet when
+# the game releases input. This keeps first-person games from fighting a host
+# cursor that cannot follow the guest's recentering.
+git -C "$QEMU_DIR" apply "$ROOT_DIR/cocoaui/game-input-handoff.patch" || die "Failed to apply game input handoff patch"
 # Allow a VirtIO block device to start empty, exchange raw media while running,
 # and report capacity changes to the guest driver.
 git -C "$QEMU_DIR" apply "$VIRTIO_DIR/virtio-blk-removable.patch" || die "Failed to apply removable VirtIO block patch"

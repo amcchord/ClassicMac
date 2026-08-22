@@ -22,7 +22,7 @@ extern "C" {
 
 #define GXMETAL_PROTOCOL_MAGIC            UINT32_C(0x47584d54) /* "GXMT" */
 #define GXMETAL_PROTOCOL_VERSION_MAJOR    1u
-#define GXMETAL_PROTOCOL_VERSION_MINOR    7u
+#define GXMETAL_PROTOCOL_VERSION_MINOR    8u
 #define GXMETAL_PROTOCOL_VERSION \
     ((GXMETAL_PROTOCOL_VERSION_MAJOR << 16) | GXMETAL_PROTOCOL_VERSION_MINOR)
 
@@ -62,7 +62,10 @@ enum GXMetalRegister {
     GXMETAL_REG_ERROR              = 0x30,
     GXMETAL_REG_COMPLETED_SEQUENCE = 0x34,
     GXMETAL_REG_RESET              = 0x38,
-    GXMETAL_REG_DIAGNOSTIC         = 0x3c
+    GXMETAL_REG_DIAGNOSTIC         = 0x3c,
+    /* InputSprocket games request captured relative host motion while active;
+     * zero restores the normal seamless absolute tablet. */
+    GXMETAL_REG_RELATIVE_INPUT     = 0x40
 };
 
 enum GXMetalFeature {
@@ -81,7 +84,8 @@ enum GXMetalFeature {
     GXMETAL_FEATURE_RECT_CLIP     = UINT64_C(1) << 12,
     /* The host can normalize ATI type-1001 texel coordinates and translate
      * OpenGL's homogeneous T coordinate natively. */
-    GXMETAL_FEATURE_ATI_UV_TRANSFORM = UINT64_C(1) << 13
+    GXMETAL_FEATURE_ATI_UV_TRANSFORM = UINT64_C(1) << 13,
+    GXMETAL_FEATURE_RELATIVE_INPUT = UINT64_C(1) << 14
 };
 
 /* C11 enum constants are restricted to int even though the feature word is 64-bit. */
