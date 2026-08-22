@@ -713,6 +713,45 @@ static void test_metal_texture_upload_and_sampling(void)
      * TQAVTexture draws consume undefined specular fields as ATI UVs. */
     draw_textured_test_quad(renderer, 3, 0);
     CHECK(framebuffer_pixel(framebuffer, 16, 16) == 0x001f);
+
+    /* Common sprite formats must preserve source row padding and PowerPC
+     * byte order. I8 expands to opaque gray; AI16_88 stores alpha before
+     * intensity, so this half-alpha white texel fails a 0.75 alpha test. */
+    {
+        const uint8_t intensity[4] = {0x80, 0x11, 0x22, 0x33};
+        const uint8_t alpha_intensity[4] = {0x80, 0xff, 0x44, 0x55};
+
+        upload_single_pixel_texture(renderer, packet, shared, 12,
+                                    GXMETAL_PIXEL_INTENSITY8, intensity);
+        set_resource_state(renderer, packet, 3, GXMETAL_STATE_TEXTURE, 12);
+        draw_textured_test_quad(renderer, 3, 0);
+        CHECK(framebuffer_pixel(framebuffer, 16, 16) == 0x4210);
+
+        upload_single_pixel_texture(
+            renderer, packet, shared, 13,
+            GXMETAL_PIXEL_ALPHA_INTENSITY88, alpha_intensity);
+        set_resource_state(renderer, packet, 3, GXMETAL_STATE_TEXTURE, 13);
+        set_float_state(renderer, packet, 3,
+                        GXMETAL_STATE_ALPHA_TEST_REFERENCE, 0.75f);
+        set_int_state(renderer, packet, 3,
+                      GXMETAL_STATE_ALPHA_TEST_FUNCTION,
+                      GXMETAL_ALPHA_TEST_GT);
+        draw_textured_test_quad(renderer, 3, 0);
+        CHECK(framebuffer_pixel(framebuffer, 16, 16) == 0x0000);
+        set_int_state(renderer, packet, 3,
+                      GXMETAL_STATE_ALPHA_TEST_FUNCTION,
+                      GXMETAL_ALPHA_TEST_NONE);
+
+        make_packet(packet, GXMETAL_OP_TEXTURE_DESTROY, 32, 0);
+        payload = packet + GXMETAL_PACKET_HEADER_BYTES;
+        gxmetal_store_le32(payload + GXMETAL_DESTROY_RESOURCE_ID_OFFSET, 12);
+        CHECK(dispatch(renderer, packet, 32) == GXMETAL_ERROR_NONE);
+        make_packet(packet, GXMETAL_OP_TEXTURE_DESTROY, 32, 0);
+        payload = packet + GXMETAL_PACKET_HEADER_BYTES;
+        gxmetal_store_le32(payload + GXMETAL_DESTROY_RESOURCE_ID_OFFSET, 13);
+        CHECK(dispatch(renderer, packet, 32) == GXMETAL_ERROR_NONE);
+        set_resource_state(renderer, packet, 3, GXMETAL_STATE_TEXTURE, 7);
+    }
     set_int_state(renderer, packet, 3, GXMETAL_STATE_MULTI_TEXTURE_ENABLE, 1);
     set_int_state(renderer, packet, 3, GXMETAL_STATE_MULTI_TEXTURE_OP,
                   GXMETAL_MULTI_TEXTURE_MODULATE);

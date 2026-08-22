@@ -682,7 +682,10 @@ static uint32_t gxmetal_metal_resource_bytes_per_pixel(uint32_t format)
     case GXMETAL_PIXEL_ATI_ARGB4444:
     case GXMETAL_PIXEL_ARGB1555:
     case GXMETAL_PIXEL_ARGB4444:
+    case GXMETAL_PIXEL_ALPHA_INTENSITY88:
         return 2;
+    case GXMETAL_PIXEL_INTENSITY8:
+        return 1;
     case GXMETAL_PIXEL_ARGB8888:
     case GXMETAL_PIXEL_RGB8888:
         return 4;
@@ -1039,6 +1042,20 @@ static void gxmetal_metal_convert_pixel(uint32_t format,
         destination[1] = source[2];
         destination[2] = source[3];
         destination[3] = 255;
+        break;
+    case GXMETAL_PIXEL_INTENSITY8:
+        destination[0] = source[0];
+        destination[1] = source[0];
+        destination[2] = source[0];
+        destination[3] = 255;
+        break;
+    case GXMETAL_PIXEL_ALPHA_INTENSITY88:
+        /* RAVE's AI16_88 word is big-endian on PowerPC: alpha first,
+         * followed by the intensity replicated into RGB. */
+        destination[0] = source[1];
+        destination[1] = source[1];
+        destination[2] = source[1];
+        destination[3] = source[0];
         break;
     default:
         memset(destination, 0, 4);
@@ -1611,6 +1628,18 @@ static uint32_t gxmetal_metal_draw_textured(
 
     if (resource == NULL ||
         (context->secondary_texture_id != 0 && secondary_resource == NULL)) {
+        uint32_t active_count = 0;
+
+        for (i = 0; i < GXMETAL_METAL_MAX_RESOURCES; i++) {
+            if (renderer->resources[i].active) {
+                active_count++;
+            }
+        }
+        fprintf(stderr,
+                "GXMetal: textured draw references missing resource "
+                "primary=%u secondary=%u active=%u\n",
+                context->texture_id, context->secondary_texture_id,
+                active_count);
         return GXMETAL_ERROR_BAD_RESOURCE;
     }
     if (host_ati_uv_transform &&

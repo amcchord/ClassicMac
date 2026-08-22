@@ -15,7 +15,7 @@ early enough for the RAVE manager to select Apple Software RAVE.
 | Primitives | Points, lines, triangles, strips, fans, indexed meshes, and submitted vertex arrays | Supported for Gouraud and textured vertices | Protocol, renderer, Metal, and guest conformance tests |
 | Color and depth | Color clear, Z16 clear, all RAVE depth comparisons, and depth-write mask | Supported | Metal and guest framebuffer checks |
 | Blending | Premultiplied, interpolated-alpha, and the OpenGL source/destination factors used by the system GLD | Supported | Metal alpha and OpenGL pipeline tests |
-| Textures | RGB555, RGB565, ARGB1555, ARGB4444, RGB32, ARGB32, and CL8; mipmaps; repeat/clamp; nearest, bilinear, and trilinear filtering | Supported | Asymmetric upload/sample tests and classic-game runs |
+| Textures | RGB555, RGB565, ARGB1555, ARGB4444, RGB32, ARGB32, CL8, I8, and AI16_88; mipmaps; repeat/clamp; nearest, bilinear, and trilinear filtering | Supported | Asymmetric upload/sample, byte-order, alpha, row-padding tests, and classic-game runs |
 | Texture operations | Decal, modulation, highlight, and their documented combinations | Supported | Metal shader tests |
 | Fog | Alpha, linear depth, exponential, and squared-exponential | Supported | Metal and guest conformance tests |
 | Alpha test | All seven RAVE comparisons, before blend and depth write | Supported | Metal and guest conformance tests |
@@ -40,7 +40,7 @@ early enough for the RAVE manager to select Apple Software RAVE.
 2. Complete or narrow extended OpenGL semantics. In particular, either
    implement draw-buffer and stipple behavior or document why the system GLD
    never exposes it to applications.
-3. Expand common sprite and UI formats in measured order: I8, AI16_88,
+3. Expand the remaining common sprite and UI formats in measured order:
    ACL16_88, Alpha1, then CL4. Each format needs endian, alpha, palette, and
    row-padding tests before it is advertised.
 4. Add bitmap scale/filter and chromakey before attempting more specialized

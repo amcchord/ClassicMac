@@ -22,7 +22,7 @@ extern "C" {
 
 #define GXMETAL_PROTOCOL_MAGIC            UINT32_C(0x47584d54) /* "GXMT" */
 #define GXMETAL_PROTOCOL_VERSION_MAJOR    1u
-#define GXMETAL_PROTOCOL_VERSION_MINOR    10u
+#define GXMETAL_PROTOCOL_VERSION_MINOR    11u
 #define GXMETAL_PROTOCOL_VERSION \
     ((GXMETAL_PROTOCOL_VERSION_MAJOR << 16) | GXMETAL_PROTOCOL_VERSION_MINOR)
 
@@ -91,7 +91,9 @@ enum GXMetalFeature {
     GXMETAL_FEATURE_MULTI_TEXTURE_VERTEX = UINT64_C(1) << 15,
     /* Resource uploads may replace a rectangular subregion. The destination
      * X/Y origin is packed into the final resource-upload payload word. */
-    GXMETAL_FEATURE_RESOURCE_SUBREGION = UINT64_C(1) << 16
+    GXMETAL_FEATURE_RESOURCE_SUBREGION = UINT64_C(1) << 16,
+    /* The host converts RAVE I8 and big-endian AI16_88 source pixels. */
+    GXMETAL_FEATURE_INTENSITY_FORMATS = UINT64_C(1) << 17
 };
 
 /* C11 enum constants are restricted to int even though the feature word is 64-bit. */
@@ -162,7 +164,9 @@ enum GXMetalPixelFormat {
     GXMETAL_PIXEL_ARGB4444 = 8,
     GXMETAL_PIXEL_RGB565 = 9,
     /* ATI's private Mac RAVE type-1001 surface: big-endian ARGB4444. */
-    GXMETAL_PIXEL_ATI_ARGB4444 = 10
+    GXMETAL_PIXEL_ATI_ARGB4444 = 10,
+    GXMETAL_PIXEL_INTENSITY8 = 11,
+    GXMETAL_PIXEL_ALPHA_INTENSITY88 = 12
 };
 
 enum GXMetalPrimitive {

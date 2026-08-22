@@ -405,6 +405,8 @@ enum GXMetalExpectedPixel {
     kGXMetalPixelBlue,
     kGXMetalPixelPurple,
     kGXMetalPixelGreen,
+    kGXMetalPixelGray,
+    kGXMetalPixelLightBlue,
     kGXMetalPixelFogPurple
 };
 
@@ -467,6 +469,20 @@ static Boolean GXMetalPixelMatches(GDHandle graphicsDevice,
     if (expected == kGXMetalPixelGreen) {
         return green > maximum * 2 / 3 &&
                red < maximum / 3 && blue < maximum / 3;
+    }
+    if (expected == kGXMetalPixelGray) {
+        return red > maximum / 3 && red < maximum * 4 / 5 &&
+               green > maximum / 3 && green < maximum * 4 / 5 &&
+               blue > maximum / 3 && blue < maximum * 4 / 5 &&
+               red - green < maximum / 8 &&
+               green - red < maximum / 8 &&
+               red - blue < maximum / 8 &&
+               blue - red < maximum / 8;
+    }
+    if (expected == kGXMetalPixelLightBlue) {
+        return red > maximum / 2 && red < maximum * 9 / 10 &&
+               green > maximum / 2 && green < maximum * 9 / 10 &&
+               blue > maximum * 9 / 10;
     }
     /* The display driver's programmable gamma table is applied before the
      * test reads VRAM.  The default Mac OS 9 table lifts the linear 25% red
@@ -1223,6 +1239,138 @@ static TQAError GXMetalRenderDynamicResources(
     return error;
 }
 
+static TQAError GXMetalRenderIntensityFormats(
+    TQADrawContext *context, const TQAEngine *engine,
+    GDHandle graphicsDevice, const TQARect *deviceRect)
+{
+    unsigned char intensityPixels[4] = {0x80, 0x11, 0x22, 0x33};
+    unsigned char alphaIntensityPixels[4] = {0x80, 0xff, 0x44, 0x55};
+    TQAImage intensityImage;
+    TQAImage alphaIntensityImage;
+    TQATexture *intensityTexture = NULL;
+    TQATexture *alphaIntensityTexture = NULL;
+    TQABitmap *intensityBitmap = NULL;
+    TQABitmap *alphaIntensityBitmap = NULL;
+    TQAVTexture leftQuad[4];
+    TQAVTexture rightQuad[4];
+    TQAVGouraud intensityBitmapVertex;
+    TQAVGouraud alphaIntensityBitmapVertex;
+    unsigned long vertexFlags[4] = {0, 0, 0, 0};
+    TQARect dirty = {0, GXMETAL_WIDTH, 0, GXMETAL_HEIGHT};
+    TQAError error;
+
+    intensityImage.width = 1;
+    intensityImage.height = 1;
+    intensityImage.rowBytes = 4;
+    intensityImage.pixmap = intensityPixels;
+    alphaIntensityImage = intensityImage;
+    alphaIntensityImage.pixmap = alphaIntensityPixels;
+    error = QATextureNew(engine, kQATexture_None, kQAPixel_I8,
+                         &intensityImage, &intensityTexture);
+    if (error == kQANoErr) {
+        error = QATextureNew(engine, kQATexture_None, kQAPixel_AI16_88,
+                             &alphaIntensityImage,
+                             &alphaIntensityTexture);
+    }
+    if (error == kQANoErr) {
+        error = QABitmapNew(engine, kQABitmap_None, kQAPixel_I8,
+                            &intensityImage, &intensityBitmap);
+    }
+    if (error == kQANoErr) {
+        error = QABitmapNew(engine, kQABitmap_None, kQAPixel_AI16_88,
+                            &alphaIntensityImage,
+                            &alphaIntensityBitmap);
+    }
+    if (error != kQANoErr) {
+        GXMetalRecordResult("FAIL: intensity texture creation");
+        if (alphaIntensityBitmap != NULL) {
+            QABitmapDelete(engine, alphaIntensityBitmap);
+        }
+        if (intensityBitmap != NULL) {
+            QABitmapDelete(engine, intensityBitmap);
+        }
+        if (alphaIntensityTexture != NULL) {
+            QATextureDelete(engine, alphaIntensityTexture);
+        }
+        if (intensityTexture != NULL) {
+            QATextureDelete(engine, intensityTexture);
+        }
+        return error;
+    }
+
+    leftQuad[0] = GXMetalTextureVertex(16.0f, 24.0f, 0.5f, 0.0f, 0.0f);
+    leftQuad[1] = GXMetalTextureVertex(144.0f, 24.0f, 0.5f, 1.0f, 0.0f);
+    leftQuad[2] = GXMetalTextureVertex(16.0f, 196.0f, 0.5f, 0.0f, 1.0f);
+    leftQuad[3] = GXMetalTextureVertex(144.0f, 196.0f, 0.5f, 1.0f, 1.0f);
+    rightQuad[0] = GXMetalTextureVertex(176.0f, 24.0f, 0.5f, 0.0f, 0.0f);
+    rightQuad[1] = GXMetalTextureVertex(304.0f, 24.0f, 0.5f, 1.0f, 0.0f);
+    rightQuad[2] = GXMetalTextureVertex(176.0f, 196.0f, 0.5f, 0.0f, 1.0f);
+    rightQuad[3] = GXMetalTextureVertex(304.0f, 196.0f, 0.5f, 1.0f, 1.0f);
+    intensityBitmapVertex = GXMetalGouraud(152.0f, 100.0f, 0.4f,
+                                           1.0f, 1.0f, 1.0f, 1.0f);
+    alphaIntensityBitmapVertex = GXMetalGouraud(
+        162.0f, 100.0f, 0.4f, 1.0f, 1.0f, 1.0f, 1.0f);
+    QASetFloat(context, kQATag_ColorBG_r, 0.0f);
+    QASetFloat(context, kQATag_ColorBG_g, 0.0f);
+    QASetFloat(context, kQATag_ColorBG_b, 1.0f);
+    QASetFloat(context, kQATag_ColorBG_a, 1.0f);
+    QASetInt(context, kQATag_ZFunction, kQAZFunction_None);
+    QASetInt(context, kQATag_ZBufferMask, kQAZBufferMask_Disable);
+    QASetInt(context, kQATag_Blend, kQABlend_Interpolate);
+    QASetInt(context, kQATag_AlphaTestFunc, kQAAlphaTest_None);
+    QASetInt(context, kQATag_TextureFilter, kQATextureFilter_Fast);
+    QASetInt(context, kQATag_TextureOp, kQATextureOp_None);
+    QASetInt(context, kQATagGL_TextureWrapU, kQAGL_Clamp);
+    QASetInt(context, kQATagGL_TextureWrapV, kQAGL_Clamp);
+    QARenderStart(context, &dirty, NULL);
+    QASetPtr(context, kQATag_Texture, intensityTexture);
+    QADrawVTexture(context, 4, kQAVertexMode_Strip,
+                   leftQuad, vertexFlags);
+    QASetPtr(context, kQATag_Texture, alphaIntensityTexture);
+    QADrawVTexture(context, 4, kQAVertexMode_Strip,
+                   rightQuad, vertexFlags);
+    QADrawBitmap(context, &intensityBitmapVertex, intensityBitmap);
+    QADrawBitmap(context, &alphaIntensityBitmapVertex,
+                 alphaIntensityBitmap);
+    error = QARenderEnd(context, &dirty);
+    if (error == kQANoErr) {
+        error = QASync(context);
+    }
+    if (error == kQANoErr &&
+        !GXMetalPixelMatches(graphicsDevice, deviceRect->left + 80,
+                             deviceRect->top + 110,
+                             kGXMetalPixelGray)) {
+        GXMetalRecordResult("FAIL: I8 intensity pixel");
+        error = kQAError;
+    }
+    if (error == kQANoErr &&
+        !GXMetalPixelMatches(graphicsDevice, deviceRect->left + 240,
+                             deviceRect->top + 110,
+                             kGXMetalPixelLightBlue)) {
+        GXMetalRecordResult("FAIL: AI16_88 alpha-intensity pixel");
+        error = kQAError;
+    }
+    if (error == kQANoErr &&
+        !GXMetalPixelMatches(graphicsDevice, deviceRect->left + 152,
+                             deviceRect->top + 100,
+                             kGXMetalPixelGray)) {
+        GXMetalRecordResult("FAIL: I8 intensity bitmap pixel");
+        error = kQAError;
+    }
+    if (error == kQANoErr &&
+        !GXMetalPixelMatches(graphicsDevice, deviceRect->left + 162,
+                             deviceRect->top + 100,
+                             kGXMetalPixelLightBlue)) {
+        GXMetalRecordResult("FAIL: AI16_88 alpha-intensity bitmap pixel");
+        error = kQAError;
+    }
+    QABitmapDelete(engine, alphaIntensityBitmap);
+    QABitmapDelete(engine, intensityBitmap);
+    QATextureDelete(engine, alphaIntensityTexture);
+    QATextureDelete(engine, intensityTexture);
+    return error;
+}
+
 static TQAError GXMetalBenchmarkFrame(TQADrawContext *context,
                                       TQATexture *texture,
                                       unsigned long frame)
@@ -1385,7 +1533,7 @@ static void GXMetalBuildPassResult(char *result, size_t resultCapacity,
     GXMetalAppendText(&cursor, end, "PASS: version=");
     GXMetalAppendVersion(&cursor, end, revision);
     GXMetalAppendText(&cursor, end,
-        " RAVE discovery capability-contract depth perspective-z blend alpha-test backface clip texture public-multitexture dynamic-resources ATI-private-nocopy bitmap dirty-present double-buffer framebuffer gx_us=");
+        " RAVE discovery capability-contract depth perspective-z blend alpha-test backface clip texture intensity-formats public-multitexture dynamic-resources ATI-private-nocopy bitmap dirty-present double-buffer framebuffer gx_us=");
     GXMetalAppendDecimal(&cursor, end, gxMetalMicroseconds);
     GXMetalAppendText(&cursor, end, " sw_us=");
     GXMetalAppendDecimal(&cursor, end, softwareMicroseconds);
@@ -1405,7 +1553,7 @@ static void GXMetalBuildPassMessage(char *message, size_t messageCapacity,
     GXMetalAppendText(&cursor, end, "GXMetal ");
     GXMetalAppendVersion(&cursor, end, revision);
     GXMetalAppendText(&cursor, end,
-        " passed automatic RAVE discovery, public RAVE 1.6 multitexture and dynamic-resource rendering, framebuffer correctness, ATI private static/NoCopy texture mutation, bitmap drawing, presentation, and fallback. The repeatable mixed texture/Gouraud workload ran ");
+        " passed automatic RAVE discovery, I8/AI16_88 textures, public RAVE 1.6 multitexture and dynamic-resource rendering, framebuffer correctness, ATI private static/NoCopy texture mutation, bitmap drawing, presentation, and fallback. The repeatable mixed texture/Gouraud workload ran ");
     GXMetalAppendDecimal(&cursor, end, speedupTimes100 / 100);
     GXMetalAppendText(&cursor, end, ".");
     if (speedupTimes100 % 100 < 10) {
@@ -1699,11 +1847,15 @@ int main(void)
                                 (1UL << kQAPixel_RGB32) |
                                 (1UL << kQAPixel_ARGB32) |
                                 (1UL << kQAPixel_CL8) |
-                                (1UL << kQAPixel_ARGB16_4444);
+                                (1UL << kQAPixel_ARGB16_4444) |
+                                (1UL << kQAPixel_I8) |
+                                (1UL << kQAPixel_AI16_88);
     requiredBitmapPixelTypes = (1UL << kQAPixel_RGB16) |
                                (1UL << kQAPixel_RGB32) |
                                (1UL << kQAPixel_ARGB32) |
-                               (1UL << kQAPixel_CL8);
+                               (1UL << kQAPixel_CL8) |
+                               (1UL << kQAPixel_I8) |
+                               (1UL << kQAPixel_AI16_88);
     if (textureMemory == 0 || fastTextureMemory != textureMemory ||
         drawPixelTypes != requiredDrawPixelTypes ||
         preferredDrawPixelTypes != requiredDrawPixelTypes ||
@@ -1793,6 +1945,10 @@ int main(void)
         }
         if (error == kQANoErr) {
             error = GXMetalRenderDynamicResources(
+                context, engine, device.device.gDevice, &deviceRect);
+        }
+        if (error == kQANoErr) {
+            error = GXMetalRenderIntensityFormats(
                 context, engine, device.device.gDevice, &deviceRect);
         }
     } else {
