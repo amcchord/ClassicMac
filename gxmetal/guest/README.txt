@@ -1,4 +1,4 @@
-GXMetal 2.0.5 for Mac OS 9
+GXMetal 2.0.6 for Mac OS 9
 ==========================
 
 GXMetal is ClassicMac's host-accelerated QuickDraw 3D RAVE engine. It lets
@@ -23,14 +23,14 @@ INSTALL OR UPDATE
 7. Run GXMetal Test. Do not rely on the startup icon alone: the test confirms
    the installed GXMetal version, RAVE discovery, the host transport,
    rendering correctness, presentation, and software fallback. GXMetal Test
-   2.0.5 rejects a mismatched driver and tells you to reinstall and restart.
+   2.0.6 rejects a mismatched driver and tells you to reinstall and restart.
 
 Keep the complete GXMetal folder together while the installer runs. GXMetal is
 the RAVE driver; GXMetal Startup draws the icon during boot; GXMetal Input is
-an InputSprocket coordinator that automatically captures relative mouse motion
-while a game owns the system mouse and restores ClassicMac's seamless pointer
-afterward. Mac OS remains the single source of movement and button events.
-You can install directly from the read-only Tools CD.
+an InputSprocket mouse that supplies the relative movement and button elements
+classic games actually consume. It reads host-relative deltas directly while
+active, preserves even very short clicks, and restores ClassicMac's seamless
+pointer afterward. You can install directly from the read-only Tools CD.
 
 WHAT THE STARTUP ICON MEANS
 ---------------------------
@@ -62,7 +62,7 @@ TESTED GAME
 -----------
 
 Nanosaur, Carmageddon II, and Quake III Arena Demo are the primary real-game
-tests. GXMetal 2.0.5 has been exercised through their title screens and
+tests. GXMetal 2.0.6 has been exercised through their title screens and
 extended gameplay with multitexturing, lightmaps, textures, depth, clipping,
 fog, water, alpha effects, camera movement, HUDs, and dynamic textures.
 Rendering bugs should be reported with a screenshot, the Mac OS version,

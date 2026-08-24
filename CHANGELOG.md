@@ -1,6 +1,23 @@
 # Changelog
 
-## Unreleased
+## 2.0.6 — 2026-08-24
+
+### Fixed
+
+- Restored GXMetal Input's real InputSprocket movement and button elements.
+  The coordinator-only 2.0.5 device could move Quake III's menu pointer but
+  could not activate menu items, making a normal match impossible to start.
+- Captured motion now travels as direct host-relative deltas instead of moving
+  and recentering Mac OS's shared cursor. Quake III receives the device layout
+  its Mac input loop expects, and vertical movement observes InputSprocket's
+  positive-up coordinate contract.
+- Host-side button edge latches preserve complete clicks that begin and end
+  between guest polls. Short clicks now activate menus and fire reliably while
+  held-button state remains coherent across release and reacquisition.
+- Deleting a texture now flushes and invalidates every draw-context binding
+  that references it before the host resource is destroyed. This prevents an
+  ATI private draw from submitting an unbound textured packet and freezing
+  Quake III at `AWAITING SNAPSHOT...` while Q3DM1 starts.
 
 ## 2.0.5 — 2026-08-24
 

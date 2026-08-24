@@ -5,9 +5,9 @@
 #include "GXMetalIcon.r"
 
 resource 'vers' (1) {
-    2, 0, release, 5, verUS,
-    "2.0.5",
-    "GXMetal Input 2.0.5"
+    2, 0, release, 6, verUS,
+    "2.0.6",
+    "GXMetal Input 2.0.6"
 };
 
 resource 'cfrg' (0) {

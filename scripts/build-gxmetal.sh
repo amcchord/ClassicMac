@@ -105,13 +105,17 @@ rm -rf "$ICON_CHECK_DIR"
 trap - EXIT
 
 for symbol in QARegisterEngine QARegisterDrawMethod RegistryEntrySearch \
+    GXMetalGetInputButtonState GXMetalGetInputState GXMetalGetInputEvents \
     GXMetalSetRelativeInputMode; do
     strings "$GUEST_DIR/bin/GXMetal.pef" | grep -F "$symbol" >/dev/null ||
         die "GXMetal PEF is missing required import $symbol"
 done
 for symbol in ISpDriver_CheckConfiguration ISpDriver_FindAndLoadDevices \
     ISpDriver_DisposeDevices ISpDriver_Tickle ISpDevice_New \
-    ISpDevice_Dispose GXMetalSetRelativeInputMode; do
+    ISpDevice_Dispose ISpElement_New ISpElement_Dispose \
+    ISpElement_PushSimpleData GXMetalGetInputButtonState \
+    GXMetalGetInputState GXMetalGetInputEvents \
+    GXMetalSetRelativeInputMode; do
     strings "$GUEST_DIR/bin/GXMetalInput.pef" | grep -F "$symbol" >/dev/null ||
         die "GXMetal Input PEF is missing required symbol $symbol"
 done
@@ -124,6 +128,6 @@ done
 for artifact in GXMetal.bin GXMetalInput.bin GXMetalStartup.bin \
                 GXMetalInstaller.bin GXMetalTest.bin; do
     file "$GUEST_DIR/bin/$artifact"
-    strings "$GUEST_DIR/bin/$artifact" | grep -F "2.0.5" >/dev/null || \
-        die "$artifact does not report GXMetal version 2.0.5"
+    strings "$GUEST_DIR/bin/$artifact" | grep -F "2.0.6" >/dev/null || \
+        die "$artifact does not report GXMetal version 2.0.6"
 done
