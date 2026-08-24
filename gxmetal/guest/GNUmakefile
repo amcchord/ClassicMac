@@ -53,7 +53,8 @@ bin/GXMetal.bin: bin/GXMetal.pef src/GXMetal.r src/GXMetalIcon.r
 		-t shlb -c tnsl --data bin/GXMetal.pef
 	python3 ../tools/set_macbinary_flags.py $@ --set 0x0400 --clear 0x0180
 
-bin/GXMetalInput.xcoff: src/GXMetalInput.c src/GXMetalInput.exp GNUmakefile
+bin/GXMetalInput.xcoff: src/GXMetalInput.c src/GXMetalInput.exp \
+                        ../protocol/gxmetal_protocol.h GNUmakefile
 	@mkdir -p bin
 	$(CC) $(CFLAGS) -shared -Wl,-e,GXMetalInputCFMInitialize \
 		-Wl,-bE:src/GXMetalInput.exp -Wl,--gc-sections \

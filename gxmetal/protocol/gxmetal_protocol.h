@@ -22,7 +22,7 @@ extern "C" {
 
 #define GXMETAL_PROTOCOL_MAGIC            UINT32_C(0x47584d54) /* "GXMT" */
 #define GXMETAL_PROTOCOL_VERSION_MAJOR    1u
-#define GXMETAL_PROTOCOL_VERSION_MINOR    14u
+#define GXMETAL_PROTOCOL_VERSION_MINOR    16u
 #define GXMETAL_PROTOCOL_VERSION \
     ((GXMETAL_PROTOCOL_VERSION_MAJOR << 16) | GXMETAL_PROTOCOL_VERSION_MINOR)
 
@@ -65,7 +65,22 @@ enum GXMetalRegister {
     GXMETAL_REG_DIAGNOSTIC         = 0x3c,
     /* InputSprocket games request captured relative host motion while active;
      * zero restores the normal seamless absolute tablet. */
-    GXMETAL_REG_RELATIVE_INPUT     = 0x40
+    GXMETAL_REG_RELATIVE_INPUT     = 0x40,
+    /* Host input state for the guest InputSprocket bridge. Relative-axis
+     * reads consume the accumulated delta; button reads are non-destructive. */
+    GXMETAL_REG_INPUT_BUTTONS      = 0x44,
+    GXMETAL_REG_INPUT_RELATIVE_X   = 0x48,
+    GXMETAL_REG_INPUT_RELATIVE_Y   = 0x4c,
+    /* Read-and-clear button transitions preserve clicks shorter than the
+     * guest InputSprocket driver's polling interval. */
+    GXMETAL_REG_INPUT_BUTTONS_DOWN = 0x50,
+    GXMETAL_REG_INPUT_BUTTONS_UP   = 0x54
+};
+
+enum GXMetalInputButton {
+    GXMETAL_INPUT_BUTTON_ONE   = 1u << 0,
+    GXMETAL_INPUT_BUTTON_TWO   = 1u << 1,
+    GXMETAL_INPUT_BUTTON_THREE = 1u << 2
 };
 
 enum GXMetalFeature {

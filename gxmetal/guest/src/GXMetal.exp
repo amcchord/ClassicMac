@@ -1,5 +1,8 @@
 GXMetalEngineGetMethod
 GXMetalCopyDiagnostics
 GXMetalGetDiagnosticStatus
+GXMetalGetInputButtonState
+GXMetalGetInputState
+GXMetalGetInputEvents
 GXMetalProbeTransport
 GXMetalSetRelativeInputMode

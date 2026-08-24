@@ -20,6 +20,11 @@ GXMETAL_DOORBELL_REGISTER = 0x28
 GXMETAL_STATUS_REGISTER = 0x2C
 GXMETAL_ERROR_REGISTER = 0x30
 GXMETAL_RELATIVE_INPUT_REGISTER = 0x40
+GXMETAL_INPUT_BUTTONS_REGISTER = 0x44
+GXMETAL_INPUT_RELATIVE_X_REGISTER = 0x48
+GXMETAL_INPUT_RELATIVE_Y_REGISTER = 0x4C
+GXMETAL_INPUT_BUTTONS_DOWN_REGISTER = 0x50
+GXMETAL_INPUT_BUTTONS_UP_REGISTER = 0x54
 GXMETAL_OP_CONTEXT_CREATE = 0x0100
 GXMETAL_OP_CONTEXT_DESTROY = 0x0101
 QEXT_BAR2_OFFSET = 0x600
@@ -273,6 +278,31 @@ def test_relative_input_handoff(qemu):
 
             gxmetal_registers = (register_address +
                                  GXMETAL_BAR2_REGISTER_OFFSET)
+            button_register = (gxmetal_registers +
+                               GXMETAL_INPUT_BUTTONS_REGISTER)
+            qmp_execute(qmp_stream, "input-send-event", {
+                "events": [{"type": "btn", "data": {
+                    "button": "left", "down": True}}]})
+            assert qtest_readl_le(qtest, button_register) == 0x1
+            qmp_execute(qmp_stream, "input-send-event", {
+                "events": [{"type": "btn", "data": {
+                    "button": "right", "down": True}}]})
+            assert qtest_readl_le(qtest, button_register) == 0x3
+            qmp_execute(qmp_stream, "input-send-event", {
+                "events": [
+                    {"type": "btn", "data": {
+                        "button": "left", "down": False}},
+                    {"type": "btn", "data": {
+                        "button": "right", "down": False}},
+                    {"type": "btn", "data": {
+                        "button": "middle", "down": True}},
+                ]})
+            assert qtest_readl_le(qtest, button_register) == 0x4
+            qmp_execute(qmp_stream, "input-send-event", {
+                "events": [{"type": "btn", "data": {
+                    "button": "middle", "down": False}}]})
+            assert qtest_readl_le(qtest, button_register) == 0
+
             create = context_packet(GXMETAL_OP_CONTEXT_CREATE, 1, 1)
             qtest_write(qtest, shared_address + GXMETAL_RING_OFFSET, create)
             qtest_writel_le(qtest,
@@ -300,10 +330,41 @@ def test_relative_input_handoff(qemu):
                             QEXT_CURSOR_COMMAND_REGISTER,
                             QEXT_CURSOR_MOVE)
             assert receive_vnc_pointer_mode(vnc) is False
-            # The tablet stays the selected absolute handler while REL motion
-            # chooses ADB by capability. QEMU mirrors button transitions to
-            # both so Mac OS receives one coherent shared button state.
+            # The tablet stays selected while captured. REL motion bypasses
+            # the emulated Mac cursor and is consumed once through GXMetal.
             assert current_mouse(qmp_stream)["absolute"] is True
+            button_down_register = (gxmetal_registers +
+                                    GXMETAL_INPUT_BUTTONS_DOWN_REGISTER)
+            button_up_register = (gxmetal_registers +
+                                  GXMETAL_INPUT_BUTTONS_UP_REGISTER)
+            # A complete click between guest polls remains observable as two
+            # read-and-clear edges even though the final held state is up.
+            qmp_execute(qmp_stream, "input-send-event", {
+                "events": [
+                    {"type": "btn", "data": {
+                        "button": "left", "down": True}},
+                    {"type": "btn", "data": {
+                        "button": "left", "down": False}},
+                ]})
+            assert qtest_readl_le(qtest, button_register) == 0
+            assert qtest_readl_le(qtest, button_down_register) == 0x1
+            assert qtest_readl_le(qtest, button_up_register) == 0x1
+            assert qtest_readl_le(qtest, button_down_register) == 0
+            assert qtest_readl_le(qtest, button_up_register) == 0
+            relative_x_register = (gxmetal_registers +
+                                   GXMETAL_INPUT_RELATIVE_X_REGISTER)
+            relative_y_register = (gxmetal_registers +
+                                   GXMETAL_INPUT_RELATIVE_Y_REGISTER)
+            qmp_execute(qmp_stream, "input-send-event", {
+                "events": [
+                    {"type": "rel", "data": {"axis": "x", "value": 17}},
+                    {"type": "rel", "data": {"axis": "y", "value": -9}},
+                ]})
+            assert qtest_readl_le(qtest, relative_x_register) == 17
+            assert qtest_readl_le(qtest, relative_y_register) == 0xFFFFFFF7
+            # Relative-axis registers are read-and-clear accumulators.
+            assert qtest_readl_le(qtest, relative_x_register) == 0
+            assert qtest_readl_le(qtest, relative_y_register) == 0
             qtest_writel_le(qtest,
                             register_address + QEXT_BAR2_OFFSET +
                             QEXT_CURSOR_VISIBLE_REGISTER, 1)
@@ -336,8 +397,8 @@ def test_relative_input_handoff(qemu):
             assert receive_vnc_pointer_mode(vnc) is True
             assert current_mouse(qmp_stream)["absolute"] is True
 
-            # Keep the explicit InputSprocket coordinator request as an
-            # override for games that activate the GXMetal handoff device.
+            # Keep the explicit InputSprocket bridge request as an override
+            # for games that activate the GXMetal mouse device.
             relative_register = (register_address +
                                  GXMETAL_BAR2_REGISTER_OFFSET +
                                  GXMETAL_RELATIVE_INPUT_REGISTER)

@@ -2,46 +2,85 @@ diff --git a/ui/input.c b/ui/input.c
 index 1f5be0b..d2c9462 100644
 --- a/ui/input.c
 +++ b/ui/input.c
-@@ -38,6 +38,7 @@ static QTAILQ_HEAD(, QemuInputHandlerState) handlers =
+@@ -38,6 +38,11 @@ static QTAILQ_HEAD(, QemuInputHandlerState) handlers =
      QTAILQ_HEAD_INITIALIZER(handlers);
  static NotifierList mouse_mode_notifiers =
      NOTIFIER_LIST_INITIALIZER(mouse_mode_notifiers);
 +static bool relative_mode_requested;
++static uint32_t input_button_state;
++static uint32_t input_button_down_edges;
++static uint32_t input_button_up_edges;
++static int32_t input_relative_delta[INPUT_AXIS__MAX];
  
  static QemuInputEventQueueHead kbd_queue = QTAILQ_HEAD_INITIALIZER(kbd_queue);
  static QEMUTimer *kbd_timer;
-@@ -309,6 +310,30 @@ void qemu_input_event_send_impl(QemuConsole *src, InputEvent *evt)
+@@ -303,12 +308,65 @@ static void qemu_input_queue_sync(QemuInputEventQueueHead *queue)
+     queue_count++;
+ }
+ 
++static uint32_t qemu_input_button_mask(InputButton button)
++{
++    switch (button) {
++    case INPUT_BUTTON_LEFT:
++        return 1u << 0;
++    case INPUT_BUTTON_RIGHT:
++        return 1u << 1;
++    case INPUT_BUTTON_MIDDLE:
++        return 1u << 2;
++    default:
++        return 0;
++    }
++}
++
++static void qemu_input_accumulate_relative(InputMoveEvent *move)
++{
++    int64_t accumulated;
++
++    if (move->axis >= INPUT_AXIS__MAX) {
++        return;
++    }
++    accumulated = (int64_t)input_relative_delta[move->axis] + move->value;
++    input_relative_delta[move->axis] =
++        accumulated > INT32_MAX ? INT32_MAX :
++        accumulated < INT32_MIN ? INT32_MIN : accumulated;
++}
++
+ void qemu_input_event_send_impl(QemuConsole *src, InputEvent *evt)
+ {
+     QemuInputHandlerState *s;
++    uint32_t button_mask;
  
      qemu_input_event_trace(src, evt);
  
-+    /* Classic Mac OS keeps a shared button state for every installed mouse.
-+     * During relative capture, mirror buttons to the tablet and ADB handlers
-+     * so one guest driver cannot immediately overwrite the other. Motion
-+     * remains capability-routed: absolute to the tablet, relative to ADB. */
-+    if (relative_mode_requested && evt->type == INPUT_EVENT_KIND_BTN) {
-+        bool sent = false;
-+
-+        QTAILQ_FOREACH(s, &handlers, node) {
-+            if (!(s->handler->mask & INPUT_EVENT_MASK_BTN)) {
-+                continue;
-+            }
-+            if ((src == NULL && s->con != NULL) ||
-+                (src != NULL && s->con != NULL && s->con != src)) {
-+                continue;
-+            }
-+            s->handler->event(s->dev, src, evt);
-+            s->events++;
-+            sent = true;
++    /* GXMetal's guest InputSprocket driver consumes host button state
++     * directly. Observe each event once here without duplicating it through
++     * both of classic Mac OS's emulated mouse drivers. */
++    if (evt->type == INPUT_EVENT_KIND_BTN) {
++        button_mask = qemu_input_button_mask(evt->u.btn.data->button);
++        if (relative_mode_requested && button_mask != 0 &&
++            evt->u.btn.data->down &&
++            (input_button_state & button_mask) == 0) {
++            input_button_down_edges |= button_mask;
++        } else if (relative_mode_requested && button_mask != 0 &&
++                   !evt->u.btn.data->down &&
++                   (input_button_state & button_mask) != 0) {
++            input_button_up_edges |= button_mask;
 +        }
-+        if (sent) {
-+            return;
++        if (evt->u.btn.data->down) {
++            input_button_state |= button_mask;
++        } else {
++            input_button_state &= ~button_mask;
 +        }
++    }
++    if (relative_mode_requested && evt->type == INPUT_EVENT_KIND_REL) {
++        qemu_input_accumulate_relative(evt->u.rel.data);
++        return;
 +    }
 +
      /* send event */
      s = qemu_input_find_handler(1 << evt->type, src);
      if (!s) {
-@@ -462,11 +487,27 @@ bool qemu_input_is_absolute(QemuConsole *con)
+@@ -461,11 +519,64 @@ bool qemu_input_is_absolute(QemuConsole *con)
  {
      QemuInputHandlerState *s;
  
@@ -53,16 +92,53 @@ index 1f5be0b..d2c9462 100644
      return (s != NULL) && (s->handler->mask & INPUT_EVENT_MASK_ABS);
  }
  
++uint32_t qemu_input_get_button_state(void)
++{
++    return input_button_state;
++}
++
++uint32_t qemu_input_get_button_down_edges(void)
++{
++    uint32_t edges = input_button_down_edges;
++
++    input_button_down_edges = 0;
++    return edges;
++}
++
++uint32_t qemu_input_get_button_up_edges(void)
++{
++    uint32_t edges = input_button_up_edges;
++
++    input_button_up_edges = 0;
++    return edges;
++}
++
++int32_t qemu_input_get_relative_delta(InputAxis axis)
++{
++    int32_t delta;
++
++    if (axis >= INPUT_AXIS__MAX) {
++        return 0;
++    }
++    delta = input_relative_delta[axis];
++    input_relative_delta[axis] = 0;
++    return delta;
++}
++
 +void qemu_input_set_relative_mode(bool relative)
 +{
 +    if (relative_mode_requested == relative) {
 +        return;
 +    }
 +    relative_mode_requested = relative;
++    memset(input_relative_delta, 0, sizeof(input_relative_delta));
++    input_button_down_edges = 0;
++    input_button_up_edges = 0;
 +
-+    /* Motion selects the tablet or ADB mouse by capability. Button events
-+     * are mirrored while relative mode is active so classic Mac OS sees one
-+     * coherent button state from both installed mouse drivers. */
++    /* Captured deltas go directly to GXMetal's InputSprocket bridge instead
++     * of moving and repeatedly recentering the classic Mac OS cursor.
++     * Button events remain delivered once to the active emulated device and
++     * are also exposed as non-destructive state. */
 +    notifier_list_notify(&mouse_mode_notifiers, NULL);
 +}
 +
@@ -73,10 +149,14 @@ diff --git a/include/ui/input.h b/include/ui/input.h
 index 6d1b0ca..8e5b53e 100644
 --- a/include/ui/input.h
 +++ b/include/ui/input.h
-@@ -58,6 +58,7 @@ void qemu_input_queue_mtt_abs(QemuConsole *src, const char *axis,
+@@ -58,6 +58,11 @@ void qemu_input_queue_mtt_abs(QemuConsole *src, const char *axis,
                                 uint32_t button_old, uint32_t button_new);
  
  bool qemu_input_is_absolute(QemuConsole *con);
++uint32_t qemu_input_get_button_state(void);
++uint32_t qemu_input_get_button_down_edges(void);
++uint32_t qemu_input_get_button_up_edges(void);
++int32_t qemu_input_get_relative_delta(InputAxis axis);
 +void qemu_input_set_relative_mode(bool relative);
  int qemu_input_scale_axis(int value,
                            int min_in, int max_in,
@@ -94,7 +174,7 @@ index 7edc2bc..0bc7de7 100644
      [CATransaction commit];
  }
  
-@@ -1571,7 +1571,9 @@ COCOA_DEBUG("QemuCocoaView: ungrabMouse\n");
+@@ -1571,8 +1571,12 @@ COCOA_DEBUG("QemuCocoaView: ungrabMouse\n");
      if (isMouseGrabbed) {
          if (isAbsoluteEnabled) {
              [self ungrabMouse];

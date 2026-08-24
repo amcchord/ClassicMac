@@ -46,6 +46,7 @@
 #define GXMETAL_ATI_GESTALT_TEXTURE_FLAGS ((TQAGestaltSelector)1005)
 
 typedef struct GXMetalDrawState {
+    struct GXMetalDrawState *next_state;
     const TQADrawContext *draw_context;
     GXMetalGuestTransport *transport;
     uint32_t context_id;
@@ -134,12 +135,15 @@ static uint32_t gNextContextID = 1;
 static uint32_t gNextResourceID = 1;
 static uint32_t gRenderEpoch = 1;
 static const TQADrawContext *gLastDrawContext;
+static GXMetalDrawState *gDrawStates;
 static TQABoolean gRegistrationVendorPending;
 static int32_t gDiagnosticStatus = kGXMetalDiagnosticNotLoaded;
 static GXMetalDiagnosticSnapshot gDiagnostics = {
     .magic = GXMETAL_DIAGNOSTIC_MAGIC,
     .version = GXMETAL_DIAGNOSTIC_VERSION
 };
+
+static TQABoolean GXMetalFlushPendingDraws(GXMetalDrawState *state);
 
 static const unsigned char kGXMetalDriverTraceName[] = {
     20, 'G', 'X', 'M', 'e', 't', 'a', 'l', ' ', 'D', 'r', 'i', 'v', 'e',
@@ -324,6 +328,63 @@ OSErr GXMetalSetRelativeInputMode(Boolean relative)
     }
     gxmetal_guest_register_write(&gTransport, GXMETAL_REG_RELATIVE_INPUT,
                                  relative ? 1u : 0u);
+    return noErr;
+}
+
+OSErr GXMetalGetInputButtonState(UInt32 *buttons)
+{
+    if (buttons == NULL) {
+        return paramErr;
+    }
+    if (!GXMetalTransportAvailable() ||
+        (gTransport.features & GXMETAL_FEATURE_RELATIVE_INPUT) == 0) {
+        return unimpErr;
+    }
+    *buttons = gxmetal_guest_register_read(&gTransport,
+                                          GXMETAL_REG_INPUT_BUTTONS);
+    return noErr;
+}
+
+OSErr GXMetalGetInputState(SInt32 *deltaX, SInt32 *deltaY, UInt32 *buttons)
+{
+    if (deltaX == NULL || deltaY == NULL || buttons == NULL) {
+        return paramErr;
+    }
+    if (!GXMetalTransportAvailable() ||
+        (gTransport.features & GXMETAL_FEATURE_RELATIVE_INPUT) == 0) {
+        return unimpErr;
+    }
+    *deltaX = (SInt32)gxmetal_guest_register_read(
+        &gTransport, GXMETAL_REG_INPUT_RELATIVE_X);
+    *deltaY = (SInt32)gxmetal_guest_register_read(
+        &gTransport, GXMETAL_REG_INPUT_RELATIVE_Y);
+    *buttons = gxmetal_guest_register_read(&gTransport,
+                                          GXMETAL_REG_INPUT_BUTTONS);
+    return noErr;
+}
+
+OSErr GXMetalGetInputEvents(SInt32 *deltaX, SInt32 *deltaY, UInt32 *buttons,
+                            UInt32 *buttonDownEdges,
+                            UInt32 *buttonUpEdges)
+{
+    if (deltaX == NULL || deltaY == NULL || buttons == NULL ||
+        buttonDownEdges == NULL || buttonUpEdges == NULL) {
+        return paramErr;
+    }
+    if (!GXMetalTransportAvailable() ||
+        (gTransport.features & GXMETAL_FEATURE_RELATIVE_INPUT) == 0) {
+        return unimpErr;
+    }
+    *deltaX = (SInt32)gxmetal_guest_register_read(
+        &gTransport, GXMETAL_REG_INPUT_RELATIVE_X);
+    *deltaY = (SInt32)gxmetal_guest_register_read(
+        &gTransport, GXMETAL_REG_INPUT_RELATIVE_Y);
+    *buttonDownEdges = gxmetal_guest_register_read(
+        &gTransport, GXMETAL_REG_INPUT_BUTTONS_DOWN);
+    *buttonUpEdges = gxmetal_guest_register_read(
+        &gTransport, GXMETAL_REG_INPUT_BUTTONS_UP);
+    *buttons = gxmetal_guest_register_read(&gTransport,
+                                          GXMETAL_REG_INPUT_BUTTONS);
     return noErr;
 }
 
@@ -808,8 +869,34 @@ static TQAError GXMetalTextureDetach(TQATexture *texture)
 
 static void GXMetalTextureDelete(TQATexture *texture)
 {
+    GXMetalDrawState *state;
+
     if (texture == NULL || texture->magic != GXMETAL_TEXTURE_MAGIC) {
         return;
+    }
+    /* RAVE permits a texture to be deleted while a draw context still has
+     * it selected. Flush every batch that legitimately references the live
+     * resource, then invalidate the guest-side binding before destroying the
+     * host resource. Otherwise a private ATI draw can follow a stale pointer
+     * and fault the entire command queue with an unbound textured draw. */
+    for (state = gDrawStates; state != NULL; state = state->next_state) {
+        TQABoolean primary = state->texture == texture ||
+            state->texture_resource_id == texture->resource_id;
+        TQABoolean secondary = state->secondary_texture == texture ||
+            state->secondary_texture_resource_id == texture->resource_id;
+
+        if (!primary && !secondary) {
+            continue;
+        }
+        (void)GXMetalFlushPendingDraws(state);
+        if (primary) {
+            state->texture = NULL;
+            state->texture_resource_id = 0;
+        }
+        if (secondary) {
+            state->secondary_texture = NULL;
+            state->secondary_texture_resource_id = 0;
+        }
     }
     GXMetalDestroyTextureResource(texture->resource_id);
     GXMetalFreeTextureSources(texture);
@@ -1642,8 +1729,6 @@ static TQABoolean GXMetalDescribeClip(const TQAClip *clip,
     return *left <= width && *right <= width &&
            *top <= height && *bottom <= height;
 }
-
-static TQABoolean GXMetalFlushPendingDraws(GXMetalDrawState *state);
 
 static TQABoolean GXMetalBeginPacket(GXMetalDrawState *state,
                                      uint16_t opcode, uint32_t bytes,
@@ -4329,6 +4414,8 @@ static TQAError GXMetalDrawPrivateNew(TQADrawContext *newDrawContext,
     }
     state->pending_vertices = NewPtr(
         (Size)(GXMETAL_DRAW_BATCH_VERTICES * sizeof(TQAVTexture)));
+    state->next_state = gDrawStates;
+    gDrawStates = state;
     gLastDrawContext = newDrawContext;
     gDiagnosticStatus = kGXMetalDiagnosticContextReady;
     GXMetalPublishDiagnostics();
@@ -4339,6 +4426,7 @@ static TQAError GXMetalDrawPrivateNew(TQADrawContext *newDrawContext,
 static void GXMetalDrawPrivateDelete(TQADrawPrivate *drawPrivate)
 {
     GXMetalDrawState *state = (GXMetalDrawState *)drawPrivate;
+    GXMetalDrawState **link;
     GXMetalGuestPacket packet;
 
     if (state == NULL) {
@@ -4364,6 +4452,12 @@ static void GXMetalDrawPrivateDelete(TQADrawPrivate *drawPrivate)
     }
     if (gLastDrawContext == state->draw_context) {
         gLastDrawContext = NULL;
+    }
+    for (link = &gDrawStates; *link != NULL; link = &(*link)->next_state) {
+        if (*link == state) {
+            *link = state->next_state;
+            break;
+        }
     }
     DisposePtr((Ptr)state);
 }

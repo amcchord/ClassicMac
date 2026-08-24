@@ -153,6 +153,16 @@ static uint64_t gxmetal_register_read(void *opaque, hwaddr address,
         return state->queue.diagnostic;
     case GXMETAL_REG_RELATIVE_INPUT:
         return state->relative_input;
+    case GXMETAL_REG_INPUT_BUTTONS:
+        return qemu_input_get_button_state();
+    case GXMETAL_REG_INPUT_RELATIVE_X:
+        return (uint32_t)qemu_input_get_relative_delta(INPUT_AXIS_X);
+    case GXMETAL_REG_INPUT_RELATIVE_Y:
+        return (uint32_t)qemu_input_get_relative_delta(INPUT_AXIS_Y);
+    case GXMETAL_REG_INPUT_BUTTONS_DOWN:
+        return qemu_input_get_button_down_edges();
+    case GXMETAL_REG_INPUT_BUTTONS_UP:
+        return qemu_input_get_button_up_edges();
     default:
         return 0;
     }
