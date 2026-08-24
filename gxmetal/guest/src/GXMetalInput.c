@@ -1,36 +1,21 @@
 /*
- * GXMetal InputSprocket bridge.
+ * GXMetal InputSprocket capture coordinator.
  *
  * Copyright (c) 2026 ClassicMac contributors
  * SPDX-License-Identifier: MIT
  *
- * ClassicMac's Virtio tablet gives the Finder an absolute, seamless pointer,
- * but InputSprocket games only enumerate devices registered with
- * InputSprocket.  Expose the system cursor as a conventional mouse with X/Y
- * delta and button elements so those games can consume the same input stream.
+ * Classic Mac OS already provides the authoritative InputSprocket mouse
+ * elements. GXMetal registers a mouse-class coordinator so games activating
+ * those devices can request host-relative capture without creating a second
+ * movement or button stream that races the system mouse driver.
  */
 
 #include <CodeFragments.h>
 #include <InputSprocket.h>
-#include <LowMem.h>
 #include <MacTypes.h>
-#include <Timer.h>
 #include <string.h>
 
 static ISpDeviceReference gDevice;
-static ISpElementReference gDeltaX;
-static ISpElementReference gDeltaY;
-static ISpElementReference gButton1;
-static ISpElementReference gButton2;
-static ISpElementReference gButton3;
-static Point gLastPosition;
-static UInt8 gLastButtons;
-static Boolean gHavePosition;
-static Boolean gActive;
-static Boolean gHostRelativeInput;
-static Point gRelativeAnchor;
-static TMTask gPollTimer;
-static Boolean gPollTimerInstalled;
 static CFragConnectionID gGXMetalConnection;
 typedef OSErr (*GXMetalInputModeProc)(Boolean relative);
 static GXMetalInputModeProc gSetRelativeInputMode;
@@ -43,14 +28,17 @@ static const unsigned char kGXMetalInputModeSymbol[] = {
     'a', 't', 'i', 'v', 'e', 'I', 'n', 'p', 'u', 't', 'M', 'o', 'd', 'e'
 };
 
-enum {
-    kGXMetalInputPollIntervalMilliseconds = 8,
-    /* The standard InputSprocket mouse scale is approximately 1/400 of a
-     * 16.16 unit per screen pixel (65536 / 400 = 163.84). */
-    kGXMetalInputDeltaScale = 164
-};
+static void GXMetalInputSetPascalString(Str63 destination,
+                                        const char *source)
+{
+    size_t length = strlen(source);
 
-void ISpDriver_Tickle(void);
+    if (length > 63u) {
+        length = 63u;
+    }
+    destination[0] = (UInt8)length;
+    memcpy(destination + 1, source, length);
+}
 
 static void GXMetalInputResolveHostBridge(void)
 {
@@ -76,116 +64,44 @@ static void GXMetalInputResolveHostBridge(void)
     gSetRelativeInputMode = (GXMetalInputModeProc)symbol;
 }
 
-static Boolean GXMetalInputSetHostMode(Boolean relative)
-{
-    OSErr error;
-
-    GXMetalInputResolveHostBridge();
-    if (gSetRelativeInputMode == NULL) {
-        return false;
-    }
-    error = gSetRelativeInputMode(relative);
-    return error == noErr;
-}
-
-static void GXMetalInputMoveCursor(Point position)
-{
-    /* Keep all three classic low-memory cursor locations together. The
-     * relative ADB mouse can then travel forever without hitting an edge. */
-    LMSetMouseTemp(position);
-    LMSetRawMouseLocation(position);
-    LMSetMouseLocation(position);
-}
-
-static void GXMetalInputBeginRelativeTracking(void)
-{
-    GDHandle mainDevice = GetMainDevice();
-    Rect bounds;
-
-    if (mainDevice != NULL && *mainDevice != NULL) {
-        bounds = (**mainDevice).gdRect;
-        gRelativeAnchor.h =
-            (short)(bounds.left + (bounds.right - bounds.left) / 2);
-        gRelativeAnchor.v =
-            (short)(bounds.top + (bounds.bottom - bounds.top) / 2);
-    } else {
-        gRelativeAnchor = LMGetMouseLocation();
-    }
-    GXMetalInputMoveCursor(gRelativeAnchor);
-    gLastPosition = gRelativeAnchor;
-    gHavePosition = true;
-}
-
-static pascal void GXMetalInputPollTimer(TMTaskPtr *task)
-{
-    (void)task;
-    ISpDriver_Tickle();
-    if (gPollTimerInstalled && gActive) {
-        PrimeTime((QElemPtr)&gPollTimer,
-                  kGXMetalInputPollIntervalMilliseconds);
-    }
-}
-
-static const RoutineDescriptor gPollTimerDescriptor =
-    BUILD_ROUTINE_DESCRIPTOR(uppTimerProcInfo, GXMetalInputPollTimer);
-static const TimerUPP gPollTimerProc =
-    (TimerUPP)&gPollTimerDescriptor;
-
-static void GXMetalInputStopPolling(void)
-{
-    if (gPollTimerInstalled) {
-        RmvTime((QElemPtr)&gPollTimer);
-        gPollTimerInstalled = false;
-    }
-}
-
-static void GXMetalInputStartPolling(void)
-{
-    if (!gPollTimerInstalled) {
-        memset(&gPollTimer, 0, sizeof(gPollTimer));
-        gPollTimer.tmAddr = gPollTimerProc;
-        InsXTime((QElemPtr)&gPollTimer);
-        gPollTimerInstalled = true;
-    }
-    PrimeTime((QElemPtr)&gPollTimer,
-              kGXMetalInputPollIntervalMilliseconds);
-}
-
-static void GXMetalInputSetPascalString(Str63 destination,
-                                        const char *source)
-{
-    size_t length = strlen(source);
-
-    if (length > 63u) {
-        length = 63u;
-    }
-    destination[0] = (UInt8)length;
-    memcpy(destination + 1, source, length);
-}
-
 static OSStatus GXMetalInputSetActive(UInt32 refCon, Boolean active)
 {
     (void)refCon;
-    if (!active) {
-        GXMetalInputStopPolling();
-    }
-    gHostRelativeInput = GXMetalInputSetHostMode(active) && active;
-    gActive = active;
-    gHavePosition = false;
-    gLastButtons = LMGetMouseButtonState();
-    if (active) {
-        if (gHostRelativeInput) {
-            GXMetalInputBeginRelativeTracking();
-        }
-        GXMetalInputStartPolling();
+    GXMetalInputResolveHostBridge();
+    if (gSetRelativeInputMode != NULL) {
+        (void)gSetRelativeInputMode(active);
     }
     return noErr;
+}
+
+static OSStatus GXMetalInputInitializeDevice(
+    UInt32 refCon, UInt32 count, ISpNeed needs[],
+    ISpElementReference virtualElements[], Boolean used[],
+    OSType appCreatorCode, OSType subCreatorCode, UInt32 reserved,
+    void *reserved2)
+{
+    (void)refCon;
+    (void)count;
+    (void)needs;
+    (void)virtualElements;
+    (void)used;
+    (void)appCreatorCode;
+    (void)subCreatorCode;
+    (void)reserved;
+    (void)reserved2;
+
+    /* The system mouse driver fulfills all needs and owns all event data. */
+    return noErr;
+}
+
+static OSStatus GXMetalInputStopDevice(UInt32 refCon)
+{
+    return GXMetalInputSetActive(refCon, false);
 }
 
 static OSStatus GXMetalInputDeviceTickle(UInt32 refCon)
 {
     (void)refCon;
-    ISpDriver_Tickle();
     return noErr;
 }
 
@@ -194,6 +110,10 @@ static ISpDriverFunctionPtr_Generic GXMetalInputMetaHandler(
 {
     (void)refCon;
     switch (selector) {
+    case kISpSelector_Init:
+        return (ISpDriverFunctionPtr_Generic)GXMetalInputInitializeDevice;
+    case kISpSelector_Stop:
+        return (ISpDriverFunctionPtr_Generic)GXMetalInputStopDevice;
     case kISpSelector_SetActive:
         return (ISpDriverFunctionPtr_Generic)GXMetalInputSetActive;
     case kISpSelector_Tickle:
@@ -203,113 +123,35 @@ static ISpDriverFunctionPtr_Generic GXMetalInputMetaHandler(
     }
 }
 
-static OSStatus GXMetalInputCreateElement(
-    const char *name, ISpElementKind kind, ISpElementLabel label,
-    void *configuration, UInt32 configurationSize,
-    ISpElementReference *element)
-{
-    ISpElementDefinitionStruct definition;
-
-    memset(&definition, 0, sizeof(definition));
-    definition.device = gDevice;
-    GXMetalInputSetPascalString(definition.theString, name);
-    definition.kind = kind;
-    definition.label = label;
-    definition.configInfo = configuration;
-    definition.configInfoLength = configurationSize;
-    definition.dataSize = sizeof(UInt32);
-    return ISpElement_New(&definition, element);
-}
-
 static void GXMetalInputDispose(void)
 {
-    GXMetalInputStopPolling();
-    (void)GXMetalInputSetHostMode(false);
-    gHostRelativeInput = false;
-    if (gButton3 != NULL) {
-        (void)ISpElement_Dispose(gButton3);
-        gButton3 = NULL;
-    }
-    if (gButton2 != NULL) {
-        (void)ISpElement_Dispose(gButton2);
-        gButton2 = NULL;
-    }
-    if (gButton1 != NULL) {
-        (void)ISpElement_Dispose(gButton1);
-        gButton1 = NULL;
-    }
-    if (gDeltaY != NULL) {
-        (void)ISpElement_Dispose(gDeltaY);
-        gDeltaY = NULL;
-    }
-    if (gDeltaX != NULL) {
-        (void)ISpElement_Dispose(gDeltaX);
-        gDeltaX = NULL;
-    }
+    (void)GXMetalInputSetActive(0, false);
     if (gDevice != NULL) {
         (void)ISpDevice_Dispose(gDevice);
         gDevice = NULL;
     }
-    gActive = false;
-    gHavePosition = false;
+    gSetRelativeInputMode = NULL;
+    if (gGXMetalConnection != NULL) {
+        (void)CloseConnection(&gGXMetalConnection);
+    }
 }
 
 static OSStatus GXMetalInputCreate(void)
 {
     ISpDeviceDefinition deviceDefinition;
-    ISpDeltaConfigurationInfo deltaConfiguration = {0, 0};
-    ISpButtonConfigurationInfo buttonConfiguration;
     OSStatus error;
 
     if (gDevice != NULL) {
         return noErr;
     }
-
     memset(&deviceDefinition, 0, sizeof(deviceDefinition));
     GXMetalInputSetPascalString(deviceDefinition.deviceName,
-                                "GXMetal Seamless Mouse");
+                                "GXMetal Game Input Handoff");
     deviceDefinition.theDeviceClass = kISpDeviceClass_Mouse;
     deviceDefinition.theDeviceIdentifier = 'GXMI';
     deviceDefinition.permanentID = 'GXMI';
     error = ISpDevice_New(&deviceDefinition, GXMetalInputMetaHandler, 0,
                           &gDevice);
-    if (error != noErr) {
-        GXMetalInputDispose();
-        return error;
-    }
-
-    error = GXMetalInputCreateElement(
-        "Horizontal motion", kISpElementKind_Delta,
-        kISpElementLabel_Delta_Cursor_X, &deltaConfiguration,
-        sizeof(deltaConfiguration), &gDeltaX);
-    if (error == noErr) {
-        error = GXMetalInputCreateElement(
-            "Vertical motion", kISpElementKind_Delta,
-            kISpElementLabel_Delta_Cursor_Y, &deltaConfiguration,
-            sizeof(deltaConfiguration), &gDeltaY);
-    }
-
-    buttonConfiguration.id = 1;
-    if (error == noErr) {
-        error = GXMetalInputCreateElement(
-            "Mouse button 1", kISpElementKind_Button,
-            kISpElementLabel_Btn_MouseOne, &buttonConfiguration,
-            sizeof(buttonConfiguration), &gButton1);
-    }
-    buttonConfiguration.id = 2;
-    if (error == noErr) {
-        error = GXMetalInputCreateElement(
-            "Mouse button 2", kISpElementKind_Button,
-            kISpElementLabel_Btn_MouseTwo, &buttonConfiguration,
-            sizeof(buttonConfiguration), &gButton2);
-    }
-    buttonConfiguration.id = 3;
-    if (error == noErr) {
-        error = GXMetalInputCreateElement(
-            "Mouse button 3", kISpElementKind_Button,
-            kISpElementLabel_Btn_MouseThree, &buttonConfiguration,
-            sizeof(buttonConfiguration), &gButton3);
-    }
     if (error != noErr) {
         GXMetalInputDispose();
     }
@@ -352,53 +194,5 @@ OSStatus ISpDriver_DisposeDevices(void)
 
 void ISpDriver_Tickle(void)
 {
-    Point position;
-    UInt8 buttons;
-    AbsoluteTime now;
-    SInt32 deltaX;
-    SInt32 deltaY;
-
-    if (!gActive || gDevice == NULL) {
-        return;
-    }
-    position = LMGetMouseLocation();
-    buttons = LMGetMouseButtonState();
-    now = ISpUptime();
-
-    if (!gHavePosition) {
-        gLastPosition = position;
-        gLastButtons = buttons;
-        gHavePosition = true;
-        return;
-    }
-
-    if (gHostRelativeInput) {
-        deltaX = (SInt32)position.h - (SInt32)gRelativeAnchor.h;
-        deltaY = (SInt32)position.v - (SInt32)gRelativeAnchor.v;
-    } else {
-        deltaX = (SInt32)position.h - (SInt32)gLastPosition.h;
-        deltaY = (SInt32)position.v - (SInt32)gLastPosition.v;
-    }
-    if (deltaX != 0) {
-        (void)ISpElement_PushSimpleData(
-            gDeltaX, (UInt32)(deltaX * kGXMetalInputDeltaScale), &now);
-    }
-    if (deltaY != 0) {
-        /* InputSprocket's positive Y direction is up; QuickDraw screen
-         * coordinates increase toward the bottom of the display. */
-        (void)ISpElement_PushSimpleData(
-            gDeltaY, (UInt32)(-deltaY * kGXMetalInputDeltaScale), &now);
-    }
-    if ((buttons & 0x80u) != (gLastButtons & 0x80u)) {
-        (void)ISpElement_PushSimpleData(
-            gButton1, (buttons & 0x80u) != 0 ?
-                kISpButtonUp : kISpButtonDown, &now);
-    }
-
-    if (gHostRelativeInput) {
-        GXMetalInputMoveCursor(gRelativeAnchor);
-        position = gRelativeAnchor;
-    }
-    gLastPosition = position;
-    gLastButtons = buttons;
+    /* The system InputSprocket mouse driver owns polling and event delivery. */
 }

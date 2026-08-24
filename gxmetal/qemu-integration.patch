@@ -72,7 +72,17 @@ index e3519edd8a..a514168880 100644
      default:
          return pci_vga_qext_read(ptr, addr, size);
      }
-@@ -286,6 +301,27 @@ static void pci_vga_qext_resize_write(void *ptr, hwaddr addr,
+@@ -273,5 +288,9 @@ static void pci_vga_qext_define_cursor(PCIVGAState *d)
+     cursor_unref(cursor);
+     dpy_mouse_set(d->vga.con, d->cursor_x, d->cursor_y,
+                   d->cursor_visible);
++    if (d->gxmetal_enabled) {
++        gxmetal_qemu_set_guest_cursor_visible(&d->gxmetal,
++                                               d->cursor_visible);
++    }
+ }
+ 
+@@ -286,6 +304,27 @@ static void pci_vga_qext_resize_write(void *ptr, hwaddr addr,
      }
  
      switch (addr) {
@@ -100,6 +110,17 @@ index e3519edd8a..a514168880 100644
      case PCI_VGA_QEXT_REG_CURSOR_WIDTH:
          d->cursor_width = val;
          break;
+@@ -321,6 +360,10 @@ static void pci_vga_qext_resize_write(void *ptr, hwaddr addr,
+         if (val & PCI_VGA_QEXT_CURSOR_MOVE) {
+             dpy_mouse_set(s->con, d->cursor_x, d->cursor_y,
+                           d->cursor_visible);
++            if (d->gxmetal_enabled) {
++                gxmetal_qemu_set_guest_cursor_visible(&d->gxmetal,
++                                                       d->cursor_visible);
++            }
+         }
+         break;
+     default:
 @@ -455,11 +491,23 @@ static void pci_std_vga_realize(PCIDevice *dev, Error **errp)
      VGACommonState *s = &d->vga;
      bool qext = false;

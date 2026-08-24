@@ -18,6 +18,19 @@
 
 #define GXMETAL_CONSOLE_REFRESH_NS (NANOSECONDS_PER_SECOND / 60)
 
+static void gxmetal_update_relative_input(GXMetalQemuState *state)
+{
+    bool relative = state->relative_input ||
+                    (state->active_contexts != 0 &&
+                     !state->guest_cursor_visible);
+
+    if (state->relative_input_effective == relative) {
+        return;
+    }
+    state->relative_input_effective = relative;
+    qemu_input_set_relative_mode(relative);
+}
+
 static void gxmetal_console_refresh(void *opaque)
 {
     GXMetalQemuState *state = opaque;
@@ -62,6 +75,14 @@ static uint32_t gxmetal_render_dispatch(void *opaque,
     if (error != GXMETAL_ERROR_NONE) {
         return error;
     }
+
+    if (packet->opcode == GXMETAL_OP_CONTEXT_CREATE) {
+        state->active_contexts++;
+    } else if (packet->opcode == GXMETAL_OP_CONTEXT_DESTROY &&
+               state->active_contexts != 0) {
+        state->active_contexts--;
+    }
+    gxmetal_update_relative_input(state);
 
     gxmetal_dirty_observe_success(&state->dirty, packet);
     if (state->metal != NULL) {
@@ -185,7 +206,7 @@ static void gxmetal_register_write(void *opaque, hwaddr address,
     case GXMETAL_REG_RELATIVE_INPUT:
         if (state->features & GXMETAL_FEATURE_RELATIVE_INPUT) {
             state->relative_input = value != 0;
-            qemu_input_set_relative_mode(state->relative_input);
+            gxmetal_update_relative_input(state);
         }
         break;
     default:
@@ -236,6 +257,7 @@ bool gxmetal_qemu_init(GXMetalQemuState *state, Object *owner,
         QEMU_CLOCK_REALTIME, gxmetal_console_refresh, state);
     gxmetal_renderer_init(&state->renderer, framebuffer, framebuffer_bytes);
     gxmetal_dirty_init(&state->dirty, framebuffer_bytes);
+    state->guest_cursor_visible = true;
     state->metal = gxmetal_metal_create(framebuffer, framebuffer_bytes,
                                          shared, GXMETAL_SHARED_BYTES);
     state->features = GXMETAL_FEATURE_GOURAUD | GXMETAL_FEATURE_FENCE;
@@ -270,10 +292,22 @@ bool gxmetal_qemu_init(GXMetalQemuState *state, Object *owner,
     return true;
 }
 
+void gxmetal_qemu_set_guest_cursor_visible(GXMetalQemuState *state,
+                                           bool visible)
+{
+    if (state->guest_cursor_visible == visible) {
+        return;
+    }
+    state->guest_cursor_visible = visible;
+    gxmetal_update_relative_input(state);
+}
+
 void gxmetal_qemu_reset(GXMetalQemuState *state)
 {
     state->relative_input = false;
-    qemu_input_set_relative_mode(false);
+    state->active_contexts = 0;
+    state->guest_cursor_visible = true;
+    gxmetal_update_relative_input(state);
     timer_del(state->console_refresh_timer);
     state->last_console_refresh_ns = 0;
     gxmetal_queue_reset(&state->queue);

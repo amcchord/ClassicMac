@@ -27,13 +27,18 @@ typedef struct GXMetalQemuState {
     GXMetalMetalRenderer *metal;
     GXMetalRenderer renderer;
     uint64_t features;
+    uint32_t active_contexts;
     bool relative_input;
+    bool guest_cursor_visible;
+    bool relative_input_effective;
 } GXMetalQemuState;
 
 bool gxmetal_qemu_init(GXMetalQemuState *state, Object *owner,
                        MemoryRegion *framebuffer_region,
                        uint32_t framebuffer_bytes, QemuConsole *console,
                        Error **errp);
+void gxmetal_qemu_set_guest_cursor_visible(GXMetalQemuState *state,
+                                           bool visible);
 void gxmetal_qemu_reset(GXMetalQemuState *state);
 
 #endif /* HW_DISPLAY_GXMETAL_QEMU_H */

@@ -111,7 +111,7 @@ for symbol in QARegisterEngine QARegisterDrawMethod RegistryEntrySearch \
 done
 for symbol in ISpDriver_CheckConfiguration ISpDriver_FindAndLoadDevices \
     ISpDriver_DisposeDevices ISpDriver_Tickle ISpDevice_New \
-    ISpElement_New ISpElement_PushSimpleData; do
+    ISpDevice_Dispose GXMetalSetRelativeInputMode; do
     strings "$GUEST_DIR/bin/GXMetalInput.pef" | grep -F "$symbol" >/dev/null ||
         die "GXMetal Input PEF is missing required symbol $symbol"
 done

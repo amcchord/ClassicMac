@@ -10,7 +10,38 @@ index 1f5be0b..d2c9462 100644
  
  static QemuInputEventQueueHead kbd_queue = QTAILQ_HEAD_INITIALIZER(kbd_queue);
  static QEMUTimer *kbd_timer;
-@@ -462,11 +463,23 @@ bool qemu_input_is_absolute(QemuConsole *con)
+@@ -309,6 +310,30 @@ void qemu_input_event_send_impl(QemuConsole *src, InputEvent *evt)
+ 
+     qemu_input_event_trace(src, evt);
+ 
++    /* Classic Mac OS keeps a shared button state for every installed mouse.
++     * During relative capture, mirror buttons to the tablet and ADB handlers
++     * so one guest driver cannot immediately overwrite the other. Motion
++     * remains capability-routed: absolute to the tablet, relative to ADB. */
++    if (relative_mode_requested && evt->type == INPUT_EVENT_KIND_BTN) {
++        bool sent = false;
++
++        QTAILQ_FOREACH(s, &handlers, node) {
++            if (!(s->handler->mask & INPUT_EVENT_MASK_BTN)) {
++                continue;
++            }
++            if ((src == NULL && s->con != NULL) ||
++                (src != NULL && s->con != NULL && s->con != src)) {
++                continue;
++            }
++            s->handler->event(s->dev, src, evt);
++            s->events++;
++            sent = true;
++        }
++        if (sent) {
++            return;
++        }
++    }
++
+     /* send event */
+     s = qemu_input_find_handler(1 << evt->type, src);
+     if (!s) {
+@@ -462,11 +487,27 @@ bool qemu_input_is_absolute(QemuConsole *con)
  {
      QemuInputHandlerState *s;
  
@@ -28,6 +59,10 @@ index 1f5be0b..d2c9462 100644
 +        return;
 +    }
 +    relative_mode_requested = relative;
++
++    /* Motion selects the tablet or ADB mouse by capability. Button events
++     * are mirrored while relative mode is active so classic Mac OS sees one
++     * coherent button state from both installed mouse drivers. */
 +    notifier_list_notify(&mouse_mode_notifiers, NULL);
 +}
 +
@@ -47,9 +82,18 @@ index 6d1b0ca..8e5b53e 100644
                            int min_in, int max_in,
                            int min_out, int max_out);
 diff --git a/ui/cocoa.m b/ui/cocoa.m
-index 7edc2bc..65293b1 100644
+index 7edc2bc..0bc7de7 100644
 --- a/ui/cocoa.m
 +++ b/ui/cocoa.m
+@@ -578,7 +578,7 @@ COCOA_DEBUG("QemuCocoaView: ungrabMouse\n");
+     [CATransaction begin];
+     [CATransaction setDisableActions:YES];
+     [cursorLayer setPosition:position];
+-    [cursorLayer setHidden:!mouseOn];
++    [cursorLayer setHidden:!mouseOn || !isAbsoluteEnabled];
+     [CATransaction commit];
+ }
+ 
 @@ -1571,7 +1571,9 @@ COCOA_DEBUG("QemuCocoaView: ungrabMouse\n");
      if (isMouseGrabbed) {
          if (isAbsoluteEnabled) {
@@ -60,4 +104,6 @@ index 7edc2bc..65293b1 100644
              CGAssociateMouseAndMouseCursorPosition(isAbsoluteEnabled);
          }
      }
++
++    [cursorLayer setHidden:!mouseOn || !isAbsoluteEnabled];
  }
