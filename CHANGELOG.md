@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 2.0.4 — 2026-08-24
+
 ### Added
 
 - GXMetal now implements and advertises the QuickDraw 3D RAVE chromakey
