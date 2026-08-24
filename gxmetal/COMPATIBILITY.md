@@ -29,7 +29,8 @@ early enough for the RAVE manager to select Apple Software RAVE.
 | Extended OpenGL state | Wrap, filters, scissor, and blend factors are honored | Draw-buffer selection, line/area stipple, border color, and environment color are not yet implemented | Required GLD paths are covered; unimplemented state must not become a silent dependency |
 | Resource access | `QAAccessTexture`, `QAAccessBitmap`, draw-buffer access, and Z-buffer access | Texture and bitmap access are supported for direct-color resources, including mip levels and dirty-rectangle uploads; framebuffer and Z-buffer access remain unavailable | Native partial-upload preservation test plus signed-bundle Mac OS 9 conformance |
 | Offscreen and scaled contexts | Offscreen allocation, draw-context copy, and scaling | Deliberately declined | Software fallback |
-| Deep Z, CSG, antialias, chromakey, channel mask, Z sorting | Optional RAVE features | Not advertised | Software fallback |
+| Chromakey | `kQATag_Chromakey_r/g/b` and `kQATag_ChromakeyEnable` | Primary texel RGB is compared in the normalized 8-bit color domain before texture operations, fog, blending, or depth writes | Native Metal matching/non-matching tests plus guest conformance |
+| Deep Z, CSG, antialias, channel mask, Z sorting | Optional RAVE features | Not advertised | Software fallback |
 
 ## General-purpose priorities
 
@@ -43,8 +44,8 @@ early enough for the RAVE manager to select Apple Software RAVE.
 3. Measure remaining specialized formats against real software before adding
    them. The packed YUV variants stay unadvertised until a game or standards
    probe establishes their value and exact conversion semantics.
-4. Add chromakey before attempting more specialized features such as CSG or
-   Z-sorted transparency.
+4. Prioritize channel masks and the OpenGL draw-buffer contract before more
+   specialized features such as CSG or Z-sorted transparency.
 
 ## Game qualification
 

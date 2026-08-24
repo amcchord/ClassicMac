@@ -538,8 +538,10 @@ static TQAError GXMetalRenderPattern(TQADrawContext *context,
     TQAVGouraud perspectiveFar[3];
     TQAVGouraud perspectiveNear[3];
     TQAVGouraud fogTriangle[3];
+    TQAVGouraud chromakeyBase[3];
     TQAVGouraud bitmapVertex;
     TQAVTexture backfaceTextureOriented[3];
+    TQAVTexture chromakeyTexture[3];
     TQAVTexture texturedQuad[4];
     unsigned long backfaceFlags[1] = {kQATriFlags_Backfacing};
     unsigned long flags[4] = {0, 0, 0, 0};
@@ -680,6 +682,19 @@ static TQAError GXMetalRenderPattern(TQADrawContext *context,
     fogTriangle[0].invW = fogTriangle[1].invW = fogTriangle[2].invW =
         1.0f / 0.75f;
 
+    chromakeyBase[0] = GXMetalGouraud(315.0f, 85.0f, 0.40f,
+                                      0.0f, 1.0f, 0.0f, 1.0f);
+    chromakeyBase[1] = GXMetalGouraud(335.0f, 45.0f, 0.40f,
+                                      0.0f, 1.0f, 0.0f, 1.0f);
+    chromakeyBase[2] = GXMetalGouraud(355.0f, 85.0f, 0.40f,
+                                      0.0f, 1.0f, 0.0f, 1.0f);
+    chromakeyTexture[0] = GXMetalTextureVertex(
+        315.0f, 85.0f, 0.10f, 0.0f, 0.0f);
+    chromakeyTexture[1] = GXMetalTextureVertex(
+        335.0f, 45.0f, 0.10f, 0.0f, 0.0f);
+    chromakeyTexture[2] = GXMetalTextureVertex(
+        355.0f, 85.0f, 0.10f, 0.0f, 0.0f);
+
     texturedQuad[0] = GXMetalTextureVertex(178.0f, 38.0f, 0.30f,
                                             0.0f, 0.0f);
     texturedQuad[1] = GXMetalTextureVertex(302.0f, 38.0f, 0.30f,
@@ -718,6 +733,8 @@ static TQAError GXMetalRenderPattern(TQADrawContext *context,
     QADrawTriGouraud(context, &backfaceTextureBase[0],
                      &backfaceTextureBase[1], &backfaceTextureBase[2],
                      kQATriFlags_None);
+    QADrawTriGouraud(context, &chromakeyBase[0], &chromakeyBase[1],
+                     &chromakeyBase[2], kQATriFlags_None);
     QASetPtr(context, kQATag_Texture, texture);
     QASetInt(context, kQATag_TextureFilter, kQATextureFilter_Fast);
     QASetInt(context, kQATag_TextureOp, kQATextureOp_None);
@@ -727,6 +744,13 @@ static TQAError GXMetalRenderPattern(TQADrawContext *context,
                    backfaceTextureOriented, backfaceFlags);
     QADrawVTexture(context, 4, kQAVertexMode_Strip,
                    texturedQuad, flags);
+    QASetFloat(context, kQATag_Chromakey_r, 0.0f);
+    QASetFloat(context, kQATag_Chromakey_g, 0.0f);
+    QASetFloat(context, kQATag_Chromakey_b, 1.0f);
+    QASetInt(context, kQATag_ChromakeyEnable, 1);
+    QADrawVTexture(context, 3, kQAVertexMode_Tri,
+                   chromakeyTexture, flags);
+    QASetInt(context, kQATag_ChromakeyEnable, 0);
     /* Bitmaps bind their own resource and must not depend on an unrelated
      * current texture. Carmageddon II exercises this path before binding its
      * first scene texture. */
@@ -817,6 +841,12 @@ static TQAError GXMetalRenderPattern(TQADrawContext *context,
                                     deviceRect->top + 35,
                                     kGXMetalPixelRed)) {
         GXMetalRecordResult("FAIL: batched textured backface orientation pixel");
+        error = kQAError;
+    } else if (!GXMetalPixelMatches(graphicsDevice,
+                                    deviceRect->left + 335,
+                                    deviceRect->top + 65,
+                                    kGXMetalPixelGreen)) {
+        GXMetalRecordResult("FAIL: texture chromakey rejection pixel");
         error = kQAError;
     } else if (!GXMetalPixelMatches(graphicsDevice,
                                     deviceRect->left + 160,
@@ -2063,7 +2093,7 @@ static void GXMetalBuildPassResult(char *result, size_t resultCapacity,
     GXMetalAppendText(&cursor, end, "PASS: version=");
     GXMetalAppendVersion(&cursor, end, revision);
     GXMetalAppendText(&cursor, end,
-        " RAVE discovery capability-contract depth perspective-z blend alpha-test backface clip texture intensity-formats acl16-88 alpha1-byte cl4 rgb8-332 public-multitexture dynamic-resources ATI-private-nocopy bitmap bitmap-scale dirty-present double-buffer framebuffer gx_us=");
+        " RAVE discovery capability-contract depth perspective-z blend alpha-test chromakey backface clip texture intensity-formats acl16-88 alpha1-byte cl4 rgb8-332 public-multitexture dynamic-resources ATI-private-nocopy bitmap bitmap-scale dirty-present double-buffer framebuffer gx_us=");
     GXMetalAppendDecimal(&cursor, end, gxMetalMicroseconds);
     GXMetalAppendText(&cursor, end, " sw_us=");
     GXMetalAppendDecimal(&cursor, end, softwareMicroseconds);
@@ -2355,8 +2385,8 @@ int main(void)
                        kQAOptional_MultiTextures |
                        kQAOptional_AccessTexture |
                        kQAOptional_AccessBitmap;
-    requiredFeatures2 = kQAOptional2_SwapBuffers | kQAOptional2_FlipOrigin |
-                        kQAOptional2_BitmapScale;
+    requiredFeatures2 = kQAOptional2_SwapBuffers | kQAOptional2_Chromakey |
+                        kQAOptional2_FlipOrigin | kQAOptional2_BitmapScale;
     requiredFastFeatures = kQAFast_Line | kQAFast_Gouraud |
                            kQAFast_Blend | kQAFast_Texture |
                            kQAFast_TextureHQ | kQAFast_CL4 | kQAFast_CL8 |

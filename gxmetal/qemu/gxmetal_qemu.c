@@ -255,7 +255,8 @@ bool gxmetal_qemu_init(GXMetalQemuState *state, Object *owner,
                            GXMETAL_FEATURE_RESOURCE_SUBREGION |
                            GXMETAL_FEATURE_INTENSITY_FORMATS |
                            GXMETAL_FEATURE_ALPHA1_FORMAT |
-                           GXMETAL_FEATURE_RGB332_FORMAT;
+                           GXMETAL_FEATURE_RGB332_FORMAT |
+                           GXMETAL_FEATURE_CHROMAKEY;
     } else {
         state->features |= GXMETAL_FEATURE_TRACE;
     }

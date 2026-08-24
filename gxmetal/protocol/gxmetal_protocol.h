@@ -22,7 +22,7 @@ extern "C" {
 
 #define GXMETAL_PROTOCOL_MAGIC            UINT32_C(0x47584d54) /* "GXMT" */
 #define GXMETAL_PROTOCOL_VERSION_MAJOR    1u
-#define GXMETAL_PROTOCOL_VERSION_MINOR    13u
+#define GXMETAL_PROTOCOL_VERSION_MINOR    14u
 #define GXMETAL_PROTOCOL_VERSION \
     ((GXMETAL_PROTOCOL_VERSION_MAJOR << 16) | GXMETAL_PROTOCOL_VERSION_MINOR)
 
@@ -98,7 +98,10 @@ enum GXMetalFeature {
      * transparent, every nonzero value is opaque, and RGB is neutral white. */
     GXMETAL_FEATURE_ALPHA1_FORMAT = UINT64_C(1) << 18,
     /* The host expands RAVE's direct-color RRR GGG BB byte layout. */
-    GXMETAL_FEATURE_RGB332_FORMAT = UINT64_C(1) << 19
+    GXMETAL_FEATURE_RGB332_FORMAT = UINT64_C(1) << 19,
+    /* Textured fragments matching the RAVE chromakey color are rejected
+     * before texture operations, blending, depth writes, or fog. */
+    GXMETAL_FEATURE_CHROMAKEY = UINT64_C(1) << 20
 };
 
 /* C11 enum constants are restricted to int even though the feature word is 64-bit. */
@@ -218,6 +221,7 @@ enum GXMetalStateTag {
     GXMETAL_STATE_FOG_END      = 23,
     GXMETAL_STATE_FOG_DENSITY  = 24,
     GXMETAL_STATE_FOG_MAX_DEPTH = 25,
+    GXMETAL_STATE_CHROMAKEY_ENABLE = 30,
     GXMETAL_STATE_MULTI_TEXTURE = 26,
     GXMETAL_STATE_MULTI_TEXTURE_ENABLE = 33,
     GXMETAL_STATE_MULTI_TEXTURE_OP = 35,
@@ -226,6 +230,9 @@ enum GXMetalStateTag {
     GXMETAL_STATE_MULTI_TEXTURE_WRAP_V = 38,
     GXMETAL_STATE_MULTI_TEXTURE_MAG_FILTER = 39,
     GXMETAL_STATE_MULTI_TEXTURE_MIN_FILTER = 40,
+    GXMETAL_STATE_CHROMAKEY_R = 43,
+    GXMETAL_STATE_CHROMAKEY_G = 44,
+    GXMETAL_STATE_CHROMAKEY_B = 45,
     GXMETAL_STATE_MULTI_TEXTURE_FACTOR = 51,
     /* Marks draws translated from ATI's private OpenGL/RAVE bridge.  The
      * bridge overloads BlendAlpha for additive composition when both stages

@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Added
+
+- GXMetal now implements and advertises the QuickDraw 3D RAVE chromakey
+  contract. Primary texture texels matching the configured 8-bit RGB key are
+  rejected before texture operations, fog, blending, and depth writes, with
+  native Metal and guest conformance coverage for both matching and
+  non-matching colors.
+
 ## 2.0.3 — 2026-08-22
 
 ### Added

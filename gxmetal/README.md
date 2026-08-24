@@ -32,7 +32,9 @@ distance follows the RAVE contract and is reconstructed from `1 / invW`; the
 normalized Z-buffer coordinate remains independent for hidden-surface removal.
 All seven RAVE alpha comparisons operate on shaded fragment alpha before
 blending and depth writes, supporting masked sprites, foliage, fences, and
-cutout texture borders. GXMetal preserves RAVE's per-triangle backfacing
+cutout texture borders. RAVE chromakey rejects matching primary texture RGB
+values in the normalized eight-bit color domain before texture operations,
+fog, blending, and depth writes. GXMetal preserves RAVE's per-triangle backfacing
 orientation flag through scalar and batched draw entry points without treating
 it as a discard request. QuickDraw 3D applies the active backfacing style before
 submission; a submitted triangle must still be rendered by the driver.
@@ -63,7 +65,7 @@ remains a small Gouraud correctness oracle.
 
 ## Transport contract
 
-The backward-compatible version 1.8 wire contract is defined in
+The backward-compatible version 1.14 wire contract is defined in
 `protocol/gxmetal_protocol.h`. All registers and shared-memory packets are
 little-endian. Packet sizes are multiples of 16 bytes, packets never cross the
 end of the circular command ring, and offsets in commands refer only to the

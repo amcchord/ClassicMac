@@ -99,6 +99,16 @@ typedef struct GXMetalMetalAlphaTest {
 _Static_assert(sizeof(GXMetalMetalAlphaTest) == 8,
                "Metal alpha-test constants must match the shader layout");
 
+typedef struct GXMetalMetalChromakey {
+    uint32_t enabled;
+    float red;
+    float green;
+    float blue;
+} GXMetalMetalChromakey;
+
+_Static_assert(sizeof(GXMetalMetalChromakey) == 16,
+               "Metal chromakey constants must match the shader layout");
+
 typedef struct GXMetalMetalMultiTexture {
     uint32_t enabled;
     uint32_t operation;
@@ -172,6 +182,7 @@ typedef struct GXMetalMetalContext {
     uint32_t scissor_bottom;
     GXMetalMetalFog fog;
     GXMetalMetalAlphaTest alpha_test;
+    GXMetalMetalChromakey chromakey;
     int active;
     int committed;
     id<MTLTexture> texture;
@@ -430,6 +441,18 @@ static NSString *const kGXMetalShaderSource = @
     "    default: return true;\n"
     "  }\n"
     "}\n"
+    "struct GXChromakey { uint enabled; float red; float green; float blue; };\n"
+    "bool gxmetal_chromakey_visible(float3 color,\n"
+    "                               constant GXChromakey &key) {\n"
+    "  if (key.enabled == 0u) return true;\n"
+    /* RAVE's key is an RGB texel value. Compare in the destination's
+     * normalized eight-bit color domain before vertex/texture operations so
+     * modulation, highlights, fog, and blending cannot change key identity. */
+    "  float3 texel8 = round(clamp(color, 0.0, 1.0) * 255.0);\n"
+    "  float3 key8 = round(clamp(float3(key.red, key.green, key.blue),\n"
+    "                            0.0, 1.0) * 255.0);\n"
+    "  return any(texel8 != key8);\n"
+    "}\n"
     "vertex GXOut gxmetal_vertex(const device GXVertex *vertices [[buffer(0)]], "
     "                            constant GXViewport &viewport [[buffer(1)]], "
     "                            uint index [[vertex_id]]) {\n"
@@ -502,8 +525,10 @@ static NSString *const kGXMetalTextureShaderSource = @
     "    constant uint &operation [[buffer(0)]],\n"
     "    constant GXFog &fog [[buffer(1)]],\n"
     "    constant GXAlphaTest &alphaTest [[buffer(2)]],\n"
-    "    constant uint4 &multiTextureBits [[buffer(3)]]) {\n"
+    "    constant uint4 &multiTextureBits [[buffer(3)]],\n"
+    "    constant GXChromakey &chromakey [[buffer(4)]]) {\n"
     "  float4 texel = image.sample(imageSampler, in.uv);\n"
+    "  if (!gxmetal_chromakey_visible(texel.rgb, chromakey)) discard_fragment();\n"
     "  float4 result = texel;\n"
     "  if ((operation & 4u) != 0u) {\n"
     "    result.rgb = mix(in.color.rgb, texel.rgb, texel.a);\n"
@@ -1818,6 +1843,8 @@ static uint32_t gxmetal_metal_draw_textured(
         length:sizeof(context->alpha_test) atIndex:2];
     [context->encoder setFragmentBytes:&multi_texture
         length:sizeof(multi_texture) atIndex:3];
+    [context->encoder setFragmentBytes:&context->chromakey
+        length:sizeof(context->chromakey) atIndex:4];
     [context->encoder drawPrimitives:metal_primitive vertexStart:0
         vertexCount:draw_count];
     if (draw_vertices != vertices) {
@@ -2322,6 +2349,15 @@ static uint32_t gxmetal_metal_set_state(GXMetalMetalContext *context,
         case GXMETAL_STATE_ALPHA_TEST_REFERENCE:
             context->alpha_test.reference = float_value;
             break;
+        case GXMETAL_STATE_CHROMAKEY_R:
+            context->chromakey.red = float_value;
+            break;
+        case GXMETAL_STATE_CHROMAKEY_G:
+            context->chromakey.green = float_value;
+            break;
+        case GXMETAL_STATE_CHROMAKEY_B:
+            context->chromakey.blue = float_value;
+            break;
         case GXMETAL_STATE_MULTI_TEXTURE_FACTOR:
             context->multi_texture.factor = float_value;
             break;
@@ -2414,6 +2450,12 @@ static uint32_t gxmetal_metal_set_state(GXMetalMetalContext *context,
             return GXMETAL_ERROR_BAD_PACKET;
         }
         context->alpha_test.function = value;
+        break;
+    case GXMETAL_STATE_CHROMAKEY_ENABLE:
+        if (value > 1) {
+            return GXMETAL_ERROR_BAD_PACKET;
+        }
+        context->chromakey.enabled = value;
         break;
     case GXMETAL_STATE_TEXTURE_WRAP_U:
         if (value > GXMETAL_TEXTURE_WRAP_CLAMP) {

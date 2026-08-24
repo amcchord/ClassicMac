@@ -701,6 +701,27 @@ static void test_metal_texture_upload_and_sampling(void)
     set_resource_state(renderer, packet, 3, GXMETAL_STATE_TEXTURE, 7);
     set_resource_state(renderer, packet, 3, GXMETAL_STATE_MULTI_TEXTURE, 9);
 
+    /* RAVE chromakey compares the primary source texel before texture
+     * operations. A keyed blue texel must preserve the black clear color;
+     * changing only the key to red must make the same texture visible. */
+    set_int_state(renderer, packet, 3,
+                  GXMETAL_STATE_MULTI_TEXTURE_ENABLE, 0);
+    set_resource_state(renderer, packet, 3, GXMETAL_STATE_TEXTURE, 10);
+    set_float_state(renderer, packet, 3, GXMETAL_STATE_CHROMAKEY_R, 0.0f);
+    set_float_state(renderer, packet, 3, GXMETAL_STATE_CHROMAKEY_G, 0.0f);
+    set_float_state(renderer, packet, 3, GXMETAL_STATE_CHROMAKEY_B, 1.0f);
+    set_int_state(renderer, packet, 3, GXMETAL_STATE_CHROMAKEY_ENABLE, 1);
+    draw_textured_test_quad(renderer, 3, 0);
+    CHECK(framebuffer_pixel(framebuffer, 16, 16) == 0x0000);
+    set_float_state(renderer, packet, 3, GXMETAL_STATE_CHROMAKEY_R, 1.0f);
+    set_float_state(renderer, packet, 3, GXMETAL_STATE_CHROMAKEY_B, 0.0f);
+    draw_textured_test_quad(renderer, 3, 0);
+    CHECK(framebuffer_pixel(framebuffer, 16, 16) == 0x001f);
+    set_int_state(renderer, packet, 3, GXMETAL_STATE_CHROMAKEY_ENABLE, 0);
+    set_resource_state(renderer, packet, 3, GXMETAL_STATE_TEXTURE, 7);
+    set_int_state(renderer, packet, 3,
+                  GXMETAL_STATE_MULTI_TEXTURE_ENABLE, 1);
+
     set_float_state(renderer, packet, 3, GXMETAL_STATE_MULTI_TEXTURE_FACTOR,
                     0.25f);
     set_int_state(renderer, packet, 3, GXMETAL_STATE_MULTI_TEXTURE_OP,

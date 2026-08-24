@@ -4512,6 +4512,9 @@ static TQAError GXMetalEngineGestalt(TQAGestaltSelector selector,
     case kQAGestalt_OptionalFeatures2:
         value = (features & GXMETAL_FEATURE_DOUBLE_BUFFER) ?
             kQAOptional2_SwapBuffers : 0;
+        if (features & GXMETAL_FEATURE_CHROMAKEY) {
+            value |= kQAOptional2_Chromakey;
+        }
         if (features & GXMETAL_FEATURE_TEXTURE) {
             value |= kQAOptional2_FlipOrigin;
         }
