@@ -1,5 +1,21 @@
 # Changelog
 
+## 2.0.7 — 2026-08-24
+
+### Fixed
+
+- Quake III Arena Demo once again completes Q3DM1 loading and enters live
+  play. The 2.0.3 dynamic-resource change retained a second guest-memory copy
+  of every texture and bitmap, exhausting Quake's fixed classic-Mac
+  application heap and ultimately faulting GXMetal on an unbound draw.
+- Direct-color resources now upload without permanent guest shadow copies.
+  Writable backing is allocated only when an application actually requests
+  dynamic access with `kQANoCopyNeeded`, preserving dirty-region updates
+  without making ordinary games pay twice for all texture data.
+- Cocoa relative mouse Y is normalized from AppKit's bottom-left coordinate
+  convention to QEMU's positive-down convention before GXMetal Input consumes
+  it. Physical up/down motion now pitches Quake III in the matching direction.
+
 ## 2.0.6 — 2026-08-24
 
 ### Fixed
