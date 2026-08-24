@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+## 2.0.5 — 2026-08-24
+
+### Fixed
+
+- InputSprocket games now negotiate captured relative input through a
+  coordinator-only GXMetal Input device. Mac OS's system mouse remains the
+  sole source of movement and button events, eliminating the competing guest
+  cursor streams that caused Quake III's host and guest positions to diverge.
+- Relative motion is capability-routed to the ADB mouse while button
+  transitions are mirrored coherently to both installed Mac mouse drivers.
+  The seamless Virtio tablet remains selected for normal absolute input.
+- Games that hide the guest cursor while a GXMetal context is active now enter
+  relative capture automatically, including older titles that do not call the
+  explicit GXMetal input handoff. Context teardown restores absolute input
+  even after an abnormal game exit.
+- ClassicMac hides its hardware-cursor layer throughout relative capture and
+  restores it with the seamless pointer afterward, preventing a second cursor
+  from appearing during play.
+
 ## 2.0.4 — 2026-08-24
 
 ### Added
