@@ -202,6 +202,10 @@ git -C "$QEMU_DIR" apply "$ROOT_DIR/cocoaui/classicmac-ui.patch" || die "Failed 
 # and scroll-keys turns wheel motion into arrow-key taps, since classic Mac
 # OS mouse drivers ignore extra buttons and the wheel.
 git -C "$QEMU_DIR" apply "$ROOT_DIR/cocoaui/input-remap.patch" || die "Failed to apply ClassicMac input remap patch"
+# AppKit reports relative Y in its native bottom-left coordinate system.
+# Normalize it to QEMU's positive-down convention before GXMetal and every
+# other guest input backend consume the event.
+git -C "$QEMU_DIR" apply "$ROOT_DIR/cocoaui/relative-mouse-y.patch" || die "Failed to apply Cocoa relative mouse Y normalization"
 # Machine menu items to insert/eject the bundled ClassicMac Tools CD into
 # the dedicated tools0 drive while the Mac is running (shown when the app
 # publishes the image path via CLASSICMAC_TOOLS_CD).
@@ -502,6 +506,12 @@ if "$QEMU_PPC_BIN" -device macio-ide,help 2>&1 | grep -q "dma-completion-delay-n
   printf '    OK  MacIO IDE DMA completion delay (ppc)\n'
 else
   die "MacIO IDE DMA completion delay property missing from the ppc build"
+fi
+if grep -F 'qemu_input_queue_rel(dcl.con, INPUT_AXIS_Y, -[event deltaY]);' \
+    "$QEMU_DIR/ui/cocoa.m" >/dev/null; then
+  printf '    OK  Cocoa relative mouse Y normalization\n'
+else
+  die "Cocoa relative mouse Y normalization missing from the ppc build"
 fi
 if [ -f "$PPCVID_DIR/qemu_vga.ndrv" ] && cmp -s "$PPCVID_DIR/qemu_vga.ndrv" "$QEMU_DIR/pc-bios/qemu_vga.ndrv"; then
   printf '    OK  ClassicMac qemu_vga.ndrv installed\n'

@@ -777,18 +777,18 @@ static TQAError GXMetalTextureNew(unsigned long flags,
             gDiagnostics.last_texture_error = kQAOutOfVideoMemory;
             return kQAOutOfVideoMemory;
         }
-        texture->source_pixels[level] = NewPtr((Size)length);
-        if (texture->source_pixels[level] == NULL) {
-            GXMetalDestroyTextureResource(texture->resource_id);
-            GXMetalFreeTextureSources(texture);
-            DisposePtr((Ptr)texture);
-            gDiagnostics.last_texture_error = kQAOutOfMemory;
-            return kQAOutOfMemory;
-        }
-        texture->source_row_bytes[level] = rowBytes;
-        memcpy(texture->source_pixels[level], images[level].pixmap,
-               (size_t)length);
         if (indexed) {
+            texture->source_pixels[level] = NewPtr((Size)length);
+            if (texture->source_pixels[level] == NULL) {
+                GXMetalDestroyTextureResource(texture->resource_id);
+                GXMetalFreeTextureSources(texture);
+                DisposePtr((Ptr)texture);
+                gDiagnostics.last_texture_error = kQAOutOfMemory;
+                return kQAOutOfMemory;
+            }
+            texture->source_row_bytes[level] = rowBytes;
+            memcpy(texture->source_pixels[level], images[level].pixmap,
+                   (size_t)length);
             gDiagnostics.resource_stage = 3;
             continue;
         }
@@ -799,10 +799,22 @@ static TQAError GXMetalTextureNew(unsigned long flags,
              * textures are immutable after QATextureNew; scanning all of them
              * once per frame is especially expensive under PPC emulation and
              * can also dereference memory the caller has already released. */
+            texture->source_pixels[level] = NewPtr((Size)length);
+            if (texture->source_pixels[level] == NULL) {
+                GXMetalDestroyTextureResource(texture->resource_id);
+                GXMetalFreeTextureSources(texture);
+                DisposePtr((Ptr)texture);
+                gDiagnostics.last_texture_error = kQAOutOfMemory;
+                return kQAOutOfMemory;
+            }
+            texture->source_row_bytes[level] = rowBytes;
             texture->live_pixels[level] = images[level].pixmap;
+            memcpy(texture->source_pixels[level], images[level].pixmap,
+                   (size_t)length);
         }
         memcpy(gTransport.shared + GXMETAL_UPLOAD_OFFSET,
-               texture->source_pixels[level],
+               texture->source_pixels[level] != NULL ?
+                   texture->source_pixels[level] : images[level].pixmap,
                (size_t)length);
         if (!GXMetalGlobalPacket(GXMETAL_OP_TEXTURE_UPLOAD,
                                  GXMETAL_RESOURCE_UPLOAD_PACKET_BYTES,
@@ -1274,16 +1286,16 @@ static TQAError GXMetalBitmapNew(unsigned long flags,
         return kQAError;
     }
 
-    bitmap->source_pixels = NewPtr((Size)length);
-    if (bitmap->source_pixels == NULL) {
-        GXMetalDestroyTextureResource(bitmap->resource_id);
-        DisposePtr((Ptr)bitmap);
-        gDiagnostics.last_bitmap_error = kQAOutOfMemory;
-        return kQAOutOfMemory;
-    }
-    bitmap->source_row_bytes = rowBytes;
-    memcpy(bitmap->source_pixels, image->pixmap, (size_t)length);
     if (indexed) {
+        bitmap->source_pixels = NewPtr((Size)length);
+        if (bitmap->source_pixels == NULL) {
+            GXMetalDestroyTextureResource(bitmap->resource_id);
+            DisposePtr((Ptr)bitmap);
+            gDiagnostics.last_bitmap_error = kQAOutOfMemory;
+            return kQAOutOfMemory;
+        }
+        bitmap->source_row_bytes = rowBytes;
+        memcpy(bitmap->source_pixels, image->pixmap, (size_t)length);
         *newBitmap = bitmap;
         gDiagnostics.last_bitmap_error = kQANoErr;
         GXMetalCountPixelType(gDiagnostics.bitmap_new_success_by_type,
@@ -1292,12 +1304,11 @@ static TQAError GXMetalBitmapNew(unsigned long flags,
     }
 
     memcpy(gTransport.shared + GXMETAL_UPLOAD_OFFSET,
-           bitmap->source_pixels, (size_t)length);
+           image->pixmap, (size_t)length);
     if (!GXMetalGlobalPacket(GXMETAL_OP_TEXTURE_UPLOAD,
                              GXMETAL_RESOURCE_UPLOAD_PACKET_BYTES,
                              &packet)) {
         GXMetalDestroyTextureResource(bitmap->resource_id);
-        DisposePtr(bitmap->source_pixels);
         DisposePtr((Ptr)bitmap);
         gDiagnostics.last_bitmap_error = kQAError;
         return kQAError;
@@ -1315,7 +1326,6 @@ static TQAError GXMetalBitmapNew(unsigned long flags,
     gxmetal_store_le32(payload + GXMETAL_UPLOAD_HEIGHT_OFFSET, height);
     if (!GXMetalCommitUploadPacket(&packet)) {
         GXMetalDestroyTextureResource(bitmap->resource_id);
-        DisposePtr(bitmap->source_pixels);
         DisposePtr((Ptr)bitmap);
         gDiagnostics.last_bitmap_error = kQAError;
         return kQAError;
@@ -1387,6 +1397,7 @@ static TQAError GXMetalAccessTexture(TQATexture *texture,
     uint32_t height;
     uint32_t format;
     uint32_t bytesPerPixel;
+    uint64_t length;
 
     if (texture == NULL || texture->magic != GXMETAL_TEXTURE_MAGIC ||
         buffer == NULL || mipmapLevel < 0 ||
@@ -1396,8 +1407,6 @@ static TQAError GXMetalAccessTexture(TQATexture *texture,
         !GXMetalTextureFormat((TQAImagePixelType)texture->source_pixel_type,
                               &format, &bytesPerPixel) ||
         format != texture->pixel_format ||
-        texture->source_pixels[mipmapLevel] == NULL ||
-        texture->source_row_bytes[mipmapLevel] < bytesPerPixel ||
         !GXMetalTransportAvailable() ||
         (gTransport.features & GXMETAL_FEATURE_RESOURCE_SUBREGION) == 0) {
         return kQANotSupported;
@@ -1410,6 +1419,28 @@ static TQAError GXMetalAccessTexture(TQATexture *texture,
     }
     if (height == 0) {
         height = 1;
+    }
+    if (texture->source_pixels[level] == NULL) {
+        /* kQANoCopyNeeded means the caller will initialize every byte in its
+         * dirty region. Allocate backing only for resources that are truly
+         * dynamic; retaining a second copy of every game texture exhausts
+         * classic applications' fixed heaps during level loads. */
+        if ((flags & kQANoCopyNeeded) == 0) {
+            return kQANotSupported;
+        }
+        texture->source_row_bytes[level] = width * bytesPerPixel;
+        length = (uint64_t)texture->source_row_bytes[level] * height;
+        if (length == 0 || length > GXMETAL_UPLOAD_BYTES) {
+            texture->source_row_bytes[level] = 0;
+            return kQANotSupported;
+        }
+        texture->source_pixels[level] = NewPtr((Size)length);
+        if (texture->source_pixels[level] == NULL) {
+            texture->source_row_bytes[level] = 0;
+            return kQAOutOfMemory;
+        }
+    } else if (texture->source_row_bytes[level] < width * bytesPerPixel) {
+        return kQANotSupported;
     }
     buffer->rowBytes = (long)texture->source_row_bytes[level];
     buffer->pixelType = (TQAImagePixelType)texture->source_pixel_type;
@@ -1470,16 +1501,34 @@ static TQAError GXMetalAccessBitmap(TQABitmap *bitmap, long flags,
 {
     uint32_t format;
     uint32_t bytesPerPixel;
+    uint64_t length;
 
     if (bitmap == NULL || bitmap->magic != GXMETAL_BITMAP_MAGIC ||
         buffer == NULL || (flags & ~kQANoCopyNeeded) != 0 ||
         bitmap->access_active != 0 ||
         !GXMetalTextureFormat((TQAImagePixelType)bitmap->source_pixel_type,
                               &format, &bytesPerPixel) ||
-        format != bitmap->pixel_format || bitmap->source_pixels == NULL ||
-        bitmap->source_row_bytes < bytesPerPixel ||
+        format != bitmap->pixel_format ||
         !GXMetalTransportAvailable() ||
         (gTransport.features & GXMETAL_FEATURE_RESOURCE_SUBREGION) == 0) {
+        return kQANotSupported;
+    }
+    if (bitmap->source_pixels == NULL) {
+        if ((flags & kQANoCopyNeeded) == 0) {
+            return kQANotSupported;
+        }
+        bitmap->source_row_bytes = bitmap->width * bytesPerPixel;
+        length = (uint64_t)bitmap->source_row_bytes * bitmap->height;
+        if (length == 0 || length > GXMETAL_UPLOAD_BYTES) {
+            bitmap->source_row_bytes = 0;
+            return kQANotSupported;
+        }
+        bitmap->source_pixels = NewPtr((Size)length);
+        if (bitmap->source_pixels == NULL) {
+            bitmap->source_row_bytes = 0;
+            return kQAOutOfMemory;
+        }
+    } else if (bitmap->source_row_bytes < bitmap->width * bytesPerPixel) {
         return kQANotSupported;
     }
     buffer->rowBytes = (long)bitmap->source_row_bytes;

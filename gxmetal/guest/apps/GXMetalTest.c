@@ -1188,7 +1188,8 @@ static TQAError GXMetalRenderDynamicResources(
     }
     memset(&access, 0, sizeof(access));
     if (error == kQANoErr) {
-        error = QAAccessTexture(engine, texture, 0, 0, &access);
+        error = QAAccessTexture(engine, texture, 0,
+                                kQANoCopyNeeded, &access);
     }
     if (error == kQANoErr &&
         (access.pixelType != kQAPixel_ARGB32 || access.width != 4 ||
@@ -1207,7 +1208,7 @@ static TQAError GXMetalRenderDynamicResources(
     }
     memset(&access, 0, sizeof(access));
     if (error == kQANoErr) {
-        error = QAAccessBitmap(engine, bitmap, 0, &access);
+        error = QAAccessBitmap(engine, bitmap, kQANoCopyNeeded, &access);
     }
     if (error == kQANoErr &&
         (access.pixelType != kQAPixel_ARGB32 || access.width != 4 ||
