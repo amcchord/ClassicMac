@@ -520,9 +520,12 @@ static TQAError GXMetalRenderPattern(TQADrawContext *context,
         0xff00ff00UL, 0xff00ff00UL, 0xff00ff00UL, 0xff00ff00UL,
         0xff00ff00UL, 0xff00ff00UL, 0xff00ff00UL, 0xff00ff00UL
     };
+    static unsigned long chromakeyPixels[1] = {0xff0000ffUL};
     TQAImage image;
     TQAImage bitmapImage;
+    TQAImage chromakeyImage;
     TQATexture *texture = NULL;
+    TQATexture *chromakeyResource = NULL;
     TQAColorTable *colorTable = NULL;
     TQABitmap *bitmap = NULL;
     TQARect dirty = {0, GXMETAL_WIDTH, 0, GXMETAL_HEIGHT};
@@ -560,7 +563,18 @@ static TQAError GXMetalRenderPattern(TQADrawContext *context,
     if (error == kQANoErr) {
         error = QATextureBindColorTable(engine, texture, colorTable);
     }
+    chromakeyImage.width = 1;
+    chromakeyImage.height = 1;
+    chromakeyImage.rowBytes = 4;
+    chromakeyImage.pixmap = chromakeyPixels;
+    if (error == kQANoErr) {
+        error = QATextureNew(engine, kQATexture_None, kQAPixel_ARGB32,
+                             &chromakeyImage, &chromakeyResource);
+    }
     if (error != kQANoErr) {
+        if (chromakeyResource != NULL) {
+            QATextureDelete(engine, chromakeyResource);
+        }
         if (colorTable != NULL) {
             QAColorTableDelete(engine, colorTable);
         }
@@ -582,6 +596,7 @@ static TQAError GXMetalRenderPattern(TQADrawContext *context,
         if (bitmap != NULL) {
             QABitmapDelete(engine, bitmap);
         }
+        QATextureDelete(engine, chromakeyResource);
         QAColorTableDelete(engine, colorTable);
         QATextureDelete(engine, texture);
         return error;
@@ -682,18 +697,20 @@ static TQAError GXMetalRenderPattern(TQADrawContext *context,
     fogTriangle[0].invW = fogTriangle[1].invW = fogTriangle[2].invW =
         1.0f / 0.75f;
 
-    chromakeyBase[0] = GXMetalGouraud(315.0f, 85.0f, 0.40f,
+    chromakeyBase[0] = GXMetalGouraud(303.0f, 85.0f, 0.40f,
                                       0.0f, 1.0f, 0.0f, 1.0f);
-    chromakeyBase[1] = GXMetalGouraud(335.0f, 45.0f, 0.40f,
+    chromakeyBase[1] = GXMetalGouraud(311.0f, 45.0f, 0.40f,
                                       0.0f, 1.0f, 0.0f, 1.0f);
-    chromakeyBase[2] = GXMetalGouraud(355.0f, 85.0f, 0.40f,
+    chromakeyBase[2] = GXMetalGouraud(319.0f, 85.0f, 0.40f,
                                       0.0f, 1.0f, 0.0f, 1.0f);
+    /* Sample a dedicated blue texel so texture origin/filtering cannot make
+     * this a false negative for the chromakey state itself. */
     chromakeyTexture[0] = GXMetalTextureVertex(
-        315.0f, 85.0f, 0.10f, 0.0f, 0.0f);
+        303.0f, 85.0f, 0.10f, 0.0f, 0.0f);
     chromakeyTexture[1] = GXMetalTextureVertex(
-        335.0f, 45.0f, 0.10f, 0.0f, 0.0f);
+        311.0f, 45.0f, 0.10f, 0.0f, 0.0f);
     chromakeyTexture[2] = GXMetalTextureVertex(
-        355.0f, 85.0f, 0.10f, 0.0f, 0.0f);
+        319.0f, 85.0f, 0.10f, 0.0f, 0.0f);
 
     texturedQuad[0] = GXMetalTextureVertex(178.0f, 38.0f, 0.30f,
                                             0.0f, 0.0f);
@@ -748,6 +765,7 @@ static TQAError GXMetalRenderPattern(TQADrawContext *context,
     QASetFloat(context, kQATag_Chromakey_g, 0.0f);
     QASetFloat(context, kQATag_Chromakey_b, 1.0f);
     QASetInt(context, kQATag_ChromakeyEnable, 1);
+    QASetPtr(context, kQATag_Texture, chromakeyResource);
     QADrawVTexture(context, 3, kQAVertexMode_Tri,
                    chromakeyTexture, flags);
     QASetInt(context, kQATag_ChromakeyEnable, 0);
@@ -843,7 +861,7 @@ static TQAError GXMetalRenderPattern(TQADrawContext *context,
         GXMetalRecordResult("FAIL: batched textured backface orientation pixel");
         error = kQAError;
     } else if (!GXMetalPixelMatches(graphicsDevice,
-                                    deviceRect->left + 335,
+                                    deviceRect->left + 311,
                                     deviceRect->top + 65,
                                     kGXMetalPixelGreen)) {
         GXMetalRecordResult("FAIL: texture chromakey rejection pixel");
@@ -856,6 +874,7 @@ static TQAError GXMetalRenderPattern(TQADrawContext *context,
         error = kQAError;
     }
     QABitmapDelete(engine, bitmap);
+    QATextureDelete(engine, chromakeyResource);
     QAColorTableDelete(engine, colorTable);
     QATextureDelete(engine, texture);
     return error;
