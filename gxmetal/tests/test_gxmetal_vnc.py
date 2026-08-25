@@ -93,6 +93,13 @@ class RFBClientTests(unittest.TestCase):
 
 
 class ManifestValidationTests(unittest.TestCase):
+    def test_qemu_guest_name_removes_option_delimiters(self):
+        self.assertEqual(
+            SWEEP.qemu_guest_name(
+                "Combat Mission, Oni, and Unreal Tournament", "gxmetal"),
+            "GXMetal sweep: Combat Mission Oni and Unreal Tournament "
+            "(gxmetal)")
+
     def test_named_keys_are_case_sensitive_and_checked_before_runtime(self):
         self.assertEqual(
             SWEEP.validate_step({"key": "Space"}, "steps[0]"),

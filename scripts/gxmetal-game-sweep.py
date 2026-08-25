@@ -108,6 +108,12 @@ def file_record(path: Path, include_hash: bool = True) -> dict[str, Any]:
     return record
 
 
+def qemu_guest_name(name: str, mode: str) -> str:
+    """Return a display label that QEMU's comma-delimited -name accepts."""
+    safe_name = re.sub(r"[\s,]+", " ", name).strip()
+    return f"GXMetal sweep: {safe_name} ({mode})"
+
+
 def load_vnc_module(root: Path) -> ModuleType:
     path = root / "scripts/gxmetal-vnc.py"
     spec = importlib.util.spec_from_file_location("gxmetal_vnc", path)
@@ -339,7 +345,7 @@ def qemu_command(
         "-global", "macio-ide.dma-completion-delay-ns=1000000",
         "-prom-env", "output-device=ttya",
         "-g", spec.resolution,
-        "-name", f"GXMetal sweep: {spec.name} ({spec.mode})",
+        "-name", qemu_guest_name(spec.name, spec.mode),
         "-device", f"loader,addr=0x4000000,file={loader}",
         "-device", "virtio-tablet-pci",
         "-prom-env", "boot-command=init-program go",
