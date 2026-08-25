@@ -67,7 +67,8 @@ enum GXMetalRegister {
      * zero restores the normal seamless absolute tablet. */
     GXMETAL_REG_RELATIVE_INPUT     = 0x40,
     /* Host input state for the guest InputSprocket bridge. Relative-axis
-     * reads consume the accumulated delta; button reads are non-destructive. */
+     * reads consume the accumulated delta; button reads are non-destructive.
+     * QEMU supplies device motion with right and down positive. */
     GXMETAL_REG_INPUT_BUTTONS      = 0x44,
     GXMETAL_REG_INPUT_RELATIVE_X   = 0x48,
     GXMETAL_REG_INPUT_RELATIVE_Y   = 0x4c,
@@ -82,6 +83,10 @@ enum GXMetalInputButton {
     GXMETAL_INPUT_BUTTON_TWO   = 1u << 1,
     GXMETAL_INPUT_BUTTON_THREE = 1u << 2
 };
+
+/* InputSprocket cursor-delta Y uses positive-up while QEMU device motion uses
+ * positive-down. Convert exactly once at the guest API boundary. */
+#define GXMETAL_INPUT_CURSOR_DELTA_Y(relative_y) (-(relative_y))
 
 enum GXMetalFeature {
     GXMETAL_FEATURE_GOURAUD       = UINT64_C(1) << 0,

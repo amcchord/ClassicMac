@@ -593,10 +593,11 @@ void ISpDriver_Tickle(void)
     }
     if (deltaY != 0) {
         /* QEMU relative motion and QuickDraw positions increase toward the
-         * bottom. InputSprocket delta elements define positive Y as up, so
-         * both the direct host bridge and cursor fallback need inversion. */
+         * bottom. Convert once to InputSprocket's positive-up delta here. */
         (void)ISpElement_PushSimpleData(
-            gDeltaY, (UInt32)(-deltaY * kGXMetalInputDeltaScale),
+            gDeltaY, (UInt32)(
+                GXMETAL_INPUT_CURSOR_DELTA_Y(deltaY) *
+                kGXMetalInputDeltaScale),
             &now);
     }
     GXMetalInputPushButton(gButton1, GXMETAL_INPUT_BUTTON_ONE, buttons,
