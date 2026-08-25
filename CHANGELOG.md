@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.0.8 — 2026-08-24
+
+### Fixed
+
+- Corrected Quake III Arena Demo's reversed vertical mouse movement. ClassicMac
+  2.0.7 negated Cocoa relative Y before GXMetal Input performed the existing
+  QEMU-to-InputSprocket conversion, producing two inversions.
+- Cocoa now forwards raw relative mouse Y unchanged, and GXMetal Input remains
+  the single coordinate-system boundary. The normal seamless absolute pointer
+  used by Mac OS is unchanged.
+- QEMU build validation and GXMetal protocol tests now lock both sides of that
+  contract: raw host forwarding and positive-down to positive-up guest mapping.
+
 ## 2.0.7 — 2026-08-24
 
 ### Fixed

@@ -19,9 +19,9 @@ data 'ftag' (0) {
 };
 
 resource 'vers' (1) {
-    2, 0, release, 6, verUS,
-    "2.0.7",
-    "GXMetal 2.0.7"
+    2, 0, release, 8, verUS,
+    "2.0.8",
+    "GXMetal 2.0.8"
 };
 
 resource 'cfrg' (0) {
