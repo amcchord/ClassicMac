@@ -1549,12 +1549,17 @@ static TQAError GXMetalRenderAlpha1Format(
     TQADrawContext *context, const TQAEngine *engine,
     GDHandle graphicsDevice, const TQARect *deviceRect)
 {
-    /* Apple Software RAVE was used as the reference oracle. Alpha1 is one
-     * byte per texel rather than a packed bitmap: zero is transparent, any
-     * nonzero value is opaque, and the color channels are neutral white.
-     * The last two bytes are deliberate row padding. */
-    static unsigned char pixels[4] = {0x00, 0x01, 0xa5, 0x5a};
-    TQAImage image;
+    /* Apple Software RAVE keeps Alpha1 textures byte-addressed, while RAVE's
+     * public bitmap contract is packed one-bit alpha. The bitmap uses ten
+     * pixels in four-byte padded rows to prove MSB-first order, byte crossing,
+     * row padding, and a source rowBytes smaller than the pixel width. */
+    static unsigned char texturePixels[4] = {0x00, 0x01, 0xa5, 0x5a};
+    static unsigned char bitmapPixels[2][4] = {
+        {0x40, 0x40, 0xff, 0xff},
+        {0x80, 0x80, 0xff, 0xff}
+    };
+    TQAImage textureImage;
+    TQAImage bitmapImage;
     TQATexture *texture = NULL;
     TQABitmap *bitmap = NULL;
     TQAVTexture quad[4];
@@ -1563,15 +1568,19 @@ static TQAError GXMetalRenderAlpha1Format(
     TQARect dirty = {0, GXMETAL_WIDTH, 0, GXMETAL_HEIGHT};
     TQAError error;
 
-    image.width = 2;
-    image.height = 1;
-    image.rowBytes = 4;
-    image.pixmap = pixels;
+    textureImage.width = 2;
+    textureImage.height = 1;
+    textureImage.rowBytes = 4;
+    textureImage.pixmap = texturePixels;
+    bitmapImage.width = 10;
+    bitmapImage.height = 2;
+    bitmapImage.rowBytes = 4;
+    bitmapImage.pixmap = bitmapPixels;
     error = QATextureNew(engine, kQATexture_None, kQAPixel_Alpha1,
-                         &image, &texture);
+                         &textureImage, &texture);
     if (error == kQANoErr) {
         error = QABitmapNew(engine, kQABitmap_None, kQAPixel_Alpha1,
-                            &image, &bitmap);
+                            &bitmapImage, &bitmap);
     }
     if (error != kQANoErr) {
         GXMetalRecordResult("FAIL: Alpha1 resource creation");
@@ -1636,7 +1645,34 @@ static TQAError GXMetalRenderAlpha1Format(
         !GXMetalPixelMatches(graphicsDevice, deviceRect->left + 161,
                              deviceRect->top + 100,
                              kGXMetalPixelWhite)) {
-        GXMetalRecordResult("FAIL: Alpha1 byte bitmap layout");
+        GXMetalRecordResult("FAIL: Alpha1 packed bitmap bit order");
+        error = kQAError;
+    }
+    if (error == kQANoErr &&
+        !GXMetalPixelMatches(graphicsDevice, deviceRect->left + 168,
+                             deviceRect->top + 100,
+                             kGXMetalPixelBlue)) {
+        GXMetalRecordResult("FAIL: Alpha1 packed bitmap byte crossing");
+        error = kQAError;
+    }
+    if (error == kQANoErr &&
+        !GXMetalPixelMatches(graphicsDevice, deviceRect->left + 169,
+                             deviceRect->top + 100,
+                             kGXMetalPixelWhite)) {
+        GXMetalRecordResult("FAIL: Alpha1 packed bitmap second byte");
+        error = kQAError;
+    }
+    if (error == kQANoErr &&
+        (!GXMetalPixelMatches(graphicsDevice, deviceRect->left + 160,
+                              deviceRect->top + 101,
+                              kGXMetalPixelWhite) ||
+         !GXMetalPixelMatches(graphicsDevice, deviceRect->left + 161,
+                              deviceRect->top + 101,
+                              kGXMetalPixelBlue) ||
+         !GXMetalPixelMatches(graphicsDevice, deviceRect->left + 168,
+                              deviceRect->top + 101,
+                              kGXMetalPixelWhite))) {
+        GXMetalRecordResult("FAIL: Alpha1 packed bitmap row padding");
         error = kQAError;
     }
     QABitmapDelete(engine, bitmap);
@@ -2193,7 +2229,7 @@ static void GXMetalBuildPassResult(char *result, size_t resultCapacity,
     GXMetalAppendText(&cursor, end, "PASS: version=");
     GXMetalAppendVersion(&cursor, end, revision);
     GXMetalAppendText(&cursor, end,
-        " RAVE discovery capability-contract depth perspective-z blend alpha-test chromakey backface clip texture intensity-formats acl16-88 alpha1-byte cl4 rgb8-332 public-multitexture dynamic-resources ATI-private-nocopy large-mesh-batches bitmap bitmap-scale dirty-present double-buffer framebuffer gx_us=");
+        " RAVE discovery capability-contract depth perspective-z blend alpha-test chromakey backface clip texture intensity-formats acl16-88 alpha1-texture-byte+bitmap-packed cl4 rgb8-332 public-multitexture dynamic-resources ATI-private-nocopy large-mesh-batches bitmap bitmap-scale dirty-present double-buffer framebuffer gx_us=");
     GXMetalAppendDecimal(&cursor, end, gxMetalMicroseconds);
     GXMetalAppendText(&cursor, end, " sw_us=");
     GXMetalAppendDecimal(&cursor, end, softwareMicroseconds);

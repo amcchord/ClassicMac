@@ -34,8 +34,8 @@ SCHEMA_VERSION = 1
 VALID_MODES = ("gxmetal", "software")
 ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
 STEP_ACTIONS = (
-    "wait", "click", "double_click", "key", "chord", "text",
-    "screenshot", "note",
+    "wait", "wait_for_frame_change", "click", "double_click", "key",
+    "chord", "text", "screenshot", "note",
 )
 # Keep these names synchronized with scripts/gxmetal-vnc.py. Single printable
 # characters are accepted independently for ordinary text keys.
@@ -144,6 +144,43 @@ def validate_step(step: Any, field: str) -> dict[str, Any]:
     value = step[action]
     if action == "wait":
         number(value, f"{field}.wait")
+    elif action == "wait_for_frame_change":
+        if not isinstance(value, dict):
+            raise ValueError(
+                f"{field}.wait_for_frame_change must be an object")
+        unknown_wait_fields = set(value) - {
+            "timeout_seconds", "poll_interval_seconds",
+            "minimum_changed_fraction", "channel_tolerance",
+        }
+        if unknown_wait_fields:
+            raise ValueError(
+                f"{field}.wait_for_frame_change has unknown fields: "
+                f"{sorted(unknown_wait_fields)}")
+        timeout = number(value.get("timeout_seconds"),
+                         f"{field}.wait_for_frame_change.timeout_seconds",
+                         positive=True)
+        poll_interval = number(
+            value.get("poll_interval_seconds", 1),
+            f"{field}.wait_for_frame_change.poll_interval_seconds",
+            positive=True)
+        minimum_fraction = number(
+            value.get("minimum_changed_fraction", 0.02),
+            f"{field}.wait_for_frame_change.minimum_changed_fraction",
+            positive=True)
+        tolerance = value.get("channel_tolerance", 8)
+        if (isinstance(tolerance, bool) or not isinstance(tolerance, int) or
+                tolerance < 0 or tolerance > 255):
+            raise ValueError(
+                f"{field}.wait_for_frame_change.channel_tolerance must be "
+                "an integer from 0 through 255")
+        if timeout < poll_interval:
+            raise ValueError(
+                f"{field}.wait_for_frame_change timeout must be at least "
+                "the poll interval")
+        if minimum_fraction > 1:
+            raise ValueError(
+                f"{field}.wait_for_frame_change.minimum_changed_fraction "
+                "must not exceed 1")
     elif action in ("click", "double_click"):
         if (not isinstance(value, list) or len(value) != 2 or
                 any(isinstance(item, bool) or not isinstance(item, int)
@@ -426,6 +463,22 @@ def write_json(path: Path, value: Any) -> None:
                     encoding="utf-8")
 
 
+def changed_pixel_fraction(previous: bytes, current: bytes,
+                           channel_tolerance: int) -> float:
+    """Return the fraction of RGB pixels with a material channel change."""
+    if len(previous) != len(current) or len(current) % 3 != 0:
+        raise ValueError("RGB frames must have the same whole-pixel length")
+    pixel_count = len(current) // 3
+    if pixel_count == 0:
+        return 0.0
+    changed = 0
+    for offset in range(0, len(current), 3):
+        if any(abs(current[offset + channel] - previous[offset + channel]) >
+               channel_tolerance for channel in range(3)):
+            changed += 1
+    return changed / pixel_count
+
+
 def captured_command(command: list[str], cwd: Path) -> dict[str, Any]:
     result = subprocess.run(command, cwd=cwd, text=True,
                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
@@ -469,18 +522,21 @@ def execute_run(
     capture_count = 0
     clone_method: str | None = None
 
-    def capture(label: str) -> None:
+    def capture_frame(label: str, rgb: bytes, width: int, height: int) -> None:
         nonlocal capture_count
-        if client is None:
-            return
         capture_count += 1
         elapsed = time.monotonic() - started
         filename = f"{capture_count:04d}-{elapsed:07.2f}s-{safe_label(label)}.png"
         path = screenshots / filename
-        rgb = client.capture()
-        vnc_module.write_png(path, client.width, client.height, rgb)
+        vnc_module.write_png(path, width, height, rgb)
         events.write("screenshot", file=str(path.relative_to(run_dir)),
-                     width=client.width, height=client.height)
+                     width=width, height=height)
+
+    def capture(label: str) -> None:
+        if client is None:
+            return
+        rgb = client.capture()
+        capture_frame(label, rgb, client.width, client.height)
 
     def wait_and_capture(seconds: float, label: str) -> None:
         deadline = time.monotonic() + seconds
@@ -494,6 +550,56 @@ def execute_run(
                 next_capture += spec.capture_interval_seconds
                 continue
             time.sleep(min(0.2, deadline - now, next_capture - now))
+
+    def wait_for_frame_change(settings: dict[str, Any], label: str) -> None:
+        if client is None:
+            return
+        timeout = float(settings["timeout_seconds"])
+        poll_interval = float(settings.get("poll_interval_seconds", 1))
+        minimum_fraction = float(
+            settings.get("minimum_changed_fraction", 0.02))
+        tolerance = int(settings.get("channel_tolerance", 8))
+        baseline = client.capture()
+        baseline_width = client.width
+        baseline_height = client.height
+        capture_frame(f"{label}-baseline", baseline,
+                      baseline_width, baseline_height)
+        deadline = time.monotonic() + timeout
+        next_evidence = min(
+            deadline, time.monotonic() + spec.capture_interval_seconds)
+        while time.monotonic() < deadline:
+            if process is not None and process.poll() is not None:
+                raise RuntimeError(
+                    f"QEMU exited during {label} ({process.returncode})")
+            time.sleep(min(poll_interval, max(0, deadline - time.monotonic())))
+            current = client.capture()
+            width = client.width
+            height = client.height
+            if width != baseline_width or height != baseline_height:
+                fraction = 1.0
+            else:
+                fraction = changed_pixel_fraction(
+                    baseline, current, tolerance)
+            if fraction >= minimum_fraction:
+                capture_frame(f"{label}-detected", current, width, height)
+                events.write(
+                    "frame_change_detected", label=label,
+                    changed_fraction=round(fraction, 6),
+                    minimum_changed_fraction=minimum_fraction,
+                    channel_tolerance=tolerance,
+                    baseline_width=baseline_width,
+                    baseline_height=baseline_height,
+                    width=width, height=height)
+                return
+            if time.monotonic() >= next_evidence:
+                capture_frame(label, current, width, height)
+                next_evidence += spec.capture_interval_seconds
+        events.write(
+            "frame_change_timeout", label=label,
+            minimum_changed_fraction=minimum_fraction,
+            channel_tolerance=tolerance)
+        raise RuntimeError(
+            f"timed out waiting {timeout:g}s for a material frame change")
 
     try:
         events.write("clone_started", source=str(source_disk))
@@ -536,6 +642,9 @@ def execute_run(
             events.write("step", index=index, action=action, value=value)
             if action == "wait":
                 wait_and_capture(float(value), f"step-{index:02d}-wait")
+            elif action == "wait_for_frame_change":
+                wait_for_frame_change(
+                    value, f"step-{index:02d}-frame-change")
             elif action == "click":
                 client.click(value[0], value[1])
             elif action == "double_click":

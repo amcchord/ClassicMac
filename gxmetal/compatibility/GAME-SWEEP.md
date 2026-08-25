@@ -16,15 +16,15 @@ records sources, hashes, recipes, evidence descriptions, and driver fixes.
 
 | ID | Game | Primary path under test | Minimum qualification route | Media and current state |
 | --- | --- | --- | --- | --- |
-| `bugdom` | Bugdom 1.2.1 | QuickDraw 3D 1.6 / RAVE, ATI behavior | Highest quality; load The Lawn; verify terrain, fog, foliage alpha, and HUD for five minutes; quit and relaunch | Installed; launcher and 3D intro pass on candidate; gameplay qualification pending |
+| `bugdom` | Bugdom 1.2.1 | QuickDraw 3D 1.6 / RAVE, ATI behavior | Highest quality; load The Lawn; verify terrain, fog, foliage alpha, and HUD for five minutes; quit and relaunch | Launcher, Pangea intro, title, and direct rendering pass; main-menu composition is malformed and the Lawn remains unqualified |
 | `cro-mag-rally` | Cro-Mag Rally Demo | Apple OpenGL 1.1.2 | Confirm hardware/OpenGL; complete a lap with terrain, particles, HUD, transparency, and camera transitions | Accelerated 800x600 title/menu pass with zero fallback; 640x480 GXMetal reaches a static Pangea splash while the matched software control remains black |
 | `weekend-warrior` | Weekend Warrior | QuickDraw 3D / RAVE | Load the first arena; verify camera clipping, textured characters, UI, depth ordering, and transitions for five minutes | PerspectiveZ gap fixed and verified through title/menu/selection plus a ten-minute 3D center-stage soak with zero fallback; first-arena qualification pending |
 | `future-cop` | Future Cop: LAPD Demo | Selectable QuickDraw 3D RAVE | Select RAVE; enter Crime War; verify weapon blending, transparent HUD, depth, and explosions | Qualified on GXMetal: coherent ATI-private rendering, live gameplay/input, 2,610 direct frames, zero fallback, and clean exit |
 | `dark-vengeance` | Dark Vengeance Demo | Direct RAVE | Reach first combat and scripted sequence; inspect lighting, translucent effects, animated geometry, and camera motion | Blocked before 3D by deterministic game-level error in GXMetal and software controls |
 | `myth-ii` | Myth II: Soulblighter 1.5.1 Demo | RAVE | Select RAVE; load a solo map; pan, zoom, rotate, issue orders, and verify terrain, water, units, decals, projectiles, and explosions | Menu and new-game dialog pass; selected demo level remains black without creating a GXMetal context, so acceleration is unqualified |
-| `unreal-tournament` | Unreal Tournament 348m3 Demo | ATI renderer through RAVE | Confirm RAVE; render intro flyby; run a five-minute bot match checking lightmaps, fog, weapon alpha, HUD, and texture cycling | Installed; route pending |
-| `combat-mission` | Combat Mission: Beyond Overlord 1.02 Demo | RAVE hardware probe | Complete detection; load Chance Encounter; move through the map and execute a turn with terrain, markers, smoke, and animation | Installed on nine-game candidate; route pending |
-| `oni` | Oni Demo | Classic Apple OpenGL | Reach training and first fight; verify animation, lightmaps, transparency, HUD, and an indoor/outdoor transition | Installed with Bink library on nine-game candidate; route pending |
+| `unreal-tournament` | Unreal Tournament 348m3 Demo | ATI renderer through RAVE | Confirm RAVE; render intro flyby; run a five-minute bot match checking lightmaps, fog, weapon alpha, HUD, and texture cycling | RAVE Rage 128 is detected and selected, but RAVE and explicit software controls stop at the identical black frame before creating a GXMetal context; gameplay unqualified |
+| `combat-mission` | Combat Mission: Beyond Overlord 1.02 Demo | RAVE hardware probe | Complete detection; load Chance Encounter; move through the map and execute a turn with terrain, markers, smoke, and animation | Packed-Alpha1 fix verified: full Chance Encounter setup renders for 246.6 seconds at 49.75-53.64 fps, direct-only; input and turn execution remain unqualified |
+| `oni` | Oni Demo | Classic Apple OpenGL | Reach training and first fight; verify animation, lightmaps, transparency, HUD, and an indoor/outdoor transition | Bink intro passes, but AGL/OpenGL context creation fails after a successful 640x480x32 mode switch; no GXMetal presentation traffic, and the software fallback also fails |
 | `havoc` | Havoc Demo | First shipping QuickDraw 3D RAVE game | Select accelerated rendering; enter the demo arena; verify terrain, fog, textured objects, transparency, HUD, and camera motion for five minutes | Blocked before 3D by identical game resource-allocation error across clean controls |
 
 OpenGL titles only count as GXMetal tests when the host log contains GXMetal
@@ -228,6 +228,43 @@ VMs, each with an independent clone and unique local VNC and monitor sockets.
   remained unchanged. Audio was not exercised. Evidence is under
   `context/gxmetal-games/evidence/future-cop-software-gameplay-probe/` and
   `context/gxmetal-games/evidence/future-cop-gxmetal-input-adaptive-final/`.
+- Unreal Tournament 348m3 presented no EULA prompt. Its first-run detector
+  offered RAVE and selected `RAVE (Rage 128) Renderer`, proving that the
+  expected accelerated device is visible. After acknowledging the renderer
+  notice, the demo completed its `Loading objects...` progress screen and
+  changed to a 640x480 black framebuffer. Captures from 226.38 through 416.43
+  seconds are byte-identical, Escape and Command-Option-Escape do not alter the
+  display, and the host log contains only initial gamma programming—no GXMetal
+  context, profile, fallback, unsupported command, or error. A clean control
+  explicitly selecting `Software Rendering` reaches the same black PNG hash
+  and remains there from 172.63 through 437.66 seconds. Both QEMU runs exit
+  zero and preserve their source hashes. This is retained as a demo/runtime
+  startup blocker before the graphics driver, not a GXMetal rendering failure.
+  Evidence and the exact hash comparison are under
+  `context/gxmetal-games/evidence/unreal-tournament-rave-gameplay-20260825/`
+  and
+  `context/gxmetal-games/evidence/unreal-tournament-software-control-20260825/`.
+- Oni presented no EULA and played its live Bink intro twice, but never reached
+  the menu, training, or first fight. In GXMetal mode it reported `Unable to
+  initialize hardware accelerated OpenGL on your system with the current
+  settings; Oni will now exit.` The retained clone's `startup.txt` reaches
+  `creating new OpenGL context`, reports both the original and requested
+  display as `640x480x32 : SUCCESS`, enters `OpenGL platform initialization`,
+  and stops there. The host log contains only initial gamma programming: no
+  GXMetal context, rolling profile, fallback, or command error. Clicking OK
+  returned cleanly to Finder and a relaunch reproduced the live intro and same
+  fatal dialog. Sixty-one screenshots from 228.01 through 528.05 seconds are
+  byte-identical at SHA-256
+  `5aef23120e5c07e9e32140d4a097df52de28fab82a738e1816c0519727aca501`.
+  With GXMetal disabled, Oni first offered to continue with lower performance,
+  but accepting that path produced the same fatal dialog and identical
+  `startup.txt` stopping point. This blocks classic Apple OpenGL/AGL context
+  integration before GXMetal's in-context rendering path, so gameplay remains
+  unqualified. The production QEMU SHA-256 was
+  `363ce5db9e4f778df633c8defed946f4a81753a1abf768a7ed2f8a67308302b5`;
+  both runs preserved the immutable source hash. Evidence is under
+  `context/gxmetal-games/evidence/oni-gxmetal-fatal-relaunch-20260825/` and
+  `context/gxmetal-games/evidence/oni-software-continue-20260825/`.
 - Myth II reached its correctly rendered main menu and new-game dialog, then
   accepted the demo mission and difficulty. It changed to a larger black
   display that remained byte-identical for the final minute; the host log only
@@ -296,3 +333,37 @@ VMs, each with an independent clone and unique local VNC and monitor sockets.
   `context/gxmetal-games/evidence/bugdom-candidate-large-batch/`; a five-minute
   playable Lawn route, clean quit, and second launch are still required before
   marking the game qualified.
+- A longer Bugdom trace reached its Pangea logo, title, and expected main-menu
+  interval through four sequential renderer contexts. GXMetal accepted 221,158
+  draws with no fallback or invalid resource, but the menu was mostly black
+  with blue fragments and presentation stopped after the game's 20-second menu
+  timeout. A disabled-GXMetal control changed to 640x480 but never exposed a
+  useful software-rendered frame, so the visual defect remains open rather than
+  attributed to either side. A follow-up fixed-delay recipe launched only as
+  far as the mode change before its menu input landed, demonstrating that
+  variable guest latency can invalidate otherwise correct coordinates.
+  Evidence is under
+  `context/gxmetal-games/evidence/bugdom-lawn-qualification-20260825/`,
+  `context/gxmetal-games/evidence/bugdom-software-control-20260825/`, and
+  `context/gxmetal-games/evidence/bugdom-menu-profiler-20260825/`.
+- The sweep harness now provides `wait_for_frame_change`, which records a
+  baseline, polls with configurable RGB noise and changed-pixel thresholds,
+  captures the detected transition, and fails explicitly on timeout. This
+  lets new game recipes synchronize on visible guest progress instead of
+  silently sending input after an assumed fixed launch delay.
+- Combat Mission's hardware path originally stalled at `Loading 3-D Graphics`
+  because three of four `kQAPixel_Alpha1` bitmaps were rejected. RAVE Alpha1
+  bitmaps are packed one-bit, MSB-first rows, unlike Alpha1 textures, which are
+  byte-addressed. GXMetal now validates padded packed rows and expands full and
+  dirty subregions to deterministic 0/255 host Alpha8. Native and guest tests
+  cover odd widths, byte crossings, row padding, and the distinct texture
+  layout. The production rerun rendered the complete Chance Encounter setup
+  battlefield immediately and held it visually stable for 246.6 seconds.
+  Thirty-three profiles reported 49.75-53.64 fps (51.48 mean), roughly 1,553
+  draws/frame, direct-only presentation, and zero fallback. The trace records
+  459/459 Alpha1 bitmap successes, 6,065,523 draws, balanced 3,392/3,392 frame
+  boundaries, and no rejects, invalid resources, aborts, or errors. VNC input
+  produced no visible camera or command change, so rendering/stability is
+  verified while input, turn execution, clean quit, and relaunch remain open.
+  Evidence is under
+  `context/gxmetal-games/evidence/combat-mission-alpha1-fixed-production-20260825/`.

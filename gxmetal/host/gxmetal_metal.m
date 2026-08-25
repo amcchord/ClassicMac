@@ -210,6 +210,10 @@ struct GXMetalMetalRenderer {
     uint64_t profile_single_triangle_count;
     uint64_t profile_triangle_fan_count;
     uint64_t profile_host_ati_uv_count;
+    uint64_t profile_blend_draw_count[3];
+    uint64_t profile_vertex_alpha_count;
+    uint64_t profile_translucent_vertex_count;
+    uint64_t profile_zero_alpha_vertex_count;
     uint64_t profile_draw_ns;
     uint64_t profile_clear_count;
     uint64_t profile_depth_clear_count;
@@ -282,11 +286,16 @@ static uint64_t gxmetal_metal_now_ns(void)
            (uint64_t)now.tv_nsec;
 }
 
+static float gxmetal_metal_load_float(const uint8_t *bytes);
+
 static void gxmetal_metal_profile_draw(GXMetalMetalRenderer *renderer,
+                                       const GXMetalMetalContext *context,
                                        const GXMetalPacketView *packet)
 {
     uint32_t primitive;
     uint32_t count;
+    uint32_t stride;
+    uint32_t i;
 
     if (!renderer->profile_enabled ||
         packet->payload_bytes < GXMETAL_DRAW_HEADER_BYTES) {
@@ -296,8 +305,35 @@ static void gxmetal_metal_profile_draw(GXMetalMetalRenderer *renderer,
         packet->payload + GXMETAL_DRAW_PRIMITIVE_OFFSET);
     count = gxmetal_load_le32(
         packet->payload + GXMETAL_DRAW_VERTEX_COUNT_OFFSET);
+    stride = gxmetal_load_le32(
+        packet->payload + GXMETAL_DRAW_VERTEX_STRIDE_OFFSET);
     renderer->profile_draw_count++;
     renderer->profile_draw_vertex_count += count;
+    if (context != NULL && context->blend <= GXMETAL_BLEND_OPENGL) {
+        renderer->profile_blend_draw_count[context->blend]++;
+    }
+    if (stride >= GXMETAL_VERTEX_A_OFFSET + sizeof(uint32_t) &&
+        (uint64_t)GXMETAL_DRAW_HEADER_BYTES + (uint64_t)count * stride <=
+            packet->payload_bytes) {
+        const uint8_t *vertices =
+            packet->payload + GXMETAL_DRAW_VERTICES_OFFSET;
+
+        for (i = 0; i < count; i++) {
+            float alpha = gxmetal_metal_load_float(
+                vertices + (uint64_t)i * stride + GXMETAL_VERTEX_A_OFFSET);
+
+            if (!isfinite(alpha)) {
+                continue;
+            }
+            renderer->profile_vertex_alpha_count++;
+            if (alpha < 0.999f) {
+                renderer->profile_translucent_vertex_count++;
+            }
+            if (alpha <= 0.001f) {
+                renderer->profile_zero_alpha_vertex_count++;
+            }
+        }
+    }
     if (primitive == GXMETAL_PRIMITIVE_TRIANGLE && count == 3) {
         renderer->profile_single_triangle_count++;
     }
@@ -324,6 +360,11 @@ static void gxmetal_metal_profile_present(GXMetalMetalRenderer *renderer,
     double single_triangle_percent;
     double triangle_fan_percent;
     double host_ati_uv_percent;
+    double premultiply_percent;
+    double interpolate_percent;
+    double opengl_blend_percent;
+    double translucent_vertex_percent;
+    double zero_alpha_vertex_percent;
     double draw_ms_per_frame;
     double probes_per_lookup;
 
@@ -373,6 +414,21 @@ static void gxmetal_metal_profile_present(GXMetalMetalRenderer *renderer,
     host_ati_uv_percent = renderer->profile_draw_count != 0 ?
         (double)renderer->profile_host_ati_uv_count * 100.0 /
             (double)renderer->profile_draw_count : 0.0;
+    premultiply_percent = renderer->profile_draw_count != 0 ?
+        (double)renderer->profile_blend_draw_count[GXMETAL_BLEND_PREMULTIPLY] *
+            100.0 / (double)renderer->profile_draw_count : 0.0;
+    interpolate_percent = renderer->profile_draw_count != 0 ?
+        (double)renderer->profile_blend_draw_count[GXMETAL_BLEND_INTERPOLATE] *
+            100.0 / (double)renderer->profile_draw_count : 0.0;
+    opengl_blend_percent = renderer->profile_draw_count != 0 ?
+        (double)renderer->profile_blend_draw_count[GXMETAL_BLEND_OPENGL] *
+            100.0 / (double)renderer->profile_draw_count : 0.0;
+    translucent_vertex_percent = renderer->profile_vertex_alpha_count != 0 ?
+        (double)renderer->profile_translucent_vertex_count * 100.0 /
+            (double)renderer->profile_vertex_alpha_count : 0.0;
+    zero_alpha_vertex_percent = renderer->profile_vertex_alpha_count != 0 ?
+        (double)renderer->profile_zero_alpha_vertex_count * 100.0 /
+            (double)renderer->profile_vertex_alpha_count : 0.0;
     draw_ms_per_frame = renderer->profile_present_count != 0 ?
         (double)renderer->profile_draw_ns /
             (double)renderer->profile_present_count / 1000000.0 : 0.0;
@@ -385,6 +441,9 @@ static void gxmetal_metal_profile_present(GXMetalMetalRenderer *renderer,
             "draw_ms_per_frame=%.3f vertices_per_draw=%.2f "
             "single_triangle_pct=%.2f triangle_fan_pct=%.2f "
             "host_ati_uv_pct=%.2f "
+            "blend_premultiply_pct=%.2f blend_interpolate_pct=%.2f "
+            "blend_opengl_pct=%.2f translucent_vertex_pct=%.2f "
+            "zero_alpha_vertex_pct=%.2f "
             "clears_per_frame=%.2f depth_clears_per_frame=%.2f "
             "depth_clear=%.6f resource_probes_per_lookup=%.2f\n",
             frames_per_second,
@@ -394,6 +453,9 @@ static void gxmetal_metal_profile_present(GXMetalMetalRenderer *renderer,
             present_ms, draws_per_frame, draw_ms_per_frame,
             vertices_per_draw, single_triangle_percent,
             triangle_fan_percent, host_ati_uv_percent,
+            premultiply_percent, interpolate_percent,
+            opengl_blend_percent, translucent_vertex_percent,
+            zero_alpha_vertex_percent,
             renderer->profile_present_count != 0 ?
                 (double)renderer->profile_clear_count /
                     (double)renderer->profile_present_count : 0.0,
@@ -411,6 +473,11 @@ static void gxmetal_metal_profile_present(GXMetalMetalRenderer *renderer,
     renderer->profile_single_triangle_count = 0;
     renderer->profile_triangle_fan_count = 0;
     renderer->profile_host_ati_uv_count = 0;
+    memset(renderer->profile_blend_draw_count, 0,
+           sizeof(renderer->profile_blend_draw_count));
+    renderer->profile_vertex_alpha_count = 0;
+    renderer->profile_translucent_vertex_count = 0;
+    renderer->profile_zero_alpha_vertex_count = 0;
     renderer->profile_draw_ns = 0;
     renderer->profile_clear_count = 0;
     renderer->profile_depth_clear_count = 0;
@@ -2902,7 +2969,7 @@ uint32_t gxmetal_metal_dispatch(void *opaque,
                 gxmetal_metal_now_ns() : 0;
             uint32_t result;
 
-            gxmetal_metal_profile_draw(renderer, packet);
+            gxmetal_metal_profile_draw(renderer, context, packet);
             result = gxmetal_metal_draw(renderer, context, packet);
             if (start_ns != 0) {
                 renderer->profile_draw_ns +=
@@ -2915,7 +2982,7 @@ uint32_t gxmetal_metal_dispatch(void *opaque,
                 gxmetal_metal_now_ns() : 0;
             uint32_t result;
 
-            gxmetal_metal_profile_draw(renderer, packet);
+            gxmetal_metal_profile_draw(renderer, context, packet);
             result = gxmetal_metal_draw_textured(renderer, context, packet);
             if (start_ns != 0) {
                 renderer->profile_draw_ns +=

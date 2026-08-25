@@ -899,8 +899,9 @@ static void test_metal_texture_upload_and_sampling(void)
     /* Common sprite formats must preserve source row padding and PowerPC
      * byte order. I8 expands to opaque gray; AI16_88 stores alpha before
      * intensity, so this half-alpha white texel fails a 0.75 alpha test.
-     * Alpha1 follows Apple Software RAVE's byte-per-texel contract: any
-     * nonzero first byte is opaque white and padding is ignored. RGB8_332
+     * The guest expands RAVE's packed Alpha1 bitmap contract before upload;
+     * the host therefore receives the same byte-per-texel Alpha8 resource
+     * used by Alpha1 textures. Any nonzero byte is opaque white. RGB8_332
      * expands the explicitly documented RRR GGG BB layout. */
     {
         const uint8_t intensity[4] = {0x80, 0x11, 0x22, 0x33};

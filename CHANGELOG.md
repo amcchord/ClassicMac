@@ -1,5 +1,54 @@
 # Changelog
 
+## 2.1.2 — 2026-08-25
+
+### Added
+
+- Expanded the Mac OS 9 GXMetal conformance app with real 256-triangle indexed
+  Gouraud and textured batches plus pixel verification. The native Metal suite
+  now also covers Perspective-Z above one, ATI source-color blending, and both
+  observed ATI private-texture V-coordinate conventions under clamp sampling.
+- Added an isolated ten-game compatibility campaign with immutable source
+  images, independent writable clones, deterministic VNC interaction and
+  screenshots, rolling GXMetal profiles, matched software controls, and source
+  integrity checks. The harness now validates display-resize negotiation,
+  sanitizes game names before passing them to QEMU, and can synchronize recipes
+  on a material framebuffer change with recorded baseline/detected evidence.
+- Rolling GXMetal profiles now report per-blend-mode draw distribution and
+  translucent/zero-alpha vertex percentages for diagnosing composition faults
+  in unfamiliar engines.
+- Added a schema-derived Driver Trace decoder that emits persisted guest
+  diagnostic snapshots as JSON and rejects layout/size mismatches.
+
+### Changed
+
+- The current ten-game sweep fully qualifies Future Cop on GXMetal, verifies
+  accelerated 3D progress in Bugdom, Cro-Mag Rally, Weekend Warrior, and Combat
+  Mission, and records reproducible pre-driver or matched-control blockers for
+  Dark Vengeance, Myth II, Unreal Tournament, Havoc, and Oni. Combat Mission's
+  full Chance Encounter setup rendering and sustained stability pass, while
+  its input and turn execution remain under qualification.
+
+### Fixed
+
+- Large Gouraud and textured meshes no longer exceed Metal's inline vertex
+  upload limit. Oversized batches use command-buffer-retained buffers while
+  smaller draws keep the low-overhead inline path.
+- Perspective-Z now maps the complete positive finite reciprocal-W range
+  monotonically instead of collapsing values at and above one onto the same
+  depth, preserving near/far ordering while keeping reciprocal-distance fog.
+- ATI's classic OpenGL/RAVE compatibility path now accepts `SRC_COLOR` and
+  `ONE_MINUS_SRC_COLOR` as source blend factors, preventing valid vendor draws
+  from faulting the guest command stream.
+- ATI private textures now distinguish the observed negative top-origin and
+  nonnegative RAVE V-coordinate conventions per primitive. This removes
+  clamp-induced texture stripes in Future Cop without regressing the negative-V
+  path used by previously qualified software.
+- RAVE Alpha1 bitmaps now use their packed one-bit, MSB-first row contract,
+  including odd widths, row padding, and dirty subregions. They are expanded to
+  host Alpha8 without changing the byte-per-texel layout of Alpha1 textures;
+  this restores Combat Mission's complete 3D setup scene.
+
 ## 2.1.1 — 2026-08-24
 
 ### Changed

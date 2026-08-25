@@ -95,6 +95,7 @@ test: $(PROTOCOL_TEST) $(QUEUE_TEST) $(GUEST_TRANSPORT_TEST) \
 	$(RAVE_COMPATIBILITY_TEST)
 	$(if $(METAL_TEST),$(METAL_TEST),@true)
 	python3 tests/test_gxmetal_vnc.py
+	python3 tests/test_decode_diagnostics.py
 	python3 tests/test_pef_set_init.py
 
 guest:

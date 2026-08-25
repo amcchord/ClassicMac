@@ -495,9 +495,10 @@ static TQABoolean GXMetalTextureFormat(TQAImagePixelType pixelType,
     }
     switch (pixelType) {
     case kQAPixel_Alpha1:
-        /* Despite the historical name, Apple Software RAVE stores one byte
-         * per Alpha1 texel. The host reduces that byte to transparent/opaque
-         * while supplying the format's neutral white RGB channels. */
+        /* Apple Software RAVE stores one byte per Alpha1 texture texel. RAVE
+         * Alpha1 bitmaps are packed separately and expanded before upload.
+         * The host reduces each uploaded byte to transparent/opaque while
+         * supplying the format's neutral white RGB channels. */
         *format = GXMETAL_PIXEL_ALPHA8;
         *bytesPerPixel = 1;
         return 1;
@@ -536,6 +537,60 @@ static TQABoolean GXMetalTextureFormat(TQAImagePixelType pixelType,
     default:
         return 0;
     }
+}
+
+static TQAError GXMetalUploadAlpha1BitmapRegion(
+    uint32_t resourceID, const void *source, uint32_t sourceRowBytes,
+    uint32_t resourceWidth, uint32_t resourceHeight,
+    uint32_t left, uint32_t top,
+    uint32_t width, uint32_t height)
+{
+    GXMetalGuestPacket packet;
+    uint8_t *payload;
+    uint8_t *destination;
+    const uint8_t *sourceBytes = (const uint8_t *)source;
+    uint64_t length = (uint64_t)width * height;
+    uint32_t y;
+
+    if (source == NULL || width == 0 || height == 0 ||
+        left > resourceWidth || width > resourceWidth - left ||
+        top > resourceHeight || height > resourceHeight - top ||
+        !gxmetal_rave_alpha1_bitmap_row_is_valid(resourceWidth,
+                                                  sourceRowBytes) ||
+        length > GXMETAL_UPLOAD_BYTES || !GXMetalTransportAvailable() ||
+        ((left != 0 || top != 0 || width != resourceWidth ||
+          height != resourceHeight) &&
+         (gTransport.features & GXMETAL_FEATURE_RESOURCE_SUBREGION) == 0)) {
+        return kQANotSupported;
+    }
+    destination = gTransport.shared + GXMETAL_UPLOAD_OFFSET;
+    for (y = 0; y < height; y++) {
+        if (!gxmetal_rave_expand_alpha1_bitmap_row(
+                destination + y * width, width,
+                sourceBytes + (top + y) * sourceRowBytes,
+                sourceRowBytes, left, width)) {
+            return kQAParamErr;
+        }
+    }
+    if (!GXMetalGlobalPacket(GXMETAL_OP_TEXTURE_UPLOAD,
+                             GXMETAL_RESOURCE_UPLOAD_PACKET_BYTES,
+                             &packet)) {
+        return kQAError;
+    }
+    payload = packet.bytes + GXMETAL_PACKET_HEADER_BYTES;
+    gxmetal_store_le32(payload + GXMETAL_UPLOAD_RESOURCE_ID_OFFSET,
+                       resourceID);
+    gxmetal_store_le32(payload + GXMETAL_UPLOAD_LEVEL_OFFSET, 0);
+    gxmetal_store_le32(payload + GXMETAL_UPLOAD_SHARED_OFFSET_OFFSET,
+                       GXMETAL_UPLOAD_OFFSET);
+    gxmetal_store_le32(payload + GXMETAL_UPLOAD_LENGTH_OFFSET,
+                       (uint32_t)length);
+    gxmetal_store_le32(payload + GXMETAL_UPLOAD_ROW_BYTES_OFFSET, width);
+    gxmetal_store_le32(payload + GXMETAL_UPLOAD_WIDTH_OFFSET, width);
+    gxmetal_store_le32(payload + GXMETAL_UPLOAD_HEIGHT_OFFSET, height);
+    gxmetal_store_le32(payload + GXMETAL_UPLOAD_DESTINATION_ORIGIN_OFFSET,
+                       left | (top << GXMETAL_UPLOAD_DESTINATION_Y_SHIFT));
+    return GXMetalCommitUploadPacket(&packet) ? kQANoErr : kQAError;
 }
 
 static TQABoolean GXMetalPaletteFormat(TQAImagePixelType pixelType)
@@ -1192,7 +1247,11 @@ static TQAError GXMetalBitmapNew(unsigned long flags,
     uint32_t width;
     uint32_t height;
     uint32_t rowBytes;
-    uint64_t length;
+    uint32_t resourceRowBytes;
+    uint64_t sourceLength;
+    uint64_t uploadLength;
+    TQAError error;
+    TQABoolean alpha1;
     TQABoolean indexed;
 
     gDiagnostics.bitmap_new_count++;
@@ -1210,6 +1269,7 @@ static TQAError GXMetalBitmapNew(unsigned long flags,
         return kQAParamErr;
     }
     *newBitmap = NULL;
+    alpha1 = pixelType == kQAPixel_Alpha1;
     indexed = GXMetalPaletteFormat(pixelType);
     if (image == NULL || image->pixmap == NULL || image->width <= 0 ||
         image->height <= 0 ||
@@ -1238,10 +1298,16 @@ static TQAError GXMetalBitmapNew(unsigned long flags,
     width = (uint32_t)image->width;
     height = (uint32_t)image->height;
     rowBytes = (uint32_t)image->rowBytes;
-    length = (uint64_t)rowBytes * height;
-    if (rowBytes < (indexed ?
-            GXMetalPaletteMinimumRowBytes(pixelType, width) :
-            width * bytesPerPixel) || length > GXMETAL_UPLOAD_BYTES) {
+    resourceRowBytes = indexed ? width * 4u : alpha1 ? width : rowBytes;
+    sourceLength = (uint64_t)rowBytes * height;
+    uploadLength = (uint64_t)resourceRowBytes * height;
+    if ((indexed && rowBytes <
+             GXMetalPaletteMinimumRowBytes(pixelType, width)) ||
+        (alpha1 && !gxmetal_rave_alpha1_bitmap_row_is_valid(width,
+                                                             rowBytes)) ||
+        (!indexed && !alpha1 && rowBytes < width * bytesPerPixel) ||
+        sourceLength > UINT32_MAX ||
+        (alpha1 ? uploadLength : sourceLength) > GXMETAL_UPLOAD_BYTES) {
         gDiagnostics.last_bitmap_error = kQAOutOfVideoMemory;
         return kQAOutOfVideoMemory;
     }
@@ -1274,7 +1340,7 @@ static TQAError GXMetalBitmapNew(unsigned long flags,
     gxmetal_store_le32(payload + GXMETAL_RESOURCE_WIDTH_OFFSET, width);
     gxmetal_store_le32(payload + GXMETAL_RESOURCE_HEIGHT_OFFSET, height);
     gxmetal_store_le32(payload + GXMETAL_RESOURCE_ROW_BYTES_OFFSET,
-                       indexed ? width * 4 : rowBytes);
+                       resourceRowBytes);
     gxmetal_store_le32(payload + GXMETAL_RESOURCE_PIXEL_FORMAT_OFFSET,
                        format);
     gxmetal_store_le32(payload + GXMETAL_RESOURCE_FLAGS_OFFSET,
@@ -1287,7 +1353,7 @@ static TQAError GXMetalBitmapNew(unsigned long flags,
     }
 
     if (indexed) {
-        bitmap->source_pixels = NewPtr((Size)length);
+        bitmap->source_pixels = NewPtr((Size)sourceLength);
         if (bitmap->source_pixels == NULL) {
             GXMetalDestroyTextureResource(bitmap->resource_id);
             DisposePtr((Ptr)bitmap);
@@ -1295,7 +1361,24 @@ static TQAError GXMetalBitmapNew(unsigned long flags,
             return kQAOutOfMemory;
         }
         bitmap->source_row_bytes = rowBytes;
-        memcpy(bitmap->source_pixels, image->pixmap, (size_t)length);
+        memcpy(bitmap->source_pixels, image->pixmap, (size_t)sourceLength);
+        *newBitmap = bitmap;
+        gDiagnostics.last_bitmap_error = kQANoErr;
+        GXMetalCountPixelType(gDiagnostics.bitmap_new_success_by_type,
+                              pixelType);
+        return kQANoErr;
+    }
+
+    if (alpha1) {
+        error = GXMetalUploadAlpha1BitmapRegion(
+            bitmap->resource_id, image->pixmap, rowBytes, width, height,
+            0, 0, width, height);
+        if (error != kQANoErr) {
+            GXMetalDestroyTextureResource(bitmap->resource_id);
+            DisposePtr((Ptr)bitmap);
+            gDiagnostics.last_bitmap_error = error;
+            return error;
+        }
         *newBitmap = bitmap;
         gDiagnostics.last_bitmap_error = kQANoErr;
         GXMetalCountPixelType(gDiagnostics.bitmap_new_success_by_type,
@@ -1304,7 +1387,7 @@ static TQAError GXMetalBitmapNew(unsigned long flags,
     }
 
     memcpy(gTransport.shared + GXMETAL_UPLOAD_OFFSET,
-           image->pixmap, (size_t)length);
+           image->pixmap, (size_t)sourceLength);
     if (!GXMetalGlobalPacket(GXMETAL_OP_TEXTURE_UPLOAD,
                              GXMETAL_RESOURCE_UPLOAD_PACKET_BYTES,
                              &packet)) {
@@ -1320,7 +1403,7 @@ static TQAError GXMetalBitmapNew(unsigned long flags,
     gxmetal_store_le32(payload + GXMETAL_UPLOAD_SHARED_OFFSET_OFFSET,
                        GXMETAL_UPLOAD_OFFSET);
     gxmetal_store_le32(payload + GXMETAL_UPLOAD_LENGTH_OFFSET,
-                       (uint32_t)length);
+                       (uint32_t)sourceLength);
     gxmetal_store_le32(payload + GXMETAL_UPLOAD_ROW_BYTES_OFFSET, rowBytes);
     gxmetal_store_le32(payload + GXMETAL_UPLOAD_WIDTH_OFFSET, width);
     gxmetal_store_le32(payload + GXMETAL_UPLOAD_HEIGHT_OFFSET, height);
@@ -1501,7 +1584,9 @@ static TQAError GXMetalAccessBitmap(TQABitmap *bitmap, long flags,
 {
     uint32_t format;
     uint32_t bytesPerPixel;
+    uint32_t minimumRowBytes;
     uint64_t length;
+    TQABoolean alpha1;
 
     if (bitmap == NULL || bitmap->magic != GXMETAL_BITMAP_MAGIC ||
         buffer == NULL || (flags & ~kQANoCopyNeeded) != 0 ||
@@ -1513,11 +1598,15 @@ static TQAError GXMetalAccessBitmap(TQABitmap *bitmap, long flags,
         (gTransport.features & GXMETAL_FEATURE_RESOURCE_SUBREGION) == 0) {
         return kQANotSupported;
     }
+    alpha1 = bitmap->source_pixel_type == kQAPixel_Alpha1;
+    minimumRowBytes = alpha1 ?
+        gxmetal_rave_alpha1_bitmap_row_bytes(bitmap->width) :
+        bitmap->width * bytesPerPixel;
     if (bitmap->source_pixels == NULL) {
         if ((flags & kQANoCopyNeeded) == 0) {
             return kQANotSupported;
         }
-        bitmap->source_row_bytes = bitmap->width * bytesPerPixel;
+        bitmap->source_row_bytes = minimumRowBytes;
         length = (uint64_t)bitmap->source_row_bytes * bitmap->height;
         if (length == 0 || length > GXMETAL_UPLOAD_BYTES) {
             bitmap->source_row_bytes = 0;
@@ -1528,7 +1617,7 @@ static TQAError GXMetalAccessBitmap(TQABitmap *bitmap, long flags,
             bitmap->source_row_bytes = 0;
             return kQAOutOfMemory;
         }
-    } else if (bitmap->source_row_bytes < bitmap->width * bytesPerPixel) {
+    } else if (bitmap->source_row_bytes < minimumRowBytes) {
         return kQANotSupported;
     }
     buffer->rowBytes = (long)bitmap->source_row_bytes;
@@ -1565,6 +1654,12 @@ static TQAError GXMetalAccessBitmapEnd(TQABitmap *bitmap,
                               &format, &bytesPerPixel) ||
         format != bitmap->pixel_format) {
         return kQANotSupported;
+    }
+    if (bitmap->source_pixel_type == kQAPixel_Alpha1) {
+        return GXMetalUploadAlpha1BitmapRegion(
+            bitmap->resource_id, bitmap->source_pixels,
+            bitmap->source_row_bytes, bitmap->width, bitmap->height,
+            left, top, width, height);
     }
     return GXMetalUploadResourceRegion(
         bitmap->resource_id, 0, bitmap->source_pixels,

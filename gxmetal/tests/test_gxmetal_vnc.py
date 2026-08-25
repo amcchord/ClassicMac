@@ -114,6 +114,33 @@ class ManifestValidationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "unknown or missing"):
             SWEEP.validate_step({"chord": "Command+o"}, "steps[0]")
 
+    def test_frame_change_wait_is_validated(self):
+        step = {
+            "wait_for_frame_change": {
+                "timeout_seconds": 30,
+                "poll_interval_seconds": 0.5,
+                "minimum_changed_fraction": 0.1,
+                "channel_tolerance": 4,
+            },
+            "capture_after": True,
+        }
+        self.assertEqual(SWEEP.validate_step(step, "steps[0]"), step)
+        with self.assertRaisesRegex(ValueError, "must not exceed 1"):
+            SWEEP.validate_step({
+                "wait_for_frame_change": {
+                    "timeout_seconds": 30,
+                    "minimum_changed_fraction": 1.1,
+                }
+            }, "steps[0]")
+
+    def test_changed_pixel_fraction_uses_channel_tolerance(self):
+        previous = bytes((10, 20, 30, 40, 50, 60))
+        current = bytes((11, 21, 31, 40, 50, 70))
+        self.assertEqual(
+            SWEEP.changed_pixel_fraction(previous, current, 3), 0.5)
+        self.assertEqual(
+            SWEEP.changed_pixel_fraction(previous, current, 10), 0.0)
+
 
 if __name__ == "__main__":
     unittest.main()

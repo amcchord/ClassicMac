@@ -49,9 +49,10 @@ Each game supports these fields:
   read-only raw/ISO CD attachment.
 - `boot_wait_seconds`, `observation_seconds`, `capture_interval_seconds`, and
   `resolution`: per-game timing/display overrides.
-- `steps`: ordered VNC actions. Supported actions are `wait`, `click`,
-  `double_click`, `key`, `chord`, `text`, `screenshot`, and `note`. A step can
-  also set `delay_after`, `hold_ms`, or `capture_after`.
+- `steps`: ordered VNC actions. Supported actions are `wait`,
+  `wait_for_frame_change`, `click`, `double_click`, `key`, `chord`, `text`,
+  `screenshot`, and `note`. A step can also set `delay_after`, `hold_ms`, or
+  `capture_after`.
 
 A step contains exactly one action. For example:
 
@@ -65,6 +66,27 @@ A step contains exactly one action. For example:
   {"screenshot": "first-live-gameplay"}
 ]
 ```
+
+For slow or variable launch paths, synchronize on visible guest progress
+instead of relying only on a long fixed delay:
+
+```json
+{
+  "wait_for_frame_change": {
+    "timeout_seconds": 180,
+    "poll_interval_seconds": 1,
+    "minimum_changed_fraction": 0.05,
+    "channel_tolerance": 8
+  },
+  "capture_after": true
+}
+```
+
+The action records its baseline and detected frame, ignores per-channel noise
+up to `channel_tolerance`, and fails the run if the requested fraction of
+pixels does not change before the timeout. A display resize counts as a full
+frame change. This makes missed launch transitions explicit in the evidence
+rather than silently sending later input to the wrong screen.
 
 `Super_L` is the Mac Command key in QEMU VNC, so a chord such as
 `{"chord":"Super_L+o"}` sends Command-O. Coordinates are tied to the
@@ -151,6 +173,18 @@ For performance measurements, first finish the correctness pass. Then run one
 guest at a time (`--jobs 1`) with identical steps and timing. GXMetal mode sets
 `GXMETAL_PROFILE=1`, so rolling presentation FPS, draw counts, batching, and
 resource lookup telemetry is preserved in `qemu.log`.
+
+Decode a persisted `GXMetal-Driver-Trace.bin` without duplicating the guest
+snapshot layout in an analysis script:
+
+```sh
+python3 scripts/decode-gxmetal-diagnostics.py \
+  path/to/GXMetal-Driver-Trace.bin > driver-trace.json
+```
+
+The decoder derives field order, signedness, and array extents from the current
+`GXMetalDiagnostics.h`, and rejects snapshots whose exact size does not match
+that schema.
 
 ## Ten-game sweep discipline
 
