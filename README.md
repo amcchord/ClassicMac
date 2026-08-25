@@ -137,7 +137,7 @@ Requirements: an Apple Silicon Mac (M1 or later) running a recent macOS.
 
 # 5. Verify the exact signed/stapled artifact, including versions, Gatekeeper,
 #    the bundled Tools CD, and the GXMetal-enabled Power Mac executable
-./scripts/verify-release.sh dist/ClassicMac.dmg 2.1.0 2.1.0
+./scripts/verify-release.sh dist/ClassicMac.dmg 2.1.1 2.1.1
 ```
 
 All scripts are idempotent and safe to re-run. Building needs the Xcode command line tools and [Homebrew](https://brew.sh).

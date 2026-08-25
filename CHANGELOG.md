@@ -1,5 +1,23 @@
 # Changelog
 
+## 2.1.1 — 2026-08-24
+
+### Changed
+
+- Simplified the browser display with a compact toolbar, quieter status
+  presentation, and sharper classic Mac pixels. Enlarged displays use
+  whole-number scaling, while downscaled displays keep exact aspect ratios
+  wherever the viewport permits.
+
+### Fixed
+
+- Reconnecting browser tabs now hold one stable waiting screen across retry
+  attempts instead of alternating status copy and flashing transient noVNC
+  display nodes.
+- The waiting screen explains that the virtual machine may be shut down or
+  restarting, points users back to ClassicMac to start it when needed, and
+  reconnects automatically when the display returns.
+
 ## 2.1.0 — 2026-08-24
 
 ### Added
