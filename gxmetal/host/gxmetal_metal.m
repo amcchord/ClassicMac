@@ -1708,6 +1708,7 @@ static uint32_t gxmetal_metal_draw_textured(
     int host_ati_uv_transform =
         (draw_flags & GXMETAL_DRAW_HOST_ATI_UV) != 0;
     int ati_texel_coordinates = 0;
+    int ati_negative_v_coordinates = 0;
 
     if (resource == NULL ||
         (context->secondary_texture_id != 0 && secondary_resource == NULL)) {
@@ -1758,12 +1759,14 @@ static uint32_t gxmetal_metal_draw_textured(
         for (i = 0; i < count; i++) {
             float limit = vertices[i].inv_w * 2.0f;
 
+            if (vertices[i].v_over_w < 0.0f) {
+                ati_negative_v_coordinates = 1;
+            }
             if (vertices[i].u_over_w < -limit ||
                 vertices[i].u_over_w > limit ||
                 vertices[i].v_over_w < -limit ||
                 vertices[i].v_over_w > limit) {
                 ati_texel_coordinates = 1;
-                break;
             }
         }
         for (i = 0; i < count; i++) {
@@ -1771,8 +1774,14 @@ static uint32_t gxmetal_metal_draw_textured(
                 vertices[i].u_over_w /= (float)resource->width;
                 vertices[i].v_over_w /= (float)resource->height;
             }
-            vertices[i].v_over_w =
-                vertices[i].inv_w + vertices[i].v_over_w;
+            if (ati_negative_v_coordinates) {
+                /* Observed ATI private callers use two V conventions.  A
+                 * primitive containing negative V is top-origin and needs
+                 * translation into RAVE's lower-origin convention; an
+                 * entirely nonnegative primitive already uses RAVE V. */
+                vertices[i].v_over_w =
+                    vertices[i].inv_w + vertices[i].v_over_w;
+            }
         }
     }
     draw_vertices = vertices;

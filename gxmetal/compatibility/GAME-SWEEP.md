@@ -19,7 +19,7 @@ records sources, hashes, recipes, evidence descriptions, and driver fixes.
 | `bugdom` | Bugdom 1.2.1 | QuickDraw 3D 1.6 / RAVE, ATI behavior | Highest quality; load The Lawn; verify terrain, fog, foliage alpha, and HUD for five minutes; quit and relaunch | Installed; launcher and 3D intro pass on candidate; gameplay qualification pending |
 | `cro-mag-rally` | Cro-Mag Rally Demo | Apple OpenGL 1.1.2 | Confirm hardware/OpenGL; complete a lap with terrain, particles, HUD, transparency, and camera transitions | Accelerated 800x600 title/menu pass with zero fallback; 640x480 GXMetal reaches a static Pangea splash while the matched software control remains black |
 | `weekend-warrior` | Weekend Warrior | QuickDraw 3D / RAVE | Load the first arena; verify camera clipping, textured characters, UI, depth ordering, and transitions for five minutes | PerspectiveZ gap fixed and verified through title/menu/selection plus a ten-minute 3D center-stage soak with zero fallback; first-arena qualification pending |
-| `future-cop` | Future Cop: LAPD Demo | Selectable QuickDraw 3D RAVE | Select RAVE; enter Crime War; verify weapon blending, transparent HUD, depth, and explosions | Installed; ATI source-color blend fix restores live direct gameplay, but private-path texture coordinates remain visually incorrect |
+| `future-cop` | Future Cop: LAPD Demo | Selectable QuickDraw 3D RAVE | Select RAVE; enter Crime War; verify weapon blending, transparent HUD, depth, and explosions | Qualified on GXMetal: coherent ATI-private rendering, live gameplay/input, 2,610 direct frames, zero fallback, and clean exit |
 | `dark-vengeance` | Dark Vengeance Demo | Direct RAVE | Reach first combat and scripted sequence; inspect lighting, translucent effects, animated geometry, and camera motion | Blocked before 3D by deterministic game-level error in GXMetal and software controls |
 | `myth-ii` | Myth II: Soulblighter 1.5.1 Demo | RAVE | Select RAVE; load a solo map; pan, zoom, rotate, issue orders, and verify terrain, water, units, decals, projectiles, and explosions | Menu and new-game dialog pass; selected demo level remains black without creating a GXMetal context, so acceleration is unqualified |
 | `unreal-tournament` | Unreal Tournament 348m3 Demo | ATI renderer through RAVE | Confirm RAVE; render intro flyby; run a five-minute bot match checking lightmaps, fog, weapon alpha, HUD, and texture cycling | Installed; route pending |
@@ -212,18 +212,22 @@ VMs, each with an independent clone and unique local VNC and monitor sockets.
   correctly textured Crime War gameplay for more than two minutes and visibly
   responded to movement and combat input. GXMetal originally stopped
   presenting at the 3D transition after the ATI bridge requested the vendor
-  blend pair `GL_SRC_COLOR/GL_ONE`, leaving every subsequent screenshot
-  byte-identical. Extending the bounded Metal pipeline cache to accept
-  source-color and one-minus-source-color as ATI source factors removed the
-  warning and restored live input and presentation: all 20 gameplay captures
-  were unique, 3,077 profiled frames were direct with zero fallback, and QEMU
-  exited cleanly. The scene is not yet visually qualified because environment,
-  vehicle, and HUD textures remain severely striped or smeared; over 90 percent
-  of the affected draws use the private ATI UV transform, which is now under a
-  controlled semantic A/B. Evidence is under
-  `context/gxmetal-games/evidence/future-cop-software-gameplay-probe/`,
-  `context/gxmetal-games/evidence/future-cop-gxmetal-input/`, and
-  `context/gxmetal-games/evidence/future-cop-gxmetal-input-src-color/`.
+  blend pair `GL_SRC_COLOR/GL_ONE`; implementing the two ATI source-color
+  factors restored live presentation. A controlled trace then established two
+  real ATI-private texture-coordinate conventions: Carmageddon II supplies
+  negative top-origin V, while Future Cop supplies nonnegative RAVE V. The
+  production path now classifies the complete primitive before applying the
+  legacy V translation, so mixed vertex order cannot produce a partial
+  transform. Clamp-sensitive native gradients cover both conventions. The
+  exact production rerun on QEMU SHA-256
+  `363ce5db9e4f778df633c8defed946f4a81753a1abf768a7ed2f8a67308302b5`
+  produced 2,610 direct frames with zero fallback, averaged 29.39 fps, showed
+  coherent world, road, vehicle, HUD, and effect textures against ATG2, and
+  visibly responded to movement and combat input. No relevant warning, error,
+  fatal, or assertion appeared; QEMU exited zero and the immutable source hash
+  remained unchanged. Audio was not exercised. Evidence is under
+  `context/gxmetal-games/evidence/future-cop-software-gameplay-probe/` and
+  `context/gxmetal-games/evidence/future-cop-gxmetal-input-adaptive-final/`.
 - Myth II reached its correctly rendered main menu and new-game dialog, then
   accepted the demo mission and difficulty. It changed to a larger black
   display that remained byte-identical for the final minute; the host log only
