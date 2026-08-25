@@ -110,7 +110,7 @@ Requirements: an Apple Silicon Mac (M1 or later) running a recent macOS.
 ## Display & sound notes
 
 - The resolution you pick is the *boot* resolution and the depth is the *deepest available* mode; classic Mac OS chooses the active depth at startup (a fresh system comes up in B&W until you pick Thousands/Millions once in Monitors — it's remembered per machine).
-- The browser's **Fit** mode scales the configured framebuffer to the tab without changing the Mac's resolution. Choose **Actual Size** for one guest pixel per browser pixel, and use the page's **Full Screen** button to enter or leave browser fullscreen.
+- The browser's **Fit** mode prefers the largest whole-number scale that fits the tab and uses sharp nearest-neighbor edges when it must shrink the image. Choose **Actual Size** for one guest pixel per browser pixel, and use the page's **Fullscreen** button to enter or leave browser fullscreen.
 - The browser toolbar provides sticky Command, Option, and Control modifiers plus a dedicated Escape button, which makes host-reserved key combinations practical. Games using GXMetal Input automatically reveal a **Capture game mouse** control for relative movement; press Escape to leave pointer lock.
 - Power Mac widths snap down to a multiple of 8 (a VGA hardware constraint).
 - The Power Mac's packed low-bpp patch adds Black & White, 4 and 16 colors to the Monitors panel alongside 256/thousands/millions.

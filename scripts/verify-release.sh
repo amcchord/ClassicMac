@@ -71,11 +71,12 @@ TOOLS_CD="$APP/Contents/Resources/ClassicMacTools.iso"
 VNC_KEYMAP="$APP/Contents/Resources/qemu/pc-bios/keymaps/en-us"
 BROWSER_INDEX="$APP/Contents/Resources/Browser/index.html"
 BROWSER_RFB="$APP/Contents/Resources/Browser/novnc/core/rfb.js"
+BROWSER_SCALE="$APP/Contents/Resources/Browser/pixel-scale.js"
 BROWSER_LICENSE="$APP/Contents/Resources/Licenses/noVNC-MPL-2.0.txt"
 PAKO_LICENSE="$APP/Contents/Resources/Licenses/pako-MIT.txt"
 
 for required in "$PLIST" "$PPC_HELPER/Contents/Info.plist" \
-  "$PPC_QEMU" "$TOOLS_CD" "$VNC_KEYMAP" "$BROWSER_INDEX" \
+  "$PPC_QEMU" "$TOOLS_CD" "$VNC_KEYMAP" "$BROWSER_INDEX" "$BROWSER_SCALE" \
   "$BROWSER_RFB" "$BROWSER_LICENSE" "$PAKO_LICENSE"; do
   [ -e "$required" ] || die "Required release component is missing: $required"
 done
@@ -134,6 +135,8 @@ printf '%s\n' "$VNC_HELP" | grep -q 'websocket=' || \
   die "Bundled Power Mac QEMU lacks VNC-over-WebSocket support"
 grep -q 'pseudoEncodingQEMUPointerTypeChange' "$BROWSER_RFB" || \
   die "Bundled browser client lacks QEMU relative-pointer support"
+grep -q 'Math.floor(fit)' "$BROWSER_SCALE" || \
+  die "Bundled browser client lacks whole-number display scaling"
 if otool -L "$PPC_QEMU" | grep -Eq '/opt/homebrew|/usr/local'; then
   die "Bundled Power Mac QEMU still references a package-manager library"
 fi

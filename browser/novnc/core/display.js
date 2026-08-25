@@ -9,6 +9,7 @@
 import * as Log from './util/logging.js';
 import Base64 from "./base64.js";
 import { toSigned32bit } from './util/int.js';
+import { fitPixelScale } from '../../pixel-scale.js';
 
 export default class Display {
     constructor(target) {
@@ -430,25 +431,13 @@ export default class Display {
     }
 
     autoscale(containerWidth, containerHeight) {
-        let scaleRatio;
-
-        if (containerWidth === 0 || containerHeight === 0) {
-            scaleRatio = 0;
-
-        } else {
-
-            const vp = this._viewportLoc;
-            const targetAspectRatio = containerWidth / containerHeight;
-            const fbAspectRatio = vp.w / vp.h;
-
-            if (fbAspectRatio >= targetAspectRatio) {
-                scaleRatio = containerWidth / vp.w;
-            } else {
-                scaleRatio = containerHeight / vp.h;
-            }
-        }
-
-        this._rescale(scaleRatio);
+        const vp = this._viewportLoc;
+        this._rescale(fitPixelScale(
+            vp.w,
+            vp.h,
+            containerWidth,
+            containerHeight
+        ));
     }
 
     // ===== PRIVATE METHODS =====

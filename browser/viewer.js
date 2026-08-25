@@ -18,6 +18,7 @@ let reconnectTimer;
 let relativePointer = false;
 let scaleViewport = true;
 let pageClosing = false;
+let connected = false;
 
 function setMessage(title, detail, visible = true) {
   messageTitle.textContent = title;
@@ -25,8 +26,10 @@ function setMessage(title, detail, visible = true) {
   message.hidden = !visible;
 }
 
-function setStatus(text) {
+function setStatus(text, state = "waiting") {
   status.textContent = text;
+  status.dataset.state = state;
+  document.body.dataset.status = state;
 }
 
 function currentCanvas() {
@@ -50,7 +53,11 @@ function updatePointerControls() {
   captureButton.classList.toggle("active", captured);
   captureButton.setAttribute("aria-pressed", captured ? "true" : "false");
   if (relativePointer && !captured) {
-    setStatus("Game mouse needs capture");
+    setStatus("Mouse capture needed", "attention");
+  } else if (relativePointer && captured) {
+    setStatus("Mouse captured", "connected");
+  } else if (connected) {
+    setStatus("Connected", "connected");
   }
 }
 
@@ -70,6 +77,7 @@ function connect() {
 
   setStatus("Connecting…");
   setMessage("Connecting to the Mac…", "The display will appear automatically.");
+  connected = false;
   relativePointer = false;
   updatePointerControls();
 
@@ -84,7 +92,8 @@ function connect() {
     rfb.classicInputHelpers = configuration.classicInputHelpers;
 
     rfb.addEventListener("connect", () => {
-      setStatus("Connected");
+      connected = true;
+      setStatus("Connected", "connected");
       setMessage("", "", false);
       rfb.focus();
     });
@@ -109,6 +118,7 @@ function connect() {
         document.exitPointerLock();
       }
       rfb = undefined;
+      connected = false;
       relativePointer = false;
       updatePointerControls();
       if (!pageClosing) {
@@ -122,6 +132,8 @@ function connect() {
     });
 
     rfb.addEventListener("securityfailure", () => {
+      connected = false;
+      setStatus("Display rejected", "error");
       setMessage(
         "The local display was rejected",
         "Close this tab and reopen the screen from ClassicMac."
@@ -163,7 +175,7 @@ fullScreenButton.addEventListener("click", async () => {
 });
 
 document.addEventListener("fullscreenchange", () => {
-  fullScreenButton.textContent = document.fullscreenElement ? "Exit Full Screen" : "Full Screen";
+  fullScreenButton.textContent = document.fullscreenElement ? "Exit Fullscreen" : "Fullscreen";
 });
 
 escapeButton.addEventListener("click", () => {
@@ -203,7 +215,7 @@ try {
   document.title = `${machineName.textContent} — ClassicMac`;
   connect();
 } catch (error) {
-  setStatus("Display unavailable");
+  setStatus("Display unavailable", "error");
   setMessage(
     "ClassicMac is no longer serving this display",
     "Reopen the screen from the ClassicMac app."
