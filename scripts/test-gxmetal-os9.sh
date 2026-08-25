@@ -9,6 +9,8 @@
 #
 # Optional environment:
 #   GXMETAL_APP=/path/to/ClassicMac.app
+#   GXMETAL_TOOLS_CD=/path/to/ClassicMacTools.iso
+#   GXMETAL_QEMU=/path/to/qemu-system-ppc
 #   GXMETAL_OS9_WAIT_SECONDS=90
 
 set -euo pipefail
@@ -17,8 +19,8 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SOURCE_DISK="${1:-${OS9_DISK:-}}"
 APP="${GXMETAL_APP:-$ROOT_DIR/dist/ClassicMac.app}"
 WAIT_SECONDS="${GXMETAL_OS9_WAIT_SECONDS:-90}"
-TOOLS_CD="$APP/Contents/Resources/ClassicMacTools.iso"
-QEMU="$APP/Contents/Helpers/Power Mac G4.app/Contents/MacOS/qemu-system-ppc"
+TOOLS_CD="${GXMETAL_TOOLS_CD:-$APP/Contents/Resources/ClassicMacTools.iso}"
+QEMU="${GXMETAL_QEMU:-$APP/Contents/Helpers/Power Mac G4.app/Contents/MacOS/qemu-system-ppc}"
 NDRVLOADER="$APP/Contents/Resources/ndrvloader"
 
 SCRATCH=""
@@ -88,7 +90,11 @@ if ! cp -c "$SOURCE_DISK" "$DISK" 2>/dev/null; then
 fi
 chmod u+w "$DISK"
 
-log "Extracting the matching driver and test from the bundled Tools CD"
+if [ -n "${GXMETAL_TOOLS_CD:-}" ]; then
+  log "Extracting the source candidate driver and test from $TOOLS_CD"
+else
+  log "Extracting the matching driver and test from the bundled Tools CD"
+fi
 mkdir -p "$SCRATCH/macbinary" "$SCRATCH/guest"
 hmount "$TOOLS_CD" >/dev/null
 HFSUTILS_MOUNTED=1
@@ -179,6 +185,9 @@ sync
 detach_disk
 
 log "Booting Mac OS 9 and running the in-guest conformance workload"
+if [ -n "${GXMETAL_QEMU:-}" ]; then
+  printf '    Source candidate QEMU: %s\n' "$QEMU"
+fi
 "$QEMU" \
   -d guest_errors \
   -accel tcg,tb-size=512 \
@@ -240,6 +249,10 @@ esac
   [ "$(stat -f '%m' "$SOURCE_DISK")" = "$SOURCE_MTIME" ] || \
   die "The source disk's size or modification time changed during validation."
 
-log "OS 9 signed-bundle conformance passed"
+if [ -n "${GXMETAL_TOOLS_CD:-}${GXMETAL_QEMU:-}" ]; then
+  log "OS 9 source-candidate conformance passed"
+else
+  log "OS 9 signed-bundle conformance passed"
+fi
 printf '    %s\n' "$RESULT"
 printf '    Evidence: %s\n' "$SCRATCH"

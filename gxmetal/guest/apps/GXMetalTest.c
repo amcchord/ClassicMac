@@ -1952,6 +1952,82 @@ static TQAError GXMetalRenderCL4Format(
     return error;
 }
 
+static TQAError GXMetalRenderLargeMeshBatches(
+    TQADrawContext *context, const TQAEngine *engine,
+    GDHandle graphicsDevice, const TQARect *deviceRect)
+{
+    enum { kTriangleCount = 256 };
+    static unsigned char pixels[4] = {0x00, 0x00, 0xff, 0x00};
+    static TQAIndexedTriangle triangles[kTriangleCount];
+    TQAImage image;
+    TQATexture *texture = NULL;
+    TQAVGouraud gouraud[3];
+    TQAVTexture textured[3];
+    TQARect dirty = {0, GXMETAL_WIDTH, 0, GXMETAL_HEIGHT};
+    TQAError error;
+    unsigned long i;
+
+    image.width = 1;
+    image.height = 1;
+    image.rowBytes = 4;
+    image.pixmap = pixels;
+    error = QATextureNew(engine, kQATexture_None, kQAPixel_RGB32,
+                         &image, &texture);
+    if (error != kQANoErr) {
+        GXMetalRecordResult("FAIL: large mesh texture creation");
+        return error;
+    }
+    for (i = 0; i < kTriangleCount; i++) {
+        triangles[i].triangleFlags = kQATriFlags_None;
+        triangles[i].vertices[0] = 0;
+        triangles[i].vertices[1] = 1;
+        triangles[i].vertices[2] = 2;
+    }
+    gouraud[0] = GXMetalGouraud(16.0f, 16.0f, 0.5f,
+                                 1.0f, 0.0f, 0.0f, 1.0f);
+    gouraud[1] = GXMetalGouraud(144.0f, 16.0f, 0.5f,
+                                 1.0f, 0.0f, 0.0f, 1.0f);
+    gouraud[2] = GXMetalGouraud(80.0f, 196.0f, 0.5f,
+                                 1.0f, 0.0f, 0.0f, 1.0f);
+    textured[0] = GXMetalTextureVertex(176.0f, 16.0f, 0.5f, 0.0f, 0.0f);
+    textured[1] = GXMetalTextureVertex(304.0f, 16.0f, 0.5f, 1.0f, 0.0f);
+    textured[2] = GXMetalTextureVertex(240.0f, 196.0f, 0.5f, 0.5f, 1.0f);
+
+    QASetFloat(context, kQATag_ColorBG_r, 0.0f);
+    QASetFloat(context, kQATag_ColorBG_g, 0.0f);
+    QASetFloat(context, kQATag_ColorBG_b, 1.0f);
+    QASetFloat(context, kQATag_ColorBG_a, 1.0f);
+    QASetInt(context, kQATag_ZFunction, kQAZFunction_None);
+    QASetInt(context, kQATag_ZBufferMask, kQAZBufferMask_Disable);
+    QASetInt(context, kQATag_Blend, kQABlend_PreMultiply);
+    QASetInt(context, kQATag_TextureFilter, kQATextureFilter_Fast);
+    QASetInt(context, kQATag_TextureOp, kQATextureOp_None);
+    QARenderStart(context, &dirty, NULL);
+    QASubmitVerticesGouraud(context, 3, gouraud);
+    QADrawTriMeshGouraud(context, kTriangleCount, triangles);
+    QASetPtr(context, kQATag_Texture, texture);
+    QASubmitVerticesTexture(context, 3, textured);
+    QADrawTriMeshTexture(context, kTriangleCount, triangles);
+    error = QARenderEnd(context, &dirty);
+    if (error == kQANoErr) {
+        error = QASync(context);
+    }
+    if (error == kQANoErr &&
+        !GXMetalPixelMatches(graphicsDevice, deviceRect->left + 80,
+                             deviceRect->top + 64, kGXMetalPixelRed)) {
+        GXMetalRecordResult("FAIL: large Gouraud mesh batch pixel");
+        error = kQAError;
+    }
+    if (error == kQANoErr &&
+        !GXMetalPixelMatches(graphicsDevice, deviceRect->left + 240,
+                             deviceRect->top + 64, kGXMetalPixelGreen)) {
+        GXMetalRecordResult("FAIL: large textured mesh batch pixel");
+        error = kQAError;
+    }
+    QATextureDelete(engine, texture);
+    return error;
+}
+
 static TQAError GXMetalBenchmarkFrame(TQADrawContext *context,
                                       TQATexture *texture,
                                       unsigned long frame)
@@ -2114,7 +2190,7 @@ static void GXMetalBuildPassResult(char *result, size_t resultCapacity,
     GXMetalAppendText(&cursor, end, "PASS: version=");
     GXMetalAppendVersion(&cursor, end, revision);
     GXMetalAppendText(&cursor, end,
-        " RAVE discovery capability-contract depth perspective-z blend alpha-test chromakey backface clip texture intensity-formats acl16-88 alpha1-byte cl4 rgb8-332 public-multitexture dynamic-resources ATI-private-nocopy bitmap bitmap-scale dirty-present double-buffer framebuffer gx_us=");
+        " RAVE discovery capability-contract depth perspective-z blend alpha-test chromakey backface clip texture intensity-formats acl16-88 alpha1-byte cl4 rgb8-332 public-multitexture dynamic-resources ATI-private-nocopy large-mesh-batches bitmap bitmap-scale dirty-present double-buffer framebuffer gx_us=");
     GXMetalAppendDecimal(&cursor, end, gxMetalMicroseconds);
     GXMetalAppendText(&cursor, end, " sw_us=");
     GXMetalAppendDecimal(&cursor, end, softwareMicroseconds);
@@ -2563,6 +2639,10 @@ int main(void)
         }
         if (error == kQANoErr) {
             error = GXMetalRenderBitmapScale(
+                context, engine, device.device.gDevice, &deviceRect);
+        }
+        if (error == kQANoErr) {
+            error = GXMetalRenderLargeMeshBatches(
                 context, engine, device.device.gDevice, &deviceRect);
         }
     } else {
