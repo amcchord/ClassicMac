@@ -18,14 +18,14 @@ records sources, hashes, recipes, evidence descriptions, and driver fixes.
 | --- | --- | --- | --- | --- |
 | `bugdom` | Bugdom 1.2.1 | QuickDraw 3D 1.6 / RAVE, ATI behavior | Highest quality; load The Lawn; verify terrain, fog, foliage alpha, and HUD for five minutes; quit and relaunch | Installed; launcher and 3D intro pass on candidate; gameplay qualification pending |
 | `cro-mag-rally` | Cro-Mag Rally Demo | Apple OpenGL 1.1.2 | Confirm hardware/OpenGL; complete a lap with terrain, particles, HUD, transparency, and camera transitions | Installed; test in progress |
-| `weekend-warrior` | Weekend Warrior | QuickDraw 3D / RAVE | Load the first arena; verify camera clipping, textured characters, UI, depth ordering, and transitions for five minutes | Installed; test in progress |
+| `weekend-warrior` | Weekend Warrior | QuickDraw 3D / RAVE | Load the first arena; verify camera clipping, textured characters, UI, depth ordering, and transitions for five minutes | Direct intro/title and five-minute stability pass; title-menu models missing; clean A/B rerun pending |
 | `future-cop` | Future Cop: LAPD Demo | Selectable QuickDraw 3D RAVE | Select RAVE; enter Crime War; verify weapon blending, transparent HUD, depth, and explosions | Acquired; in-guest installer pending |
-| `dark-vengeance` | Dark Vengeance Demo | Direct RAVE | Reach first combat and scripted sequence; inspect lighting, translucent effects, animated geometry, and camera motion | Installed; test in progress |
+| `dark-vengeance` | Dark Vengeance Demo | Direct RAVE | Reach first combat and scripted sequence; inspect lighting, translucent effects, animated geometry, and camera motion | Blocked before 3D by deterministic game-level error in GXMetal and software controls |
 | `myth-ii` | Myth II: Soulblighter 1.5.1 Demo | RAVE | Select RAVE; load a solo map; pan, zoom, rotate, issue orders, and verify terrain, water, units, decals, projectiles, and explosions | Installed; route pending |
 | `unreal-tournament` | Unreal Tournament 348m3 Demo | ATI renderer through RAVE | Confirm RAVE; render intro flyby; run a five-minute bot match checking lightmaps, fog, weapon alpha, HUD, and texture cycling | Installed; route pending |
-| `combat-mission` | Combat Mission: Beyond Overlord 1.02 Demo | RAVE hardware probe | Complete detection; load Chance Encounter; move through the map and execute a turn with terrain, markers, smoke, and animation | Acquired and fork-verified; disk staging pending |
-| `oni` | Oni Demo | Classic Apple OpenGL | Reach training and first fight; verify animation, lightmaps, transparency, HUD, and an indoor/outdoor transition | Source located; download pending |
-| `diablo-ii` | Diablo II Shareware | Selectable RAVE/OpenGL/Glide | Run Video Test; select RAVE; enter Blood Moor; verify perspective, blended shadows, lighting, sprite alpha, and UI | Source located; download pending |
+| `combat-mission` | Combat Mission: Beyond Overlord 1.02 Demo | RAVE hardware probe | Complete detection; load Chance Encounter; move through the map and execute a turn with terrain, markers, smoke, and animation | Installed on nine-game candidate; route pending |
+| `oni` | Oni Demo | Classic Apple OpenGL | Reach training and first fight; verify animation, lightmaps, transparency, HUD, and an indoor/outdoor transition | Installed with Bink library on nine-game candidate; route pending |
+| `havoc` | Havoc Demo | First shipping QuickDraw 3D RAVE game | Select accelerated rendering; enter the demo arena; verify terrain, fog, textured objects, transparency, HUD, and camera motion for five minutes | Acquired, fork-verified, and installed on immutable ten-game base; route pending |
 
 OpenGL titles only count as GXMetal tests when the host log contains GXMetal
 presentation traffic. If a game cannot launch or render, run the matched
@@ -44,8 +44,8 @@ OS, or installer faults.
 | Myth II | [Project Magma demo mirror](https://www.moddb.com/games/myth2/downloads/myth-2-151-demo-macosxclassic) | `Myth_II_Demo.zip` | MD5 `baacee4d64a6848580fe1c7883ac1172` | `0eda6b3620891080a2dc04cb88de3d6620c05f2a4f6c1bebcb724bdb97afc020` |
 | Unreal Tournament | [Internet Archive tucows_205662_Unreal_Tournament](https://archive.org/details/tucows_205662_Unreal_Tournament) | `unrealtournament.hqx`, 348m3 demo | SHA-1 `76107e9de4bf6c22db3f6338f27edd6312de193a` | `1155ff75573893220fbbc211fa41b45ee92f597650f7f6cc918f5ab473d11117` |
 | Combat Mission | [Macintosh Repository 24664](https://www.macintoshrepository.org/24664-combat-mission-beyond-overlord) | `cm-bo-demo102.sit.bin`, download id 24627 | SHA-1 `eab48f4a228bc151eef7629c6b3576cd6930deea` | `56f46fae2993fbce317f33a71411f959525de5c3481fdca7a6cb6f3750b19967` |
-| Oni | [Macintosh Repository 3445](https://www.macintoshrepository.org/3445-oni) | `OniDemo.sit`, download id 60155 | SHA-1 `0433e6…` on archive page | Pending |
-| Diablo II | [Macintosh Repository 12637](https://www.macintoshrepository.org/12637-diablo-ii) | `DiabloIIdemo.sit`, download id 14664 | SHA-1 `4bd7be…` on archive page | Pending |
+| Oni | [Macintosh Repository 3445](https://www.macintoshrepository.org/3445-oni) | `OniDemo.sit`, download id 60155 | SHA-1 `0433e60b5987a144e57ccec154f003c710c04a81` | `295f8b2ba3b84bb601194f73fbc026265a2b287b09761453c7134200faf31739` |
+| Havoc | [Macintosh Repository 4456](https://www.macintoshrepository.org/4456-havoc) | `HAVOC_Demo.sit`, download id 59775 | SHA-1 `8e4e2e8d300c9441d03eedb3954f3ba657f6bd28` | `4cf7f7d8d49fa46b54abf7f6977d20bed856cbd236d6d2c95b952f57183956d8` |
 
 The classic Bugdom and Weekend Warrior releases are freeware according to
 Pangea's official pages. Pangea also publishes the classic Bugdom serial. The
@@ -79,6 +79,13 @@ VMs, each with an independent clone and unique local VNC and monitor sockets.
 - Selected ten games covering nine additional engines and five renderer/API
   patterns. Existing Nanosaur, Carmageddon II, and Quake III results are kept as
   regression anchors rather than counted toward the ten.
+- Replaced the planned Diablo II shareware case after its 121 MB Macintosh
+  Repository package proved member-gated and no digest-matched public mirror
+  was available. The replacement is Havoc, which
+  [Apple Directions, July 1996](https://www.savagetaylor.com/wp-content/uploads/documents/Apple_Directions/Apple_Directions_1996/Apple_Directions_07-96.pdf)
+  identified as the first game on the market to use QuickDraw 3D RAVE. That
+  makes its small public demo a more direct historical test of the baseline
+  RAVE contract while avoiding an undocumented account-creation step.
 - Added `scripts/gxmetal-game-sweep.py`, an evidence-producing parallel runner
   with isolated APFS/full-copy disks, Unix-socket VNC automation, screenshots,
   profile and serial logs, media/tool hashes, and before/after base-image
@@ -101,6 +108,51 @@ VMs, each with an independent clone and unique local VNC and monitor sockets.
   Graphics and Sound data files. Installation into the shared candidate disk
   is deferred until the concurrent game runs finish their source-integrity
   checks.
+- Downloaded and verified the Oni demo (79,260,591 bytes) against the archive's
+  full SHA-1. Host extraction retained its application resource fork and the
+  resource forks of CarbonLib, InputSprocket, and the Bink shared library.
+  This supplied the self-contained game folder and candidate extension set for
+  an isolated Mac OS 9 staging pass.
+- Cloned the shared six-game candidate without altering it, then staged Combat
+  Mission and Oni on the new nine-game disk. Mac OS 9.2.1 already supplied
+  newer CarbonLib 1.4 and the same InputSprocket 1.7.3, so only Oni's missing
+  Bink 1.0k shared library was installed. Data and resource-fork byte counts
+  were verified after `ditto`; the staged disk SHA-256 is
+  `c32273882c6f3582b1699a0e05dddf0848fa702eb86a959760df1169761af81d`.
+- Downloaded the 5,367,480-byte Havoc demo after the archive's serialized
+  transfer interval and matched its complete published SHA-1. `unar` preserved
+  its PEF application's 351,278-byte resource fork and the resource-only game
+  data files (including the 795,380-byte `RB Objects` fork). A full-copy
+  derivative of the immutable nine-game disk was mounted for this staging only;
+  `ditto` preserved the verified forks, the disk was ejected, and the resulting
+  ten-game base was locked read-only at SHA-256
+  `66ddbb9898aec3128d8e8cbf33ae3774cb39bba64483936b45432245ffaa83aa`.
+- A concurrent Cro-Mag probe detected that the older shared source
+  `/tmp/gxmetal-bugdom-fix.img` changed at 00:29:24 while the run was active.
+  Audit confirmed every recorded QEMU command targeted a distinct retained
+  clone, not that source, but the exact external writer was not recoverable
+  after the fact. The harness correctly rejected the run on its before/after
+  SHA-256 mismatch. All overlapping results are marked tainted, the old source
+  is retired, and subsequent runs use the unmounted nine-game image above in
+  read-only mode (`0444`) with its hash checked on every run.
+- Weekend Warrior reached its Pangea 3D intro and animated textured money-field
+  title scene and remained stable for more than five minutes. The host recorded
+  49,184 direct frames, zero fallback frames, and no crash or queue fault.
+  However, the rotating `MenuInterface.3dmf` selection models never appeared,
+  so input could not advance to gameplay. Because this long run overlapped the
+  retired source-image change, it is retained as diagnostic evidence rather
+  than qualification; a clean GXMetal/software comparison on the immutable
+  base is required to isolate a likely public RAVE state/rendering gap.
+- Dark Vengeance consistently stopped before creating a RAVE context with
+  `FATAL ERROR: Memory allocation failed (size = -49)`. The same result occurred
+  at 512 MB and 128 MB, with GXMetal and software RAVE, and after applying the
+  vendor-documented `DISABLE_DRAWSPROCKET=TRUE` workaround. The workaround took
+  effect but did not change the error, and no rolling GXMetal profile appeared.
+  Because classic Mac OS error -49 is `opWrErr` (file already open for writing),
+  the observed failure is classified as a media/runtime compatibility problem,
+  not a GXMetal rendering failure. Evidence and the completed review record are
+  under
+  `context/gxmetal-games/evidence/dark-vengeance-live-final-drawsprocket-off-2/`.
 - Confirmed `unar` preserved classic Finder metadata and resource forks for the
   extracted applications before copying them to HFS+ with `ditto`.
 - Macintosh Repository rejected simultaneous follow-up transfers with HTTP
