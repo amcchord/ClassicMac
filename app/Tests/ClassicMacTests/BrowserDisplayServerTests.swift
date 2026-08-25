@@ -39,6 +39,9 @@ final class BrowserDisplayServerTests: XCTestCase {
         XCTAssertEqual((pageResponse as? HTTPURLResponse)?.statusCode, 200)
         let page = String(decoding: pageData, as: UTF8.self)
         XCTAssertTrue(page.contains("Classic Mac display"))
+        XCTAssertTrue(page.contains("Waiting for the Mac"))
+        XCTAssertTrue(page.contains("may be shut down or restarting"))
+        XCTAssertTrue(page.contains("reconnect automatically"))
         XCTAssertTrue(page.contains("content=\"Browser Test Mac\""))
         XCTAssertTrue(
             page.contains("content=\"ws://127.0.0.1:\(server.endpoint.webSocketPort)\"")

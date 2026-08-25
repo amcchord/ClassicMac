@@ -145,6 +145,12 @@ button.capture {
   height: 100%;
 }
 
+/* Failed reconnect attempts can create and remove noVNC display nodes. Keep
+   those transient nodes out of view until a connection actually succeeds. */
+#screen.showing-message > :not(.message) {
+  visibility: hidden;
+}
+
 #screen canvas {
   image-rendering: crisp-edges;
   image-rendering: pixelated;
@@ -177,6 +183,7 @@ button.capture {
 .message span {
   color: #777;
   font-size: 12px;
+  line-height: 1.45;
 }
 
 .spinner {

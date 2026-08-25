@@ -11,6 +11,9 @@ const scaleButton = document.getElementById("scale");
 const fullScreenButton = document.getElementById("fullscreen");
 const escapeButton = document.getElementById("escape");
 const modifierButtons = [...document.querySelectorAll("button.modifier")];
+const waitingTitle = "Waiting for the Mac…";
+const waitingDetail =
+  "The machine may be shut down or restarting. Start it in ClassicMac if needed; this page will reconnect automatically.";
 
 let configuration;
 let rfb;
@@ -21,15 +24,28 @@ let pageClosing = false;
 let connected = false;
 
 function setMessage(title, detail, visible = true) {
-  messageTitle.textContent = title;
-  messageDetail.textContent = detail;
-  message.hidden = !visible;
+  if (messageTitle.textContent !== title) messageTitle.textContent = title;
+  if (messageDetail.textContent !== detail) messageDetail.textContent = detail;
+  if (visible) {
+    screen.classList.add("showing-message");
+    message.hidden = false;
+  } else {
+    message.hidden = true;
+    screen.classList.remove("showing-message");
+  }
 }
 
 function setStatus(text, state = "waiting") {
-  status.textContent = text;
-  status.dataset.state = state;
-  document.body.dataset.status = state;
+  if (status.textContent !== text) status.textContent = text;
+  if (status.dataset.state !== state) status.dataset.state = state;
+  if (document.body.dataset.status !== state) {
+    document.body.dataset.status = state;
+  }
+}
+
+function showWaitingForMachine() {
+  setStatus(waitingTitle);
+  setMessage(waitingTitle, waitingDetail);
 }
 
 function currentCanvas() {
@@ -75,8 +91,9 @@ function connect() {
   clearTimeout(reconnectTimer);
   if (!configuration || pageClosing) return;
 
-  setStatus("Connecting…");
-  setMessage("Connecting to the Mac…", "The display will appear automatically.");
+  // Keep one stable waiting view across retries. Rewriting this copy for each
+  // one-second attempt made the page visibly alternate between states.
+  showWaitingForMachine();
   connected = false;
   relativePointer = false;
   updatePointerControls();
@@ -122,11 +139,7 @@ function connect() {
       relativePointer = false;
       updatePointerControls();
       if (!pageClosing) {
-        setStatus("Waiting for the Mac…");
-        setMessage(
-          "The Mac is reconnecting…",
-          "Keep this tab open during a restart."
-        );
+        showWaitingForMachine();
         reconnectTimer = setTimeout(connect, 1000);
       }
     });
@@ -140,8 +153,7 @@ function connect() {
       );
     });
   } catch (error) {
-    setStatus("Waiting for the Mac…");
-    setMessage("The Mac is still starting…", "Trying the display again shortly.");
+    showWaitingForMachine();
     reconnectTimer = setTimeout(connect, 1000);
   }
 }
