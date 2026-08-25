@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
+  <meta name="classicmac-machine-name" content="__CLASSICMAC_MACHINE_NAME__">
+  <meta name="classicmac-websocket-url" content="__CLASSICMAC_WEBSOCKET_URL__">
+  <meta name="classicmac-input-helpers" content="__CLASSICMAC_INPUT_HELPERS__">
+  <title>ClassicMac</title>
+  <link rel="stylesheet" href="./viewer.css">
+</head>
+<body>
+  <header class="toolbar">
+    <div class="identity">
+      <span class="mark" aria-hidden="true">M</span>
+      <div class="identity-copy">
+        <strong id="machine-name">ClassicMac</strong>
+        <span id="status" role="status">Preparing display…</span>
+      </div>
+    </div>
+
+    <div class="controls" aria-label="Mac keyboard and display controls">
+      <button id="capture" class="capture" type="button" hidden>
+        Capture game mouse
+      </button>
+      <button class="modifier" data-keysym="0xffeb" data-code="MetaLeft" type="button">
+        Command
+      </button>
+      <button class="modifier" data-keysym="0xffe9" data-code="AltLeft" type="button">
+        Option
+      </button>
+      <button class="modifier" data-keysym="0xffe3" data-code="ControlLeft" type="button">
+        Control
+      </button>
+      <button id="escape" type="button">Esc</button>
+      <button id="scale" type="button" aria-pressed="true">Fit</button>
+      <button id="fullscreen" type="button">Full Screen</button>
+    </div>
+  </header>
+
+  <main id="screen" aria-label="Classic Mac display">
+    <div id="message" class="message">
+      <div class="spinner" aria-hidden="true"></div>
+      <strong id="message-title">Starting the Mac…</strong>
+      <span id="message-detail">The display will connect automatically.</span>
+    </div>
+  </main>
+
+  <script type="module" src="./viewer.js"></script>
+</body>
+</html>

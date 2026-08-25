@@ -40,3 +40,18 @@ linked libraries:
 Their license texts are copied from the exact Homebrew installations used to
 produce the release. Source code is available from each project's upstream
 site and through Homebrew's corresponding formula source archives.
+
+## noVNC
+
+ClassicMac includes the noVNC 1.7.0 browser VNC client, modified to support
+QEMU's pointer-type-change extension and ClassicMac's optional secondary-click
+and scrolling helpers. noVNC is licensed under the Mozilla Public License 2.0;
+its JavaScript source and license text are included in the application bundle.
+
+Upstream source: <https://github.com/novnc/noVNC/tree/v1.7.0>
+
+noVNC includes an ES-module adaptation of pako 1.0.3 under the MIT License.
+The pako license text is included with the browser source and in the
+application's Licenses directory.
+
+Upstream source: <https://github.com/nodeca/pako/tree/1.0.3>

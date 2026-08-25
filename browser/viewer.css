@@ -1,0 +1,225 @@
+:root {
+  color-scheme: dark;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+  background: #111214;
+  color: #f5f5f7;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+  background:
+    radial-gradient(circle at 50% -30%, rgba(255, 255, 255, 0.10), transparent 52%),
+    #111214;
+}
+
+.toolbar {
+  min-height: 64px;
+  padding: max(10px, env(safe-area-inset-top)) 14px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  background: rgba(31, 32, 35, 0.92);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.10);
+  backdrop-filter: blur(22px) saturate(130%);
+  -webkit-backdrop-filter: blur(22px) saturate(130%);
+  z-index: 10;
+}
+
+.identity {
+  min-width: 180px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.mark {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  border-radius: 10px;
+  color: #fff;
+  font: 800 21px/1 ui-rounded, "SF Pro Rounded", sans-serif;
+  background: linear-gradient(145deg, #ea414c, #9f1024);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  box-shadow: 0 5px 18px rgba(0, 0, 0, 0.32), inset 0 1px rgba(255, 255, 255, 0.25);
+}
+
+.identity-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.identity-copy strong,
+.identity-copy span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.identity-copy strong {
+  font-size: 14px;
+  letter-spacing: 0.01em;
+}
+
+.identity-copy span {
+  color: #a8abb2;
+  font-size: 12px;
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.controls::-webkit-scrollbar {
+  display: none;
+}
+
+button {
+  appearance: none;
+  min-height: 34px;
+  padding: 6px 11px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 9px;
+  color: #f4f4f6;
+  background: rgba(255, 255, 255, 0.075);
+  font: 600 12px/1 -apple-system, BlinkMacSystemFont, sans-serif;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease, transform 80ms ease;
+}
+
+button:hover {
+  background: rgba(255, 255, 255, 0.13);
+  border-color: rgba(255, 255, 255, 0.22);
+}
+
+button:active {
+  transform: translateY(1px);
+}
+
+button[aria-pressed="true"],
+button.active {
+  color: #fff;
+  background: #2867d6;
+  border-color: #4b83df;
+}
+
+button.capture {
+  background: #d33242;
+  border-color: #ea5966;
+}
+
+#screen {
+  position: relative;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  outline: none;
+}
+
+#screen > div:not(.message) {
+  width: 100%;
+  height: 100%;
+}
+
+#screen canvas {
+  image-rendering: auto;
+  box-shadow: 0 16px 54px rgba(0, 0, 0, 0.55);
+}
+
+.message {
+  position: absolute;
+  z-index: 5;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  min-width: min(390px, calc(100vw - 40px));
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  text-align: center;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 17px;
+  background: rgba(35, 36, 40, 0.9);
+  box-shadow: 0 22px 60px rgba(0, 0, 0, 0.42);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+.message[hidden] {
+  display: none;
+}
+
+.message strong {
+  font-size: 16px;
+}
+
+.message span {
+  color: #b5b7bd;
+  font-size: 13px;
+}
+
+.spinner {
+  width: 24px;
+  height: 24px;
+  margin-bottom: 5px;
+  border: 3px solid rgba(255, 255, 255, 0.17);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (max-width: 760px) {
+  .toolbar {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 9px;
+  }
+
+  .controls {
+    width: 100%;
+    justify-content: flex-start;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition: none !important;
+    animation-duration: 0.001ms !important;
+  }
+}

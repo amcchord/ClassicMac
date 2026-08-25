@@ -35,7 +35,7 @@ ClassicMac wraps a custom QEMU build in a native SwiftUI app and covers the enti
 | Machine | CPU | Runs | Highlights |
 | --- | --- | --- | --- |
 | **Macintosh Quadra 800** | Motorola 68040 | System 7.1 – Mac OS 8.1 | Enhanced paravirtualized framebuffer (`nubus-qfb`), writable removable floppy images, any resolution up to 3840x2160, all QuickDraw depths incl. Thousands |
-| **Power Mac G4** | PowerPC (`mac99`) | Mac OS 8.5 – 9.2.2 | Boots through OpenBIOS firmware, screamer (AWACS) sound, live window resizing via a custom `qemu_vga.ndrv` |
+| **Power Mac G4** | PowerPC (`mac99`) | Mac OS 8.5 – 9.2.2 | Boots through OpenBIOS firmware, screamer (AWACS) sound, browser-native display, custom `qemu_vga.ndrv` |
 
 Everything is bundled into a single `ClassicMac.app`: the two QEMU system emulators, firmware, guest video drivers, folder-sharing drivers, and a guest-additions Tools CD. No Homebrew, nothing to hunt down, nothing to install inside the guest.
 
@@ -51,18 +51,19 @@ ClassicMac exists because of years of brilliant work by other engineers. The pat
 - [QemuMacDrivers](https://github.com/qemu/QemuMacDrivers) (Benjamin Herrenschmidt, Mark Cave-Ayland) for the `qemu_vga.ndrv` Power Mac video driver that `ppcvid/driver` extends with live host-window resizing.
 - [mcayland/qemu](https://github.com/mcayland/qemu/tree/screamer) for the screamer (AWACS) PPC audio device and screamer-aware OpenBIOS (ported here onto QEMU 11.0.2).
 - [Retro68](https://github.com/autc04/Retro68) for the 68k and PPC classic Mac OS cross toolchain.
+- [noVNC](https://github.com/novnc/noVNC) for the browser-native VNC client used by the private local display page.
 
 ## Features
 
-- **Drag the window, the Mac follows.** On both machines you can drag the QEMU window to any size and the guest switches to that exact pixel resolution when you release the mouse — the Display Manager does a real live resolution switch, no reboot. The Monitors control panel also offers the standard resolution list.
+- **The Mac opens in your web browser.** Starting either machine launches a private loopback URL in your preferred browser instead of a separate emulator window. The app also shows the address so you can reopen or copy it, while Fit, Actual Size, Full Screen, modifier-key, and game-mouse controls stay close at hand.
 - **Enhanced video on the Quadra** (`-M q800,fb=qemu`): arbitrary resolutions up to 3840x2160, every QuickDraw depth including Thousands (16-bit), gamma correction, and multiple monitors — far beyond what stock QEMU's macfb can do.
 - **Zero guest setup on the Power Mac.** It boots through OpenBIOS firmware, and a custom `qemu_vga.ndrv` is handed to Mac OS over fw_cfg at boot, so live resizing and millions of colors work with nothing installed in the guest.
 - **Host folder sharing on both machines.** Pick a folder and it mounts on the emulated desktop as a read/write disk (classicvirtio + virtio-9p). Resource forks and type/creator codes round-trip via `.rdump`/`.idump` sidecars.
-- **Writable floppy images on the Quadra.** Attach a raw `.img`, `.dsk`, `.ima`, or `.raw` image in Media settings, or insert one while the Mac is running with **Mac → Floppy**. Ejection is guest-coordinated: classic Mac OS flushes and unmounts the volume before QEMU releases the host file.
+- **Writable floppy images on the Quadra.** Attach a raw `.img`, `.dsk`, `.ima`, or `.raw` image in Media settings before startup and it appears as a writable classic Mac disk.
 - **Clean, working sound.** The Quadra's Apple Sound Chip is patched to feed silence when idle (no more idle buzz), and the Power Mac gets the screamer (AWACS) device with a screamer-aware OpenBIOS.
 - **Self-contained `.classic` machine documents.** Each VM is a single Finder package holding its config, disk, and PRAM. Keep it anywhere, double-click to boot, move it between Macs.
-- **Classic input helpers.** Secondary click opens contextual menus as Control+click, and the scroll wheel becomes arrow-key taps. Toggle both together while the Mac is running with **Mac → Secondary Click and Scrolling**, or turn them off for guests with real drivers (e.g. USB Overdrive).
-- **A guest-additions Tools volume** (StuffIt Expander, Disk Copy, USB Overdrive, Transmit, Lido, patched HD SC Setup...) built from `guestcd/manifest.tsv`. On Power Macs it mounts automatically at startup as a read-only Virtio disk, using the same guest-driver path as folder sharing instead of unreliable OS 9 IDE hot-plug. Quadras retain the state-aware **Mac → Insert/Eject “ClassicMac Tools”** CD command. Everything is pre-expanded and ready to run.
+- **Classic input helpers.** Secondary click opens contextual menus as Control+click, and the scroll wheel becomes arrow-key taps. Turn both off in machine settings for guests with real drivers (e.g. USB Overdrive).
+- **A guest-additions Tools volume** (StuffIt Expander, Disk Copy, USB Overdrive, Transmit, Lido, patched HD SC Setup...) built from `guestcd/manifest.tsv`. On Power Macs it mounts automatically at startup as a read-only Virtio disk, using the same guest-driver path as folder sharing instead of unreliable OS 9 IDE hot-plug. Everything is pre-expanded and ready to run.
 - **Experimental GXMetal 3D acceleration on Mac OS 9.** The Tools CD carries a
   one-click installer for a PowerPC QuickDraw 3D RAVE engine. It batches guest
   drawing commands to the host, renders them with Metal, and safely leaves
@@ -70,11 +71,10 @@ ClassicMac exists because of years of brilliant work by other engineers. The pat
   Test verifies framebuffer correctness and measures both engines before a
   game is launched. A classic puzzle-piece M appears in the startup extension
   row when GXMetal's companion loads.
-- **Native machine control.** Pause / Resume, Restart, and Shut Down from the app, live screen previews in the library, and a "Match Display" button that sizes the Mac to your screen.
+- **Native machine control.** Pause / Resume, Restart, and Shut Down from the app, live screen previews in the library, a visible browser URL, and a "Match Display" button that chooses a screen-sized boot resolution.
 - **Safe, faster shutdown cycles.** The app's Shut Down command presses the
   virtual Mac's Power key and confirms Mac OS's own dialog, allowing HFS/HFS+
   to unmount cleanly so the next boot does not pay the recovery penalty.
-- **Machine window shortcuts that always work.** Control-Option-T hides or restores the title bar for a clean borderless look, Control-Option-F toggles Full Screen, and Control-Option-R matches the Mac screen to the window again. All three keep working even while the emulator has grabbed the keyboard, and they also live in the **View** menu and the machine's Dock icon menu.
 - **Signed, notarized, stapled DMG** for distribution — recipients get a clean Gatekeeper experience even offline.
 
 ## Getting started
@@ -83,7 +83,8 @@ ClassicMac exists because of years of brilliant work by other engineers. The pat
 2. Click **+** to create a machine — pick the Quadra 800 (System 7.1–8.1) or Power Mac G4 (Mac OS 8.5–9.2.2), choose disk size, RAM, and resolution.
 3. Attach a Mac OS install CD image and boot from it. Installation media is not bundled — download the classic Mac OS version you want from the [WinWorld operating system library](https://winworldpc.com/library/operating-systems).
 4. Optional: pick a shared folder, or attach a raw floppy image to a Quadra. Both appear on the emulated desktop as writable disks.
-5. To test GXMetal on Mac OS 9, open the automatically mounted **ClassicMac Tools** disk, then open **GXMetal**,
+5. Click **Start**. ClassicMac opens the private display URL in your preferred browser; the same URL remains visible in the machine details if you close the tab.
+6. To test GXMetal on Mac OS 9, open the automatically mounted **ClassicMac Tools** disk, then open **GXMetal**,
    run **Install GXMetal**, restart, and run **GXMetal Test**. Proceed to a RAVE
    game only after the test reports a pass; moving both GXMetal and GXMetal
    Startup out of Extensions and restarting restores the normal Apple software
@@ -109,10 +110,9 @@ Requirements: an Apple Silicon Mac (M1 or later) running a recent macOS.
 ## Display & sound notes
 
 - The resolution you pick is the *boot* resolution and the depth is the *deepest available* mode; classic Mac OS chooses the active depth at startup (a fresh system comes up in B&W until you pick Thousands/Millions once in Monitors — it's remembered per machine).
-- Live resolution switching relies on the Display Manager, so it needs Mac OS ~7.6+ on the Quadra; on the Power Mac it works throughout Mac OS 9. Older systems still boot fine at the configured resolution and scale to the window. Power Mac widths snap down to a multiple of 8 (a VGA hardware constraint).
-- If the guest ever misses a resolution change (the window resized but the Mac stayed at the old size), pick **View → Match Mac Screen to Window** (Control-Option-R) — also available from the machine's Dock icon menu — to ask it again.
-- For a borderless machine window, choose **View → Hide Title Bar** or press **Control-Option-T**. Use the same shortcut (or **Show Title Bar**) to restore the normal window controls.
-- To leave Full Screen, press **Control-Option-F** (it also enters it). The combo works even while the emulator has grabbed the keyboard; the **View** menu and Dock icon menu show **Enter Full Screen** or **Exit Full Screen** to match the current state.
+- The browser's **Fit** mode scales the configured framebuffer to the tab without changing the Mac's resolution. Choose **Actual Size** for one guest pixel per browser pixel, and use the page's **Full Screen** button to enter or leave browser fullscreen.
+- The browser toolbar provides sticky Command, Option, and Control modifiers plus a dedicated Escape button, which makes host-reserved key combinations practical. Games using GXMetal Input automatically reveal a **Capture game mouse** control for relative movement; press Escape to leave pointer lock.
+- Power Mac widths snap down to a multiple of 8 (a VGA hardware constraint).
 - The Power Mac's packed low-bpp patch adds Black & White, 4 and 16 colors to the Monitors panel alongside 256/thousands/millions.
 - Mac OS 9 wants **less than 1 GB of RAM** for stable sound, so the app's presets stop at 896 MB.
 - On the Quadra, folder sharing arrives through the classicvirtio NuBus card firmware (new machines start from a pre-seeded PRAM so it boots reliably). On the Power Mac it arrives through `virtio-9p-pci` and the classicvirtio ndrvloader placed in guest RAM at boot; while booting from CD (e.g. an OS install) sharing is temporarily inactive.
@@ -137,7 +137,7 @@ Requirements: an Apple Silicon Mac (M1 or later) running a recent macOS.
 
 # 5. Verify the exact signed/stapled artifact, including versions, Gatekeeper,
 #    the bundled Tools CD, and the GXMetal-enabled Power Mac executable
-./scripts/verify-release.sh dist/ClassicMac.dmg 2.0.8 2.0.8
+./scripts/verify-release.sh dist/ClassicMac.dmg 2.1.0 2.1.0
 ```
 
 All scripts are idempotent and safe to re-run. Building needs the Xcode command line tools and [Homebrew](https://brew.sh).
@@ -163,6 +163,7 @@ The guest-side binaries are committed, so a normal build needs no cross toolchai
 ```
 ClassicMac/
   app/                      # SwiftUI configurator / launcher (SwiftPM package)
+  browser/                  # branded loopback-only noVNC display client
   Resources/                # app icon, machine icon, bundled firmware
   qfb/                      # nubus-qfb enhanced framebuffer device + 68k driver
     driver/                 #   68k card firmware + driver source (Retro68)
@@ -184,8 +185,9 @@ ClassicMac/
 
 ## How the interesting parts work
 
-- **Quadra video** — `nubus-qfb`, a paravirtualized NuBus framebuffer (ported from [SolraBizna/qemu](https://github.com/SolraBizna/qemu) onto QEMU 11.0.2) with 68k card firmware and a driver built with Retro68. The Cocoa window scales the framebuffer while you drag and asks the guest driver for the exact size on mouse-up.
-- **Power Mac video** — QEMU's std VGA gains a host-resize request channel (`ppcvid/vga-host-resize.patch`). The bundled `qemu_vga.ndrv` polls it from its VBL task, retargets a dynamic display mode, and fires a VSL connect-change interrupt so the Display Manager re-probes and adopts the new size.
+- **Browser display** — each running VM gets an HTTP server and QEMU VNC WebSocket bound only to `127.0.0.1`. The bundled noVNC client renders the framebuffer, sends keyboard and pointer input, scales it to the tab, reconnects across Power Mac restarts, and understands QEMU's relative-pointer extension for games.
+- **Quadra video** — `nubus-qfb`, a paravirtualized NuBus framebuffer (ported from [SolraBizna/qemu](https://github.com/SolraBizna/qemu) onto QEMU 11.0.2) with 68k card firmware and a driver built with Retro68.
+- **Power Mac video** — QEMU's std VGA gains packed low-color and optimized framebuffer paths. The bundled `qemu_vga.ndrv` supplies the full classic Mac display-mode set without a guest installation.
 - **Restart on the Power Mac** — an in-place reset hangs QEMU's `mac99`, so the app runs it with `-action reboot=shutdown`, watches the QMP shutdown reason, and relaunches on a reset — Restart behaves like a real reboot.
 - **Sound** — the ASC is patched to output silence when idle (`qfb/asc-silence.patch`); the Power Mac uses Mark Cave-Ayland's screamer device with a screamer-aware OpenBIOS build.
 - **Power Mac storage** — MacIO IDE/DBDMA holds the final DMA descriptor for 1 ms before publishing completion. Real hardware cannot finish in the same scheduling window in which the driver starts an operation; without this small latency, cached host I/O can beat Mac OS 9's synchronous-wait setup and lose its wakeup, freezing Installer mid-copy. Focused MacIO/DBDMA tracepoints remain available for regression runs.

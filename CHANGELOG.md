@@ -1,5 +1,26 @@
 # Changelog
 
+## 2.1.0 — 2026-08-24
+
+### Added
+
+- Starting a virtual Mac now opens its display in the user's preferred web
+  browser instead of creating a separate QEMU window. ClassicMac shows the
+  private local URL with Open and Copy actions while the machine is running.
+- Added a bundled, branded noVNC 1.7.0 client with Fit, Actual Size, Full
+  Screen, sticky Command/Option/Control, and Escape controls.
+- Browser input supports ClassicMac's secondary-click and scrolling helpers
+  plus QEMU relative pointer capture for GXMetal/InputSprocket games.
+
+### Changed
+
+- Each VM now exposes its framebuffer through isolated HTTP and VNC WebSocket
+  listeners bound exclusively to loopback. Browser tabs reconnect
+  automatically while a Power Mac restart relaunches QEMU.
+- Removable media and display configuration are changed while the machine is
+  shut down; the SwiftUI app remains the control center for power, settings,
+  live previews, and the browser address.
+
 ## 2.0.8 — 2026-08-24
 
 ### Fixed

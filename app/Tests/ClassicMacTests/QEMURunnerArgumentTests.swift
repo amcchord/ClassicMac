@@ -49,6 +49,25 @@ final class QEMURunnerArgumentTests: XCTestCase {
         XCTAssertEqual(optionValues("-g", in: millions), ["1024x768x32"])
     }
 
+    func testBothMachinesUseLoopbackBrowserDisplayWithoutCocoaWindow() {
+        let port: UInt16 = 61_234
+        let powerMac = config()
+        let quadra = config(family: .quadra800)
+
+        for vm in [powerMac, quadra] {
+            let arguments = QEMUManager.buildArguments(
+                for: vm,
+                browserWebSocketPort: port
+            )
+            let display = try! XCTUnwrap(optionValues("-display", in: arguments).first)
+
+            XCTAssertFalse(display.contains("cocoa"))
+            XCTAssertTrue(display.hasPrefix("vnc=unix:/tmp/ClassicMac/"))
+            XCTAssertTrue(display.contains("websocket=127.0.0.1:\(port)"))
+            XCTAssertTrue(display.hasSuffix("share=force-shared"))
+        }
+    }
+
     func testPowerMacIDECompletionDelayOnlyProtectsInstallerBoots() {
         let installer = QEMUManager.buildArguments(for: config())
         let hardDisk = QEMUManager.buildArguments(

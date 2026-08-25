@@ -51,6 +51,9 @@ struct VMDetailView: View {
                 .padding(.top, 20)
                 .padding(.bottom, 12)
             Form {
+                if running {
+                    browserAccessSection
+                }
                 if previewImage != nil {
                     screenSection
                 }
@@ -163,6 +166,44 @@ struct VMDetailView: View {
 
     // MARK: Screen
 
+    private var browserAccessSection: some View {
+        Section {
+            if let url = manager.browserURLs[vmID] {
+                LabeledContent("Address") {
+                    Text(url.absoluteString)
+                        .font(.system(.caption, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .textSelection(.enabled)
+                }
+                HStack {
+                    Button {
+                        manager.activate(vmID)
+                    } label: {
+                        Label("Open in Browser", systemImage: "safari")
+                    }
+
+                    Button {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(
+                            url.absoluteString,
+                            forType: .string
+                        )
+                    } label: {
+                        Label("Copy URL", systemImage: "doc.on.doc")
+                    }
+                }
+            } else {
+                ProgressView("Preparing the browser display…")
+            }
+        } header: {
+            Label("Browser Display", systemImage: "globe")
+        } footer: {
+            Text("This private address works only on this Mac and disappears when the virtual Mac shuts down.")
+        }
+    }
+
     // The live capture while running; the saved capture from the last run
     // otherwise.
     private var previewImage: NSImage? {
@@ -206,7 +247,7 @@ struct VMDetailView: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(!running)
-                .help(running ? "Click to open the Mac's window" : "The Mac's screen when it last shut down")
+                .help(running ? "Click to open the Mac in your web browser" : "The Mac's screen when it last shut down")
                 .listRowBackground(Color.clear)
                 .listRowInsets(EdgeInsets())
             } footer: {
@@ -254,7 +295,7 @@ struct VMDetailView: View {
         } header: {
             Label("Display", systemImage: "display")
         } footer: {
-            Text("Thousands reduces framebuffer bandwidth and is usually faster. While it's running, drag the window to any size and the Mac follows; other depths remain available in the Monitors control panel.")
+            Text("Thousands reduces framebuffer bandwidth and is usually faster. The browser scales the Mac to fit its tab; other depths remain available in the Monitors control panel.")
         }
     }
 
@@ -402,7 +443,7 @@ struct VMDetailView: View {
             Toggle(isOn: vm.tabletInput) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Seamless mouse")
-                    Text("Move the pointer freely in and out of the Mac window without releasing it first.")
+                    Text("Move the pointer freely in and out of the browser display. Games can request captured relative motion.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -470,7 +511,7 @@ struct VMDetailView: View {
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         } else {
-                            Text("Useful classic Mac apps, including StuffIt Expander, Disk Copy, a disc image mounter, and USB Overdrive for Power Macs. You can insert or eject it from the Mac menu while the Mac is running.")
+                            Text("Useful classic Mac apps, including StuffIt Expander, Disk Copy, a disc image mounter, and USB Overdrive for Power Macs.")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -508,11 +549,7 @@ struct VMDetailView: View {
         } header: {
             Label("Media", systemImage: "opticaldiscdrive")
         } footer: {
-            if vm.wrappedValue.machineFamily.supportsFloppyDisk {
-                Text("While the Mac is running, use Mac → Disc or Mac → Floppy to change removable media.")
-            } else {
-                Text("While the Mac is running, use Mac → Disc to insert or eject a disc image.")
-            }
+            Text("Shut down the virtual Mac before changing removable media.")
         }
     }
 
@@ -588,9 +625,9 @@ struct VMDetailView: View {
                 Button {
                     manager.activate(vmID)
                 } label: {
-                    Label("Show Screen", systemImage: "macwindow")
+                    Label("Open Screen", systemImage: "safari")
                 }
-                .help("Bring the Mac's window to the front")
+                .help("Open the Mac in your preferred web browser")
 
                 if paused {
                     Button {

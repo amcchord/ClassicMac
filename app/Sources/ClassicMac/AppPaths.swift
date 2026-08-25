@@ -135,6 +135,19 @@ enum AppPaths {
         return developmentRepoRoot.appendingPathComponent("shared/pram-seed.img")
     }
 
+    // Browser display assets are copied into the release bundle. Development
+    // runs load the tracked source directory directly so `swift run` and the
+    // tests do not need a partially assembled app bundle.
+    static var browserAssetsDir: URL {
+        let bundled = resourcesDir.appendingPathComponent("Browser")
+        if FileManager.default.fileExists(
+            atPath: bundled.appendingPathComponent("index.html").path
+        ) {
+            return bundled
+        }
+        return developmentRepoRoot.appendingPathComponent("browser")
+    }
+
     // MARK: Development fallbacks
 
     // When run via `swift run` from app/, the working directory is app/, so the

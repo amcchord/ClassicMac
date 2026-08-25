@@ -23,6 +23,7 @@ NDRVLOADER_SRC="$ROOT_DIR/shared/ndrvloader"
 PRAMSEED_SRC="$ROOT_DIR/shared/pram-seed.img"
 ENTITLEMENTS="$ROOT_DIR/scripts/qemu.entitlements"
 THIRD_PARTY_NOTICES="$ROOT_DIR/THIRD_PARTY_NOTICES.md"
+BROWSER_SRC="$ROOT_DIR/browser"
 
 DIST_DIR="$ROOT_DIR/dist"
 APP="$DIST_DIR/ClassicMac.app"
@@ -38,8 +39,8 @@ HELPERS_DIR="$CONTENTS/Helpers"
 QUADRA_APP="$HELPERS_DIR/Quadra 800.app"
 PPC_APP="$HELPERS_DIR/Power Mac G4.app"
 
-APP_VERSION="${APP_VERSION:-2.0.8}"
-APP_BUILD_VERSION="${APP_BUILD_VERSION:-2.0.8}"
+APP_VERSION="${APP_VERSION:-2.1.0}"
+APP_BUILD_VERSION="${APP_BUILD_VERSION:-2.1.0}"
 BUNDLE_ID="com.classicmac.emulator"
 
 log() { printf '\n==> %s\n' "$*"; }
@@ -72,6 +73,10 @@ done
 [ -f "$NDRVLOADER_SRC" ] || die "shared/ndrvloader (classicvirtio PPC driver loader) not found."
 [ -f "$PRAMSEED_SRC" ] || die "shared/pram-seed.img (PRAM seed) not found."
 [ -f "$THIRD_PARTY_NOTICES" ] || die "THIRD_PARTY_NOTICES.md not found."
+[ -f "$BROWSER_SRC/index.html" ] || die "Browser display index is missing."
+[ -f "$BROWSER_SRC/novnc/core/rfb.js" ] || die "Bundled noVNC client is missing."
+[ -f "$BROWSER_SRC/novnc/LICENSE.txt" ] || die "Bundled noVNC license is missing."
+[ -f "$BROWSER_SRC/novnc/vendor/pako/LICENSE" ] || die "Bundled pako license is missing."
 [ -f "$ROOT_DIR/vendor/qemu/LICENSE" ] || die "QEMU LICENSE not found. Run scripts/build-qemu.sh first."
 [ -f "$ROOT_DIR/vendor/qemu/COPYING" ] || die "QEMU GPL license not found. Run scripts/build-qemu.sh first."
 [ -f "$ROOT_DIR/vendor/qemu/COPYING.LIB" ] || die "QEMU LGPL license not found. Run scripts/build-qemu.sh first."
@@ -167,6 +172,7 @@ cp -R "$QEMU_PCBIOS_DIR/keymaps" "$PCBIOS_DEST/keymaps"
 cp "$DECLROM_SRC" "$RES_DIR/declrom"
 cp "$NDRVLOADER_SRC" "$RES_DIR/ndrvloader"
 cp "$PRAMSEED_SRC" "$RES_DIR/pram-seed.img"
+cp -R "$BROWSER_SRC" "$RES_DIR/Browser"
 
 # Third-party notices and license texts for QEMU, its firmware, and every
 # Homebrew library copied into the self-contained helper apps below.
@@ -176,6 +182,8 @@ cp "$THIRD_PARTY_NOTICES" "$RES_DIR/ThirdPartyNotices.md"
 cp "$ROOT_DIR/vendor/qemu/LICENSE" "$LICENSES_DIR/QEMU-LICENSE.txt"
 cp "$ROOT_DIR/vendor/qemu/COPYING" "$LICENSES_DIR/GPL-2.0.txt"
 cp "$ROOT_DIR/vendor/qemu/COPYING.LIB" "$LICENSES_DIR/LGPL-2.1.txt"
+cp "$BROWSER_SRC/novnc/LICENSE.txt" "$LICENSES_DIR/noVNC-MPL-2.0.txt"
+cp "$BROWSER_SRC/novnc/vendor/pako/LICENSE" "$LICENSES_DIR/pako-MIT.txt"
 
 copy_brew_license() {
   local formula="$1" source_name="$2" destination_name="$3"

@@ -418,7 +418,7 @@ struct NewVMSheet: View {
 
     private var displayFooter: String {
         if family == .powerMacG4 {
-            return "Thousands reduces framebuffer bandwidth and is usually faster. Drag the window after startup to resize the guest display."
+            return "Thousands reduces framebuffer bandwidth and is usually faster. The browser display scales the Mac to fit its tab."
         }
         return "This is the startup size and deepest available color mode. Lower modes remain available in the Monitors control panel."
     }

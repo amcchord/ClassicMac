@@ -78,10 +78,11 @@ enum MachineFamily: String, Codable, CaseIterable, Identifiable {
 
     // The qfb enhanced framebuffer is a Quadra/NuBus feature; the mac99
     // display is the std VGA framebuffer driven by the bundled qemu_vga.ndrv,
-    // which supports custom boot resolutions (via -g) and live window
-    // resizing (via the vga-host-resize channel). Host folder sharing works
-    // on both: the Quadra through the classicvirtio NuBus transport and the
-    // Power Mac through virtio-9p-pci plus the classicvirtio ndrvloader.
+    // which supports custom boot resolutions (via -g). The browser display
+    // scales that framebuffer without changing the guest mode. Host folder
+    // sharing works on both: the Quadra through the classicvirtio NuBus
+    // transport and the Power Mac through virtio-9p-pci plus the classicvirtio
+    // ndrvloader.
     // Sound works on both: the Quadra has the Apple Sound Chip and the Power
     // Mac the screamer (AWACS) port.
     var supportsEnhancedFramebuffer: Bool { self == .quadra800 }

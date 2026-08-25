@@ -8,8 +8,8 @@
 #   scripts/verify-release.sh [app-or-dmg] [short-version] [build-version]
 #
 # Examples:
-#   scripts/verify-release.sh dist/ClassicMac.app 2.0.8 2.0.8
-#   scripts/verify-release.sh dist/ClassicMac.dmg 2.0.8 2.0.8
+#   scripts/verify-release.sh dist/ClassicMac.app 2.1.0 2.1.0
+#   scripts/verify-release.sh dist/ClassicMac.dmg 2.1.0 2.1.0
 
 set -euo pipefail
 
@@ -69,9 +69,14 @@ PPC_HELPER="$APP/Contents/Helpers/Power Mac G4.app"
 PPC_QEMU="$PPC_HELPER/Contents/MacOS/qemu-system-ppc"
 TOOLS_CD="$APP/Contents/Resources/ClassicMacTools.iso"
 VNC_KEYMAP="$APP/Contents/Resources/qemu/pc-bios/keymaps/en-us"
+BROWSER_INDEX="$APP/Contents/Resources/Browser/index.html"
+BROWSER_RFB="$APP/Contents/Resources/Browser/novnc/core/rfb.js"
+BROWSER_LICENSE="$APP/Contents/Resources/Licenses/noVNC-MPL-2.0.txt"
+PAKO_LICENSE="$APP/Contents/Resources/Licenses/pako-MIT.txt"
 
 for required in "$PLIST" "$PPC_HELPER/Contents/Info.plist" \
-  "$PPC_QEMU" "$TOOLS_CD" "$VNC_KEYMAP"; do
+  "$PPC_QEMU" "$TOOLS_CD" "$VNC_KEYMAP" "$BROWSER_INDEX" \
+  "$BROWSER_RFB" "$BROWSER_LICENSE" "$PAKO_LICENSE"; do
   [ -e "$required" ] || die "Required release component is missing: $required"
 done
 [ -s "$TOOLS_CD" ] || die "Bundled ClassicMac Tools CD is empty"
@@ -125,6 +130,10 @@ done
 VNC_HELP="$("$PPC_QEMU" -vnc help 2>&1 || true)"
 printf '%s\n' "$VNC_HELP" | grep -q 'vnc options' || \
   die "Bundled Power Mac QEMU lacks the headless VNC display"
+printf '%s\n' "$VNC_HELP" | grep -q 'websocket=' || \
+  die "Bundled Power Mac QEMU lacks VNC-over-WebSocket support"
+grep -q 'pseudoEncodingQEMUPointerTypeChange' "$BROWSER_RFB" || \
+  die "Bundled browser client lacks QEMU relative-pointer support"
 if otool -L "$PPC_QEMU" | grep -Eq '/opt/homebrew|/usr/local'; then
   die "Bundled Power Mac QEMU still references a package-manager library"
 fi
