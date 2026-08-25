@@ -30,6 +30,7 @@ all: bin/GXMetal.bin bin/GXMetalInput.bin bin/GXMetalStartup.bin bin/GXMetalInst
 
 bin/GXMetal.xcoff: src/GXMetalEngine.c src/GXMetalTransport.c \
                    src/GXMetalTransport.h src/GXMetalATICompatibility.h \
+                   src/GXMetalRAVECompatibility.h \
                    include/GXMetalDiagnostics.h \
                    include/GXMetalRegistry.h include/GXMetalVersion.h \
                    src/GXMetal.exp \
@@ -99,9 +100,10 @@ bin/GXMetalInstaller.bin: bin/GXMetalInstaller.pef apps/GXMetalInstaller.r \
 	python3 ../tools/set_macbinary_flags.py $@ --set 0x2000 --clear 0x0100
 
 bin/GXMetalTest.xcoff: apps/GXMetalTest.c include/GXMetalDiagnostics.h \
-                       include/GXMetalVersion.h GNUmakefile
+                       include/GXMetalVersion.h \
+                       src/GXMetalATICompatibility.h GNUmakefile
 	@mkdir -p bin
-	$(CC) $(APP_CFLAGS) $(APP_LDFLAGS) -o $@ $< \
+	$(CC) $(APP_CFLAGS) -Isrc $(APP_LDFLAGS) -o $@ $< \
 		-lQuickDraw3DRAVELib -lNameRegistryLib -lInterfaceLib
 
 bin/GXMetalTest.pef: bin/GXMetalTest.xcoff

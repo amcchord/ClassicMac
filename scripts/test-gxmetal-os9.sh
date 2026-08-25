@@ -86,6 +86,7 @@ if ! cp -c "$SOURCE_DISK" "$DISK" 2>/dev/null; then
   rm -f "$DISK"
   cp "$SOURCE_DISK" "$DISK"
 fi
+chmod u+w "$DISK"
 
 log "Extracting the matching driver and test from the bundled Tools CD"
 mkdir -p "$SCRATCH/macbinary" "$SCRATCH/guest"

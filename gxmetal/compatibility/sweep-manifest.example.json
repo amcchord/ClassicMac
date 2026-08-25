@@ -1,0 +1,47 @@
+{
+  "schema": 1,
+  "defaults": {
+    "boot_wait_seconds": 75,
+    "observation_seconds": 60,
+    "capture_interval_seconds": 15,
+    "resolution": "1024x768x15"
+  },
+  "games": [
+    {
+      "id": "nanosaur",
+      "name": "Nanosaur",
+      "modes": [
+        "gxmetal",
+        "software"
+      ],
+      "source_url": null,
+      "source_sha256": null,
+      "cdrom": null,
+      "steps": [
+        {
+          "note": "The base image for this example already has Nanosaur installed. Replace the coordinates below with those recorded for the golden image."
+        },
+        {
+          "screenshot": "finder-before-launch"
+        },
+        {
+          "double_click": [
+            965,
+            52
+          ],
+          "delay_after": 2,
+          "capture_after": true
+        },
+        {
+          "note": "Add deterministic Finder and in-game navigation here. EULA acceptance should have its own note and screenshot."
+        },
+        {
+          "wait": 20
+        },
+        {
+          "screenshot": "gameplay"
+        }
+      ]
+    }
+  ]
+}

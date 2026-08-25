@@ -4,12 +4,42 @@
 
 #include <stdint.h>
 
+/* GXMetal advertises ATI's vendor ID because classic QuickDraw 3D clients
+ * and Apple's OpenGLRendererATI deliberately select that compatibility path.
+ * Vendor-specific engine IDs below generation four are rejected by later
+ * Pangea launchers; generation four also needs revision 30.  Use the next
+ * generation while retaining GXMetal's own product revision in the public
+ * revision gestalt. */
+#define GXMETAL_ATI_ENGINE_ID UINT32_C(5)
+
+/* ATI 3D Accelerator exposes its chip-family version through private integer
+ * tag 1011.  A value of 0x0500 selects the Rage 128 feature path used by
+ * Bugdom-era clients.  GXMetal implements the associated public RAVE state
+ * and does not expose unsupported hardware-only entry points here. */
+#define GXMETAL_ATI_CHIP_VERSION_TAG UINT32_C(1011)
+#define GXMETAL_ATI_RAGE128_CHIP_VERSION UINT32_C(0x0500)
+
 typedef struct GXMetalBitmapRect {
     float left;
     float top;
     float right;
     float bottom;
 } GXMetalBitmapRect;
+
+static inline int gxmetal_ati_legacy_generation_is_current(
+    uint32_t engine_id, uint32_t revision)
+{
+    return engine_id > 4u || (engine_id == 4u && revision >= 30u);
+}
+
+static inline int gxmetal_ati_private_int(uint32_t tag, uint32_t *value)
+{
+    if (tag != GXMETAL_ATI_CHIP_VERSION_TAG || value == 0) {
+        return 0;
+    }
+    *value = GXMETAL_ATI_RAGE128_CHIP_VERSION;
+    return 1;
+}
 
 static inline int gxmetal_ati_uses_logical_bitmap_canvas(
     float x, float y, float width, float height)

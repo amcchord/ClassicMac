@@ -18,12 +18,12 @@
 #include "GXMetalRegistry.h"
 #include "GXMetalDiagnostics.h"
 #include "GXMetalATICompatibility.h"
+#include "GXMetalRAVECompatibility.h"
 #include "GXMetalTransport.h"
 #include "GXMetalVersion.h"
 
 #define GXMETAL_REGISTRATION_VENDOR_ID UINT32_C(0x47584d54) /* GXMT */
 #define GXMETAL_LEGACY_VENDOR_ID UINT32_C(1) /* kQAVendor_ATI */
-#define GXMETAL_ENGINE_ID UINT32_C(0x00000001)
 #define GXMETAL_STATE_SLOTS 154u
 #define GXMETAL_SYNC_SPINS UINT32_C(10000000)
 #define GXMETAL_TEXTURE_MAGIC UINT32_C(0x47585458) /* GXTX */
@@ -2395,6 +2395,17 @@ static void GXMetalSetInt(TQADrawContext *drawContext, TQATagInt tag,
     if (state == NULL || (uint32_t)tag >= GXMETAL_STATE_SLOTS) {
         return;
     }
+    if (!gxmetal_rave_int_state_is_accepted((uint32_t)tag,
+                                             (uint32_t)newValue)) {
+        /* A state setter cannot report an error through the RAVE ABI. Do not
+         * forward malformed legacy input as a protocol error: the host would
+         * fault the transport and every later draw would fail. */
+        gDiagnostics.rejected_int_state_count++;
+        gDiagnostics.last_rejected_int_state_tag = (uint32_t)tag;
+        gDiagnostics.last_rejected_int_state_value = (uint32_t)newValue;
+        GXMetalPersistDiagnostics();
+        return;
+    }
     if ((uint32_t)tag == kQATag_MultiTextureEnable && newValue > 1u) {
         /* GXMetal advertises one secondary stage. Ignore probes for later
          * stages without poisoning an otherwise valid draw context. */
@@ -2550,6 +2561,7 @@ static unsigned long GXMetalGetInt(const TQADrawContext *drawContext,
                                    TQATagInt tag)
 {
     GXMetalDrawState *state = GXMetalGetState(drawContext);
+    uint32_t compatibilityValue;
     gDiagnostics.draw_method_stage = 140;
     gDiagnostics.get_int_count++;
     gDiagnostics.last_get_int_tag = (uint32_t)tag;
@@ -2558,6 +2570,12 @@ static unsigned long GXMetalGetInt(const TQADrawContext *drawContext,
         gDiagnostics.last_get_int_value = state->ati_private_enabled;
         gDiagnostics.draw_method_stage = 141;
         return state->ati_private_enabled;
+    }
+    if (state != NULL && gxmetal_ati_private_int(
+            (uint32_t)tag, &compatibilityValue)) {
+        gDiagnostics.last_get_int_value = compatibilityValue;
+        gDiagnostics.draw_method_stage = 141;
+        return compatibilityValue;
     }
     if (state == NULL || (uint32_t)tag >= GXMETAL_STATE_SLOTS) {
         gDiagnostics.last_get_int_value = 0;
@@ -4674,7 +4692,7 @@ static TQAError GXMetalEngineGestalt(TQAGestaltSelector selector,
         gRegistrationVendorPending = 0;
         break;
     case kQAGestalt_EngineID:
-        value = GXMETAL_ENGINE_ID;
+        value = GXMETAL_ATI_ENGINE_ID;
         break;
     case kQAGestalt_Revision:
         value = GXMETAL_PRODUCT_REVISION;

@@ -439,6 +439,104 @@ static uint16_t framebuffer_pixel(const uint8_t *framebuffer,
                       framebuffer[offset + 1]);
 }
 
+static void test_metal_large_vertex_batches(void)
+{
+    enum {
+        kTextureVertexCount = 96,
+        kGouraudVertexCount = 129,
+        kPacketBytes = GXMETAL_PACKET_HEADER_BYTES +
+            GXMETAL_DRAW_HEADER_BYTES +
+            kTextureVertexCount * GXMETAL_TEXTURE_VERTEX_BYTES
+    };
+    uint8_t framebuffer[64 * 64 * 2] = {0};
+    uint8_t *packet = calloc(1, kPacketBytes);
+    uint8_t *shared = calloc(1, GXMETAL_SHARED_BYTES);
+    uint8_t *payload;
+    uint8_t *vertices;
+    const uint8_t white[4] = {0xff, 0xff, 0xff, 0xff};
+    GXMetalMetalRenderer *renderer;
+    uint32_t i;
+
+    CHECK(packet != NULL);
+    CHECK(shared != NULL);
+    if (packet == NULL || shared == NULL) {
+        free(packet);
+        free(shared);
+        return;
+    }
+    renderer = gxmetal_metal_create(framebuffer, sizeof(framebuffer),
+                                     shared, GXMETAL_SHARED_BYTES);
+    if (renderer == NULL) {
+        free(packet);
+        free(shared);
+        return;
+    }
+    upload_single_pixel_texture(renderer, packet, shared, 501,
+                                GXMETAL_PIXEL_ARGB8888, white);
+    make_packet(packet, GXMETAL_OP_CONTEXT_CREATE, 48, 31);
+    payload = packet + GXMETAL_PACKET_HEADER_BYTES;
+    gxmetal_store_le32(payload + GXMETAL_CONTEXT_WIDTH_OFFSET, 64);
+    gxmetal_store_le32(payload + GXMETAL_CONTEXT_HEIGHT_OFFSET, 64);
+    gxmetal_store_le32(payload + GXMETAL_CONTEXT_ROW_BYTES_OFFSET, 128);
+    gxmetal_store_le32(payload + GXMETAL_CONTEXT_PIXEL_FORMAT_OFFSET,
+                       GXMETAL_PIXEL_RGB555);
+    CHECK(dispatch(renderer, packet, 48) == GXMETAL_ERROR_NONE);
+    set_resource_state(renderer, packet, 31, GXMETAL_STATE_TEXTURE, 501);
+
+    make_packet(packet, GXMETAL_OP_BEGIN_FRAME, 32, 31);
+    CHECK(dispatch(renderer, packet, 32) == GXMETAL_ERROR_NONE);
+    make_packet(packet, GXMETAL_OP_DRAW_TEXTURED, kPacketBytes, 31);
+    payload = packet + GXMETAL_PACKET_HEADER_BYTES;
+    gxmetal_store_le32(payload + GXMETAL_DRAW_PRIMITIVE_OFFSET,
+                       GXMETAL_PRIMITIVE_TRIANGLE);
+    gxmetal_store_le32(payload + GXMETAL_DRAW_VERTEX_COUNT_OFFSET,
+                       kTextureVertexCount);
+    gxmetal_store_le32(payload + GXMETAL_DRAW_VERTEX_STRIDE_OFFSET,
+                       GXMETAL_TEXTURE_VERTEX_BYTES);
+    vertices = payload + GXMETAL_DRAW_VERTICES_OFFSET;
+    for (i = 0; i < kTextureVertexCount; i += 3) {
+        set_texture_vertex(vertices + (i + 0) * GXMETAL_TEXTURE_VERTEX_BYTES,
+                           0, 0, 0, 0);
+        set_texture_vertex(vertices + (i + 1) * GXMETAL_TEXTURE_VERTEX_BYTES,
+                           64, 0, 1, 0);
+        set_texture_vertex(vertices + (i + 2) * GXMETAL_TEXTURE_VERTEX_BYTES,
+                           0, 64, 0, 1);
+    }
+    CHECK(dispatch(renderer, packet, kPacketBytes) == GXMETAL_ERROR_NONE);
+
+    make_packet(packet, GXMETAL_OP_DRAW_GOURAUD,
+                GXMETAL_PACKET_HEADER_BYTES + GXMETAL_DRAW_HEADER_BYTES +
+                    kGouraudVertexCount * GXMETAL_GOURAUD_VERTEX_BYTES,
+                31);
+    payload = packet + GXMETAL_PACKET_HEADER_BYTES;
+    gxmetal_store_le32(payload + GXMETAL_DRAW_PRIMITIVE_OFFSET,
+                       GXMETAL_PRIMITIVE_TRIANGLE);
+    gxmetal_store_le32(payload + GXMETAL_DRAW_VERTEX_COUNT_OFFSET,
+                       kGouraudVertexCount);
+    gxmetal_store_le32(payload + GXMETAL_DRAW_VERTEX_STRIDE_OFFSET,
+                       GXMETAL_GOURAUD_VERTEX_BYTES);
+    vertices = payload + GXMETAL_DRAW_VERTICES_OFFSET;
+    for (i = 0; i < kGouraudVertexCount; i += 3) {
+        set_vertex(vertices + (i + 0) * GXMETAL_GOURAUD_VERTEX_BYTES,
+                   0, 0, 1, 0, 0);
+        set_vertex(vertices + (i + 1) * GXMETAL_GOURAUD_VERTEX_BYTES,
+                   64, 0, 0, 1, 0);
+        set_vertex(vertices + (i + 2) * GXMETAL_GOURAUD_VERTEX_BYTES,
+                   0, 64, 0, 0, 1);
+    }
+    CHECK(dispatch(renderer, packet,
+                   GXMETAL_PACKET_HEADER_BYTES + GXMETAL_DRAW_HEADER_BYTES +
+                       kGouraudVertexCount * GXMETAL_GOURAUD_VERTEX_BYTES) ==
+          GXMETAL_ERROR_NONE);
+    make_packet(packet, GXMETAL_OP_END_FRAME, 32, 31);
+    CHECK(dispatch(renderer, packet, 32) == GXMETAL_ERROR_NONE);
+    present_rect(renderer, packet, 31, 0, 0, 64, 64);
+
+    gxmetal_metal_destroy(renderer);
+    free(packet);
+    free(shared);
+}
+
 static void test_metal_texture_upload_and_sampling(void)
 {
     uint8_t framebuffer[64 * 64 * 2] = {0};
@@ -1574,6 +1672,7 @@ int main(void)
 {
     @autoreleasepool {
         test_metal_triangle();
+        test_metal_large_vertex_batches();
         test_metal_depth_blend_and_double_buffer();
         test_metal_texture_upload_and_sampling();
         test_metal_rect_clip_scissor_and_dirty_present();
@@ -1585,6 +1684,6 @@ int main(void)
         fprintf(stderr, "GXMetal Metal: %u failure(s)\n", failures);
         return EXIT_FAILURE;
     }
-    puts("GXMetal Metal: first triangle passed");
+    puts("GXMetal Metal: all tests passed");
     return EXIT_SUCCESS;
 }

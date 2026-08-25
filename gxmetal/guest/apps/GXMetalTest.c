@@ -13,6 +13,7 @@
 #include <string.h>
 
 #include "GXMetalDiagnostics.h"
+#include "GXMetalATICompatibility.h"
 #include "GXMetalVersion.h"
 
 /* QAInit/QAExit remain exported by the classic RAVE manager and import
@@ -2376,11 +2377,13 @@ int main(void)
         QAExit();
         return 1;
     }
-    if (engineID != 1) {
-        GXMetalRecordResult("FAIL: GXMetal engine identity");
+    if (engineID != GXMETAL_ATI_ENGINE_ID ||
+        !gxmetal_ati_legacy_generation_is_current(
+            (uint32_t)engineID, (uint32_t)revision)) {
+        GXMetalRecordResult("FAIL: ATI-compatible engine generation");
         DisposeWindow(window);
         GXMetalShowResult(false,
-            "GXMetal did not advertise its unique engine identity.");
+            "GXMetal's ATI-compatible RAVE identity is too old for later classic game launchers.");
         QAExit();
         return 1;
     }

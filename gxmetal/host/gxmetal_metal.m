@@ -26,6 +26,7 @@
 #define GXMETAL_METAL_MAX_RESOURCES 4096u
 #define GXMETAL_METAL_RESOURCE_HASH_SIZE 8192u
 #define GXMETAL_METAL_STACK_VERTICES 256u
+#define GXMETAL_METAL_INLINE_BYTES 4096u
 #define GXMETAL_METAL_GL_SRC_FACTORS 9u
 #define GXMETAL_METAL_GL_DST_FACTORS 8u
 
@@ -245,6 +246,30 @@ struct GXMetalMetalRenderer {
 static id<MTLRenderPipelineState> gxmetal_metal_select_pipeline(
     GXMetalMetalRenderer *renderer, const GXMetalMetalContext *context,
     int textured);
+
+/* Metal's setVertexBytes convenience API is limited to 4 KiB. Real RAVE
+ * mesh batches are commonly much larger than the tiny conformance draws, so
+ * use an ordinary command-buffer-retained MTLBuffer beyond that limit. */
+static int gxmetal_metal_set_vertex_data(
+    GXMetalMetalRenderer *renderer, id<MTLRenderCommandEncoder> encoder,
+    const void *bytes, NSUInteger length, NSUInteger index)
+{
+    id<MTLBuffer> buffer;
+
+    if (length <= GXMETAL_METAL_INLINE_BYTES) {
+        [encoder setVertexBytes:bytes length:length atIndex:index];
+        return 1;
+    }
+    buffer = [renderer->device newBufferWithBytes:bytes length:length
+        options:MTLResourceStorageModeShared];
+    if (buffer == nil) {
+        return 0;
+    }
+    [encoder setVertexBuffer:buffer offset:0 atIndex:index];
+    /* Command buffers retain referenced resources until GPU completion. */
+    [buffer release];
+    return 1;
+}
 
 static uint64_t gxmetal_metal_now_ns(void)
 {
@@ -1494,8 +1519,17 @@ static uint32_t gxmetal_metal_draw(GXMetalMetalRenderer *renderer,
         renderer->depth_states[context->z_function <= GXMETAL_Z_FALSE ?
                                context->z_function : GXMETAL_Z_NONE]
                               [context->z_write != 0]];
-    [context->encoder setVertexBytes:draw_vertices
-        length:(NSUInteger)draw_count * sizeof(*draw_vertices) atIndex:0];
+    if (!gxmetal_metal_set_vertex_data(
+            renderer, context->encoder, draw_vertices,
+            (NSUInteger)draw_count * sizeof(*draw_vertices), 0)) {
+        if (draw_vertices != vertices) {
+            free(draw_vertices);
+        }
+        if (vertices != stack_vertices) {
+            free(vertices);
+        }
+        return GXMETAL_ERROR_RENDERER;
+    }
     [context->encoder setVertexBytes:&viewport
         length:sizeof(viewport) atIndex:1];
     [context->encoder setFragmentBytes:&context->fog
@@ -1822,8 +1856,17 @@ static uint32_t gxmetal_metal_draw_textured(
         renderer->depth_states[context->z_function <= GXMETAL_Z_FALSE ?
                                context->z_function : GXMETAL_Z_NONE]
                               [context->z_write != 0]];
-    [context->encoder setVertexBytes:draw_vertices
-        length:(NSUInteger)draw_count * sizeof(*draw_vertices) atIndex:0];
+    if (!gxmetal_metal_set_vertex_data(
+            renderer, context->encoder, draw_vertices,
+            (NSUInteger)draw_count * sizeof(*draw_vertices), 0)) {
+        if (draw_vertices != vertices) {
+            free(draw_vertices);
+        }
+        if (vertices != stack_vertices) {
+            free(vertices);
+        }
+        return GXMETAL_ERROR_RENDERER;
+    }
     [context->encoder setVertexBytes:&viewport length:sizeof(viewport)
         atIndex:1];
     [context->encoder setFragmentTexture:resource->texture atIndex:0];

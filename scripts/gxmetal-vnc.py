@@ -70,6 +70,8 @@ class RFBClient:
         self.connection = connection
         self.width = 0
         self.height = 0
+        self.pointer_x = None
+        self.pointer_y = None
 
     def connect(self):
         version = receive_exact(self.connection, 12)
@@ -109,13 +111,16 @@ class RFBClient:
         receive_exact(self.connection, name_length)
 
         # Request 32-bit little-endian true color (B, G, R, padding in memory)
-        # and raw rectangles only. This keeps the client deterministic and
-        # avoids pulling a VNC library into the release toolchain.
+        # and raw rectangles. DesktopSize notifications keep a connection
+        # valid when Open Firmware and Mac OS use different resolutions.
+        # This keeps the client deterministic and avoids pulling a VNC
+        # library into the release toolchain.
         pixel_format = struct.pack(
             ">BBBBHHHBBBxxx", 32, 24, 0, 1,
             255, 255, 255, 16, 8, 0)
         self.connection.sendall(b"\x00\x00\x00\x00" + pixel_format)
-        self.connection.sendall(struct.pack(">BBHi", 2, 0, 1, 0))
+        self.connection.sendall(struct.pack(">BBHiii", 2, 0, 3,
+                                            0, -223, -308))
 
     def keysym(self, name):
         if name in KEYSYMS:
@@ -144,22 +149,63 @@ class RFBClient:
         for keysym in reversed(keysyms):
             self.key_event(keysym, 0)
 
-    def click(self, x, y):
+    def pointer_event(self, x, y, buttons=0):
+        self.connection.sendall(struct.pack(">BBHH", 5, buttons, x, y))
+
+    def move_to(self, x, y):
         if x < 0 or y < 0 or x >= self.width or y >= self.height:
             raise ValueError("pointer coordinate outside VNC framebuffer")
-        # QEMU's relative ADB mouse needs a button-up motion event before a
-        # button transition from a newly connected VNC client. Without it,
-        # the first requested coordinate only synchronizes QEMU's pointer and
-        # the click lands at the previous guest position.
-        self.connection.sendall(struct.pack(">BBHH", 5, 0, x, y))
-        time.sleep(0.05)
-        self.connection.sendall(struct.pack(">BBHH", 5, 1, x, y))
-        time.sleep(0.05)
-        self.connection.sendall(struct.pack(">BBHH", 5, 0, x, y))
+        # RFB pointer messages carry absolute coordinates, but QEMU converts
+        # them to deltas for the Power Mac's relative USB/ADB mouse. The first
+        # event on a connection only establishes QEMU's reference position.
+        # Establish it at the lower-right, send one large negative motion to
+        # home the clipped guest cursor, then use paced one-pixel deltas so
+        # classic Mac OS mouse acceleration cannot overshoot the target.
+        if self.pointer_x is None:
+            self.pointer_event(self.width - 1, self.height - 1)
+            time.sleep(0.05)
+            self.pointer_event(0, 0)
+            time.sleep(0.05)
+            start_x = 0
+            start_y = 0
+        else:
+            start_x = self.pointer_x
+            start_y = self.pointer_y
+        delta_x = x - start_x
+        delta_y = y - start_y
+        distance = max(abs(delta_x), abs(delta_y))
+        sign_x = 1 if delta_x > 0 else (-1 if delta_x < 0 else 0)
+        sign_y = 1 if delta_y > 0 else (-1 if delta_y < 0 else 0)
+        for step in range(1, distance + 1):
+            pointer_x = start_x + sign_x * min(step, abs(delta_x))
+            pointer_y = start_y + sign_y * min(step, abs(delta_y))
+            self.pointer_event(pointer_x, pointer_y)
+            time.sleep(0.002)
+        self.pointer_x = x
+        self.pointer_y = y
+
+    def click_buttons(self, x, y, count):
+        for index in range(count):
+            self.pointer_event(x, y, 1)
+            time.sleep(0.05)
+            self.pointer_event(x, y)
+            if index + 1 < count:
+                time.sleep(0.12)
+
+    def click(self, x, y):
+        self.move_to(x, y)
+        self.click_buttons(x, y, 1)
+
+    def double_click(self, x, y):
+        self.move_to(x, y)
+        self.click_buttons(x, y, 2)
 
     def capture(self):
-        self.connection.sendall(struct.pack(">BBHHHH", 3, 0, 0, 0,
-                                            self.width, self.height))
+        def request_full_update():
+            self.connection.sendall(struct.pack(">BBHHHH", 3, 0, 0, 0,
+                                                self.width, self.height))
+
+        request_full_update()
         rgb = bytearray(self.width * self.height * 3)
         while True:
             message_type = receive_exact(self.connection, 1)[0]
@@ -167,12 +213,35 @@ class RFBClient:
                 receive_exact(self.connection, 1)
                 rectangles = struct.unpack(">H", receive_exact(
                     self.connection, 2))[0]
+                resized = False
+                saw_pixels = False
                 for _ in range(rectangles):
                     x, y, width, height, encoding = struct.unpack(
                         ">HHHHi", receive_exact(self.connection, 12))
+                    if encoding in (-223, -308):
+                        if encoding == -308:
+                            screen_count = receive_exact(
+                                self.connection, 1)[0]
+                            receive_exact(self.connection, 3 +
+                                          screen_count * 16)
+                        if width < 1 or height < 1:
+                            raise RuntimeError(
+                                "invalid VNC desktop size %dx%d" %
+                                (width, height))
+                        self.width = width
+                        self.height = height
+                        self.pointer_x = None
+                        self.pointer_y = None
+                        rgb = bytearray(width * height * 3)
+                        resized = True
+                        continue
                     if encoding != 0:
                         raise RuntimeError(
                             "unexpected VNC encoding %d" % encoding)
+                    if (x + width > self.width or
+                            y + height > self.height):
+                        raise RuntimeError(
+                            "VNC rectangle outside framebuffer")
                     raw = receive_exact(self.connection, width * height * 4)
                     for row in range(height):
                         source = row * width * 4
@@ -182,7 +251,19 @@ class RFBClient:
                             rgb[destination:destination + 3] = (
                                 raw[offset + 2], raw[offset + 1], raw[offset])
                             destination += 3
-                return rgb
+                    saw_pixels = True
+                if resized:
+                    # A resize rectangle may be the only rectangle in this
+                    # update. Request a complete frame at the new dimensions;
+                    # any pixels bundled with the resize are intentionally
+                    # discarded so callers always receive one coherent frame.
+                    rgb = bytearray(self.width * self.height * 3)
+                    request_full_update()
+                    continue
+                if saw_pixels:
+                    return rgb
+                request_full_update()
+                continue
             if message_type == 2:  # Bell
                 continue
             if message_type == 3:  # ServerCutText
@@ -213,6 +294,8 @@ def main():
     parser.add_argument("--chord", action="append", default=[])
     parser.add_argument("--click", action="append", type=parse_click,
                         default=[])
+    parser.add_argument("--double-click", action="append", type=parse_click,
+                        default=[])
     parser.add_argument("--hold-ms", type=int, default=150)
     parser.add_argument("--delay", type=float, default=0.0)
     parser.add_argument("--screenshot")
@@ -238,11 +321,13 @@ def main():
             client.key(key, args.hold_ms / 1000.0)
         for x, y in args.click:
             client.click(x, y)
+        for x, y in args.double_click:
+            client.double_click(x, y)
         if args.delay > 0:
             time.sleep(args.delay)
         if args.screenshot:
-            write_png(args.screenshot, client.width, client.height,
-                      client.capture())
+            rgb = client.capture()
+            write_png(args.screenshot, client.width, client.height, rgb)
             print("%s: %dx%d" % (args.screenshot,
                                   client.width, client.height))
     finally:

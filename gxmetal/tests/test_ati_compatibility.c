@@ -7,6 +7,14 @@
 
 static unsigned failures;
 
+#define CHECK(condition) do { \
+    if (!(condition)) { \
+        fprintf(stderr, "%s:%d: check failed: %s\n", \
+                __FILE__, __LINE__, #condition); \
+        failures++; \
+    } \
+} while (0)
+
 #define CHECK_CLOSE(actual, expected) do { \
     if (fabsf((actual) - (expected)) > 0.0001f) { \
         fprintf(stderr, "%s:%d: got %.4f, expected %.4f\n", \
@@ -70,12 +78,29 @@ static void test_larger_four_by_three_context(void)
     CHECK_CLOSE(rect.bottom, 200.0f);
 }
 
+static void test_later_ati_game_identity(void)
+{
+    uint32_t value = UINT32_C(0xdeadbeef);
+
+    CHECK(gxmetal_ati_legacy_generation_is_current(
+        GXMETAL_ATI_ENGINE_ID, UINT32_C(0x00020101)));
+    CHECK(!gxmetal_ati_legacy_generation_is_current(3, 999));
+    CHECK(!gxmetal_ati_legacy_generation_is_current(4, 29));
+    CHECK(gxmetal_ati_legacy_generation_is_current(4, 30));
+    CHECK(gxmetal_ati_private_int(GXMETAL_ATI_CHIP_VERSION_TAG, &value));
+    CHECK(value == GXMETAL_ATI_RAGE128_CHIP_VERSION);
+    value = UINT32_C(0xdeadbeef);
+    CHECK(!gxmetal_ati_private_int(1010, &value));
+    CHECK(value == UINT32_C(0xdeadbeef));
+}
+
 int main(void)
 {
     test_carmageddon_minimap();
     test_physical_context_bitmap();
     test_native_logical_canvas();
     test_larger_four_by_three_context();
+    test_later_ati_game_identity();
     if (failures != 0) {
         fprintf(stderr, "GXMetal ATI compatibility: %u failures\n",
                 failures);
