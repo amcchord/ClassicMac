@@ -17,7 +17,7 @@ records sources, hashes, recipes, evidence descriptions, and driver fixes.
 | ID | Game | Primary path under test | Minimum qualification route | Media and current state |
 | --- | --- | --- | --- | --- |
 | `bugdom` | Bugdom 1.2.1 | QuickDraw 3D 1.6 / RAVE, ATI behavior | Highest quality; load The Lawn; verify terrain, fog, foliage alpha, and HUD for five minutes; quit and relaunch | Installed; launcher and 3D intro pass on candidate; gameplay qualification pending |
-| `cro-mag-rally` | Cro-Mag Rally Demo | Apple OpenGL 1.1.2 | Confirm hardware/OpenGL; complete a lap with terrain, particles, HUD, transparency, and camera transitions | Installed; test in progress |
+| `cro-mag-rally` | Cro-Mag Rally Demo | Apple OpenGL 1.1.2 | Confirm hardware/OpenGL; complete a lap with terrain, particles, HUD, transparency, and camera transitions | Accelerated title/menu pass with zero fallback; gameplay route in progress |
 | `weekend-warrior` | Weekend Warrior | QuickDraw 3D / RAVE | Load the first arena; verify camera clipping, textured characters, UI, depth ordering, and transitions for five minutes | Direct intro/title and five-minute stability pass; title-menu models missing; clean A/B rerun pending |
 | `future-cop` | Future Cop: LAPD Demo | Selectable QuickDraw 3D RAVE | Select RAVE; enter Crime War; verify weapon blending, transparent HUD, depth, and explosions | Acquired; in-guest installer pending |
 | `dark-vengeance` | Dark Vengeance Demo | Direct RAVE | Reach first combat and scripted sequence; inspect lighting, translucent effects, animated geometry, and camera motion | Blocked before 3D by deterministic game-level error in GXMetal and software controls |
@@ -25,7 +25,7 @@ records sources, hashes, recipes, evidence descriptions, and driver fixes.
 | `unreal-tournament` | Unreal Tournament 348m3 Demo | ATI renderer through RAVE | Confirm RAVE; render intro flyby; run a five-minute bot match checking lightmaps, fog, weapon alpha, HUD, and texture cycling | Installed; route pending |
 | `combat-mission` | Combat Mission: Beyond Overlord 1.02 Demo | RAVE hardware probe | Complete detection; load Chance Encounter; move through the map and execute a turn with terrain, markers, smoke, and animation | Installed on nine-game candidate; route pending |
 | `oni` | Oni Demo | Classic Apple OpenGL | Reach training and first fight; verify animation, lightmaps, transparency, HUD, and an indoor/outdoor transition | Installed with Bink library on nine-game candidate; route pending |
-| `havoc` | Havoc Demo | First shipping QuickDraw 3D RAVE game | Select accelerated rendering; enter the demo arena; verify terrain, fog, textured objects, transparency, HUD, and camera motion for five minutes | Acquired, fork-verified, and installed on immutable ten-game base; route pending |
+| `havoc` | Havoc Demo | First shipping QuickDraw 3D RAVE game | Select accelerated rendering; enter the demo arena; verify terrain, fog, textured objects, transparency, HUD, and camera motion for five minutes | Blocked before 3D by identical game resource-allocation error across clean controls |
 
 OpenGL titles only count as GXMetal tests when the host log contains GXMetal
 presentation traffic. If a game cannot launch or render, run the matched
@@ -153,6 +153,24 @@ VMs, each with an independent clone and unique local VNC and monitor sockets.
   not a GXMetal rendering failure. Evidence and the completed review record are
   under
   `context/gxmetal-games/evidence/dark-vengeance-live-final-drawsprocket-off-2/`.
+- Cro-Mag Rally's clean Option-launch retained its default 800x600, 16-bit
+  selection and reached the Pangea logo, title, and animated main menu through
+  classic Apple OpenGL. GXMetal recorded thousands of direct frames, zero
+  fallback, and roughly 99 draws per frame in the menu. This is the first sweep
+  evidence that the OpenGL-to-RAVE path works beyond the earlier direct/public
+  RAVE cases. Gameplay and a complete lap remain pending; evidence is under
+  `context/gxmetal-games/evidence/cromag-force-640-20260825/` (the retained
+  directory name predates confirmation that the game stayed at 800x600).
+- Havoc stops before creating a RAVE context with `Ran out of memory allocating
+  resources`. The published-hash demo and its HFS+ resource forks are intact,
+  but the error repeats with 512 MB and 128 MB guest RAM, GXMetal and software
+  graphics, the documented 256-color startup mode, and a period-correct test
+  that raises its `SIZE` resource from about 5.5 MB to 16 MB. The latter was
+  isolated on a locked derivative at SHA-256
+  `4642aa51eabd221acfe5e07d9cf22686da0e0c2070518028e017435cb06135c2`.
+  No GXMetal rolling profile or rendered frame was reached, so this is retained
+  as a demo/runtime incompatibility rather than a driver failure. Evidence is
+  under `context/gxmetal-games/evidence/havoc-*20260825/`.
 - Confirmed `unar` preserved classic Finder metadata and resource forks for the
   extracted applications before copying them to HFS+ with `ditto`.
 - Macintosh Repository rejected simultaneous follow-up transfers with HTTP
