@@ -27,7 +27,7 @@
 #define GXMETAL_METAL_RESOURCE_HASH_SIZE 8192u
 #define GXMETAL_METAL_STACK_VERTICES 256u
 #define GXMETAL_METAL_INLINE_BYTES 4096u
-#define GXMETAL_METAL_GL_SRC_FACTORS 9u
+#define GXMETAL_METAL_GL_SRC_FACTORS 11u
 #define GXMETAL_METAL_GL_DST_FACTORS 8u
 
 _Static_assert((GXMETAL_METAL_RESOURCE_HASH_SIZE &
@@ -1377,6 +1377,17 @@ static uint32_t gxmetal_metal_clear(GXMetalMetalRenderer *renderer,
     return GXMETAL_ERROR_NONE;
 }
 
+static float gxmetal_metal_perspective_depth(float inv_w)
+{
+    /* RAVE reciprocal-W is positive but is not restricted to [0, 1].  Map
+     * its complete finite range monotonically onto Metal depth: increasing
+     * invW (nearer) produces decreasing depth and therefore preserves the
+     * ordinary LT Z-function.  Unlike one-minus-invW, this does not alias all
+     * invW values at and above one onto depth zero.  Perspective fog retains
+     * its independent, documented 1/invW distance in the fragment shader. */
+    return 1.0f / (1.0f + inv_w);
+}
+
 static int gxmetal_metal_read_vertex(const GXMetalMetalContext *context,
                                      const uint8_t *source,
                                      GXMetalMetalVertex *vertex)
@@ -1401,12 +1412,7 @@ static int gxmetal_metal_read_vertex(const GXMetalMetalContext *context,
         return 0;
     }
     if (context->perspective_z != 0) {
-        /* Apple defines Perspective-Z as hidden-surface removal from invW,
-         * while retaining the ordinary Z-function result (LT still means
-         * nearer). Within the visible clip volume invW increases toward the
-         * eye, so one-minus-invW is the corresponding affine Metal depth. */
-        vertex->z = fmaxf(0.0f, fminf(0.99999994f,
-                                      1.0f - vertex->inv_w));
+        vertex->z = gxmetal_metal_perspective_depth(vertex->inv_w);
     }
     return 1;
 }
@@ -1585,8 +1591,7 @@ static int gxmetal_metal_read_texture_vertex(
         return 0;
     }
     if (context->perspective_z != 0) {
-        vertex->z = fmaxf(0.0f, fminf(0.99999994f,
-                                      1.0f - vertex->inv_w));
+        vertex->z = gxmetal_metal_perspective_depth(vertex->inv_w);
     }
 
     /* RAVE only requires color, diffuse, and specular components when the
@@ -2180,6 +2185,11 @@ static int gxmetal_metal_gl_source_index(uint32_t factor)
     case GXMETAL_GL_DST_ALPHA:                  return 6;
     case GXMETAL_GL_ONE_MINUS_DST_ALPHA:        return 7;
     case GXMETAL_GL_SRC_ALPHA_SATURATE:         return 8;
+    /* ATI's classic OpenGL/RAVE bridge also emits these as source factors.
+     * They are outside the core OpenGL 1.x glBlendFunc source-factor set,
+     * but Metal defines their behavior and shipping games depend on it. */
+    case GXMETAL_GL_SRC_COLOR:                   return 9;
+    case GXMETAL_GL_ONE_MINUS_SRC_COLOR:         return 10;
     default:                                    return -1;
     }
 }

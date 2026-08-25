@@ -424,6 +424,35 @@ static void set_texture_vertex_depth(uint8_t *bytes, float x, float y,
     store_float(bytes + GXMETAL_VERTEX_V_OVER_W_OFFSET, v * inv_w);
 }
 
+static void draw_textured_triangle_depth(GXMetalMetalRenderer *renderer,
+                                         uint8_t *packet,
+                                         uint32_t context,
+                                         float z, float inv_w,
+                                         float u, float v)
+{
+    enum {
+        kPacketBytes = GXMETAL_PACKET_HEADER_BYTES +
+            GXMETAL_DRAW_HEADER_BYTES + 3 * GXMETAL_TEXTURE_VERTEX_BYTES
+    };
+    uint8_t *payload;
+    uint8_t *vertices;
+
+    make_packet(packet, GXMETAL_OP_DRAW_TEXTURED, kPacketBytes, context);
+    payload = packet + GXMETAL_PACKET_HEADER_BYTES;
+    gxmetal_store_le32(payload + GXMETAL_DRAW_PRIMITIVE_OFFSET,
+                       GXMETAL_PRIMITIVE_TRIANGLE);
+    gxmetal_store_le32(payload + GXMETAL_DRAW_VERTEX_COUNT_OFFSET, 3);
+    gxmetal_store_le32(payload + GXMETAL_DRAW_VERTEX_STRIDE_OFFSET,
+                       GXMETAL_TEXTURE_VERTEX_BYTES);
+    vertices = payload + GXMETAL_DRAW_VERTICES_OFFSET;
+    set_texture_vertex_depth(vertices, 8, 8, z, inv_w, u, v);
+    set_texture_vertex_depth(vertices + GXMETAL_TEXTURE_VERTEX_BYTES,
+                             56, 8, z, inv_w, u, v);
+    set_texture_vertex_depth(vertices + 2 * GXMETAL_TEXTURE_VERTEX_BYTES,
+                             32, 56, z, inv_w, u, v);
+    CHECK(dispatch(renderer, packet, kPacketBytes) == GXMETAL_ERROR_NONE);
+}
+
 static void poison_unused_texture_color(uint8_t *bytes)
 {
     store_float(bytes + GXMETAL_VERTEX_R_OFFSET, NAN);
@@ -685,6 +714,40 @@ static void test_metal_texture_upload_and_sampling(void)
     CHECK(framebuffer_pixel(framebuffer, 48, 16) == 0x7fff);
     CHECK(framebuffer_pixel(framebuffer, 16, 48) == 0x7c00);
     CHECK(framebuffer_pixel(framebuffer, 48, 48) == 0x7c1f);
+
+    /* Weekend Warrior submits near menu meshes with reciprocal-W values at
+     * and above one.  A finite Perspective-Z mapping must preserve ordering
+     * across that range instead of saturating both meshes onto depth zero.
+     * Draw a farther blue textured triangle first, then a nearer red one;
+     * normalized Z deliberately disagrees with reciprocal-W. */
+    make_packet(control, GXMETAL_OP_BEGIN_FRAME, 32, 3);
+    CHECK(dispatch(renderer, control, 32) == GXMETAL_ERROR_NONE);
+    make_packet(packet, GXMETAL_OP_CLEAR, 64, 3);
+    payload = packet + GXMETAL_PACKET_HEADER_BYTES;
+    gxmetal_store_le32(payload + GXMETAL_CLEAR_FLAGS_OFFSET,
+                       GXMETAL_CLEAR_COLOR | GXMETAL_CLEAR_DEPTH);
+    store_float(payload + GXMETAL_CLEAR_COLOR_A_OFFSET, 1.0f);
+    store_float(payload + GXMETAL_CLEAR_DEPTH_OFFSET, 1.0f);
+    gxmetal_store_le32(payload + GXMETAL_CLEAR_RECT_OFFSET +
+                       GXMETAL_RECT_RIGHT_OFFSET, 64);
+    gxmetal_store_le32(payload + GXMETAL_CLEAR_RECT_OFFSET +
+                       GXMETAL_RECT_BOTTOM_OFFSET, 64);
+    CHECK(dispatch(renderer, packet, 64) == GXMETAL_ERROR_NONE);
+    set_int_state(renderer, packet, 3, GXMETAL_STATE_Z_FUNCTION,
+                  GXMETAL_Z_LT);
+    set_int_state(renderer, packet, 3, GXMETAL_STATE_Z_BUFFER_MASK, 1);
+    set_int_state(renderer, packet, 3, GXMETAL_STATE_PERSPECTIVE_Z, 1);
+    draw_textured_triangle_depth(renderer, packet, 3,
+                                 0.10f, 2.0f, 0.0f, 0.0f);
+    draw_textured_triangle_depth(renderer, packet, 3,
+                                 0.90f, 4.0f, 0.0f, 1.0f);
+    make_packet(control, GXMETAL_OP_END_FRAME, 32, 3);
+    CHECK(dispatch(renderer, control, 32) == GXMETAL_ERROR_NONE);
+    present_rect(renderer, control, 3, 0, 0, 64, 64);
+    CHECK(framebuffer_pixel(framebuffer, 32, 24) == 0x7c00);
+    set_int_state(renderer, packet, 3, GXMETAL_STATE_PERSPECTIVE_Z, 0);
+    set_int_state(renderer, packet, 3, GXMETAL_STATE_Z_FUNCTION,
+                  GXMETAL_Z_NONE);
 
     /* OpenGLRendererATI exposes Quake III's lightmap as a second texture.
      * The guest carries that stage's homogeneous S/T/Q in the specular wire
@@ -1295,6 +1358,39 @@ static void test_metal_depth_blend_and_double_buffer(void)
     pixel = framebuffer_pixel(framebuffer, 32, 24);
     CHECK(((pixel >> 10) & 31) >= 6 && ((pixel >> 10) & 31) <= 9);
     CHECK((pixel & 31) >= 22 && (pixel & 31) <= 25);
+
+    /* ATI's classic OpenGL/RAVE bridge uses GL_SRC_COLOR as a source blend
+     * factor even though core OpenGL 1.x only lists it for the destination.
+     * Future Cop depends on accepting this vendor behavior; rejecting it
+     * faults the guest command stream and freezes at the 3D transition. */
+    set_int_state(renderer, packet, 2,
+                  GXMETAL_STATE_ALPHA_TEST_FUNCTION,
+                  GXMETAL_ALPHA_TEST_TRUE);
+    set_int_state(renderer, packet, 2, GXMETAL_STATE_Z_FUNCTION,
+                  GXMETAL_Z_NONE);
+    set_int_state(renderer, packet, 2, GXMETAL_STATE_BLEND,
+                  GXMETAL_BLEND_OPENGL);
+    set_int_state(renderer, packet, 2, GXMETAL_STATE_GL_BLEND_SRC,
+                  GXMETAL_GL_SRC_COLOR);
+    set_int_state(renderer, packet, 2, GXMETAL_STATE_GL_BLEND_DST,
+                  GXMETAL_GL_ONE);
+    make_packet(packet, GXMETAL_OP_BEGIN_FRAME, 32, 2);
+    CHECK(dispatch(renderer, packet, 32) == GXMETAL_ERROR_NONE);
+    make_packet(packet, GXMETAL_OP_CLEAR, 64, 2);
+    payload = packet + 16;
+    gxmetal_store_le32(payload + GXMETAL_CLEAR_FLAGS_OFFSET,
+                       GXMETAL_CLEAR_COLOR);
+    store_float(payload + GXMETAL_CLEAR_COLOR_A_OFFSET, 1.0f);
+    gxmetal_store_le32(payload + GXMETAL_CLEAR_RECT_OFFSET +
+                       GXMETAL_RECT_RIGHT_OFFSET, 64);
+    gxmetal_store_le32(payload + GXMETAL_CLEAR_RECT_OFFSET +
+                       GXMETAL_RECT_BOTTOM_OFFSET, 64);
+    CHECK(dispatch(renderer, packet, 64) == GXMETAL_ERROR_NONE);
+    draw_triangle(renderer, packet, 2, 0.20f, 1, 0, 0, 1);
+    make_packet(packet, GXMETAL_OP_END_FRAME, 32, 2);
+    CHECK(dispatch(renderer, packet, 32) == GXMETAL_ERROR_NONE);
+    present_rect(renderer, packet, 2, 0, 0, 64, 64);
+    CHECK(framebuffer_pixel(framebuffer, 32, 24) == 0x7c00);
 
     make_packet(packet, GXMETAL_OP_SET_STATE, 32, 2);
     payload = packet + 16;

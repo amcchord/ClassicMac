@@ -682,10 +682,13 @@ static TQAError GXMetalRenderPattern(TQADrawContext *context,
                                         1.0f, 0.0f, 0.0f, 1.0f);
     perspectiveNear[2] = GXMetalGouraud(110.0f, 55.0f, 0.95f,
                                         1.0f, 0.0f, 0.0f, 1.0f);
+    /* Weekend Warrior uses reciprocal-W values above one for near menu
+     * meshes.  Keep both surfaces in that range so the guest test catches a
+     * Perspective-Z implementation that saturates them onto one depth. */
     perspectiveFar[0].invW = perspectiveFar[1].invW =
-        perspectiveFar[2].invW = 0.25f;
+        perspectiveFar[2].invW = 2.0f;
     perspectiveNear[0].invW = perspectiveNear[1].invW =
-        perspectiveNear[2].invW = 0.75f;
+        perspectiveNear[2].invW = 4.0f;
     fogTriangle[0] = GXMetalGouraud(210.0f, 232.0f, 0.75f,
                                     1.0f, 0.0f, 0.0f, 1.0f);
     fogTriangle[1] = GXMetalGouraud(240.0f, 200.0f, 0.75f,

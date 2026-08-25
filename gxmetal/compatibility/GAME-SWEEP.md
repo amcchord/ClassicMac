@@ -17,11 +17,11 @@ records sources, hashes, recipes, evidence descriptions, and driver fixes.
 | ID | Game | Primary path under test | Minimum qualification route | Media and current state |
 | --- | --- | --- | --- | --- |
 | `bugdom` | Bugdom 1.2.1 | QuickDraw 3D 1.6 / RAVE, ATI behavior | Highest quality; load The Lawn; verify terrain, fog, foliage alpha, and HUD for five minutes; quit and relaunch | Installed; launcher and 3D intro pass on candidate; gameplay qualification pending |
-| `cro-mag-rally` | Cro-Mag Rally Demo | Apple OpenGL 1.1.2 | Confirm hardware/OpenGL; complete a lap with terrain, particles, HUD, transparency, and camera transitions | Accelerated title/menu pass with zero fallback; gameplay route in progress |
-| `weekend-warrior` | Weekend Warrior | QuickDraw 3D / RAVE | Load the first arena; verify camera clipping, textured characters, UI, depth ordering, and transitions for five minutes | Direct intro/title and five-minute stability pass; title-menu models missing; clean A/B rerun pending |
-| `future-cop` | Future Cop: LAPD Demo | Selectable QuickDraw 3D RAVE | Select RAVE; enter Crime War; verify weapon blending, transparent HUD, depth, and explosions | Acquired; in-guest installer pending |
+| `cro-mag-rally` | Cro-Mag Rally Demo | Apple OpenGL 1.1.2 | Confirm hardware/OpenGL; complete a lap with terrain, particles, HUD, transparency, and camera transitions | Accelerated 800x600 title/menu pass with zero fallback; 640x480 GXMetal reaches a static Pangea splash while the matched software control remains black |
+| `weekend-warrior` | Weekend Warrior | QuickDraw 3D / RAVE | Load the first arena; verify camera clipping, textured characters, UI, depth ordering, and transitions for five minutes | PerspectiveZ gap fixed and verified through title/menu/selection plus a ten-minute 3D center-stage soak with zero fallback; first-arena qualification pending |
+| `future-cop` | Future Cop: LAPD Demo | Selectable QuickDraw 3D RAVE | Select RAVE; enter Crime War; verify weapon blending, transparent HUD, depth, and explosions | Installed; ATI source-color blend fix restores live direct gameplay, but private-path texture coordinates remain visually incorrect |
 | `dark-vengeance` | Dark Vengeance Demo | Direct RAVE | Reach first combat and scripted sequence; inspect lighting, translucent effects, animated geometry, and camera motion | Blocked before 3D by deterministic game-level error in GXMetal and software controls |
-| `myth-ii` | Myth II: Soulblighter 1.5.1 Demo | RAVE | Select RAVE; load a solo map; pan, zoom, rotate, issue orders, and verify terrain, water, units, decals, projectiles, and explosions | Installed; route pending |
+| `myth-ii` | Myth II: Soulblighter 1.5.1 Demo | RAVE | Select RAVE; load a solo map; pan, zoom, rotate, issue orders, and verify terrain, water, units, decals, projectiles, and explosions | Menu and new-game dialog pass; selected demo level remains black without creating a GXMetal context, so acceleration is unqualified |
 | `unreal-tournament` | Unreal Tournament 348m3 Demo | ATI renderer through RAVE | Confirm RAVE; render intro flyby; run a five-minute bot match checking lightmaps, fog, weapon alpha, HUD, and texture cycling | Installed; route pending |
 | `combat-mission` | Combat Mission: Beyond Overlord 1.02 Demo | RAVE hardware probe | Complete detection; load Chance Encounter; move through the map and execute a turn with terrain, markers, smoke, and animation | Installed on nine-game candidate; route pending |
 | `oni` | Oni Demo | Classic Apple OpenGL | Reach training and first fight; verify animation, lightmaps, transparency, HUD, and an indoor/outdoor transition | Installed with Bink library on nine-game candidate; route pending |
@@ -143,6 +143,36 @@ VMs, each with an independent clone and unique local VNC and monitor sockets.
   retired source-image change, it is retained as diagnostic evidence rather
   than qualification; a clean GXMetal/software comparison on the immutable
   base is required to isolate a likely public RAVE state/rendering gap.
+- The clean Weekend Warrior A/B then reproduced that gap deterministically on
+  the immutable base. At the same title-menu checkpoint software RAVE renders
+  the rotating runner, floppy disk, and other foreground models and responds to
+  Left/Right/Space, while GXMetal displays only the animated money background
+  and later advances to the Bugdom promo. A read-only focused trace recorded
+  11/11 successful texture creates, 51,210/51,210 valid binds, 111,972 draws,
+  active indexed textured meshes, and zero rejects, fallbacks, or faults. The
+  cause was GXMetal's PerspectiveZ conversion: clamping
+  `1 - invW` aliases every vertex with `invW >= 1` at depth zero, where strict
+  LT testing rejects later foreground surfaces. Evidence is under
+  `context/gxmetal-games/evidence/weekend-warrior-ab-20260825/` and
+  `context/gxmetal-games/evidence/weekend-warrior-title-trace-20260825/`.
+- The focused PerspectiveZ fix maps every finite positive reciprocal-W value
+  monotonically with `1 / (1 + invW)`, preserving LT's nearer/larger-invW
+  ordering without changing fog's `1 / invW` semantics. A native textured
+  competitor at `invW = 2` and `invW = 4` reproduces the old rejection and
+  passes with the fix; the real guest test exercises the same values through
+  RAVE. A source-built QEMU run from the immutable nine-game base restored the
+  complete title emblem at the same 30-second A/B checkpoint, accepted menu
+  input through the runner, character, face, and single-player selections, and
+  rendered the complete 3D center stage. The 819.501-second soak retained 72
+  screenshots and 72 profiles totaling 38,386 direct frames, zero fallback
+  frames, no error/fault/assert/unsupported log lines, QEMU exit zero, and an
+  unchanged base SHA-256. Auxiliary VNC input stopped affecting the game after
+  an action beside a shell, although rendering and presentation continued, so
+  first-arena gameplay, in-guest quit, and relaunch remain unqualified. Evidence
+  is under
+  `context/gxmetal-games/evidence/weekend-warrior-perspectivez-fixed-probe-20260825/`
+  and
+  `context/gxmetal-games/evidence/weekend-warrior-perspectivez-fixed-longrun-20260825/`.
 - Dark Vengeance consistently stopped before creating a RAVE context with
   `FATAL ERROR: Memory allocation failed (size = -49)`. The same result occurred
   at 512 MB and 128 MB, with GXMetal and software RAVE, and after applying the
@@ -161,6 +191,46 @@ VMs, each with an independent clone and unique local VNC and monitor sockets.
   RAVE cases. Gameplay and a complete lap remain pending; evidence is under
   `context/gxmetal-games/evidence/cromag-force-640-20260825/` (the retained
   directory name predates confirmation that the game stayed at 800x600).
+- A second Cro-Mag run committed 640x480 through a recorded popup drag and
+  reached a correctly rendered Pangea splash, but did not advance during 225
+  seconds or after Space. GXMetal remained live at roughly 1,040-1,080 fps,
+  75 draws per frame, all direct, with 136/136 successful texture creates and
+  no context, bind, bitmap, packet, or transport errors. The earlier 800x600
+  `Not enough VRAM` dialog is therefore a game-side OpenGL preflight rather
+  than a GXMetal allocation failure: that trace had a valid 800x600 context,
+  317/317 successful texture creates, and the advertised 64 MB framebuffer.
+  The matched 640x480 software-RAVE control is worse: 86/88 captures are the
+  same black frame, including every launch-to-final checkpoint, and click,
+  Return, and Escape do not advance it. GXMetal therefore creates and draws
+  more of the startup path than software at 640x480, but neither result
+  qualifies gameplay and the control does not isolate a GXMetal-only stall.
+  Evidence is under
+  `context/gxmetal-games/evidence/cromag-manual-drag-640-gameplay-20260825/`
+  and `context/gxmetal-games/evidence/cromag-640-software-ab-20260825/`.
+- Future Cop installed without an EULA prompt and exposes `ATG2 (software
+  based)` and `GXMetal` as its two 3D engines. The ATG2 control rendered live,
+  correctly textured Crime War gameplay for more than two minutes and visibly
+  responded to movement and combat input. GXMetal originally stopped
+  presenting at the 3D transition after the ATI bridge requested the vendor
+  blend pair `GL_SRC_COLOR/GL_ONE`, leaving every subsequent screenshot
+  byte-identical. Extending the bounded Metal pipeline cache to accept
+  source-color and one-minus-source-color as ATI source factors removed the
+  warning and restored live input and presentation: all 20 gameplay captures
+  were unique, 3,077 profiled frames were direct with zero fallback, and QEMU
+  exited cleanly. The scene is not yet visually qualified because environment,
+  vehicle, and HUD textures remain severely striped or smeared; over 90 percent
+  of the affected draws use the private ATI UV transform, which is now under a
+  controlled semantic A/B. Evidence is under
+  `context/gxmetal-games/evidence/future-cop-software-gameplay-probe/`,
+  `context/gxmetal-games/evidence/future-cop-gxmetal-input/`, and
+  `context/gxmetal-games/evidence/future-cop-gxmetal-input-src-color/`.
+- Myth II reached its correctly rendered main menu and new-game dialog, then
+  accepted the demo mission and difficulty. It changed to a larger black
+  display that remained byte-identical for the final minute; the host log only
+  contains initial gamma programming and never records a GXMetal context or
+  rolling profile. This route therefore does not count as an accelerated game
+  result and remains a game/runtime or route investigation. Evidence is under
+  `context/gxmetal-games/evidence/mythii-gameplay-20260825/`.
 - Havoc stops before creating a RAVE context with `Ran out of memory allocating
   resources`. The published-hash demo and its HFS+ resource forks are intact,
   but the error repeats with 512 MB and 128 MB guest RAM, GXMetal and software
@@ -181,6 +251,10 @@ VMs, each with an independent clone and unique local VNC and monitor sockets.
   resolution change. It now negotiates standard and extended DesktopSize,
   resets pointer state after a resize, requests a coherent full frame, and has
   protocol tests for both resize forms.
+- Hardened the sweep runner's QEMU display-name serialization after a matrix
+  label containing commas was parsed as invalid `-name` sub-options. Commas
+  and whitespace are now normalized before launch, with a unit regression and
+  a successful real-QEMU folder probe.
 - Proved the harness against a signed application build using one persistent
   VNC connection across `640x480 -> 1024x768 -> 640x480`, ten screenshots, a
   zero QEMU exit, and an unchanged base-image SHA-256. Short temporary Unix
