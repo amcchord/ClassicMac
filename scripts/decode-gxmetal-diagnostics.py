@@ -184,9 +184,21 @@ ATI_PRIVATE_TRANSITION_FIELDS = (
     "ati_private_geometry_first_anomaly_vertex_addresses",
     "ati_private_geometry_first_anomaly_vertex_words",
 )
+ATI_PRIVATE_BURST_FIELDS = (
+    "ati_private_geometry_current_frame_call_count",
+    "ati_private_geometry_max_frame_call_count",
+    "ati_private_geometry_max_frame_call_frame",
+    "ati_private_geometry_first_burst_method",
+    "ati_private_geometry_first_burst_frame",
+    "ati_private_geometry_first_burst_call_count",
+    "ati_private_geometry_first_burst_viewport_width",
+    "ati_private_geometry_first_burst_viewport_height",
+    "ati_private_geometry_first_burst_vertex_addresses",
+    "ati_private_geometry_first_burst_vertex_words",
+)
 ATI_PRIVATE_FINISH_FIELDS = (
     ATI_PRIVATE_FINISH_COUNTER_FIELDS + ATI_PRIVATE_FINISH_DETAIL_FIELDS
-    + ATI_PRIVATE_TRANSITION_FIELDS
+    + ATI_PRIVATE_TRANSITION_FIELDS + ATI_PRIVATE_BURST_FIELDS
 )
 ATI_PRIVATE_VERTEX_CAPTURE_FIELDS = (
     "ati_private_draw50_vertex_snapshot_valid_mask",
@@ -256,8 +268,11 @@ LEGACY_TRAILING_FIELDS = {
                  + ATI_PRIVATE_FINISH_FIELDS),
     0x00010018: ATI_PRIVATE_FINISH_FIELDS,
     0x00010019: (ATI_PRIVATE_FINISH_DETAIL_FIELDS
-                 + ATI_PRIVATE_TRANSITION_FIELDS),
-    0x0001001A: ATI_PRIVATE_TRANSITION_FIELDS,
+                 + ATI_PRIVATE_TRANSITION_FIELDS
+                 + ATI_PRIVATE_BURST_FIELDS),
+    0x0001001A: (ATI_PRIVATE_TRANSITION_FIELDS
+                 + ATI_PRIVATE_BURST_FIELDS),
+    0x0001001B: ATI_PRIVATE_BURST_FIELDS,
 }
 
 

@@ -46,7 +46,7 @@ enum GXMetalDisplayRejectReason {
 };
 
 #define GXMETAL_DIAGNOSTIC_MAGIC UINT32_C(0x47584447) /* GXDG */
-#define GXMETAL_DIAGNOSTIC_VERSION UINT32_C(0x0001001B)
+#define GXMETAL_DIAGNOSTIC_VERSION UINT32_C(0x0001001C)
 #define GXMETAL_DIAGNOSTIC_PIXEL_TYPES 18u
 #define GXMETAL_DIAGNOSTIC_PRIVATE_PIXEL_TYPES 16u
 #define GXMETAL_DIAGNOSTIC_ATI_DRAW47_WORDS 30u
@@ -66,6 +66,7 @@ enum GXMetalDisplayRejectReason {
 #define GXMETAL_DIAGNOSTIC_ATI_VERTEX_COUNT_BUCKETS 9u
 #define GXMETAL_DIAGNOSTIC_ATI_ANOMALY_VERTICES 3u
 #define GXMETAL_DIAGNOSTIC_ATI_ANOMALY_WORDS 39u
+#define GXMETAL_DIAGNOSTIC_ATI_GEOMETRY_BURST_CALLS 256u
 #define GXMETAL_DIAGNOSTIC_PROPERTY "AAPL,GXMetalEngineDiagnostic"
 
 typedef struct GXMetalDiagnosticSnapshot {
@@ -403,6 +404,21 @@ typedef struct GXMetalDiagnosticSnapshot {
     uint32_t ati_private_geometry_first_anomaly_vertex_addresses[
         GXMETAL_DIAGNOSTIC_ATI_ANOMALY_VERTICES];
     uint32_t ati_private_geometry_first_anomaly_vertex_words[
+        GXMETAL_DIAGNOSTIC_ATI_ANOMALY_WORDS];
+    uint32_t ati_private_geometry_current_frame_call_count[
+        GXMETAL_DIAGNOSTIC_ATI_GEOMETRY_METHODS];
+    uint32_t ati_private_geometry_max_frame_call_count[
+        GXMETAL_DIAGNOSTIC_ATI_GEOMETRY_METHODS];
+    uint32_t ati_private_geometry_max_frame_call_frame[
+        GXMETAL_DIAGNOSTIC_ATI_GEOMETRY_METHODS];
+    uint32_t ati_private_geometry_first_burst_method;
+    uint32_t ati_private_geometry_first_burst_frame;
+    uint32_t ati_private_geometry_first_burst_call_count;
+    uint32_t ati_private_geometry_first_burst_viewport_width;
+    uint32_t ati_private_geometry_first_burst_viewport_height;
+    uint32_t ati_private_geometry_first_burst_vertex_addresses[
+        GXMETAL_DIAGNOSTIC_ATI_ANOMALY_VERTICES];
+    uint32_t ati_private_geometry_first_burst_vertex_words[
         GXMETAL_DIAGNOSTIC_ATI_ANOMALY_WORDS];
 } GXMetalDiagnosticSnapshot;
 

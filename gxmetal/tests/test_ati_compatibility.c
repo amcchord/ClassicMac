@@ -107,6 +107,17 @@ static void test_private_method_diagnostic_masks(void)
     CHECK(gxmetal_ati_private_method_mask(0, 2) == 0);
 }
 
+static void test_private_polygon_mode(void)
+{
+    CHECK(!gxmetal_ati_private_polygon_mode_is_fill(
+        GXMETAL_ATI_POLYGON_MODE_POINT));
+    CHECK(!gxmetal_ati_private_polygon_mode_is_fill(
+        GXMETAL_ATI_POLYGON_MODE_LINE));
+    CHECK(gxmetal_ati_private_polygon_mode_is_fill(
+        GXMETAL_ATI_POLYGON_MODE_FILL));
+    CHECK(!gxmetal_ati_private_polygon_mode_is_fill(UINT32_MAX));
+}
+
 static void test_private_contiguous_vertex_bounds(void)
 {
     uint32_t byte_count = UINT32_C(0xdeadbeef);
@@ -129,6 +140,7 @@ static void test_private_contiguous_vertex_bounds(void)
 static void test_private_generic_callback_abi_discriminator(void)
 {
     uint32_t vertex_count = UINT32_C(0xdeadbeef);
+    uint32_t rim_address = UINT32_C(0xdeadbeef);
 
     CHECK(gxmetal_ati_private_is_contiguous_batch(
         3, GXMETAL_ATI_GL_TRIANGLES));
@@ -140,41 +152,41 @@ static void test_private_generic_callback_abi_discriminator(void)
         4097, GXMETAL_ATI_GL_TRIANGLES));
     CHECK(!gxmetal_ati_private_is_contiguous_batch(
         UINT32_C(0x1f7d0a80), UINT32_C(160)));
-    CHECK(gxmetal_ati_private_is_fallback_batch(
-        UINT32_C(0x1f7d0a80), 4, GXMETAL_ATI_GL_QUADS,
-        UINT32_C(0x1f7d0a80)));
-    CHECK(!gxmetal_ati_private_is_fallback_batch(
-        UINT32_C(0x1f7d0a80), 4, GXMETAL_ATI_GL_QUADS,
-        UINT32_C(110)));
-    CHECK(!gxmetal_ati_private_is_fallback_batch(
-        UINT32_C(0x1f7d0a80), UINT32_C(0x1f7d0b80),
-        UINT32_C(160), UINT32_C(110)));
-    CHECK(gxmetal_ati_private_strip_batch_vertex_count(
-        GXMETAL_ATI_GL_TRIANGLE_STRIP, 2, &vertex_count));
-    CHECK(vertex_count == 4);
-    CHECK(gxmetal_ati_private_strip_batch_vertex_count(
-        GXMETAL_ATI_GL_TRIANGLE_STRIP,
-        GXMETAL_ATI_PRIVATE_MAX_VERTEX_COUNT - 2, &vertex_count));
-    CHECK(vertex_count == GXMETAL_ATI_PRIVATE_MAX_VERTEX_COUNT);
-    CHECK(!gxmetal_ati_private_strip_batch_vertex_count(
-        GXMETAL_ATI_GL_LINE_STRIP, 2, &vertex_count));
-    CHECK(!gxmetal_ati_private_strip_batch_vertex_count(
-        GXMETAL_ATI_GL_TRIANGLE_STRIP, 0, &vertex_count));
-    CHECK(!gxmetal_ati_private_strip_batch_vertex_count(
-        GXMETAL_ATI_GL_TRIANGLE_STRIP,
-        GXMETAL_ATI_PRIVATE_MAX_VERTEX_COUNT - 1, &vertex_count));
-    CHECK(!gxmetal_ati_private_strip_batch_vertex_count(
-        GXMETAL_ATI_GL_TRIANGLE_STRIP, 2, NULL));
-    vertex_count = UINT32_C(0xdeadbeef);
-    CHECK(gxmetal_ati_private_fan_batch_vertex_count(4, &vertex_count));
-    CHECK(vertex_count == 6);
-    CHECK(gxmetal_ati_private_fan_batch_vertex_count(
-        GXMETAL_ATI_PRIVATE_MAX_VERTEX_COUNT - 2, &vertex_count));
-    CHECK(vertex_count == GXMETAL_ATI_PRIVATE_MAX_VERTEX_COUNT);
-    CHECK(!gxmetal_ati_private_fan_batch_vertex_count(0, &vertex_count));
-    CHECK(!gxmetal_ati_private_fan_batch_vertex_count(
-        GXMETAL_ATI_PRIVATE_MAX_VERTEX_COUNT - 1, &vertex_count));
-    CHECK(!gxmetal_ati_private_fan_batch_vertex_count(4, NULL));
+    /* Normal and split-center fan forms carry a rim count in arg3. */
+    CHECK(gxmetal_ati_private_fan_layout(
+        UINT32_C(0x1f7d0a00), UINT32_C(0x1f7d0a80), 3,
+        &rim_address, &vertex_count));
+    CHECK(rim_address == UINT32_C(0x1f7d0a80));
+    CHECK(vertex_count == 3);
+    CHECK(gxmetal_ati_private_fan_layout(
+        UINT32_C(0x1f7d0a00), UINT32_C(0x1f7d1000), 2,
+        &rim_address, &vertex_count));
+    CHECK(rim_address == UINT32_C(0x1f7d1000));
+    CHECK(vertex_count == 2);
+    /* Direct flush passes center==rim and a total count. */
+    CHECK(gxmetal_ati_private_fan_layout(
+        UINT32_C(0x1f7d0a00), UINT32_C(0x1f7d0a00), 4,
+        &rim_address, &vertex_count));
+    CHECK(rim_address == UINT32_C(0x1f7d0a80));
+    CHECK(vertex_count == 3);
+    CHECK(gxmetal_ati_private_fan_layout(
+        UINT32_C(0x00100000), UINT32_C(0x00100000),
+        GXMETAL_ATI_PRIVATE_MAX_VERTEX_COUNT,
+        &rim_address, &vertex_count));
+    CHECK(vertex_count == GXMETAL_ATI_PRIVATE_MAX_VERTEX_COUNT - 1);
+    CHECK(!gxmetal_ati_private_fan_layout(
+        UINT32_C(0x1f7d0a00), UINT32_C(0x1f7d0a80), 1,
+        &rim_address, &vertex_count));
+    CHECK(!gxmetal_ati_private_fan_layout(
+        UINT32_C(0x1f7d0a00), UINT32_C(0x1f7d0a00), 2,
+        &rim_address, &vertex_count));
+    CHECK(!gxmetal_ati_private_fan_layout(
+        UINT32_C(0xffffff80), UINT32_C(0xffffff80), 3,
+        &rim_address, &vertex_count));
+    CHECK(!gxmetal_ati_private_fan_layout(
+        0, UINT32_C(0x1000), 2, NULL, &vertex_count));
+    CHECK(!gxmetal_ati_private_fan_layout(
+        0, UINT32_C(0x1000), 2, &rim_address, NULL));
     CHECK(gxmetal_ati_private_is_contiguous_triangle(
         UINT32_C(0x1f7d0a00), 3, UINT32_C(0x1f7d0b00)));
     CHECK(!gxmetal_ati_private_is_contiguous_triangle(
@@ -491,6 +503,7 @@ int main(void)
     test_larger_four_by_three_context();
     test_later_ati_game_identity();
     test_private_method_diagnostic_masks();
+    test_private_polygon_mode();
     test_private_contiguous_vertex_bounds();
     test_private_generic_callback_abi_discriminator();
     test_private_triangle_strip_expansion();

@@ -1,5 +1,35 @@
 # Changelog
 
+## 2.1.4 — 2026-08-26
+
+### Added
+
+- Diagnostic schema 1.0.28 records geometry-callback counts for the current
+  private frame, each method's maximum per-frame count and frame number, and
+  the first converted triangle to cross a generic 256-callback burst threshold.
+  This preserves the exact transition primitive and viewport even when later
+  submissions would overwrite the ordinary last-vertex snapshot.
+
+### Changed
+
+- The shortened Oni transition pair, accelerated AGL/conformance pair, and
+  four public-RAVE game smokes now run from independent clones of one
+  reboot-verified immutable base. rc23 completes Oni's formerly corrupt
+  transition plus Bugdom, Future Cop, Combat Mission, and Weekend Warrior;
+  its RAVE comparison workload is 10.34 times Apple Software RAVE.
+
+### Fixed
+
+- Corrected Apple's ATI/OpenGL private primitive-family mapping: slots 49/50
+  are center-plus-contiguous-rim triangle fans, while slots 51/52 are triangle
+  strips. Split-center and direct-flush fan layouts are normalized without
+  reading residual PPC registers as callback arguments. Oni's four-vertex fan
+  now emits `(v0,v1,v2)` and `(v0,v2,v3)` instead of connecting `v0,v1` to an
+  unrelated residual pointer, the direct cause of repeated giant wedges.
+- ATI triangle-list, fan, and strip callbacks reject unsupported OpenGL point
+  and line polygon modes instead of silently rasterizing them as filled
+  triangles.
+
 ## 2.1.3 — 2026-08-26
 
 ### Added

@@ -2955,6 +2955,8 @@ static void GXMetalTraceATIPrivateMethod(
         uint32_t argumentIndex = geometryIndex * UINT32_C(8);
 
         gDiagnostics.ati_private_geometry_call_count[geometryIndex]++;
+        gDiagnostics.ati_private_geometry_current_frame_call_count[
+            geometryIndex]++;
         gDiagnostics.ati_private_geometry_last_args[argumentIndex] = arg0;
         gDiagnostics.ati_private_geometry_last_args[argumentIndex + 1] = arg1;
         gDiagnostics.ati_private_geometry_last_args[argumentIndex + 2] = arg2;
@@ -3163,41 +3165,57 @@ static void GXMetalTraceATIPrivateMethod(
         }
     }
     if (method == 49) {
+        uint32_t fanRimAddress;
+        uint32_t fanRimCount;
+
         gDiagnostics.ati_private_draw49_call_count++;
-        gDiagnostics.ati_private_draw49_last_vertex_count = arg2;
-        gDiagnostics.ati_private_draw49_last_primitive = arg6;
-        if (arg6 < UINT32_C(32)) {
-            gDiagnostics.ati_private_draw49_primitive_mask |=
-                UINT32_C(1) << arg6;
+        if (!gxmetal_ati_private_fan_layout(
+                arg1, arg2, arg3, &fanRimAddress, &fanRimCount)) {
+            fanRimCount = 0;
         }
-        if (arg2 > gDiagnostics.ati_private_draw49_max_vertex_count) {
-            gDiagnostics.ati_private_draw49_max_vertex_count = arg2;
+        gDiagnostics.ati_private_draw49_last_vertex_count =
+            fanRimCount == 0 ? 0 : fanRimCount + UINT32_C(1);
+        gDiagnostics.ati_private_draw49_last_primitive =
+            GXMETAL_ATI_GL_TRIANGLE_FAN;
+        gDiagnostics.ati_private_draw49_primitive_mask |=
+            UINT32_C(1) << GXMETAL_ATI_GL_TRIANGLE_FAN;
+        if (gDiagnostics.ati_private_draw49_last_vertex_count >
+            gDiagnostics.ati_private_draw49_max_vertex_count) {
+            gDiagnostics.ati_private_draw49_max_vertex_count =
+                gDiagnostics.ati_private_draw49_last_vertex_count;
         }
     }
     if (method == 50) {
         static const uint8_t wordOffsets[13] = {
             4, 5, 6, 7, 12, 13, 14, 15, 16, 17, 20, 21, 23
         };
-        const uint32_t vertexAddresses[3] = { arg1, arg2, arg5 };
+        uint32_t vertexAddresses[3];
         uint32_t vertexIndex;
         uint32_t wordIndex;
-        uint32_t stripVertexCount;
+        uint32_t fanRimAddress;
+        uint32_t fanRimCount;
 
         gDiagnostics.ati_private_draw50_call_count++;
-        if (gxmetal_ati_private_strip_batch_vertex_count(
-                arg3, arg4, &stripVertexCount)) {
-            gDiagnostics.ati_private_draw50_strip_call_count++;
-        } else {
-            gDiagnostics.ati_private_draw50_pointer_call_count++;
+        if (!gxmetal_ati_private_fan_layout(
+                arg1, arg2, arg3, &fanRimAddress, &fanRimCount)) {
+            fanRimAddress = 0;
+            fanRimCount = 0;
         }
-        gDiagnostics.ati_private_draw50_last_vertex_count = arg2;
-        gDiagnostics.ati_private_draw50_last_primitive = arg6;
-        if (arg6 < UINT32_C(32)) {
-            gDiagnostics.ati_private_draw50_primitive_mask |=
-                UINT32_C(1) << arg6;
-        }
-        if (arg2 > gDiagnostics.ati_private_draw50_max_vertex_count) {
-            gDiagnostics.ati_private_draw50_max_vertex_count = arg2;
+        vertexAddresses[0] = arg1;
+        vertexAddresses[1] = fanRimAddress;
+        vertexAddresses[2] = fanRimAddress <= UINT32_MAX -
+            GXMETAL_ATI_PRIVATE_VERTEX_STRIDE_BYTES ?
+                fanRimAddress + GXMETAL_ATI_PRIVATE_VERTEX_STRIDE_BYTES : 0;
+        gDiagnostics.ati_private_draw50_last_vertex_count =
+            fanRimCount == 0 ? 0 : fanRimCount + UINT32_C(1);
+        gDiagnostics.ati_private_draw50_last_primitive =
+            GXMETAL_ATI_GL_TRIANGLE_FAN;
+        gDiagnostics.ati_private_draw50_primitive_mask |=
+            UINT32_C(1) << GXMETAL_ATI_GL_TRIANGLE_FAN;
+        if (gDiagnostics.ati_private_draw50_last_vertex_count >
+            gDiagnostics.ati_private_draw50_max_vertex_count) {
+            gDiagnostics.ati_private_draw50_max_vertex_count =
+                gDiagnostics.ati_private_draw50_last_vertex_count;
         }
         gDiagnostics.ati_private_draw50_vertex_snapshot_valid_mask = 0;
         for (vertexIndex = 0; vertexIndex < 3; ++vertexIndex) {
@@ -3226,11 +3244,10 @@ static void GXMetalTraceATIPrivateMethod(
     if (method == 51) {
         gDiagnostics.ati_private_draw51_call_count++;
         gDiagnostics.ati_private_draw51_last_vertex_count = arg2;
-        gDiagnostics.ati_private_draw51_last_primitive = arg6;
-        if (arg6 < UINT32_C(32)) {
-            gDiagnostics.ati_private_draw51_primitive_mask |=
-                UINT32_C(1) << arg6;
-        }
+        gDiagnostics.ati_private_draw51_last_primitive =
+            GXMETAL_ATI_GL_TRIANGLE_STRIP;
+        gDiagnostics.ati_private_draw51_primitive_mask |=
+            UINT32_C(1) << GXMETAL_ATI_GL_TRIANGLE_STRIP;
         if (arg2 > gDiagnostics.ati_private_draw51_max_vertex_count) {
             gDiagnostics.ati_private_draw51_max_vertex_count = arg2;
         }
@@ -3238,11 +3255,10 @@ static void GXMetalTraceATIPrivateMethod(
     if (method == 52) {
         gDiagnostics.ati_private_draw52_call_count++;
         gDiagnostics.ati_private_draw52_last_vertex_count = arg2;
-        gDiagnostics.ati_private_draw52_last_primitive = arg6;
-        if (arg6 < UINT32_C(32)) {
-            gDiagnostics.ati_private_draw52_primitive_mask |=
-                UINT32_C(1) << arg6;
-        }
+        gDiagnostics.ati_private_draw52_last_primitive =
+            GXMETAL_ATI_GL_TRIANGLE_STRIP;
+        gDiagnostics.ati_private_draw52_primitive_mask |=
+            UINT32_C(1) << GXMETAL_ATI_GL_TRIANGLE_STRIP;
         if (arg2 > gDiagnostics.ati_private_draw52_max_vertex_count) {
             gDiagnostics.ati_private_draw52_max_vertex_count = arg2;
         }
@@ -3715,6 +3731,7 @@ static TQAError GXMetalATIPrivateMethod29(uint32_t arg0, uint32_t arg1,
     const TQARect *rect = (const TQARect *)(uintptr_t)arg1;
     GXMetalDrawState *state = GXMetalGetState(
         (const TQADrawContext *)(uintptr_t)arg0);
+    uint32_t geometryIndex;
 
     GXMetalTraceATIPrivateMethod(29, arg0, arg1, arg2, arg3, arg4, arg5,
                                  arg6, arg7);
@@ -3727,6 +3744,25 @@ static TQAError GXMetalATIPrivateMethod29(uint32_t arg0, uint32_t arg1,
     }
     if (GXMetalEmitRect(state, GXMETAL_OP_PRESENT, rect) != kQANoErr) {
         return kQANoErr;
+    }
+    for (geometryIndex = 0;
+         geometryIndex < GXMETAL_DIAGNOSTIC_ATI_GEOMETRY_METHODS;
+         ++geometryIndex) {
+        uint32_t frameCallCount =
+            gDiagnostics.ati_private_geometry_current_frame_call_count[
+                geometryIndex];
+
+        if (frameCallCount >
+            gDiagnostics.ati_private_geometry_max_frame_call_count[
+                geometryIndex]) {
+            gDiagnostics.ati_private_geometry_max_frame_call_count[
+                geometryIndex] = frameCallCount;
+            gDiagnostics.ati_private_geometry_max_frame_call_frame[
+                geometryIndex] =
+                    gDiagnostics.ati_private_frame_sequence + UINT32_C(1);
+        }
+        gDiagnostics.ati_private_geometry_current_frame_call_count[
+            geometryIndex] = 0;
     }
     gDiagnostics.ati_private_frame_sequence++;
     if ((gDiagnostics.ati_private_frame_sequence & UINT32_C(31)) == 0) {
@@ -3987,6 +4023,60 @@ static void GXMetalATIPrivateRecordTriangleAnomaly(
     }
 }
 
+/* A sudden per-frame callback burst is a stronger transition marker than a
+ * large cumulative method count. Preserve the first converted triangle at
+ * that boundary so a later persistence checkpoint cannot overwrite the
+ * primitive that selected a high-volume GLD path. This is diagnostic only:
+ * the triangle is still queued normally. */
+static void GXMetalATIPrivateRecordFirstGeometryBurst(
+    const GXMetalDrawState *state, uint32_t sourceMethod,
+    const TQAVTexture triangle[3], const uint32_t vertexAddresses[3])
+{
+    uint32_t geometryIndex = GXMetalATIPrivateGeometryIndex(sourceMethod);
+    uint32_t vertexIndex;
+
+    if (state == NULL ||
+        geometryIndex >= GXMETAL_DIAGNOSTIC_ATI_GEOMETRY_METHODS ||
+        gDiagnostics.ati_private_geometry_first_burst_method != 0 ||
+        gDiagnostics.ati_private_geometry_current_frame_call_count[
+            geometryIndex] <
+                GXMETAL_DIAGNOSTIC_ATI_GEOMETRY_BURST_CALLS) {
+        return;
+    }
+    gDiagnostics.ati_private_geometry_first_burst_method = sourceMethod;
+    gDiagnostics.ati_private_geometry_first_burst_frame =
+        gDiagnostics.ati_private_frame_sequence + UINT32_C(1);
+    gDiagnostics.ati_private_geometry_first_burst_call_count =
+        gDiagnostics.ati_private_geometry_current_frame_call_count[
+            geometryIndex];
+    gDiagnostics.ati_private_geometry_first_burst_viewport_width =
+        state->width;
+    gDiagnostics.ati_private_geometry_first_burst_viewport_height =
+        state->height;
+    for (vertexIndex = 0; vertexIndex < 3u; ++vertexIndex) {
+        const float values[13] = {
+            triangle[vertexIndex].r, triangle[vertexIndex].g,
+            triangle[vertexIndex].b, triangle[vertexIndex].a,
+            triangle[vertexIndex].x, triangle[vertexIndex].y,
+            triangle[vertexIndex].z, triangle[vertexIndex].invW,
+            triangle[vertexIndex].uOverW,
+            triangle[vertexIndex].vOverW,
+            triangle[vertexIndex].ks_r,
+            triangle[vertexIndex].ks_g,
+            triangle[vertexIndex].ks_b
+        };
+        uint32_t wordIndex;
+
+        gDiagnostics.ati_private_geometry_first_burst_vertex_addresses[
+            vertexIndex] = vertexAddresses[vertexIndex];
+        for (wordIndex = 0; wordIndex < 13u; ++wordIndex) {
+            gDiagnostics.ati_private_geometry_first_burst_vertex_words[
+                vertexIndex * 13u + wordIndex] =
+                    GXMetalFloatBits(values[wordIndex]);
+        }
+    }
+}
+
 static TQABoolean GXMetalATIPrivateQueueTriangle(
     GXMetalDrawState *state, const TQAVTexture triangle[3],
     TQABoolean allowTexture, uint32_t sourceMethod,
@@ -4003,6 +4093,8 @@ static TQABoolean GXMetalATIPrivateQueueTriangle(
     }
     GXMetalATIPrivateRecordTriangleAnomaly(
         sourceMethod, triangle, vertexAddresses);
+    GXMetalATIPrivateRecordFirstGeometryBurst(
+        state, sourceMethod, triangle, vertexAddresses);
     if (allowTexture && state->texture != NULL) {
         /* OpenGLRendererATI supplies homogeneous, normalized coordinates in
          * private hooks 47, 48, 54, and 60. Texel-coordinate detection
@@ -4047,6 +4139,7 @@ static TQAError GXMetalATIPrivateDrawContiguous(uint32_t sourceMethod,
                                                 uint32_t rendererAddress,
                                                 uint32_t vertexAddress,
                                                 uint32_t vertexCount,
+                                                uint32_t polygonMode,
                                                 TQABoolean allowTexture)
 {
     GXMetalDrawState *state = GXMetalATIPrivateGetState(rendererAddress);
@@ -4057,6 +4150,7 @@ static TQAError GXMetalATIPrivateDrawContiguous(uint32_t sourceMethod,
     uint32_t triangleIndex;
 
     if (state == NULL || state->failed ||
+        !gxmetal_ati_private_polygon_mode_is_fill(polygonMode) ||
         !gxmetal_ati_private_contiguous_vertex_bytes(
             vertexCount, &byteCount) ||
         !GXMetalDiagnosticMemoryRangeIsReadable(vertexAddress, byteCount)) {
@@ -4096,9 +4190,10 @@ static TQAError GXMetalATIPrivateMethod47(uint32_t arg0, uint32_t arg1,
 {
     GXMetalTraceATIPrivateMethod(47, arg0, arg1, arg2, arg3, arg4, arg5,
                                  arg6, arg7);
-    (void)arg3; (void)arg4; (void)arg5;
+    (void)arg4; (void)arg5;
     (void)arg6; (void)arg7;
-    return GXMetalATIPrivateDrawContiguous(47u, arg0, arg1, arg2, false);
+    return GXMetalATIPrivateDrawContiguous(
+        47u, arg0, arg1, arg2, arg3, false);
 }
 
 static TQAError GXMetalATIPrivateMethod48(uint32_t arg0, uint32_t arg1,
@@ -4108,9 +4203,10 @@ static TQAError GXMetalATIPrivateMethod48(uint32_t arg0, uint32_t arg1,
 {
     GXMetalTraceATIPrivateMethod(48, arg0, arg1, arg2, arg3, arg4, arg5,
                                  arg6, arg7);
-    (void)arg3; (void)arg4; (void)arg5;
+    (void)arg4; (void)arg5;
     (void)arg6; (void)arg7;
-    return GXMetalATIPrivateDrawContiguous(48u, arg0, arg1, arg2, true);
+    return GXMetalATIPrivateDrawContiguous(
+        48u, arg0, arg1, arg2, arg3, true);
 }
 
 /* OpenGLRendererATI's generic transformed-primitive callbacks have both a
@@ -4169,30 +4265,65 @@ static TQAError GXMetalATIPrivateDrawContiguousPrimitive(
     return kQANoErr;
 }
 
-/* In the reduced-triangle ABI arg1, arg2, and arg5 are three transformed-
- * vertex pointers. Other arguments carry renderer bookkeeping such as
- * viewport offsets, not a vertex count or OpenGL primitive token. */
-static TQAError GXMetalATIPrivateDrawPointerTriangle(
+/* ATI slots 49/50 are fan raster callbacks. GLCore supplies the center
+ * separately from a contiguous rim so clipped slow-path fans can retain v0
+ * while advancing pairs along a newly generated rim. arg3 is totalCount-1,
+ * not an OpenGL primitive token. */
+static TQAError GXMetalATIPrivateDrawFan(
     uint32_t sourceMethod, uint32_t rendererAddress,
-    uint32_t vertex0Address, uint32_t vertex1Address,
-    uint32_t vertex2Address, TQABoolean allowTexture)
+    uint32_t centerAddress, uint32_t rimAddress,
+    uint32_t countField, uint32_t polygonMode,
+    TQABoolean allowTexture)
 {
     GXMetalDrawState *state = GXMetalATIPrivateGetState(rendererAddress);
     TQAVTexture triangle[3];
-    const uint32_t vertexAddresses[3] = {
-        vertex0Address, vertex1Address, vertex2Address
-    };
+    uint32_t vertexAddresses[3];
+    uint32_t effectiveRimAddress;
+    uint32_t rimVertexCount;
+    uint32_t rimBytes;
+    uint32_t triangleIndex;
+    uint32_t vertexIndex;
 
     if (state == NULL || state->failed ||
-        !GXMetalATIPrivateConvertVertex(vertex0Address, &triangle[0]) ||
-        !GXMetalATIPrivateConvertVertex(vertex1Address, &triangle[1]) ||
-        !GXMetalATIPrivateConvertVertex(vertex2Address, &triangle[2]) ||
+        !gxmetal_ati_private_polygon_mode_is_fill(polygonMode) ||
+        !gxmetal_ati_private_fan_layout(
+            centerAddress, rimAddress, countField,
+            &effectiveRimAddress, &rimVertexCount)) {
+        GXMetalATIPrivateRecordInputReject(sourceMethod);
+        return kQANoErr;
+    }
+    rimBytes = rimVertexCount * GXMETAL_ATI_PRIVATE_VERTEX_STRIDE_BYTES;
+    if (!GXMetalDiagnosticMemoryRangeIsReadable(
+            centerAddress, GXMETAL_ATI_PRIVATE_VERTEX_STRIDE_BYTES) ||
+        !GXMetalDiagnosticMemoryRangeIsReadable(
+            effectiveRimAddress, rimBytes) ||
         !GXMetalATIPrivatePrepareDraw(state)) {
         GXMetalATIPrivateRecordInputReject(sourceMethod);
         return kQANoErr;
     }
-    (void)GXMetalATIPrivateQueueTriangle(
-        state, triangle, allowTexture, sourceMethod, vertexAddresses);
+    for (triangleIndex = 0;
+         triangleIndex + UINT32_C(1) < rimVertexCount;
+         ++triangleIndex) {
+        vertexAddresses[0] = centerAddress;
+        vertexAddresses[1] = effectiveRimAddress + triangleIndex *
+            GXMETAL_ATI_PRIVATE_VERTEX_STRIDE_BYTES;
+        vertexAddresses[2] = effectiveRimAddress +
+            (triangleIndex + UINT32_C(1)) *
+                GXMETAL_ATI_PRIVATE_VERTEX_STRIDE_BYTES;
+        for (vertexIndex = 0; vertexIndex < 3u; ++vertexIndex) {
+            if (!GXMetalATIPrivateConvertVertex(
+                    vertexAddresses[vertexIndex],
+                    &triangle[vertexIndex])) {
+                GXMetalATIPrivateRecordInputReject(sourceMethod);
+                return kQANoErr;
+            }
+        }
+        if (!GXMetalATIPrivateQueueTriangle(
+                state, triangle, allowTexture, sourceMethod,
+                vertexAddresses)) {
+            return kQANoErr;
+        }
+    }
     return kQANoErr;
 }
 
@@ -4219,24 +4350,21 @@ GXMETAL_ATI_PRIVATE_FILL_METHOD(42, true)
 GXMETAL_ATI_PRIVATE_FILL_METHOD(43, false)
 GXMETAL_ATI_PRIVATE_FILL_METHOD(44, true)
 
+/* GLCore has already transformed, culled, and clipped these callbacks. The
+ * ATI table's 49/50 pair rasterizes untextured/textured fans using a separate
+ * center plus contiguous rim. The 51/52 pair rasterizes contiguous triangle
+ * strips; each pair's final meaningful argument is polygon mode, while later
+ * volatile registers are not callback arguments. */
 static TQAError GXMetalATIPrivateMethod49(uint32_t arg0, uint32_t arg1,
                                           uint32_t arg2, uint32_t arg3,
                                           uint32_t arg4, uint32_t arg5,
                                           uint32_t arg6, uint32_t arg7)
 {
-    uint32_t vertexCount;
-
     GXMetalTraceATIPrivateMethod(49, arg0, arg1, arg2, arg3, arg4, arg5,
                                  arg6, arg7);
-    (void)arg6; (void)arg7;
-    if (gxmetal_ati_private_strip_batch_vertex_count(
-            arg3, arg4, &vertexCount)) {
-        return GXMetalATIPrivateDrawContiguousPrimitive(
-            49u, arg0, arg1, vertexCount,
-            GXMETAL_ATI_GL_TRIANGLE_STRIP, false);
-    }
-    return GXMetalATIPrivateDrawPointerTriangle(
-        49u, arg0, arg1, arg2, arg5, false);
+    (void)arg5; (void)arg6; (void)arg7;
+    return GXMetalATIPrivateDrawFan(
+        49u, arg0, arg1, arg2, arg3, arg4, false);
 }
 
 static TQAError GXMetalATIPrivateMethod50(uint32_t arg0, uint32_t arg1,
@@ -4244,19 +4372,11 @@ static TQAError GXMetalATIPrivateMethod50(uint32_t arg0, uint32_t arg1,
                                           uint32_t arg4, uint32_t arg5,
                                           uint32_t arg6, uint32_t arg7)
 {
-    uint32_t vertexCount;
-
     GXMetalTraceATIPrivateMethod(50, arg0, arg1, arg2, arg3, arg4, arg5,
                                  arg6, arg7);
-    (void)arg6; (void)arg7;
-    if (gxmetal_ati_private_strip_batch_vertex_count(
-            arg3, arg4, &vertexCount)) {
-        return GXMetalATIPrivateDrawContiguousPrimitive(
-            50u, arg0, arg1, vertexCount,
-            GXMETAL_ATI_GL_TRIANGLE_STRIP, true);
-    }
-    return GXMetalATIPrivateDrawPointerTriangle(
-        50u, arg0, arg1, arg2, arg5, true);
+    (void)arg5; (void)arg6; (void)arg7;
+    return GXMetalATIPrivateDrawFan(
+        50u, arg0, arg1, arg2, arg3, arg4, true);
 }
 
 static TQAError GXMetalATIPrivateMethod51(uint32_t arg0, uint32_t arg1,
@@ -4264,22 +4384,16 @@ static TQAError GXMetalATIPrivateMethod51(uint32_t arg0, uint32_t arg1,
                                           uint32_t arg4, uint32_t arg5,
                                           uint32_t arg6, uint32_t arg7)
 {
-    uint32_t vertexCount;
-
     GXMetalTraceATIPrivateMethod(51, arg0, arg1, arg2, arg3, arg4, arg5,
                                  arg6, arg7);
-    (void)arg3; (void)arg4;
-    if (gxmetal_ati_private_is_fallback_batch(
-            arg2, arg5, arg6, arg7)) {
-        return GXMetalATIPrivateDrawContiguousPrimitive(
-            51u, arg0, arg1, arg5, arg6, false);
-    }
-    if (!gxmetal_ati_private_fan_batch_vertex_count(arg2, &vertexCount)) {
+    (void)arg4; (void)arg5; (void)arg6; (void)arg7;
+    if (!gxmetal_ati_private_polygon_mode_is_fill(arg3)) {
+        GXMetalATIPrivateRecordInputReject(51u);
         return kQANoErr;
     }
     return GXMetalATIPrivateDrawContiguousPrimitive(
-        51u, arg0, arg1, vertexCount,
-        GXMETAL_ATI_GL_TRIANGLE_FAN, false);
+        51u, arg0, arg1, arg2,
+        GXMETAL_ATI_GL_TRIANGLE_STRIP, false);
 }
 
 static TQAError GXMetalATIPrivateMethod52(uint32_t arg0, uint32_t arg1,
@@ -4287,22 +4401,16 @@ static TQAError GXMetalATIPrivateMethod52(uint32_t arg0, uint32_t arg1,
                                           uint32_t arg4, uint32_t arg5,
                                           uint32_t arg6, uint32_t arg7)
 {
-    uint32_t vertexCount;
-
     GXMetalTraceATIPrivateMethod(52, arg0, arg1, arg2, arg3, arg4, arg5,
                                  arg6, arg7);
-    (void)arg3; (void)arg4;
-    if (gxmetal_ati_private_is_fallback_batch(
-            arg2, arg5, arg6, arg7)) {
-        return GXMetalATIPrivateDrawContiguousPrimitive(
-            52u, arg0, arg1, arg5, arg6, true);
-    }
-    if (!gxmetal_ati_private_fan_batch_vertex_count(arg2, &vertexCount)) {
+    (void)arg4; (void)arg5; (void)arg6; (void)arg7;
+    if (!gxmetal_ati_private_polygon_mode_is_fill(arg3)) {
+        GXMetalATIPrivateRecordInputReject(52u);
         return kQANoErr;
     }
     return GXMetalATIPrivateDrawContiguousPrimitive(
-        52u, arg0, arg1, vertexCount,
-        GXMETAL_ATI_GL_TRIANGLE_FAN, true);
+        52u, arg0, arg1, arg2,
+        GXMETAL_ATI_GL_TRIANGLE_STRIP, true);
 }
 
 /* Immediate-mode filled primitives occupy fixed odd/even callback pairs:

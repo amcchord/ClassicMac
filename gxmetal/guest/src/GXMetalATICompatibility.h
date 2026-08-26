@@ -82,6 +82,15 @@
 #define GXMETAL_ATI_GL_QUADS          UINT32_C(7)
 #define GXMETAL_ATI_GL_QUAD_STRIP     UINT32_C(8)
 #define GXMETAL_ATI_GL_POLYGON        UINT32_C(9)
+#define GXMETAL_ATI_POLYGON_MODE_POINT UINT32_C(0)
+#define GXMETAL_ATI_POLYGON_MODE_LINE UINT32_C(1)
+#define GXMETAL_ATI_POLYGON_MODE_FILL UINT32_C(2)
+
+static inline int gxmetal_ati_private_polygon_mode_is_fill(
+    uint32_t polygon_mode)
+{
+    return polygon_mode == GXMETAL_ATI_POLYGON_MODE_FILL;
+}
 
 /* OpenGL compare-function tokens stored in OpenGLRendererATI's private
  * state synchronization block. */
@@ -160,47 +169,37 @@ static inline int gxmetal_ati_private_is_contiguous_batch(
         arg6 <= GXMETAL_ATI_GL_POLYGON;
 }
 
-/* A second GLD fallback shuffles the original entry registers: arg2 and arg7
- * carry the same pointer, arg5 is the bounded vertex count, and arg6 remains
- * the OpenGL mode. Equality plus the two bounded values distinguishes this
- * form from the reduced three-pointer triangle ABI. */
-static inline int gxmetal_ati_private_is_fallback_batch(
-    uint32_t arg2, uint32_t arg5, uint32_t arg6, uint32_t arg7)
+/* Slots 49/50 normally receive one center pointer, a pointer to the first rim
+ * vertex, and totalVertexCount-1 (the rim count). A direct flush instead
+ * passes center==rimBase and a total count; normalize that form by advancing
+ * the effective rim one vertex. The center may remain separate after GLCore
+ * clipping, so only the normalized rim is necessarily contiguous. */
+static inline int gxmetal_ati_private_fan_layout(
+    uint32_t center_address, uint32_t rim_address, uint32_t count_field,
+    uint32_t *effective_rim_address, uint32_t *effective_rim_vertex_count)
 {
-    return arg2 == arg7 && arg5 >= UINT32_C(3) &&
-        arg5 <= GXMETAL_ATI_PRIVATE_MAX_VERTEX_COUNT &&
-        arg6 <= GXMETAL_ATI_GL_POLYGON;
-}
-
-/* The immediate-mode triangle-strip hook has a second, evidenced layout.
- * arg3 carries GL_TRIANGLE_STRIP and arg4 is the number of output triangles;
- * the transformed source is therefore arg4+2 contiguous vertices at arg1.
- * Oni's GLD-reduced triangle overload instead carries arg3=3 and three
- * independent pointers, so the exact mode check keeps the two ABIs separate. */
-static inline int gxmetal_ati_private_strip_batch_vertex_count(
-    uint32_t arg3, uint32_t arg4, uint32_t *vertex_count)
-{
-    if (vertex_count == 0 || arg3 != GXMETAL_ATI_GL_TRIANGLE_STRIP ||
-        arg4 == 0 ||
-        arg4 > GXMETAL_ATI_PRIVATE_MAX_VERTEX_COUNT - UINT32_C(2)) {
+    if (effective_rim_address == 0 || effective_rim_vertex_count == 0) {
         return 0;
     }
-    *vertex_count = arg4 + UINT32_C(2);
-    return 1;
-}
-
-/* The direct fan hook reports output triangle count in arg2. A convex fan
- * has two more source vertices than triangles; keep the translation bounded
- * before validating or walking the contiguous transformed-vertex array. */
-static inline int gxmetal_ati_private_fan_batch_vertex_count(
-    uint32_t triangle_count, uint32_t *vertex_count)
-{
-    if (vertex_count == 0 || triangle_count == 0 ||
-        triangle_count >
-            GXMETAL_ATI_PRIVATE_MAX_VERTEX_COUNT - UINT32_C(2)) {
+    if (center_address == rim_address) {
+        if (count_field < UINT32_C(3) ||
+            count_field > GXMETAL_ATI_PRIVATE_MAX_VERTEX_COUNT ||
+            rim_address > UINT32_MAX -
+                GXMETAL_ATI_PRIVATE_VERTEX_STRIDE_BYTES) {
+            return 0;
+        }
+        *effective_rim_address = rim_address +
+            GXMETAL_ATI_PRIVATE_VERTEX_STRIDE_BYTES;
+        *effective_rim_vertex_count = count_field - UINT32_C(1);
+        return 1;
+    }
+    if (count_field < UINT32_C(2) ||
+        count_field >
+            GXMETAL_ATI_PRIVATE_MAX_VERTEX_COUNT - UINT32_C(1)) {
         return 0;
     }
-    *vertex_count = triangle_count + UINT32_C(2);
+    *effective_rim_address = rim_address;
+    *effective_rim_vertex_count = count_field;
     return 1;
 }
 

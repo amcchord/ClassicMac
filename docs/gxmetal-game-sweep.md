@@ -388,7 +388,7 @@ python3 scripts/decode-gxmetal-diagnostics.py \
 
 The decoder derives field order, signedness, and array extents from the current
 `GXMetalDiagnostics.h`. It also recognizes supported append-only historical
-snapshots from v1.12 through v1.26 while the current schema is v1.27; other
+snapshots from v1.12 through v1.27 while the current schema is v1.28; other
 size mismatches are rejected.
 
 ## Ten-game sweep discipline

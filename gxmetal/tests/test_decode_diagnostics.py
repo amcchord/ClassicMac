@@ -395,7 +395,8 @@ class DiagnosticDecoderTests(unittest.TestCase):
         detail_declarations = "\n".join(
             f"    uint32_t {name};"
             for name in (DECODER.ATI_PRIVATE_FINISH_DETAIL_FIELDS
-                         + DECODER.ATI_PRIVATE_TRANSITION_FIELDS))
+                         + DECODER.ATI_PRIVATE_TRANSITION_FIELDS
+                         + DECODER.ATI_PRIVATE_BURST_FIELDS))
         self.header.write_text(
             HEADER.replace(
                 "    uint32_t counters[GXMETAL_DIAGNOSTIC_COUNTER47_COUNT];",
@@ -415,7 +416,8 @@ class DiagnosticDecoderTests(unittest.TestCase):
     def test_version_1001a_accepts_missing_transition_fields(self):
         transition_declarations = "\n".join(
             f"    uint32_t {name};"
-            for name in DECODER.ATI_PRIVATE_TRANSITION_FIELDS)
+            for name in (DECODER.ATI_PRIVATE_TRANSITION_FIELDS
+                         + DECODER.ATI_PRIVATE_BURST_FIELDS))
         self.header.write_text(
             HEADER.replace(
                 "    uint32_t counters[GXMETAL_DIAGNOSTIC_COUNTER47_COUNT];",
@@ -428,6 +430,26 @@ class DiagnosticDecoderTests(unittest.TestCase):
         self.assertEqual(DECODER.decode_snapshot(snapshot, fields), {
             "magic": 0x47584447,
             "version": 0x0001001A,
+            "result": -49,
+            "counters": [7, 11],
+        })
+
+    def test_version_1001b_accepts_missing_burst_fields(self):
+        burst_declarations = "\n".join(
+            f"    uint32_t {name};"
+            for name in DECODER.ATI_PRIVATE_BURST_FIELDS)
+        self.header.write_text(
+            HEADER.replace(
+                "    uint32_t counters[GXMETAL_DIAGNOSTIC_COUNTER47_COUNT];",
+                "    uint32_t counters[GXMETAL_DIAGNOSTIC_COUNTER47_COUNT];\n"
+                + burst_declarations),
+            encoding="utf-8")
+        fields = DECODER.parse_schema(self.header)
+        snapshot = struct.pack(">IIiII", 0x47584447, 0x0001001B,
+                               -49, 7, 11)
+        self.assertEqual(DECODER.decode_snapshot(snapshot, fields), {
+            "magic": 0x47584447,
+            "version": 0x0001001B,
             "result": -49,
             "counters": [7, 11],
         })
