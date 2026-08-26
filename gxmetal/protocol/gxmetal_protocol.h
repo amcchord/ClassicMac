@@ -22,7 +22,7 @@ extern "C" {
 
 #define GXMETAL_PROTOCOL_MAGIC            UINT32_C(0x47584d54) /* "GXMT" */
 #define GXMETAL_PROTOCOL_VERSION_MAJOR    1u
-#define GXMETAL_PROTOCOL_VERSION_MINOR    16u
+#define GXMETAL_PROTOCOL_VERSION_MINOR    23u
 #define GXMETAL_PROTOCOL_VERSION \
     ((GXMETAL_PROTOCOL_VERSION_MAJOR << 16) | GXMETAL_PROTOCOL_VERSION_MINOR)
 
@@ -31,7 +31,7 @@ extern "C" {
 #define GXMETAL_REGISTER_BYTES            UINT32_C(0x0100)
 
 /* A separate PCI BAR is shared by the guest and renderer. */
-#define GXMETAL_SHARED_BYTES              UINT32_C(0x00400000)
+#define GXMETAL_SHARED_BYTES              UINT32_C(0x00800000)
 #define GXMETAL_RING_OFFSET               UINT32_C(0x00001000)
 #define GXMETAL_RING_BYTES                UINT32_C(0x00100000)
 #define GXMETAL_UPLOAD_OFFSET \
@@ -121,7 +121,24 @@ enum GXMetalFeature {
     GXMETAL_FEATURE_RGB332_FORMAT = UINT64_C(1) << 19,
     /* Textured fragments matching the RAVE chromakey color are rejected
      * before texture operations, blending, depth writes, or fog. */
-    GXMETAL_FEATURE_CHROMAKEY = UINT64_C(1) << 20
+    GXMETAL_FEATURE_CHROMAKEY = UINT64_C(1) << 20,
+    /* The host honors RAVE channel masks and the OpenGL draw-buffer mask.
+     * GXMetal currently exposes one monoscopic color attachment per context:
+     * draw-buffer None disables color writes, while any nonempty front/back
+     * selection targets that attachment. Depth writes remain independent. */
+    GXMETAL_FEATURE_WRITE_MASKS = UINT64_C(1) << 21,
+    /* The host can resolve the current render target into validated shared
+     * staging without presenting it or changing guest VRAM. */
+    GXMETAL_FEATURE_ACCESS_DRAW_BUFFER = UINT64_C(1) << 22,
+    /* The accelerated host depth attachment provides at least 24 bits of
+     * precision and can satisfy RAVE's kQAContext_DeepZ contract. */
+    GXMETAL_FEATURE_DEEP_Z = UINT64_C(1) << 23,
+    /* A context may replace its rectangular clip with an exact, bounded
+     * union of nonoverlapping rectangles.  This preserves QuickDraw visible
+     * regions with holes instead of rendering through their bounding box. */
+    GXMETAL_FEATURE_REGION_CLIP = UINT64_C(1) << 24,
+    /* The host expands RAVE's three-byte R, G, B texture/bitmap format. */
+    GXMETAL_FEATURE_RGB24_FORMAT = UINT64_C(1) << 25
 };
 
 /* C11 enum constants are restricted to int even though the feature word is 64-bit. */
@@ -165,6 +182,8 @@ enum GXMetalOpcode {
     GXMETAL_OP_END_FRAME        = 0x0103,
     GXMETAL_OP_PRESENT          = 0x0104,
     GXMETAL_OP_FENCE            = 0x0105,
+    GXMETAL_OP_READBACK         = 0x0106,
+    GXMETAL_OP_SET_CLIP_RECTS   = 0x0107,
 
     GXMETAL_OP_SET_STATE        = 0x0200,
     GXMETAL_OP_CLEAR            = 0x0201,
@@ -195,7 +214,11 @@ enum GXMetalPixelFormat {
     GXMETAL_PIXEL_ATI_ARGB4444 = 10,
     GXMETAL_PIXEL_INTENSITY8 = 11,
     GXMETAL_PIXEL_ALPHA_INTENSITY88 = 12,
-    GXMETAL_PIXEL_RGB332 = 13
+    GXMETAL_PIXEL_RGB332 = 13,
+    /* OpenGLRendererATI's private type-1006 upload: bytes are R, G, B, A. */
+    GXMETAL_PIXEL_ATI_RGBA8888 = 14,
+    /* RAVE kQAPixel_RGB24: tightly packed bytes are R, G, B. */
+    GXMETAL_PIXEL_RGB24 = 15
 };
 
 enum GXMetalPrimitive {
@@ -210,8 +233,13 @@ enum GXMetalContextFlag {
     GXMETAL_CONTEXT_Z16           = 1u << 0,
     GXMETAL_CONTEXT_DOUBLE_BUFFER = 1u << 1,
     GXMETAL_CONTEXT_NO_DITHER     = 1u << 2,
-    GXMETAL_CONTEXT_RECT_CLIP     = 1u << 3
+    GXMETAL_CONTEXT_RECT_CLIP     = 1u << 3,
+    GXMETAL_CONTEXT_DEEP_Z        = 1u << 4,
+    GXMETAL_CONTEXT_REGION_CLIP   = 1u << 5
 };
+
+#define GXMETAL_CONTEXT_DEPTH_MASK \
+    (GXMETAL_CONTEXT_Z16 | GXMETAL_CONTEXT_DEEP_Z)
 
 enum GXMetalClearFlag {
     GXMETAL_CLEAR_COLOR = 1u << 0,
@@ -259,10 +287,12 @@ enum GXMetalStateTag {
      * are opaque RGB textures; public RAVE contexts retain the documented
      * BlendAlpha semantics. */
     GXMETAL_STATE_ATI_PRIVATE = 52,
+    GXMETAL_STATE_CHANNEL_MASK = 27,
     GXMETAL_STATE_Z_BUFFER_MASK = 28,
     GXMETAL_STATE_ALPHA_TEST_FUNCTION = 31,
     GXMETAL_STATE_DONT_SWAP    = 32,
     GXMETAL_STATE_ALPHA_TEST_REFERENCE = 46,
+    GXMETAL_STATE_GL_DRAW_BUFFER = 100,
     GXMETAL_STATE_TEXTURE_WRAP_U = 101,
     GXMETAL_STATE_TEXTURE_WRAP_V = 102,
     GXMETAL_STATE_GL_TEXTURE_MAG_FILTER = 103,
@@ -273,6 +303,32 @@ enum GXMetalStateTag {
     GXMETAL_STATE_SCISSOR_BOTTOM = 108,
     GXMETAL_STATE_GL_BLEND_SRC   = 109,
     GXMETAL_STATE_GL_BLEND_DST   = 110
+};
+
+/* RAVE kQATag_ChannelMask values. */
+enum GXMetalChannelMask {
+    GXMETAL_CHANNEL_RED   = 1u << 0,
+    GXMETAL_CHANNEL_GREEN = 1u << 1,
+    GXMETAL_CHANNEL_BLUE  = 1u << 2,
+    GXMETAL_CHANNEL_ALPHA = 1u << 3,
+    GXMETAL_CHANNEL_ALL   = GXMETAL_CHANNEL_RED | GXMETAL_CHANNEL_GREEN |
+                            GXMETAL_CHANNEL_BLUE | GXMETAL_CHANNEL_ALPHA
+};
+
+/* RAVE kQATagGL_DrawBuffer values. The classic ATI bridge uses these as a
+ * mask even on the ordinary non-stereo contexts GXMetal supports. */
+enum GXMetalDrawBufferMask {
+    GXMETAL_DRAW_BUFFER_NONE        = 0,
+    GXMETAL_DRAW_BUFFER_FRONT_LEFT  = 1u << 0,
+    GXMETAL_DRAW_BUFFER_FRONT_RIGHT = 1u << 1,
+    GXMETAL_DRAW_BUFFER_BACK_LEFT   = 1u << 2,
+    GXMETAL_DRAW_BUFFER_BACK_RIGHT  = 1u << 3,
+    GXMETAL_DRAW_BUFFER_FRONT = GXMETAL_DRAW_BUFFER_FRONT_LEFT |
+                                GXMETAL_DRAW_BUFFER_FRONT_RIGHT,
+    GXMETAL_DRAW_BUFFER_BACK = GXMETAL_DRAW_BUFFER_BACK_LEFT |
+                               GXMETAL_DRAW_BUFFER_BACK_RIGHT,
+    GXMETAL_DRAW_BUFFER_ALL = GXMETAL_DRAW_BUFFER_FRONT |
+                              GXMETAL_DRAW_BUFFER_BACK
 };
 
 enum GXMetalZFunction {
@@ -360,7 +416,11 @@ enum GXMetalAlphaTestFunction {
     GXMETAL_ALPHA_TEST_GT   = 4,
     GXMETAL_ALPHA_TEST_NE   = 5,
     GXMETAL_ALPHA_TEST_GE   = 6,
-    GXMETAL_ALPHA_TEST_TRUE = 7
+    GXMETAL_ALPHA_TEST_TRUE = 7,
+    /* RAVE omits a public false comparison, but ATI's private OpenGL state
+     * must preserve enabled GL_NEVER rather than confusing it with disabled
+     * alpha testing. */
+    GXMETAL_ALPHA_TEST_FALSE = 8
 };
 
 enum GXMetalResourceFlag {
@@ -392,6 +452,20 @@ enum GXMetalResourceFlag {
 #define GXMETAL_RECT_TOP_OFFSET                    4u
 #define GXMETAL_RECT_RIGHT_OFFSET                  8u
 #define GXMETAL_RECT_BOTTOM_OFFSET                12u
+
+#define GXMETAL_MAX_CLIP_RECTS                  4096u
+#define GXMETAL_CLIP_RECTS_BASE_PACKET_BYTES      32u
+#define GXMETAL_CLIP_RECTS_COUNT_OFFSET             0u
+#define GXMETAL_CLIP_RECTS_RESERVED0_OFFSET         4u
+#define GXMETAL_CLIP_RECTS_RESERVED1_OFFSET         8u
+#define GXMETAL_CLIP_RECTS_RESERVED2_OFFSET        12u
+#define GXMETAL_CLIP_RECTS_RECTS_OFFSET            16u
+
+#define GXMETAL_READBACK_PACKET_BYTES             32u
+#define GXMETAL_READBACK_SHARED_OFFSET_OFFSET      0u
+#define GXMETAL_READBACK_LENGTH_OFFSET             4u
+#define GXMETAL_READBACK_ROW_BYTES_OFFSET          8u
+#define GXMETAL_READBACK_RESERVED_OFFSET          12u
 
 #define GXMETAL_SET_STATE_PACKET_BYTES            32u
 #define GXMETAL_STATE_TAG_OFFSET                   0u

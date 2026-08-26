@@ -18,6 +18,8 @@ static unsigned failures;
 int main(void)
 {
     uint32_t mode;
+    uint32_t pixel_type;
+    uint32_t length;
     static const uint8_t packed[2][4] = {
         {0x40, 0x40, 0xff, 0xff},
         {0x80, 0x80, 0xff, 0xff}
@@ -28,13 +30,101 @@ int main(void)
     };
     uint8_t expanded[2][10];
 
+    CHECK(gxmetal_rave_draw_buffer_layout(
+        1024, 768, 4096, GXMETAL_PIXEL_RGB8888, GXMETAL_UPLOAD_BYTES,
+        &pixel_type, &length));
+    CHECK(pixel_type == GXMETAL_RAVE_PIXEL_RGB32);
+    CHECK(length == UINT32_C(3145728));
+    CHECK(gxmetal_rave_draw_buffer_layout(
+        8, 4, 32, GXMETAL_PIXEL_ARGB8888, GXMETAL_UPLOAD_BYTES,
+        &pixel_type, &length));
+    CHECK(pixel_type == GXMETAL_RAVE_PIXEL_ARGB32 && length == 128u);
+    CHECK(gxmetal_rave_draw_buffer_layout(
+        8, 4, 16, GXMETAL_PIXEL_RGB555, GXMETAL_UPLOAD_BYTES,
+        &pixel_type, &length));
+    CHECK(pixel_type == GXMETAL_RAVE_PIXEL_RGB16 && length == 64u);
+    CHECK(!gxmetal_rave_draw_buffer_layout(
+        8, 4, 31, GXMETAL_PIXEL_RGB8888, GXMETAL_UPLOAD_BYTES,
+        &pixel_type, &length));
+    CHECK(!gxmetal_rave_draw_buffer_layout(
+        1, GXMETAL_UPLOAD_BYTES, 16, GXMETAL_PIXEL_RGB555,
+        GXMETAL_UPLOAD_BYTES, &pixel_type, &length));
+    CHECK(!gxmetal_rave_draw_buffer_layout(
+        8, 4, 32, GXMETAL_PIXEL_DEPTH16, GXMETAL_UPLOAD_BYTES,
+        &pixel_type, &length));
+    CHECK(!gxmetal_rave_draw_buffer_layout(
+        8, 4, 32, GXMETAL_PIXEL_RGB8888, GXMETAL_UPLOAD_BYTES,
+        NULL, &length));
+
     for (mode = 0; mode <= GXMETAL_RAVE_FOG_MODE_MAX; mode++) {
         CHECK(gxmetal_rave_int_state_is_accepted(
             GXMETAL_RAVE_TAG_FOG_MODE, mode));
     }
     CHECK(!gxmetal_rave_int_state_is_accepted(
         GXMETAL_RAVE_TAG_FOG_MODE, UINT32_C(0x1eb1f0c8)));
-    CHECK(gxmetal_rave_int_state_is_accepted(11, UINT32_C(0x1eb1f0c8)));
+    CHECK(!gxmetal_rave_int_state_is_accepted(
+        GXMETAL_RAVE_TAG_TEXTURE_FILTER, UINT32_C(0x1eb1f0c8)));
+    CHECK(gxmetal_rave_int_state_is_accepted(
+        GXMETAL_RAVE_TAG_Z_FUNCTION, 8u));
+    CHECK(!gxmetal_rave_int_state_is_accepted(
+        GXMETAL_RAVE_TAG_Z_FUNCTION, 9u));
+    CHECK(gxmetal_rave_int_state_is_accepted(
+        GXMETAL_RAVE_TAG_BLEND, 2u));
+    CHECK(!gxmetal_rave_int_state_is_accepted(
+        GXMETAL_RAVE_TAG_BLEND, 3u));
+    CHECK(!gxmetal_rave_int_state_is_accepted(
+        GXMETAL_RAVE_TAG_PERSPECTIVE_Z, 2u));
+    CHECK(gxmetal_rave_int_state_is_accepted(
+        GXMETAL_RAVE_TAG_TEXTURE_FILTER,
+        GXMETAL_RAVE_GL_LINEAR_MIPMAP_LINEAR));
+    CHECK(!gxmetal_rave_int_state_is_accepted(
+        GXMETAL_RAVE_TAG_TEXTURE_FILTER, UINT32_C(0x2704)));
+    CHECK(gxmetal_rave_int_state_is_accepted(
+        GXMETAL_RAVE_TAG_ALPHA_TEST_FUNCTION, 8u));
+    CHECK(!gxmetal_rave_int_state_is_accepted(
+        GXMETAL_RAVE_TAG_ALPHA_TEST_FUNCTION, 9u));
+    CHECK(!gxmetal_rave_int_state_is_accepted(
+        GXMETAL_RAVE_TAG_MULTI_TEXTURE_ENABLE, 2u));
+    CHECK(gxmetal_rave_int_state_is_accepted(
+        GXMETAL_RAVE_TAG_MULTI_TEXTURE_CURRENT, UINT32_MAX));
+    CHECK(gxmetal_rave_int_state_is_accepted(
+        GXMETAL_RAVE_TAG_MULTI_TEXTURE_CURRENT, 0u));
+    CHECK(!gxmetal_rave_int_state_is_accepted(
+        GXMETAL_RAVE_TAG_MULTI_TEXTURE_CURRENT, 1u));
+    CHECK(!gxmetal_rave_int_state_is_accepted(
+        GXMETAL_RAVE_TAG_MULTI_TEXTURE_OP, 4u));
+    CHECK(!gxmetal_rave_int_state_is_accepted(
+        GXMETAL_RAVE_TAG_GL_TEXTURE_WRAP_U, 2u));
+    CHECK(gxmetal_rave_int_state_is_accepted(
+        GXMETAL_RAVE_TAG_GL_BLEND_SRC, UINT32_C(0x0308)));
+    CHECK(!gxmetal_rave_int_state_is_accepted(
+        GXMETAL_RAVE_TAG_GL_BLEND_SRC, UINT32_C(0x0309)));
+    CHECK(gxmetal_rave_int_state_requires_write_masks(
+        GXMETAL_RAVE_TAG_CHANNEL_MASK));
+    CHECK(gxmetal_rave_int_state_requires_write_masks(
+        GXMETAL_RAVE_TAG_GL_DRAW_BUFFER));
+    CHECK(!gxmetal_rave_int_state_requires_write_masks(
+        GXMETAL_RAVE_TAG_Z_BUFFER_MASK));
+    CHECK(gxmetal_rave_int_state_is_accepted(
+        GXMETAL_RAVE_TAG_CHANNEL_MASK, 0));
+    CHECK(gxmetal_rave_int_state_is_accepted(
+        GXMETAL_RAVE_TAG_CHANNEL_MASK, GXMETAL_RAVE_CHANNEL_MASK_ALL));
+    CHECK(!gxmetal_rave_int_state_is_accepted(
+        GXMETAL_RAVE_TAG_CHANNEL_MASK,
+        GXMETAL_RAVE_CHANNEL_MASK_ALL << 1));
+    CHECK(gxmetal_rave_int_state_is_accepted(
+        GXMETAL_RAVE_TAG_GL_DRAW_BUFFER, 0));
+    CHECK(gxmetal_rave_int_state_is_accepted(
+        GXMETAL_RAVE_TAG_GL_DRAW_BUFFER, GXMETAL_RAVE_DRAW_BUFFER_ALL));
+    CHECK(!gxmetal_rave_int_state_is_accepted(
+        GXMETAL_RAVE_TAG_GL_DRAW_BUFFER,
+        GXMETAL_RAVE_DRAW_BUFFER_ALL << 1));
+    CHECK(gxmetal_rave_int_state_is_accepted(
+        GXMETAL_RAVE_TAG_Z_BUFFER_MASK, 0));
+    CHECK(gxmetal_rave_int_state_is_accepted(
+        GXMETAL_RAVE_TAG_Z_BUFFER_MASK, 1));
+    CHECK(!gxmetal_rave_int_state_is_accepted(
+        GXMETAL_RAVE_TAG_Z_BUFFER_MASK, 2));
 
     CHECK(gxmetal_rave_alpha1_bitmap_row_bytes(1) == 1);
     CHECK(gxmetal_rave_alpha1_bitmap_row_bytes(8) == 1);

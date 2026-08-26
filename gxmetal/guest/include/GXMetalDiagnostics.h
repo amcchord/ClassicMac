@@ -46,9 +46,26 @@ enum GXMetalDisplayRejectReason {
 };
 
 #define GXMETAL_DIAGNOSTIC_MAGIC UINT32_C(0x47584447) /* GXDG */
-#define GXMETAL_DIAGNOSTIC_VERSION UINT32_C(0x0001000c)
+#define GXMETAL_DIAGNOSTIC_VERSION UINT32_C(0x0001001B)
 #define GXMETAL_DIAGNOSTIC_PIXEL_TYPES 18u
 #define GXMETAL_DIAGNOSTIC_PRIVATE_PIXEL_TYPES 16u
+#define GXMETAL_DIAGNOSTIC_ATI_DRAW47_WORDS 30u
+#define GXMETAL_DIAGNOSTIC_ATI_STATE20_WORDS 256u
+#define GXMETAL_DIAGNOSTIC_ATI_PIXEL21_WORDS 32u
+#define GXMETAL_DIAGNOSTIC_ATI_FILL_METHODS 4u
+#define GXMETAL_DIAGNOSTIC_ATI_GEOMETRY_METHODS 20u
+#define GXMETAL_DIAGNOSTIC_ATI_GEOMETRY_ARGUMENTS 160u
+#define GXMETAL_DIAGNOSTIC_ATI_CAPTURE_VERTICES 4u
+#define GXMETAL_DIAGNOSTIC_ATI_CAPTURE_WORDS_PER_VERTEX 13u
+#define GXMETAL_DIAGNOSTIC_ATI_DRAW50_WORDS 39u
+#define GXMETAL_DIAGNOSTIC_ATI_DRAW60_WORDS 52u
+#define GXMETAL_DIAGNOSTIC_ATI_DRAW48_WORDS 39u
+#define GXMETAL_DIAGNOSTIC_ATI_METHODS 64u
+#define GXMETAL_DIAGNOSTIC_ATI_METHOD28_29_ARGUMENTS 16u
+#define GXMETAL_DIAGNOSTIC_ATI_CLIP_MARKER_VALUES 64u
+#define GXMETAL_DIAGNOSTIC_ATI_VERTEX_COUNT_BUCKETS 9u
+#define GXMETAL_DIAGNOSTIC_ATI_ANOMALY_VERTICES 3u
+#define GXMETAL_DIAGNOSTIC_ATI_ANOMALY_WORDS 39u
 #define GXMETAL_DIAGNOSTIC_PROPERTY "AAPL,GXMetalEngineDiagnostic"
 
 typedef struct GXMetalDiagnosticSnapshot {
@@ -214,6 +231,179 @@ typedef struct GXMetalDiagnosticSnapshot {
     uint32_t rejected_int_state_count;
     uint32_t last_rejected_int_state_tag;
     uint32_t last_rejected_int_state_value;
+    uint32_t draw_private_new_success_count;
+    uint32_t draw_private_delete_count;
+    uint32_t current_state_fog_color_a;
+    uint32_t current_state_fog_color_r;
+    uint32_t current_state_fog_color_g;
+    uint32_t current_state_fog_color_b;
+    uint32_t current_state_fog_start;
+    uint32_t current_state_fog_end;
+    uint32_t current_state_fog_density;
+    uint32_t current_state_fog_max_depth;
+    uint32_t ati_private_call_count;
+    uint32_t ati_private_method_mask_low;
+    uint32_t ati_private_method_mask_high;
+    uint32_t ati_private_last_method;
+    uint32_t ati_private_last_arg0;
+    uint32_t ati_private_last_arg1;
+    uint32_t ati_private_last_arg2;
+    uint32_t ati_private_last_arg3;
+    uint32_t ati_private_last_arg4;
+    uint32_t ati_private_last_arg5;
+    uint32_t ati_private_last_arg6;
+    uint32_t ati_private_last_arg7;
+    uint32_t ati_private_draw47_call_count;
+    uint32_t ati_private_draw47_arg0;
+    uint32_t ati_private_draw47_arg1;
+    uint32_t ati_private_draw47_arg2;
+    uint32_t ati_private_draw47_arg3;
+    uint32_t ati_private_draw47_arg4;
+    uint32_t ati_private_draw47_arg5;
+    uint32_t ati_private_draw47_arg6;
+    uint32_t ati_private_draw47_arg7;
+    uint32_t ati_private_draw47_vertex_snapshot_valid;
+    uint32_t ati_private_draw47_vertex_words[
+        GXMETAL_DIAGNOSTIC_ATI_DRAW47_WORDS];
+    uint32_t ati_private_state20_call_count;
+    uint32_t ati_private_state20_arg0;
+    uint32_t ati_private_state20_arg1;
+    uint32_t ati_private_state20_arg2;
+    uint32_t ati_private_state20_arg3;
+    uint32_t ati_private_state20_arg4;
+    uint32_t ati_private_state20_arg5;
+    uint32_t ati_private_state20_arg6;
+    uint32_t ati_private_state20_arg7;
+    uint32_t ati_private_state20_snapshot_valid;
+    uint32_t ati_private_state20_words[
+        GXMETAL_DIAGNOSTIC_ATI_STATE20_WORDS];
+    uint32_t ati_private_clear27_call_count;
+    uint32_t ati_private_clear27_arg0;
+    uint32_t ati_private_clear27_arg1;
+    uint32_t ati_private_clear27_arg2;
+    uint32_t ati_private_clear27_arg3;
+    uint32_t ati_private_clear27_arg4;
+    uint32_t ati_private_clear27_arg5;
+    uint32_t ati_private_clear27_arg6;
+    uint32_t ati_private_clear27_arg7;
+    uint32_t ati_private_clear27_rect_snapshot_valid;
+    uint32_t ati_private_clear27_rect_words[4];
+    uint32_t ati_private_pixel21_call_count;
+    uint32_t ati_private_pixel21_arg0;
+    uint32_t ati_private_pixel21_arg1;
+    uint32_t ati_private_pixel21_arg2;
+    uint32_t ati_private_pixel21_arg3;
+    uint32_t ati_private_pixel21_arg4;
+    uint32_t ati_private_pixel21_arg5;
+    uint32_t ati_private_pixel21_arg6;
+    uint32_t ati_private_pixel21_arg7;
+    uint32_t ati_private_pixel21_arg1_snapshot_valid;
+    uint32_t ati_private_pixel21_arg1_words[
+        GXMETAL_DIAGNOSTIC_ATI_PIXEL21_WORDS];
+    uint32_t ati_private_pixel21_arg4_snapshot_valid;
+    uint32_t ati_private_pixel21_arg4_words[
+        GXMETAL_DIAGNOSTIC_ATI_PIXEL21_WORDS];
+    uint32_t ati_private_draw49_call_count;
+    uint32_t ati_private_draw49_last_vertex_count;
+    uint32_t ati_private_draw49_max_vertex_count;
+    uint32_t ati_private_draw50_call_count;
+    uint32_t ati_private_draw50_last_vertex_count;
+    uint32_t ati_private_draw50_max_vertex_count;
+    uint32_t ati_private_draw49_last_primitive;
+    uint32_t ati_private_draw49_primitive_mask;
+    uint32_t ati_private_draw50_last_primitive;
+    uint32_t ati_private_draw50_primitive_mask;
+    uint32_t ati_private_draw51_call_count;
+    uint32_t ati_private_draw51_last_vertex_count;
+    uint32_t ati_private_draw51_max_vertex_count;
+    uint32_t ati_private_draw51_last_primitive;
+    uint32_t ati_private_draw51_primitive_mask;
+    uint32_t ati_private_draw52_call_count;
+    uint32_t ati_private_draw52_last_vertex_count;
+    uint32_t ati_private_draw52_max_vertex_count;
+    uint32_t ati_private_draw52_last_primitive;
+    uint32_t ati_private_draw52_primitive_mask;
+    uint32_t ati_private_fill41_44_call_count[
+        GXMETAL_DIAGNOSTIC_ATI_FILL_METHODS];
+    uint32_t ati_private_fill41_44_last_vertex_count[
+        GXMETAL_DIAGNOSTIC_ATI_FILL_METHODS];
+    uint32_t ati_private_fill41_44_max_vertex_count[
+        GXMETAL_DIAGNOSTIC_ATI_FILL_METHODS];
+    uint32_t ati_private_fill41_44_last_primitive[
+        GXMETAL_DIAGNOSTIC_ATI_FILL_METHODS];
+    uint32_t ati_private_fill41_44_primitive_mask[
+        GXMETAL_DIAGNOSTIC_ATI_FILL_METHODS];
+    uint32_t ati_private_geometry_call_count[
+        GXMETAL_DIAGNOSTIC_ATI_GEOMETRY_METHODS];
+    uint32_t ati_private_geometry_last_args[
+        GXMETAL_DIAGNOSTIC_ATI_GEOMETRY_ARGUMENTS];
+    uint32_t ati_private_draw50_vertex_snapshot_valid_mask;
+    uint32_t ati_private_draw50_vertex_words[
+        GXMETAL_DIAGNOSTIC_ATI_DRAW50_WORDS];
+    uint32_t ati_private_draw60_pointer_snapshot_valid;
+    uint32_t ati_private_draw60_pointer_count;
+    uint32_t ati_private_draw60_vertex_snapshot_valid_mask;
+    uint32_t ati_private_draw60_vertex_pointers[
+        GXMETAL_DIAGNOSTIC_ATI_CAPTURE_VERTICES];
+    uint32_t ati_private_draw60_vertex_words[
+        GXMETAL_DIAGNOSTIC_ATI_DRAW60_WORDS];
+    uint32_t ati_private_draw48_vertex_snapshot_valid_mask;
+    uint32_t ati_private_draw48_vertex_words[
+        GXMETAL_DIAGNOSTIC_ATI_DRAW48_WORDS];
+    uint32_t ati_private_draw60_zero_clip_marker_call_count;
+    uint32_t ati_private_draw60_nonzero_clip_marker_call_count;
+    uint32_t ati_private_draw60_clip_marker_or;
+    uint32_t ati_private_draw60_clip_marker_low_value_count[
+        GXMETAL_DIAGNOSTIC_ATI_CLIP_MARKER_VALUES];
+    uint32_t ati_private_draw60_clip_marker_high_value_call_count;
+    uint32_t ati_private_draw60_vertex_count_buckets[
+        GXMETAL_DIAGNOSTIC_ATI_VERTEX_COUNT_BUCKETS];
+    uint32_t ati_private_draw60_nonzero_last_args[8];
+    uint32_t ati_private_draw60_nonzero_pointer_snapshot_valid;
+    uint32_t ati_private_draw60_nonzero_pointer_count;
+    uint32_t ati_private_draw60_nonzero_vertex_snapshot_valid_mask;
+    uint32_t ati_private_draw60_nonzero_vertex_pointers[
+        GXMETAL_DIAGNOSTIC_ATI_CAPTURE_VERTICES];
+    uint32_t ati_private_draw60_nonzero_vertex_words[
+        GXMETAL_DIAGNOSTIC_ATI_DRAW60_WORDS];
+    uint32_t ati_private_method_call_count[
+        GXMETAL_DIAGNOSTIC_ATI_METHODS];
+    uint32_t ati_private_method28_29_last_args[
+        GXMETAL_DIAGNOSTIC_ATI_METHOD28_29_ARGUMENTS];
+    uint32_t ati_private_frame_sequence;
+    uint32_t ati_private_state20_dirty_mask_or;
+    uint32_t ati_private_state20_word53_last;
+    uint32_t ati_private_state20_word53_or;
+    uint32_t ati_private_state20_word53_change_count;
+    uint32_t ati_private_state20_word53_nonzero_call_count;
+    uint32_t ati_private_state20_word53_first_nonzero_frame;
+    uint32_t ati_private_context_resolve_count;
+    uint32_t ati_private_context_fallback_count;
+    uint32_t ati_private_context_last_renderer;
+    uint32_t ati_private_context_last_draw_context;
+    uint32_t ati_private_draw48_vertex_count_buckets[
+        GXMETAL_DIAGNOSTIC_ATI_VERTEX_COUNT_BUCKETS];
+    uint32_t ati_private_draw48_max_vertex_count;
+    uint32_t ati_private_draw48_invalid_vertex_count_call_count;
+    uint32_t ati_private_draw50_pointer_call_count;
+    uint32_t ati_private_draw50_strip_call_count;
+    uint32_t ati_private_geometry_triangle_attempt_count[
+        GXMETAL_DIAGNOSTIC_ATI_GEOMETRY_METHODS];
+    uint32_t ati_private_geometry_triangle_queued_count[
+        GXMETAL_DIAGNOSTIC_ATI_GEOMETRY_METHODS];
+    uint32_t ati_private_geometry_triangle_rejected_count[
+        GXMETAL_DIAGNOSTIC_ATI_GEOMETRY_METHODS];
+    uint32_t ati_private_geometry_input_rejected_call_count[
+        GXMETAL_DIAGNOSTIC_ATI_GEOMETRY_METHODS];
+    uint32_t ati_private_geometry_anomaly_count;
+    uint32_t ati_private_geometry_anomaly_flags_or;
+    uint32_t ati_private_geometry_first_anomaly_method;
+    uint32_t ati_private_geometry_first_anomaly_frame;
+    uint32_t ati_private_geometry_first_anomaly_flags;
+    uint32_t ati_private_geometry_first_anomaly_vertex_addresses[
+        GXMETAL_DIAGNOSTIC_ATI_ANOMALY_VERTICES];
+    uint32_t ati_private_geometry_first_anomaly_vertex_words[
+        GXMETAL_DIAGNOSTIC_ATI_ANOMALY_WORDS];
 } GXMetalDiagnosticSnapshot;
 
 int32_t GXMetalGetDiagnosticStatus(void);

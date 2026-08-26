@@ -1,5 +1,100 @@
 # Changelog
 
+## 2.1.3 — 2026-08-26
+
+### Added
+
+- Added public RAVE draw-buffer access and a synchronized host readback command
+  with guest pixel packing, plus color-channel and depth-write masks.
+- Added verified Apple ATI private-driver clear-state, synchronization, clear,
+  and contiguous triangle-list entry points used by classic OpenGL.
+- Added GXMetal AGL Probe, which requires an accelerated Apple OpenGL pixel
+  format and verifies renderer identity, clear, every common filled OpenGL
+  primitive (`GL_TRIANGLES`, strips, fans, quads, quad strips, and polygons),
+  RGBA texture upload/sampling, source-alpha blending, depth ordering,
+  `glReadPixels`, texture deletion, display preservation, and context teardown.
+  A disjoint-triangle guard sample rejects the list-as-strip topology error
+  that a single center sample would miss.
+- Added a two-VM driver smoke manifest, a four-game semantic smoke manifest,
+  read-only guest-result/trace extraction, exact pixel waits, held keys, paced
+  drags, deterministic Virtio tablet input, dominant-color and inclusive RGB-
+  range corruption assertions, parallel jobs, and per-game replay.
+- Added signed-candidate base preparation and a General Controls automation
+  that persistently disables the improper-shutdown disk check and verifies the
+  resulting preference resource after reboot.
+- Diagnostic schema 1.0.27 now captures public RAVE entry points, ATI private
+  slot calls and arguments, per-callback OpenGL primitive masks and batch
+  sizes, readback, transport state, context lifecycle, and bounded vertex/
+  pointer snapshots for ATI contiguous/reduced triangles and the redundant
+  geometry registers observed at its finish path, plus zero/nonzero clip-
+  marker counts, method-48 count histograms, method-50 ABI branches,
+  renderer-context resolution, private swap sequence, per-method triangle
+  outcomes, and a first-suspicious-geometry record.
+
+### Changed
+
+- GXMetal protocol 1.23 retains the 8 MiB framebuffer-readback aperture, adds
+  a bounded exact-rectangle command for disjoint QuickDraw regions and holes,
+  and carries public RAVE `kQAPixel_RGB24` textures as tightly packed RGB
+  bytes. Deep-Z contexts now use the host depth path instead of falling back,
+  ATI's private RGBA byte layout is carried without channel rotation, and an
+  explicit alpha-test-false value preserves OpenGL `GL_NEVER`.
+- GXMetal Test exercises the expanded RAVE capability contract and persists a
+  machine-readable result. AGL Probe and GXMetal Test can run concurrently on
+  isolated clones before any slower game regressions.
+- App bundling now signs and verifies a staged candidate before atomically
+  promoting it. Release verification checks the bundled NDRV and its recorded
+  GXMetal protocol-header hash in addition to QEMU and the Tools CD.
+- The exact signed candidate completes Bugdom, Future Cop, Combat Mission, and
+  Weekend Warrior smoke routes with direct presentation and zero fallback
+  frames; Cro-Mag Rally and Oni render through the ATI/OpenGL path, and Unreal
+  Tournament reaches its accelerated RAVE main menu with sound disabled in
+  either windowed or fullscreen startup. The accelerated AGL core probe and
+  in-guest conformance gate pass.
+
+### Fixed
+
+- Power Mac builds now automatically rebuild the committed video NDRV when the
+  GXMetal protocol layout changes. This prevents a stale BAR contract from
+  silently withholding the guest transport and forcing both RAVE and AGL to
+  software.
+- Legacy QuickDraw 3D applications that accidentally pass the RAVE linear-fog
+  value through the QD3D fog API no longer render as nearly solid white. The
+  compatibility path is restricted to the observed perspective-Z,
+  normalized-depth, high-density signature; normal exponential-squared fog is
+  unchanged.
+- Fog now modifies RGB while preserving the fragment's source alpha, avoiding
+  unintended changes to later alpha blending.
+- ATI/OpenGL private state synchronization now translates the vendor block's
+  alpha test, blend factors, depth test and write mask, fog parameters, color
+  mask/dither, clear color/depth, and primary/secondary texture wrap, filter,
+  and border state. The first private state call forces a complete supported
+  snapshot instead of assuming Apple's defaults match GXMetal's. This retains
+  the earlier Oni coplanar-menu fix and preserves `GL_NEVER` alpha rejection.
+- Apple's ATI/OpenGL acquire/release, clear, and swap callbacks now follow
+  their actual division of responsibility: slots 23/24 begin and end host
+  work without implicit clears or presentation, slot 28 clears depth, and
+  slot 29 presents the optional damage rectangle. Geometry callbacks resolve
+  the public RAVE context from the ATI renderer object rather than relying on
+  a process-global last context.
+- ATI private dispatch slot 59 no longer treats its internal four-float state
+  values as geometry. Slot 60 reconstructs a clipped pointer fan only when the
+  GLD supplies a nonzero clip marker, then flushes the pending batch; ordinary
+  zero-marker finish calls no longer redraw redundant register values.
+- ATI multitexture stage discovery treats the vendor renderer's `Current=-1`
+  convention as its primary texture binding, restoring Cro-Mag Rally's
+  textured title and loading path.
+- Apple's ATI/OpenGL filled-geometry callback families now use their exact
+  ABIs and topology. Contiguous batches and GLD-reduced pointer triangles,
+  triangle strips, triangle fans, quads, quad strips, and polygons are
+  decomposed with correct winding. The paired dispatch+0x48 slots preserve
+  the GLD's staged-polygon and finish distinction instead of unconditionally
+  redrawing the redundant geometry arguments Apple leaves in registers. Each draw callback also
+  honors the GLD's actual loaded-primary-texture parity so an untextured draw
+  cannot sample a stale binding.
+- Exact complex QuickDraw regions are rasterized into vertically merged,
+  bounded rect lists and used consistently by Metal draw, clear, and present.
+
 ## 2.1.2 — 2026-08-25
 
 ### Added

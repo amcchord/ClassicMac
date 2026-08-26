@@ -68,9 +68,18 @@ ClassicMac exists because of years of brilliant work by other engineers. The pat
   one-click installer for a PowerPC QuickDraw 3D RAVE engine. It batches guest
   drawing commands to the host, renders them with Metal, and safely leaves
   unsupported contexts to Apple's software renderer. The included GXMetal
-  Test verifies framebuffer correctness and measures both engines before a
-  game is launched. A classic puzzle-piece M appears in the startup extension
-  row when GXMetal's companion loads.
+  Test verifies the advertised RAVE contract and measures both engines before
+  a game is launched. GXMetal AGL Probe separately verifies accelerated Apple
+  OpenGL context creation, triangle and quad rendering, RGBA textures,
+  source-alpha blending, depth ordering, readback, resource deletion, and
+  teardown. Protocol 1.23 supports exact complex-region clipping, deep-Z
+  contexts, public RGB24 and private RGBA uploads, and the ATI/OpenGL filled
+  triangle, strip, fan, quad, quad-strip, polygon, and clipped-fan paths
+  exercised by Cro-Mag Rally and Oni. The ATI compatibility layer synchronizes
+  OpenGL alpha, blend, depth, fog, channel-mask, clear, and texture sampling
+  state before those draws. A classic
+  puzzle-piece M appears in the startup extension row when GXMetal's companion
+  loads.
 - **Native machine control.** Pause / Resume, Restart, and Shut Down from the app, live screen previews in the library, a visible browser URL, and a "Match Display" button that chooses a screen-sized boot resolution.
 - **Safe, faster shutdown cycles.** The app's Shut Down command presses the
   virtual Mac's Power key and confirms Mac OS's own dialog, allowing HFS/HFS+
@@ -137,7 +146,7 @@ Requirements: an Apple Silicon Mac (M1 or later) running a recent macOS.
 
 # 5. Verify the exact signed/stapled artifact, including versions, Gatekeeper,
 #    the bundled Tools CD, and the GXMetal-enabled Power Mac executable
-./scripts/verify-release.sh dist/ClassicMac.dmg 2.1.2 2.1.2
+./scripts/verify-release.sh dist/ClassicMac.dmg 2.1.3 2.1.3
 ```
 
 All scripts are idempotent and safe to re-run. Building needs the Xcode command line tools and [Homebrew](https://brew.sh).

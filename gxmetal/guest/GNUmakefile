@@ -26,7 +26,7 @@ INIT_CFLAGS := -std=gnu99 -Os -Wall -Wextra -Werror -Wno-multichar \
 INIT_LDFLAGS := -Wl,--mac-flat
 
 all: bin/GXMetal.bin bin/GXMetalInput.bin bin/GXMetalStartup.bin bin/GXMetalInstaller.bin \
-     bin/GXMetalTest.bin
+     bin/GXMetalTest.bin bin/GXMetalAGLProbe.bin
 
 bin/GXMetal.xcoff: src/GXMetalEngine.c src/GXMetalTransport.c \
                    src/GXMetalTransport.h src/GXMetalATICompatibility.h \
@@ -115,6 +115,23 @@ bin/GXMetalTest.bin: bin/GXMetalTest.pef apps/GXMetalTest.r \
 		--cc bin/GXMetalTest.dsk --cc bin/GXMetalTest \
 		--cc bin/%GXMetalTest.ad -t APPL -c GXMT \
 		--data bin/GXMetalTest.pef
+	python3 ../tools/set_macbinary_flags.py $@ --set 0x2000 --clear 0x0100
+
+bin/GXMetalAGLProbe.xcoff: apps/GXMetalAGLProbe.c \
+                           apps/GXMetalAGLProbeLogic.h \
+                           include/GXMetalVersion.h GNUmakefile
+	@mkdir -p bin
+	$(CC) $(APP_CFLAGS) -Iapps $(APP_LDFLAGS) -o $@ $< -lInterfaceLib
+
+bin/GXMetalAGLProbe.pef: bin/GXMetalAGLProbe.xcoff
+	$(MAKEPEF) -o $@ $<
+
+bin/GXMetalAGLProbe.bin: bin/GXMetalAGLProbe.pef apps/GXMetalAGLProbe.r \
+                         src/GXMetalIcon.r
+	$(REZ) apps/GXMetalAGLProbe.r -I$(RINCLUDES) -Isrc -o $@ \
+		--cc bin/GXMetalAGLProbe.dsk --cc 'bin/GXMetal AGL Probe' \
+		--cc bin/%GXMetalAGLProbe.ad -t APPL -c GXMA \
+		--data bin/GXMetalAGLProbe.pef
 	python3 ../tools/set_macbinary_flags.py $@ --set 0x2000 --clear 0x0100
 
 clean:

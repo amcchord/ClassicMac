@@ -1,0 +1,47 @@
+{
+  "schema": 1,
+  "defaults": {
+    "boot_wait_seconds": 5,
+    "observation_seconds": 5,
+    "capture_interval_seconds": 5,
+    "resolution": "1024x768x15"
+  },
+  "games": [
+    {
+      "id": "gxmetal-conformance",
+      "name": "GXMetal in-guest conformance test",
+      "modes": ["gxmetal"],
+      "steps": [
+        {"wait_for_pixel": {"x": 22, "y": 11, "red": 221, "green": 0, "blue": 0, "tolerance": 8, "timeout_seconds": 180, "poll_interval_seconds": 1}},
+        {"screenshot": "finder-ready"},
+        {"chord": "Super_L+Alt_L+w", "delay_after": 2},
+        {"click": [610, 450], "delay_after": 1},
+        {"text": "ClassicMac Tools", "delay_after": 1},
+        {"chord": "Super_L+o", "delay_after": 3, "capture_after": true},
+        {"text": "GXMetal", "delay_after": 1},
+        {"chord": "Super_L+o", "delay_after": 3, "capture_after": true},
+        {"text": "GXMetal Test", "delay_after": 1},
+        {"chord": "Super_L+o", "delay_after": 20, "capture_after": true},
+        {"screenshot": "conformance-result"}
+      ]
+    },
+    {
+      "id": "gxmetal-agl-probe",
+      "name": "GXMetal AGL and OpenGL path probe",
+      "modes": ["gxmetal"],
+      "steps": [
+        {"wait_for_pixel": {"x": 22, "y": 11, "red": 221, "green": 0, "blue": 0, "tolerance": 8, "timeout_seconds": 180, "poll_interval_seconds": 1}},
+        {"screenshot": "finder-ready"},
+        {"chord": "Super_L+Alt_L+w", "delay_after": 2},
+        {"click": [610, 450], "delay_after": 1},
+        {"text": "ClassicMac Tools", "delay_after": 1},
+        {"chord": "Super_L+o", "delay_after": 3, "capture_after": true},
+        {"text": "GXMetal", "delay_after": 1},
+        {"chord": "Super_L+o", "delay_after": 3, "capture_after": true},
+        {"text": "GXMetal AGL Probe", "delay_after": 1},
+        {"chord": "Super_L+o", "delay_after": 15, "capture_after": true},
+        {"screenshot": "agl-probe-result"}
+      ]
+    }
+  ]
+}

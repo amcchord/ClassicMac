@@ -8,8 +8,8 @@
 #   scripts/verify-release.sh [app-or-dmg] [short-version] [build-version]
 #
 # Examples:
-#   scripts/verify-release.sh dist/ClassicMac.app 2.1.2 2.1.2
-#   scripts/verify-release.sh dist/ClassicMac.dmg 2.1.2 2.1.2
+#   scripts/verify-release.sh dist/ClassicMac.app 2.1.3 2.1.3
+#   scripts/verify-release.sh dist/ClassicMac.dmg 2.1.3 2.1.3
 
 set -euo pipefail
 
@@ -67,6 +67,7 @@ esac
 PLIST="$APP/Contents/Info.plist"
 PPC_HELPER="$APP/Contents/Helpers/Power Mac G4.app"
 PPC_QEMU="$PPC_HELPER/Contents/MacOS/qemu-system-ppc"
+PPC_NDRV="$APP/Contents/Resources/qemu/pc-bios/qemu_vga.ndrv"
 TOOLS_CD="$APP/Contents/Resources/ClassicMacTools.iso"
 VNC_KEYMAP="$APP/Contents/Resources/qemu/pc-bios/keymaps/en-us"
 BROWSER_INDEX="$APP/Contents/Resources/Browser/index.html"
@@ -76,7 +77,7 @@ BROWSER_LICENSE="$APP/Contents/Resources/Licenses/noVNC-MPL-2.0.txt"
 PAKO_LICENSE="$APP/Contents/Resources/Licenses/pako-MIT.txt"
 
 for required in "$PLIST" "$PPC_HELPER/Contents/Info.plist" \
-  "$PPC_QEMU" "$TOOLS_CD" "$VNC_KEYMAP" "$BROWSER_INDEX" "$BROWSER_SCALE" \
+  "$PPC_QEMU" "$PPC_NDRV" "$TOOLS_CD" "$VNC_KEYMAP" "$BROWSER_INDEX" "$BROWSER_SCALE" \
   "$BROWSER_RFB" "$BROWSER_LICENSE" "$PAKO_LICENSE"; do
   [ -e "$required" ] || die "Required release component is missing: $required"
 done
@@ -84,6 +85,18 @@ done
 if [ -f "$ROOT_DIR/dist/ClassicMacTools.iso" ]; then
   cmp -s "$ROOT_DIR/dist/ClassicMacTools.iso" "$TOOLS_CD" || \
     die "Bundled Tools CD differs from the freshly built dist image"
+fi
+if [ -f "$ROOT_DIR/ppcvid/qemu_vga.ndrv" ]; then
+  cmp -s "$ROOT_DIR/ppcvid/qemu_vga.ndrv" "$PPC_NDRV" || \
+    die "Bundled Power Mac NDRV differs from the freshly built driver"
+fi
+if [ -f "$ROOT_DIR/ppcvid/qemu_vga.ndrv.gxmetal-protocol.sha256" ]; then
+  CURRENT_PROTOCOL_SHA="$(shasum -a 256 \
+    "$ROOT_DIR/gxmetal/protocol/gxmetal_protocol.h" | awk '{ print $1 }')"
+  NDRV_PROTOCOL_SHA="$(sed -n '1p' \
+    "$ROOT_DIR/ppcvid/qemu_vga.ndrv.gxmetal-protocol.sha256")"
+  [ "$NDRV_PROTOCOL_SHA" = "$CURRENT_PROTOCOL_SHA" ] || \
+    die "Power Mac NDRV was built for a different GXMetal protocol"
 fi
 
 VERSION="$(plutil -extract CFBundleShortVersionString raw "$PLIST")"
@@ -144,6 +157,7 @@ fi
 log "Release verification passed"
 printf '    Version:       %s (%s)\n' "$VERSION" "$BUILD"
 printf '    Tools CD SHA:  %s\n' "$(shasum -a 256 "$TOOLS_CD" | awk '{ print $1 }')"
+printf '    Power NDRV SHA: %s\n' "$(shasum -a 256 "$PPC_NDRV" | awk '{ print $1 }')"
 if [ -f "$TARGET" ]; then
   printf '    Target SHA:    %s\n' "$(shasum -a 256 "$TARGET" | awk '{ print $1 }')"
 else

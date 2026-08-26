@@ -182,6 +182,8 @@ make -C "$DRIVER_DIR"
 
 [ -f "$DRIVER_DIR/bin/qemu_vga.ndrv" ] || die "driver build did not produce bin/qemu_vga.ndrv"
 cp "$DRIVER_DIR/bin/qemu_vga.ndrv" "$ROOT_DIR/ppcvid/qemu_vga.ndrv"
+shasum -a 256 "$ROOT_DIR/gxmetal/protocol/gxmetal_protocol.h" | \
+  awk '{ print $1 }' > "$ROOT_DIR/ppcvid/qemu_vga.ndrv.gxmetal-protocol.sha256"
 log "Installed ppcvid/qemu_vga.ndrv"
 
 log "Done. Rebuild QEMU (scripts/build-qemu.sh) to install the new driver."

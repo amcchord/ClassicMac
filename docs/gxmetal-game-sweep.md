@@ -50,9 +50,11 @@ Each game supports these fields:
 - `boot_wait_seconds`, `observation_seconds`, `capture_interval_seconds`, and
   `resolution`: per-game timing/display overrides.
 - `steps`: ordered VNC actions. Supported actions are `wait`,
-  `wait_for_frame_change`, `click`, `double_click`, `key`, `chord`, `text`,
-  `screenshot`, and `note`. A step can also set `delay_after`, `hold_ms`, or
-  `capture_after`.
+  `wait_for_frame_change`, `wait_for_pixel`, `click`, `double_click`, `key`,
+  `drag`, `chord`, `text`, `screenshot`,
+  `assert_dominant_color_fraction_below`,
+  `assert_color_range_fraction_below`, and `note`. A step can also set
+  `delay_after`, `hold_ms`, or `capture_after`.
 
 A step contains exactly one action. For example:
 
@@ -88,6 +90,33 @@ pixels does not change before the timeout. A display resize counts as a full
 frame change. This makes missed launch transitions explicit in the evidence
 rather than silently sending later input to the wrong screen.
 
+Use `wait_for_pixel` when a particular UI state has a stable visual marker.
+Unlike a generic frame-change wait, it does not mistake intermediate boot
+screens or animation for application readiness:
+
+```json
+{
+  "wait_for_pixel": {
+    "x": 22,
+    "y": 11,
+    "red": 221,
+    "green": 0,
+    "blue": 0,
+    "tolerance": 8,
+    "timeout_seconds": 180,
+    "poll_interval_seconds": 1
+  }
+}
+```
+
+The example waits for a known red pixel in the Finder Apple-menu icon. The
+harness captures periodic evidence while waiting, records the actual matched
+RGB value, and fails explicitly on timeout or if the coordinate is outside a
+resized framebuffer. Prefer a sequence of semantic gates when one screen has
+multiple phases; for example, wait for Disk First Aid to appear, then for its
+completion message, dismiss it, and finally wait for Finder to own the menu
+bar.
+
 `Super_L` is the Mac Command key in QEMU VNC, so a chord such as
 `{"chord":"Super_L+o"}` sends Command-O. Coordinates are tied to the
 specified guest resolution and Finder layout. Capture the screen after every
@@ -98,6 +127,50 @@ screenshot showing what was accepted.
 Named keys are case-sensitive and validated before a VM is created. Use names
 such as `Space`, `Return`, `Escape`, `Left`, and `Super_L`; ordinary printable
 characters such as `o` are written as a single character.
+
+Use `{"drag":[start_x,start_y,end_x,end_y]}` to reposition windows or operate
+classic sliders. The VNC client holds the primary button while sending paced
+motion events, making the action deterministic with ClassicMac's normal
+Virtio tablet.
+
+For a scene with a known large-area corruption signature, add a visual reject
+oracle after the semantic navigation steps:
+
+```json
+{
+  "assert_dominant_color_fraction_below": {
+    "maximum": 0.10,
+    "ignore_colors": []
+  }
+}
+```
+
+The harness captures the asserted frame, counts exact RGB colors, records the
+dominant color and whole-frame fraction in `events.jsonl`, and fails the run
+when the fraction is at or above the limit. `ignore_colors` is optional and
+accepts RGB triplets. This is a regression-specific reject oracle, not a proof
+that a scene is visually correct; retain representative positive screenshots
+and choose thresholds from reviewed pass/fail evidence.
+
+When compression-free shading or animation spreads the same corrupt surface
+over several nearby colors, count an inclusive RGB box instead:
+
+```json
+{
+  "assert_color_range_fraction_below": {
+    "minimum_rgb": [224, 224, 208],
+    "maximum_rgb": [255, 255, 255],
+    "maximum_fraction": 0.10
+  }
+}
+```
+
+Every pixel whose red, green, and blue channels each fall between the two
+triplets, including the endpoints, contributes to the measured fraction. The
+harness records the range, fraction, dimensions, outcome, and lossless
+screenshot in the evidence. Choose a narrow scene-specific range from reviewed
+good and bad captures; a broad bright-color range can reject legitimate skies,
+menus, or flashes in another title.
 
 ## Validate, then run
 
@@ -136,10 +209,141 @@ python3 scripts/gxmetal-game-sweep.py BASE.img MANIFEST.json \
   --output /path/to/evidence/release-name
 ```
 
+Prepare a new immutable base with the exact guest artifacts extracted from
+that signed app before the release-wide replay. The source image is never
+mounted, and the command refuses to overwrite an existing output:
+
+```sh
+scripts/prepare-gxmetal-game-base.sh \
+  /path/to/installed-ten-game-golden.img \
+  /path/to/os9-ten-game-gxmetal-release.img
+```
+
+The tool verifies the signed app, clones the source, replaces GXMetal,
+GXMetal Input, and GXMetal Startup only in the clone, places GXMetal Test in a
+top-level candidate-tools folder, clears inherited test/trace files, and uses
+General Controls inside the guest to persistently disable “Check disk if
+computer was shut down improperly.” It force-stops and reboots the output once,
+requires Finder to appear without Disk First Aid, verifies that the `Smrt`
+preference resource has the Check Disk bit cleared, and then prints source,
+output, Tools CD, and bundled Power Mac QEMU hashes. Set
+`GXMETAL_SKIP_DISK_CHECK_DISABLE=1` only when preparing a special control
+image that must retain the warning.
+
+The guest-side UI route preserves the rest of General Controls; direct host
+resource-fork rewriting is deliberately avoided. The standalone operation is
+also available for an explicitly writable disposable image:
+
+```sh
+scripts/disable-os9-disk-check.sh /path/to/writable-golden-clone.img
+```
+
+Run `scripts/test-gxmetal-os9.sh` against the prepared base before promoting
+it to the sweep; that conformance runner also uses a disposable clone. Its VNC
+helper still recognizes and dismisses only a completed Disk First Aid message,
+so older/control images cannot silently prevent GXMetal Test from running as
+a Startup Item.
+
+For the fast per-build driver gate, run GXMetal Test and the accelerated AGL
+probe together from independent clones:
+
+```sh
+python3 scripts/gxmetal-game-sweep.py BASE.img \
+  gxmetal/compatibility/driver-smoke.example.json \
+  --modes gxmetal --jobs 2 --keep-disks \
+  --output /path/to/evidence/driver-smoke-YYYYMMDD
+```
+
+The GUI recipes prove that both applications launched, but their persisted
+guest results are the authoritative pass/fail records. Extract those results
+and the matching diagnostic snapshots directly from the retained disks:
+
+```sh
+scripts/extract-gxmetal-guest-results.sh test \
+  /path/to/evidence/driver-smoke-YYYYMMDD/gxmetal-conformance__gxmetal
+scripts/extract-gxmetal-guest-results.sh agl \
+  /path/to/evidence/driver-smoke-YYYYMMDD/gxmetal-agl-probe__gxmetal
+```
+
+The AGL probe rejects software pixel formats, verifies the renderer identity,
+draws and clears through Apple's OpenGL stack, and checks all six common
+filled primitive modes: triangles, triangle strips, triangle fans, quads,
+quad strips, and polygons. Its two disjoint `GL_TRIANGLES` plus a background
+guard pixel distinguish a real triangle list from an accidentally connected
+strip. The probe also uploads and samples a real RGBA texture, checks source-
+alpha blending and near/far depth ordering, validates `glReadPixels` against
+every sample, deletes the texture, proves that readback does not alter the
+display, and checks teardown. This makes it a much faster OpenGL integration
+gate than launching a full game after every low-level driver change. Use
+`--keep-disks` whenever the persisted result and driver trace must be
+extracted; successful clones are otherwise discarded after their screenshots
+and host logs are saved.
+
+For per-commit functional coverage of the four currently proven game routes,
+use `gxmetal/compatibility/four-game-smoke.example.json`. It replaces most
+fixed delays with accepted Finder, menu, and gameplay pixels and gives each
+game its own copy-on-write disk and Unix sockets. The base must contain the
+installed top-level `FutureCop Preview` folder; media-only bases that contain
+just its installer are intentionally rejected by the launch recipe's semantic
+gate. On a sufficiently large development host, run all four at once:
+
+```sh
+python3 scripts/gxmetal-game-sweep.py BASE.img \
+  gxmetal/compatibility/four-game-smoke.example.json \
+  --modes gxmetal --jobs 4 --ram-mb 512 \
+  --output /path/to/evidence/four-game-smoke-YYYYMMDD
+```
+
+This is a short correctness regression, not performance evidence. Use two
+batches (`--jobs 2`) with at least 120 seconds of gameplay per title for a
+release qualification, keep Bugdom's separately proven quit/relaunch recipe,
+and use `--jobs 1` for comparable performance measurements.
+
+After a driver change that touches Apple's ATI/OpenGL compatibility path, run
+the shorter Cro-Mag Rally and Oni pair concurrently. These recipes skip the
+long exploratory soaks but retain the video-mode selection, textured loading,
+Oni's direct Start-button activation, Combat Training gameplay/input,
+profiles, and screenshots:
+
+```sh
+python3 scripts/gxmetal-game-sweep.py BASE.img \
+  gxmetal/compatibility/ati-opengl-game-smoke.example.json \
+  --modes gxmetal --jobs 2 \
+  --output /path/to/evidence/ati-opengl-smoke-YYYYMMDD
+```
+
+Use the longer `signed-unresolved-launch.example.json` routes when a short
+regression changes visually or stops reaching its named semantic capture.
+
+To replay only failed or recently changed routes without copying the manifest,
+select their stable ids with `--games`:
+
+```sh
+python3 scripts/gxmetal-game-sweep.py BASE.img \
+  gxmetal/compatibility/four-game-smoke.example.json \
+  --games future-cop-smoke,weekend-warrior-smoke --jobs 2 \
+  --output /path/to/evidence/smoke-retry-YYYYMMDD
+```
+
 Do not reuse an output directory; the harness refuses to overwrite one.
 `--keep-disks` retains all modified clones when an installed result is needed
 for a follow-up run. `--discard-failed-disks` opts out of the safer default of
 retaining a failed clone.
+
+The classic Unreal Tournament port currently stops before its first RAVE
+submission when `UseSound=True` under the test VM's audio path. Fullscreen is
+not causal: sound-disabled windowed and fullscreen controls render the same
+menu. Prepare a disposable, copy-on-write test image without mutating the
+corpus base:
+
+```sh
+scripts/prepare-unreal-tournament-test-image.sh \
+  BASE-WITH-UT.img UT-NOSOUND.img
+```
+
+The helper verifies the source hash before and after, requires the expected two
+CR-delimited `UseSound` entries, preserves the fullscreen setting, and refuses
+to overwrite its output.
 
 ## Evidence and review
 
@@ -183,8 +387,9 @@ python3 scripts/decode-gxmetal-diagnostics.py \
 ```
 
 The decoder derives field order, signedness, and array extents from the current
-`GXMetalDiagnostics.h`, and rejects snapshots whose exact size does not match
-that schema.
+`GXMetalDiagnostics.h`. It also recognizes supported append-only historical
+snapshots from v1.12 through v1.26 while the current schema is v1.27; other
+size mismatches are rejected.
 
 ## Ten-game sweep discipline
 
@@ -208,3 +413,8 @@ Use a staged process so discoveries remain attributable:
 This structure separates media acquisition and human visual judgment from the
 repeatable execution layer, while retaining enough evidence for another
 archivist to reproduce each compatibility claim.
+
+The current evidence-backed status of the installed ten-game corpus is in
+`docs/gxmetal-ten-game-compatibility.md`. It distinguishes current-candidate
+results from historical incremental candidates and does not treat a runtime
+failure before GXMetal context creation as a renderer failure.

@@ -1,0 +1,143 @@
+{
+  "schema": 1,
+  "defaults": {
+    "boot_wait_seconds": 5,
+    "observation_seconds": 5,
+    "capture_interval_seconds": 3,
+    "resolution": "1024x768x15"
+  },
+  "games": [
+    {
+      "id": "cromag-signed-launch",
+      "name": "Cro-Mag Rally signed-candidate launch probe",
+      "modes": ["gxmetal"],
+      "steps": [
+        {"wait_for_pixel": {"x": 22, "y": 11, "red": 221, "green": 0, "blue": 0, "tolerance": 8, "timeout_seconds": 180, "poll_interval_seconds": 1}},
+        {"screenshot": "finder-ready"},
+        {"chord": "Super_L+Alt_L+w", "delay_after": 2},
+        {"double_click": [590, 52], "delay_after": 3},
+        {"text": "GXMetal Sweep Games", "delay_after": 1},
+        {"chord": "Super_L+o", "delay_after": 3},
+        {"text": "Cro-Mag Rally", "delay_after": 1},
+        {"chord": "Super_L+o", "delay_after": 3},
+        {"text": "Cro-Mag Rally", "delay_after": 1},
+        {"chord": "Super_L+o", "delay_after": 30},
+        {"screenshot": "video-mode-dialog"},
+        {"drag": [184, 215, 230, 220], "delay_after": 2},
+        {"click": [319, 348], "delay_after": 35},
+        {"screenshot": "launch-640x480"},
+        {"key": "Space", "delay_after": 20},
+        {"screenshot": "after-space"},
+        {"key": "Return", "delay_after": 20},
+        {"screenshot": "after-return"}
+      ]
+    },
+    {
+      "id": "dark-vengeance-signed-launch",
+      "name": "Dark Vengeance signed-candidate launch probe",
+      "modes": ["gxmetal"],
+      "steps": [
+        {"wait_for_pixel": {"x": 22, "y": 11, "red": 221, "green": 0, "blue": 0, "tolerance": 8, "timeout_seconds": 180, "poll_interval_seconds": 1}},
+        {"screenshot": "finder-ready"},
+        {"chord": "Super_L+Alt_L+w", "delay_after": 2},
+        {"double_click": [590, 52], "delay_after": 3},
+        {"text": "GXMetal Sweep Games", "delay_after": 1},
+        {"chord": "Super_L+o", "delay_after": 3},
+        {"text": "Dark Vengeance", "delay_after": 1},
+        {"chord": "Super_L+o", "delay_after": 3},
+        {"text": "Dark Vengeance", "delay_after": 1},
+        {"chord": "Super_L+o", "delay_after": 30},
+        {"screenshot": "launch-after-30s"},
+        {"key": "Space", "delay_after": 10},
+        {"screenshot": "after-space"},
+        {"key": "Return", "delay_after": 10},
+        {"screenshot": "after-return"}
+      ]
+    },
+    {
+      "id": "mythii-signed-launch",
+      "name": "Myth II signed-candidate launch probe",
+      "modes": ["gxmetal"],
+      "steps": [
+        {"wait_for_pixel": {"x": 22, "y": 11, "red": 221, "green": 0, "blue": 0, "tolerance": 8, "timeout_seconds": 180, "poll_interval_seconds": 1}},
+        {"screenshot": "finder-ready"},
+        {"chord": "Super_L+Alt_L+w", "delay_after": 2},
+        {"double_click": [590, 52], "delay_after": 3},
+        {"text": "GXMetal Sweep Games", "delay_after": 1},
+        {"chord": "Super_L+o", "delay_after": 3},
+        {"text": "Myth II", "delay_after": 1},
+        {"chord": "Super_L+o", "delay_after": 3},
+        {"text": "Myth II Demo", "delay_after": 1},
+        {"chord": "Super_L+o", "delay_after": 40},
+        {"screenshot": "launch-after-40s"},
+        {"click": [135, 255], "delay_after": 1},
+        {"click": [492, 345], "delay_after": 25},
+        {"screenshot": "after-return"},
+        {"click": [250, 235], "delay_after": 30},
+        {"screenshot": "new-game-dialog"},
+        {"key": "Tab", "delay_after": 1},
+        {"key": "Return", "delay_after": 60},
+        {"screenshot": "mission-briefing"},
+        {"key": "Return", "delay_after": 30},
+        {"screenshot": "mission-briefing-after-return"},
+        {"key": "Space", "delay_after": 60},
+        {"screenshot": "mission-briefing-after-space"}
+      ]
+    },
+    {
+      "id": "oni-signed-launch",
+      "name": "Oni Demo signed-candidate OpenGL launch probe",
+      "modes": ["gxmetal"],
+      "steps": [
+        {"wait_for_pixel": {"x": 22, "y": 11, "red": 221, "green": 0, "blue": 0, "tolerance": 8, "timeout_seconds": 180, "poll_interval_seconds": 1}},
+        {"screenshot": "finder-ready"},
+        {"chord": "Super_L+Alt_L+w", "delay_after": 2},
+        {"double_click": [590, 52], "delay_after": 3},
+        {"text": "GXMetal Sweep Games", "delay_after": 1},
+        {"chord": "Super_L+o", "delay_after": 3},
+        {"text": "Oni Demo", "delay_after": 1},
+        {"chord": "Super_L+o", "delay_after": 3},
+        {"text": "Oni Demo", "delay_after": 1},
+        {"chord": "Super_L+o", "delay_after": 45},
+        {"key": "Escape", "delay_after": 7},
+        {"key": "Escape", "delay_after": 7},
+        {"key": "Escape", "delay_after": 7},
+        {"key": "Escape", "delay_after": 10},
+        {"screenshot": "main-menu"},
+        {"click": [440, 250], "delay_after": 10},
+        {"screenshot": "new-game-confirmation"},
+        {"click": [245, 255], "delay_after": 10},
+        {"screenshot": "combat-training-loading"},
+        {"wait": 50},
+        {"screenshot": "combat-training-gameplay"},
+        {"key": "w", "hold_ms": 1200, "delay_after": 2},
+        {"key": "Space", "delay_after": 3},
+        {"screenshot": "combat-training-input"}
+      ]
+    },
+    {
+      "id": "unreal-tournament-signed-launch",
+      "name": "Unreal Tournament signed-candidate RAVE launch probe",
+      "modes": ["gxmetal"],
+      "steps": [
+        {"wait_for_pixel": {"x": 22, "y": 11, "red": 221, "green": 0, "blue": 0, "tolerance": 8, "timeout_seconds": 180, "poll_interval_seconds": 1}},
+        {"screenshot": "finder-ready"},
+        {"chord": "Super_L+Alt_L+w", "delay_after": 2},
+        {"double_click": [590, 52], "delay_after": 3},
+        {"text": "GXMetal Sweep Games", "delay_after": 1},
+        {"chord": "Super_L+o", "delay_after": 3},
+        {"text": "Unreal Tournament", "delay_after": 1},
+        {"chord": "Super_L+o", "delay_after": 3},
+        {"text": "Unreal Tournament", "delay_after": 1},
+        {"chord": "Super_L+o", "delay_after": 45},
+        {"screenshot": "first-time-configuration"},
+        {"key": "Return", "delay_after": 12},
+        {"screenshot": "startup-settings"},
+        {"key": "Return", "delay_after": 60},
+        {"screenshot": "rave-launch"},
+        {"key": "Escape", "delay_after": 20},
+        {"screenshot": "after-escape"}
+      ]
+    }
+  ]
+}

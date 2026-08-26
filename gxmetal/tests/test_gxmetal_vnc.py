@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Protocol-level tests for the dependency-free GXMetal VNC helper."""
 
+import argparse
 import importlib.util
 from pathlib import Path
 import struct
@@ -40,6 +41,17 @@ def framebuffer_update(x, y, width, height, encoding, payload=b""):
 
 
 class RFBClientTests(unittest.TestCase):
+    def test_parse_pixel_accepts_optional_tolerance_and_rejects_channels(self):
+        self.assertEqual(
+            VNC.parse_pixel("128,84,248,248,0"),
+            (128, 84, 248, 248, 0, 8))
+        self.assertEqual(
+            VNC.parse_pixel("128,84,248,248,0,12"),
+            (128, 84, 248, 248, 0, 12))
+        with self.assertRaisesRegex(argparse.ArgumentTypeError,
+                                    "0 through 255"):
+            VNC.parse_pixel("128,84,256,248,0")
+
     def test_connect_requests_raw_and_desktop_resize_encodings(self):
         incoming = (
             b"RFB 003.008\n" + b"\x01\x01" + struct.pack(">I", 0) +
@@ -93,6 +105,24 @@ class RFBClientTests(unittest.TestCase):
 
 
 class ManifestValidationTests(unittest.TestCase):
+    def test_game_id_filter_is_validated_and_preserves_manifest_order(self):
+        specs = [
+            SWEEP.RunSpec(
+                game_id=game_id, name=game_id, mode="gxmetal", cdrom=None,
+                source_url=None, source_sha256=None, boot_wait_seconds=0,
+                observation_seconds=0, capture_interval_seconds=1,
+                resolution="640x480x15", steps=())
+            for game_id in ("bugdom", "future-cop", "weekend-warrior")
+        ]
+        self.assertEqual(
+            [spec.game_id for spec in SWEEP.select_game_specs(
+                specs, SWEEP.parse_game_ids("weekend-warrior,bugdom"))],
+            ["bugdom", "weekend-warrior"])
+        with self.assertRaisesRegex(ValueError, "missing-game"):
+            SWEEP.select_game_specs(specs, ("missing-game",))
+        with self.assertRaises(argparse.ArgumentTypeError):
+            SWEEP.parse_game_ids("Bugdom")
+
     def test_qemu_guest_name_removes_option_delimiters(self):
         self.assertEqual(
             SWEEP.qemu_guest_name(
@@ -114,6 +144,12 @@ class ManifestValidationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "unknown or missing"):
             SWEEP.validate_step({"chord": "Command+o"}, "steps[0]")
 
+    def test_drag_coordinates_are_validated(self):
+        step = {"drag": [250, 68, 250, 20]}
+        self.assertEqual(SWEEP.validate_step(step, "steps[0]"), step)
+        with self.assertRaisesRegex(ValueError, "start_x"):
+            SWEEP.validate_step({"drag": [250, -1, 250, 20]}, "steps[0]")
+
     def test_frame_change_wait_is_validated(self):
         step = {
             "wait_for_frame_change": {
@@ -133,6 +169,26 @@ class ManifestValidationTests(unittest.TestCase):
                 }
             }, "steps[0]")
 
+    def test_pixel_wait_is_validated(self):
+        step = {
+            "wait_for_pixel": {
+                "x": 324,
+                "y": 140,
+                "red": 248,
+                "green": 248,
+                "blue": 0,
+                "tolerance": 8,
+                "timeout_seconds": 240,
+                "poll_interval_seconds": 1,
+            },
+            "capture_after": True,
+        }
+        self.assertEqual(SWEEP.validate_step(step, "steps[0]"), step)
+        invalid = dict(step["wait_for_pixel"], red=256)
+        with self.assertRaisesRegex(ValueError, "red must be an integer"):
+            SWEEP.validate_step(
+                {"wait_for_pixel": invalid}, "steps[0]")
+
     def test_changed_pixel_fraction_uses_channel_tolerance(self):
         previous = bytes((10, 20, 30, 40, 50, 60))
         current = bytes((11, 21, 31, 40, 50, 70))
@@ -140,6 +196,88 @@ class ManifestValidationTests(unittest.TestCase):
             SWEEP.changed_pixel_fraction(previous, current, 3), 0.5)
         self.assertEqual(
             SWEEP.changed_pixel_fraction(previous, current, 10), 0.0)
+
+    def test_dominant_color_assertion_is_validated(self):
+        step = {
+            "assert_dominant_color_fraction_below": {
+                "maximum": 0.1,
+                "ignore_colors": [[0, 0, 0]],
+            }
+        }
+        self.assertEqual(SWEEP.validate_step(step, "steps[0]"), step)
+        with self.assertRaisesRegex(ValueError, "must not exceed 1"):
+            SWEEP.validate_step({
+                "assert_dominant_color_fraction_below": {"maximum": 1.1}
+            }, "steps[0]")
+        with self.assertRaisesRegex(ValueError, "RGB integer triplets"):
+            SWEEP.validate_step({
+                "assert_dominant_color_fraction_below": {
+                    "maximum": 0.1,
+                    "ignore_colors": [[0, 0, 256]],
+                }
+            }, "steps[0]")
+
+    def test_dominant_exact_color_fraction_can_ignore_colors(self):
+        rgb = bytes((1, 2, 3, 1, 2, 3, 4, 5, 6, 0, 0, 0))
+        self.assertEqual(
+            SWEEP.dominant_exact_color_fraction(rgb),
+            ((1, 2, 3), 0.5))
+        self.assertEqual(
+            SWEEP.dominant_exact_color_fraction(
+                rgb, ((1, 2, 3),)),
+            ((4, 5, 6), 0.25))
+        self.assertEqual(
+            SWEEP.dominant_exact_color_fraction(
+                bytes((0, 0, 0)), ((0, 0, 0),)),
+            (None, 0.0))
+
+    def test_color_range_assertion_is_validated(self):
+        step = {
+            "assert_color_range_fraction_below": {
+                "minimum_rgb": [224, 224, 208],
+                "maximum_rgb": [255, 255, 255],
+                "maximum_fraction": 0.1,
+            }
+        }
+        self.assertEqual(SWEEP.validate_step(step, "steps[0]"), step)
+        with self.assertRaisesRegex(ValueError, "must not exceed 1"):
+            SWEEP.validate_step({
+                "assert_color_range_fraction_below": {
+                    "minimum_rgb": [224, 224, 208],
+                    "maximum_rgb": [255, 255, 255],
+                    "maximum_fraction": 1.1,
+                }
+            }, "steps[0]")
+        with self.assertRaisesRegex(ValueError, "minimum_rgb must not"):
+            SWEEP.validate_step({
+                "assert_color_range_fraction_below": {
+                    "minimum_rgb": [255, 224, 208],
+                    "maximum_rgb": [224, 255, 255],
+                    "maximum_fraction": 0.1,
+                }
+            }, "steps[0]")
+
+    def test_color_range_fraction_is_inclusive(self):
+        rgb = bytes((
+            223, 224, 208,
+            224, 224, 208,
+            240, 240, 224,
+            255, 255, 255,
+            255, 255, 254,
+        ))
+        self.assertEqual(
+            SWEEP.color_range_fraction(
+                rgb, (224, 224, 208), (255, 255, 254)),
+            0.6)
+
+    def test_rgb_pixel_match_uses_tolerance_and_checks_bounds(self):
+        rgb = bytes((10, 20, 30, 40, 50, 60))
+        self.assertTrue(SWEEP.rgb_pixel_matches(
+            rgb, 2, 1, 1, 0, (42, 48, 60), 2))
+        self.assertFalse(SWEEP.rgb_pixel_matches(
+            rgb, 2, 1, 0, 0, (10, 20, 34), 3))
+        with self.assertRaisesRegex(ValueError, "outside 2x1 frame"):
+            SWEEP.rgb_pixel_matches(rgb, 2, 1, 2, 0, (0, 0, 0), 0)
 
 
 if __name__ == "__main__":

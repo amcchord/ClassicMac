@@ -62,10 +62,19 @@ static void test_context_clear_and_triangle(void)
 {
     uint8_t framebuffer[32 * 32 * 2] = {0};
     uint8_t packet[128];
+    uint8_t *shared;
     GXMetalRenderer renderer;
     uint8_t *vertices;
 
+    shared = calloc(1, GXMETAL_UPLOAD_OFFSET + sizeof(framebuffer));
+    CHECK(shared != NULL);
+    if (shared == NULL) {
+        return;
+    }
     gxmetal_renderer_init(&renderer, framebuffer, sizeof(framebuffer));
+    gxmetal_renderer_set_shared(&renderer, shared,
+                                GXMETAL_UPLOAD_OFFSET +
+                                    sizeof(framebuffer));
     make_packet(packet, GXMETAL_OP_CONTEXT_CREATE,
                 GXMETAL_CONTEXT_CREATE_PACKET_BYTES, 1);
     gxmetal_store_le32(packet + 16 + GXMETAL_CONTEXT_WIDTH_OFFSET, 32);
@@ -123,6 +132,27 @@ static void test_context_clear_and_triangle(void)
     CHECK(dispatch_packet(&renderer, packet, 96) == GXMETAL_ERROR_NONE);
     CHECK(framebuffer[(30 * 32 + 0) * 2] == 0x7c);
     CHECK(framebuffer[(30 * 32 + 31) * 2] == 0x7c);
+
+    make_packet(packet, GXMETAL_OP_READBACK,
+                GXMETAL_READBACK_PACKET_BYTES, 1);
+    gxmetal_store_le32(packet + 16 +
+                       GXMETAL_READBACK_SHARED_OFFSET_OFFSET,
+                       GXMETAL_UPLOAD_OFFSET);
+    gxmetal_store_le32(packet + 16 + GXMETAL_READBACK_LENGTH_OFFSET,
+                       sizeof(framebuffer));
+    gxmetal_store_le32(packet + 16 + GXMETAL_READBACK_ROW_BYTES_OFFSET,
+                       64);
+    CHECK(dispatch_packet(&renderer, packet,
+                          GXMETAL_READBACK_PACKET_BYTES) ==
+          GXMETAL_ERROR_NONE);
+    CHECK(memcmp(shared + GXMETAL_UPLOAD_OFFSET, framebuffer,
+                 sizeof(framebuffer)) == 0);
+    gxmetal_store_le32(packet + 16 + GXMETAL_READBACK_ROW_BYTES_OFFSET,
+                       32);
+    CHECK(dispatch_packet(&renderer, packet,
+                          GXMETAL_READBACK_PACKET_BYTES) ==
+          GXMETAL_ERROR_BAD_PACKET);
+    free(shared);
 }
 
 static void test_rejects_framebuffer_overflow(void)

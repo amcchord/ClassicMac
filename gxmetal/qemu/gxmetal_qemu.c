@@ -266,6 +266,8 @@ bool gxmetal_qemu_init(GXMetalQemuState *state, Object *owner,
     state->console_refresh_timer = timer_new_ns(
         QEMU_CLOCK_REALTIME, gxmetal_console_refresh, state);
     gxmetal_renderer_init(&state->renderer, framebuffer, framebuffer_bytes);
+    gxmetal_renderer_set_shared(&state->renderer, shared,
+                                GXMETAL_SHARED_BYTES);
     gxmetal_dirty_init(&state->dirty, framebuffer_bytes);
     state->guest_cursor_visible = true;
     state->metal = gxmetal_metal_create(framebuffer, framebuffer_bytes,
@@ -288,9 +290,15 @@ bool gxmetal_qemu_init(GXMetalQemuState *state, Object *owner,
                            GXMETAL_FEATURE_INTENSITY_FORMATS |
                            GXMETAL_FEATURE_ALPHA1_FORMAT |
                            GXMETAL_FEATURE_RGB332_FORMAT |
-                           GXMETAL_FEATURE_CHROMAKEY;
+                           GXMETAL_FEATURE_CHROMAKEY |
+                           GXMETAL_FEATURE_WRITE_MASKS |
+                           GXMETAL_FEATURE_ACCESS_DRAW_BUFFER |
+                           GXMETAL_FEATURE_DEEP_Z |
+                           GXMETAL_FEATURE_REGION_CLIP |
+                           GXMETAL_FEATURE_RGB24_FORMAT;
     } else {
-        state->features |= GXMETAL_FEATURE_TRACE;
+        state->features |= GXMETAL_FEATURE_ACCESS_DRAW_BUFFER |
+                           GXMETAL_FEATURE_TRACE;
     }
     gxmetal_queue_init(&state->queue, shared, GXMETAL_SHARED_BYTES,
                        GXMETAL_RING_OFFSET, GXMETAL_RING_BYTES,

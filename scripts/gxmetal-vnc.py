@@ -200,6 +200,22 @@ class RFBClient:
         self.move_to(x, y)
         self.click_buttons(x, y, 2)
 
+    def drag(self, start_x, start_y, end_x, end_y):
+        self.move_to(start_x, start_y)
+        self.pointer_event(start_x, start_y, 1)
+        delta_x = end_x - start_x
+        delta_y = end_y - start_y
+        distance = max(abs(delta_x), abs(delta_y))
+        for step in range(1, distance + 1):
+            fraction = step / distance
+            x = round(start_x + delta_x * fraction)
+            y = round(start_y + delta_y * fraction)
+            self.pointer_event(x, y, 1)
+            time.sleep(0.002)
+        self.pointer_event(end_x, end_y)
+        self.pointer_x = end_x
+        self.pointer_y = end_y
+
     def capture(self):
         def request_full_update():
             self.connection.sendall(struct.pack(">BBHHHH", 3, 0, 0, 0,
@@ -285,6 +301,51 @@ def parse_click(value):
             "click must be formatted as X,Y") from error
 
 
+def parse_pixel(value):
+    try:
+        fields = [int(field) for field in value.split(",")]
+    except ValueError as error:
+        raise argparse.ArgumentTypeError(
+            "pixel must contain integer fields") from error
+    if len(fields) not in (5, 6):
+        raise argparse.ArgumentTypeError(
+            "pixel must be formatted as X,Y,R,G,B[,TOLERANCE]")
+    x, y, red, green, blue = fields[:5]
+    tolerance = fields[5] if len(fields) == 6 else 8
+    if x < 0 or y < 0:
+        raise argparse.ArgumentTypeError(
+            "pixel coordinates must be nonnegative")
+    if any(channel < 0 or channel > 255
+           for channel in (red, green, blue, tolerance)):
+        raise argparse.ArgumentTypeError(
+            "pixel channels and tolerance must be from 0 through 255")
+    return x, y, red, green, blue, tolerance
+
+
+def wait_for_pixel(client, settings, timeout, poll_interval):
+    x, y, red, green, blue, tolerance = settings
+    target = (red, green, blue)
+    deadline = time.monotonic() + timeout
+    while True:
+        rgb = client.capture()
+        if x >= client.width or y >= client.height:
+            raise RuntimeError(
+                "pixel coordinate (%d, %d) is outside %dx%d framebuffer" %
+                (x, y, client.width, client.height))
+        offset = (y * client.width + x) * 3
+        actual = tuple(rgb[offset:offset + 3])
+        if all(abs(actual[channel] - target[channel]) <= tolerance
+               for channel in range(3)):
+            return actual
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise RuntimeError(
+                "timed out waiting for pixel (%d, %d) to match %s "
+                "within tolerance %d; last value was %s" %
+                (x, y, target, tolerance, actual))
+        time.sleep(min(poll_interval, remaining))
+
+
 def main():
     parser = argparse.ArgumentParser()
     endpoint = parser.add_mutually_exclusive_group(required=True)
@@ -296,10 +357,17 @@ def main():
                         default=[])
     parser.add_argument("--double-click", action="append", type=parse_click,
                         default=[])
+    parser.add_argument("--wait-for-pixel", type=parse_pixel)
+    parser.add_argument("--timeout", type=float, default=60.0)
+    parser.add_argument("--poll-interval", type=float, default=1.0)
     parser.add_argument("--hold-ms", type=int, default=150)
     parser.add_argument("--delay", type=float, default=0.0)
     parser.add_argument("--screenshot")
     args = parser.parse_args()
+    if args.timeout <= 0:
+        parser.error("--timeout must be positive")
+    if args.poll_interval <= 0:
+        parser.error("--poll-interval must be positive")
 
     if args.unix_socket:
         connection = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -315,6 +383,12 @@ def main():
     try:
         client = RFBClient(connection)
         client.connect()
+        if args.wait_for_pixel:
+            actual = wait_for_pixel(
+                client, args.wait_for_pixel, args.timeout,
+                args.poll_interval)
+            print("pixel detected: (%d, %d) = %s" %
+                  (args.wait_for_pixel[0], args.wait_for_pixel[1], actual))
         for chord in args.chord:
             client.chord(chord, args.hold_ms / 1000.0)
         for key in args.key:

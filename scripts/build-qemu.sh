@@ -159,13 +159,25 @@ if [ -n "${QFB_BUILD_ROM:-}" ]; then
   "$ROOT_DIR/scripts/build-qfb-rom.sh"
 fi
 
-# Same pattern for the PPC video driver: set PPCVID_BUILD_NDRV=1 to regenerate
-# ppcvid/qemu_vga.ndrv from the driver sources in ppcvid/driver (needs the
-# Retro68 PPC toolchain plus the Universal Interfaces; see the script).
-if [ -n "${PPCVID_BUILD_NDRV:-}" ]; then
-  log "PPCVID_BUILD_NDRV set: rebuilding ppcvid/qemu_vga.ndrv from ppcvid/driver"
+# The PowerPC video NDRV publishes GXMetal's PCI BAR layout to Mac OS and must
+# therefore be rebuilt whenever the shared protocol header changes. A checked
+# stamp keeps ordinary QEMU builds fast while preventing a stale committed
+# NDRV from silently disabling RAVE after a protocol/layout bump.
+GXMETAL_PROTOCOL_SHA="$(shasum -a 256 \
+  "$GXMETAL_DIR/protocol/gxmetal_protocol.h" | awk '{ print $1 }')"
+PPCVID_PROTOCOL_STAMP="$PPCVID_DIR/qemu_vga.ndrv.gxmetal-protocol.sha256"
+PPCVID_PROTOCOL_SHA="$(sed -n '1p' "$PPCVID_PROTOCOL_STAMP" 2>/dev/null || true)"
+if [ -n "${PPCVID_BUILD_NDRV:-}" ] || \
+   [ ! -f "$PPCVID_DIR/qemu_vga.ndrv" ] || \
+   [ "$PPCVID_PROTOCOL_SHA" != "$GXMETAL_PROTOCOL_SHA" ]; then
+  log "Rebuilding ppcvid/qemu_vga.ndrv for the current GXMetal protocol"
   "$ROOT_DIR/scripts/build-ppcvid-ndrv.sh"
 fi
+[ -f "$PPCVID_DIR/qemu_vga.ndrv" ] || \
+  die "ppcvid/qemu_vga.ndrv was not produced"
+[ "$(sed -n '1p' "$PPCVID_PROTOCOL_STAMP" 2>/dev/null || true)" = \
+  "$GXMETAL_PROTOCOL_SHA" ] || \
+  die "ppcvid/qemu_vga.ndrv protocol stamp is stale"
 
 # Rebuild the classicvirtio declaration ROM and PowerPC NDRV loader when
 # requested. This uses the same Retro68 toolchain.

@@ -34,8 +34,10 @@ SCHEMA_VERSION = 1
 VALID_MODES = ("gxmetal", "software")
 ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
 STEP_ACTIONS = (
-    "wait", "wait_for_frame_change", "click", "double_click", "key",
-    "chord", "text", "screenshot", "note",
+    "wait", "wait_for_frame_change", "wait_for_pixel", "click",
+    "double_click", "drag", "key", "chord", "text", "screenshot",
+    "assert_dominant_color_fraction_below",
+    "assert_color_range_fraction_below", "note",
 )
 # Keep these names synchronized with scripts/gxmetal-vnc.py. Single printable
 # characters are accepted independently for ordinary text keys.
@@ -181,11 +183,126 @@ def validate_step(step: Any, field: str) -> dict[str, Any]:
             raise ValueError(
                 f"{field}.wait_for_frame_change.minimum_changed_fraction "
                 "must not exceed 1")
+    elif action == "wait_for_pixel":
+        if not isinstance(value, dict):
+            raise ValueError(f"{field}.wait_for_pixel must be an object")
+        unknown_pixel_fields = set(value) - {
+            "x", "y", "red", "green", "blue", "tolerance",
+            "timeout_seconds", "poll_interval_seconds",
+        }
+        if unknown_pixel_fields:
+            raise ValueError(
+                f"{field}.wait_for_pixel has unknown fields: "
+                f"{sorted(unknown_pixel_fields)}")
+        for coordinate in ("x", "y"):
+            coordinate_value = value.get(coordinate)
+            if (isinstance(coordinate_value, bool) or
+                    not isinstance(coordinate_value, int) or
+                    coordinate_value < 0):
+                raise ValueError(
+                    f"{field}.wait_for_pixel.{coordinate} must be a "
+                    "nonnegative integer")
+        for channel in ("red", "green", "blue"):
+            channel_value = value.get(channel)
+            if (isinstance(channel_value, bool) or
+                    not isinstance(channel_value, int) or
+                    channel_value < 0 or channel_value > 255):
+                raise ValueError(
+                    f"{field}.wait_for_pixel.{channel} must be an integer "
+                    "from 0 through 255")
+        tolerance = value.get("tolerance", 8)
+        if (isinstance(tolerance, bool) or not isinstance(tolerance, int) or
+                tolerance < 0 or tolerance > 255):
+            raise ValueError(
+                f"{field}.wait_for_pixel.tolerance must be an integer "
+                "from 0 through 255")
+        timeout = number(
+            value.get("timeout_seconds"),
+            f"{field}.wait_for_pixel.timeout_seconds", positive=True)
+        poll_interval = number(
+            value.get("poll_interval_seconds", 1),
+            f"{field}.wait_for_pixel.poll_interval_seconds", positive=True)
+        if timeout < poll_interval:
+            raise ValueError(
+                f"{field}.wait_for_pixel timeout must be at least the "
+                "poll interval")
+    elif action == "assert_dominant_color_fraction_below":
+        if not isinstance(value, dict):
+            raise ValueError(
+                f"{field}.assert_dominant_color_fraction_below must be "
+                "an object")
+        unknown_assertion_fields = set(value) - {"maximum", "ignore_colors"}
+        if unknown_assertion_fields:
+            raise ValueError(
+                f"{field}.assert_dominant_color_fraction_below has unknown "
+                f"fields: {sorted(unknown_assertion_fields)}")
+        maximum = number(
+            value.get("maximum"),
+            f"{field}.assert_dominant_color_fraction_below.maximum",
+            positive=True)
+        if maximum > 1:
+            raise ValueError(
+                f"{field}.assert_dominant_color_fraction_below.maximum "
+                "must not exceed 1")
+        ignore_colors = value.get("ignore_colors", [])
+        if (not isinstance(ignore_colors, list) or any(
+                not isinstance(color, list) or len(color) != 3 or
+                any(isinstance(channel, bool) or
+                    not isinstance(channel, int) or channel < 0 or
+                    channel > 255 for channel in color)
+                for color in ignore_colors)):
+            raise ValueError(
+                f"{field}.assert_dominant_color_fraction_below.ignore_colors "
+                "must contain RGB integer triplets")
+    elif action == "assert_color_range_fraction_below":
+        if not isinstance(value, dict):
+            raise ValueError(
+                f"{field}.assert_color_range_fraction_below must be "
+                "an object")
+        unknown_assertion_fields = set(value) - {
+            "minimum_rgb", "maximum_rgb", "maximum_fraction",
+        }
+        if unknown_assertion_fields:
+            raise ValueError(
+                f"{field}.assert_color_range_fraction_below has unknown "
+                f"fields: {sorted(unknown_assertion_fields)}")
+        maximum_fraction = number(
+            value.get("maximum_fraction"),
+            f"{field}.assert_color_range_fraction_below.maximum_fraction",
+            positive=True)
+        if maximum_fraction > 1:
+            raise ValueError(
+                f"{field}.assert_color_range_fraction_below."
+                "maximum_fraction must not exceed 1")
+        minimum_rgb = value.get("minimum_rgb")
+        maximum_rgb = value.get("maximum_rgb")
+        for name, color in (("minimum_rgb", minimum_rgb),
+                            ("maximum_rgb", maximum_rgb)):
+            if (not isinstance(color, list) or len(color) != 3 or
+                    any(isinstance(channel, bool) or
+                        not isinstance(channel, int) or channel < 0 or
+                        channel > 255 for channel in color)):
+                raise ValueError(
+                    f"{field}.assert_color_range_fraction_below.{name} "
+                    "must be an RGB integer triplet")
+        if any(minimum_rgb[channel] > maximum_rgb[channel]
+               for channel in range(3)):
+            raise ValueError(
+                f"{field}.assert_color_range_fraction_below minimum_rgb "
+                "must not exceed maximum_rgb")
     elif action in ("click", "double_click"):
         if (not isinstance(value, list) or len(value) != 2 or
                 any(isinstance(item, bool) or not isinstance(item, int)
-                    for item in value)):
-            raise ValueError(f"{field}.click must be [x, y] integers")
+                    or item < 0 for item in value)):
+            raise ValueError(
+                f"{field}.{action} must be nonnegative [x, y] integers")
+    elif action == "drag":
+        if (not isinstance(value, list) or len(value) != 4 or
+                any(isinstance(item, bool) or not isinstance(item, int)
+                    or item < 0 for item in value)):
+            raise ValueError(
+                f"{field}.drag must be nonnegative "
+                "[start_x, start_y, end_x, end_y] integers")
     elif not isinstance(value, str) or not value:
         raise ValueError(f"{field}.{action} must be a nonempty string")
     elif action == "key" and not (
@@ -479,6 +596,59 @@ def changed_pixel_fraction(previous: bytes, current: bytes,
     return changed / pixel_count
 
 
+def rgb_pixel_matches(rgb: bytes, width: int, height: int, x: int, y: int,
+                      target: tuple[int, int, int], tolerance: int) -> bool:
+    """Return whether one RGB frame pixel is within per-channel tolerance."""
+    if width <= 0 or height <= 0 or len(rgb) != width * height * 3:
+        raise ValueError("RGB frame dimensions do not match its byte length")
+    if x < 0 or x >= width or y < 0 or y >= height:
+        raise ValueError(
+            f"pixel coordinate ({x}, {y}) is outside {width}x{height} frame")
+    offset = (y * width + x) * 3
+    actual = rgb[offset:offset + 3]
+    return all(abs(actual[channel] - target[channel]) <= tolerance
+               for channel in range(3))
+
+
+def dominant_exact_color_fraction(
+    rgb: bytes, ignored_colors: tuple[tuple[int, int, int], ...] = ()
+) -> tuple[tuple[int, int, int] | None, float]:
+    """Return the most common exact RGB color and its whole-frame fraction."""
+    if len(rgb) % 3 != 0:
+        raise ValueError("RGB frame must contain whole pixels")
+    pixel_count = len(rgb) // 3
+    if pixel_count == 0:
+        return None, 0.0
+    ignored = set(ignored_colors)
+    counts: dict[tuple[int, int, int], int] = {}
+    for offset in range(0, len(rgb), 3):
+        color = (rgb[offset], rgb[offset + 1], rgb[offset + 2])
+        if color not in ignored:
+            counts[color] = counts.get(color, 0) + 1
+    if not counts:
+        return None, 0.0
+    color, count = max(counts.items(), key=lambda item: item[1])
+    return color, count / pixel_count
+
+
+def color_range_fraction(
+    rgb: bytes, minimum: tuple[int, int, int],
+    maximum: tuple[int, int, int]
+) -> float:
+    """Return the whole-frame fraction inside an inclusive RGB box."""
+    if len(rgb) % 3 != 0:
+        raise ValueError("RGB frame must contain whole pixels")
+    pixel_count = len(rgb) // 3
+    if pixel_count == 0:
+        return 0.0
+    matched = 0
+    for offset in range(0, len(rgb), 3):
+        if all(minimum[channel] <= rgb[offset + channel] <= maximum[channel]
+               for channel in range(3)):
+            matched += 1
+    return matched / pixel_count
+
+
 def captured_command(command: list[str], cwd: Path) -> dict[str, Any]:
     result = subprocess.run(command, cwd=cwd, text=True,
                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
@@ -601,6 +771,92 @@ def execute_run(
         raise RuntimeError(
             f"timed out waiting {timeout:g}s for a material frame change")
 
+    def wait_for_pixel(settings: dict[str, Any], label: str) -> None:
+        if client is None:
+            return
+        x = int(settings["x"])
+        y = int(settings["y"])
+        target = (int(settings["red"]), int(settings["green"]),
+                  int(settings["blue"]))
+        tolerance = int(settings.get("tolerance", 8))
+        timeout = float(settings["timeout_seconds"])
+        poll_interval = float(settings.get("poll_interval_seconds", 1))
+        deadline = time.monotonic() + timeout
+        next_evidence = min(
+            deadline, time.monotonic() + spec.capture_interval_seconds)
+        while time.monotonic() < deadline:
+            if process is not None and process.poll() is not None:
+                raise RuntimeError(
+                    f"QEMU exited during {label} ({process.returncode})")
+            current = client.capture()
+            width = client.width
+            height = client.height
+            if rgb_pixel_matches(
+                    current, width, height, x, y, target, tolerance):
+                offset = (y * width + x) * 3
+                actual = tuple(current[offset:offset + 3])
+                capture_frame(f"{label}-detected", current, width, height)
+                events.write(
+                    "pixel_detected", label=label, x=x, y=y,
+                    target=target, actual=actual, tolerance=tolerance,
+                    width=width, height=height)
+                return
+            if time.monotonic() >= next_evidence:
+                capture_frame(label, current, width, height)
+                next_evidence += spec.capture_interval_seconds
+            time.sleep(min(poll_interval,
+                           max(0, deadline - time.monotonic())))
+        events.write(
+            "pixel_timeout", label=label, x=x, y=y, target=target,
+            tolerance=tolerance)
+        raise RuntimeError(
+            f"timed out waiting {timeout:g}s for pixel ({x}, {y}) to "
+            f"match {target} within tolerance {tolerance}")
+
+    def assert_dominant_color_fraction_below(
+            settings: dict[str, Any], label: str) -> None:
+        if client is None:
+            return
+        maximum = float(settings["maximum"])
+        ignored = tuple(tuple(color)
+                        for color in settings.get("ignore_colors", []))
+        current = client.capture()
+        width = client.width
+        height = client.height
+        color, fraction = dominant_exact_color_fraction(current, ignored)
+        capture_frame(label, current, width, height)
+        events.write(
+            "dominant_color_assertion", label=label, color=color,
+            fraction=round(fraction, 6), maximum=maximum,
+            ignored_colors=ignored, width=width, height=height,
+            passed=fraction < maximum)
+        if fraction >= maximum:
+            raise RuntimeError(
+                "dominant exact color fraction "
+                f"{fraction:.6f} for {color} is not below {maximum:.6f}")
+
+    def assert_color_range_fraction_below(
+            settings: dict[str, Any], label: str) -> None:
+        if client is None:
+            return
+        minimum = tuple(int(channel) for channel in settings["minimum_rgb"])
+        maximum = tuple(int(channel) for channel in settings["maximum_rgb"])
+        maximum_fraction = float(settings["maximum_fraction"])
+        current = client.capture()
+        width = client.width
+        height = client.height
+        fraction = color_range_fraction(current, minimum, maximum)
+        capture_frame(label, current, width, height)
+        events.write(
+            "color_range_assertion", label=label, minimum_rgb=minimum,
+            maximum_rgb=maximum, fraction=round(fraction, 6),
+            maximum_fraction=maximum_fraction, width=width, height=height,
+            passed=fraction < maximum_fraction)
+        if fraction >= maximum_fraction:
+            raise RuntimeError(
+                f"color range fraction {fraction:.6f} for {minimum}.."
+                f"{maximum} is not below {maximum_fraction:.6f}")
+
     try:
         events.write("clone_started", source=str(source_disk))
         clone_method = clone_disk(source_disk, clone)
@@ -645,10 +901,14 @@ def execute_run(
             elif action == "wait_for_frame_change":
                 wait_for_frame_change(
                     value, f"step-{index:02d}-frame-change")
+            elif action == "wait_for_pixel":
+                wait_for_pixel(value, f"step-{index:02d}-pixel")
             elif action == "click":
                 client.click(value[0], value[1])
             elif action == "double_click":
                 client.double_click(value[0], value[1])
+            elif action == "drag":
+                client.drag(value[0], value[1], value[2], value[3])
             elif action == "key":
                 client.key(value, float(step.get("hold_ms", 150)) / 1000.0)
             elif action == "chord":
@@ -659,13 +919,19 @@ def execute_run(
                     client.key(character, hold)
             elif action == "screenshot":
                 capture(value)
+            elif action == "assert_dominant_color_fraction_below":
+                assert_dominant_color_fraction_below(
+                    value, f"step-{index:02d}-dominant-color")
+            elif action == "assert_color_range_fraction_below":
+                assert_color_range_fraction_below(
+                    value, f"step-{index:02d}-color-range")
             elif action == "note":
                 pass
             if step.get("capture_after", False):
                 capture(f"step-{index:02d}-{action}")
             delay_after = float(step.get("delay_after", 0.25 if action in
-                                        ("click", "double_click", "key", "chord",
-                                         "text") else 0))
+                                        ("click", "double_click", "drag",
+                                         "key", "chord", "text") else 0))
             if delay_after:
                 wait_and_capture(delay_after, f"step-{index:02d}-delay")
 
@@ -752,6 +1018,31 @@ def parse_modes(value: str) -> tuple[str, ...]:
     return tuple(dict.fromkeys(modes))
 
 
+def parse_game_ids(value: str) -> tuple[str, ...]:
+    game_ids = tuple(part.strip() for part in value.split(",") if part.strip())
+    invalid = [game_id for game_id in game_ids
+               if ID_PATTERN.fullmatch(game_id) is None]
+    if not game_ids or invalid:
+        raise argparse.ArgumentTypeError(
+            "games must be comma-separated manifest ids matching "
+            f"{ID_PATTERN.pattern}")
+    return tuple(dict.fromkeys(game_ids))
+
+
+def select_game_specs(specs: list[RunSpec],
+                      game_ids: tuple[str, ...] | None) -> list[RunSpec]:
+    if game_ids is None:
+        return specs
+    selected = [spec for spec in specs if spec.game_id in game_ids]
+    found = {spec.game_id for spec in selected}
+    missing = [game_id for game_id in game_ids if game_id not in found]
+    if missing:
+        raise ValueError(
+            "requested game ids are missing, disabled, or excluded by modes: "
+            + ", ".join(missing))
+    return selected
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Run parallel, isolated GXMetal game compatibility sessions")
@@ -773,6 +1064,8 @@ def main() -> int:
                         help="maximum simultaneous QEMU instances (default: 2)")
     parser.add_argument("--modes", type=parse_modes, default=("gxmetal",),
                         help="gxmetal, software, or gxmetal,software")
+    parser.add_argument("--games", type=parse_game_ids,
+                        help="comma-separated manifest ids to run")
     parser.add_argument("--ram-mb", type=int, default=512)
     parser.add_argument("--cpu", default="7400")
     parser.add_argument("--accel", default="tcg,tb-size=512")
@@ -818,7 +1111,8 @@ def main() -> int:
         parser.error("jobs, RAM, and start timeout must be positive")
 
     try:
-        specs = load_manifest(manifest, args.modes)
+        specs = select_game_specs(load_manifest(manifest, args.modes),
+                                  args.games)
     except (OSError, json.JSONDecodeError, ValueError) as error:
         parser.error(str(error))
 
@@ -827,6 +1121,7 @@ def main() -> int:
             "base_disk": str(source_disk),
             "manifest": str(manifest),
             "jobs": args.jobs,
+            "games": args.games,
             "runs": [
                 {
                     "run_id": spec.run_id,
@@ -877,6 +1172,7 @@ def main() -> int:
         "tools_cd": file_record(tools_cd) if tools_cd else None,
         "media": media_records,
         "jobs": args.jobs,
+        "games": args.games,
         "modes": args.modes,
         "runs": [spec.run_id for spec in specs],
         "host": {

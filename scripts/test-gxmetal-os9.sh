@@ -26,7 +26,9 @@ NDRVLOADER="$APP/Contents/Resources/ndrvloader"
 SCRATCH=""
 DISK=""
 MONITOR=""
+VNC=""
 QEMU_PID=""
+VNC_HELPER_PID=""
 ATTACH_DEVICE=""
 HFS_PARTITION=""
 MOUNT_POINT=""
@@ -48,6 +50,11 @@ cleanup() {
     kill "$QEMU_PID" >/dev/null 2>&1 || true
     wait "$QEMU_PID" >/dev/null 2>&1 || true
   fi
+  if [ -n "$VNC_HELPER_PID" ] && \
+     kill -0 "$VNC_HELPER_PID" >/dev/null 2>&1; then
+    kill "$VNC_HELPER_PID" >/dev/null 2>&1 || true
+    wait "$VNC_HELPER_PID" >/dev/null 2>&1 || true
+  fi
   if [ -n "$HFS_PARTITION" ]; then
     diskutil unmount "$HFS_PARTITION" >/dev/null 2>&1 || true
   fi
@@ -58,7 +65,7 @@ cleanup() {
 trap cleanup EXIT
 
 for tool in codesign cp diskutil ditto hcopy hmount humount mktemp nc plutil \
-            sips stat unar; do
+            python3 sips stat unar; do
   command -v "$tool" >/dev/null 2>&1 || die "Required tool not found: $tool"
 done
 [ -n "$SOURCE_DISK" ] || die "Pass a Mac OS 9 disk image or set OS9_DISK."
@@ -82,6 +89,7 @@ mkdir -p /tmp/gxmetal-validation
 SCRATCH="$(mktemp -d /tmp/gxmetal-validation/os9-signed-conformance-XXXXXX)"
 DISK="$SCRATCH/disk.img"
 MONITOR="$SCRATCH/monitor.sock"
+VNC="$SCRATCH/vnc.sock"
 
 log "Cloning the source disk without modifying it"
 if ! cp -c "$SOURCE_DISK" "$DISK" 2>/dev/null; then
@@ -196,6 +204,7 @@ fi
   -m 512 \
   -L "$APP/Contents/Resources/qemu/pc-bios" \
   -display none \
+  -vnc "unix:$VNC,share=force-shared" \
   -vga std \
   -global VGA.host-resize=on \
   -global VGA.vgamem_mb=64 \
@@ -208,6 +217,7 @@ fi
   -g 640x480x15 \
   -name "GXMetal Signed Bundle OS 9 Conformance" \
   -device "loader,addr=0x4000000,file=$NDRVLOADER" \
+  -device virtio-tablet-pci \
   -prom-env "boot-command=init-program go" \
   -audiodev none,id=snd0 \
   -monitor "unix:$MONITOR,server=on,wait=off" \
@@ -216,11 +226,39 @@ fi
   -nic none >"$SCRATCH/qemu.log" 2>&1 &
 QEMU_PID=$!
 
+for ((elapsed = 0; elapsed < 30; elapsed++)); do
+  kill -0 "$QEMU_PID" >/dev/null 2>&1 || \
+    die "QEMU exited before VNC became available; see $SCRATCH/qemu.log"
+  [ -S "$VNC" ] && break
+  sleep 1
+done
+[ -S "$VNC" ] || die "QEMU VNC socket was not created: $VNC"
+
+# A source image retained after a forced test shutdown can legitimately boot
+# into Mac OS 9's completed Disk First Aid warning. It blocks Startup Items,
+# so dismiss only after a pixel in the 640x480 completion message has become
+# black; the same location is grey while verification is still progressing.
+# On a clean image the helper simply times out while GXMetal Test proceeds.
+python3 "$ROOT_DIR/scripts/gxmetal-vnc.py" \
+  --unix-socket "$VNC" \
+  --wait-for-pixel 193,231,0,0,0,0 \
+  --timeout "$((WAIT_SECONDS > 15 ? WAIT_SECONDS - 15 : WAIT_SECONDS))" \
+  --poll-interval 1 \
+  --click 500,264 \
+  --delay 2 \
+  --screenshot "$SCRATCH/after-disk-first-aid.png" \
+  >"$SCRATCH/vnc-helper.log" 2>&1 &
+VNC_HELPER_PID=$!
+
 for ((elapsed = 0; elapsed < WAIT_SECONDS; elapsed++)); do
   kill -0 "$QEMU_PID" >/dev/null 2>&1 || \
     die "QEMU exited before the conformance wait completed; see $SCRATCH/qemu.log"
   sleep 1
 done
+if [ -n "$VNC_HELPER_PID" ]; then
+  wait "$VNC_HELPER_PID" >/dev/null 2>&1 || true
+  VNC_HELPER_PID=""
+fi
 [ -S "$MONITOR" ] || die "QEMU monitor was not created: $MONITOR"
 printf 'screendump %s\n' "$SCRATCH/final.ppm" | \
   nc -U "$MONITOR" >/dev/null || true

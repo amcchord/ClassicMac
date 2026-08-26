@@ -274,6 +274,7 @@ void gxmetal_guest_packet_commit(GXMetalGuestTransport *transport,
     case GXMETAL_OP_PRESENT:
     case GXMETAL_OP_END_FRAME:
     case GXMETAL_OP_FENCE:
+    case GXMETAL_OP_READBACK:
     case GXMETAL_OP_CONTEXT_CREATE:
     case GXMETAL_OP_CONTEXT_DESTROY:
     case GXMETAL_OP_TEXTURE_CREATE:

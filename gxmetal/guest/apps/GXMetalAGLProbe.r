@@ -14,7 +14,7 @@ resource 'FREF' (128, purgeable) {
 };
 
 resource 'BNDL' (128, purgeable) {
-    'GXMT',
+    'GXMA',
     0,
     {
         'ICN#', {
@@ -29,7 +29,7 @@ resource 'BNDL' (128, purgeable) {
 resource 'vers' (1) {
     2, 1, release, 3, verUS,
     "2.1.3",
-    "Install GXMetal 2.1.3"
+    "GXMetal AGL Probe 2.1.3"
 };
 
 resource 'cfrg' (0) {
@@ -38,7 +38,7 @@ resource 'cfrg' (0) {
         kDefaultStackSize, kNoAppSubFolder,
         kApplicationCFrag, kDataForkCFragLocator,
         kZeroOffset, kCFragGoesToEOF,
-        "Install GXMetal"
+        "GXMetal AGL Probe"
     }
 };
 
@@ -59,12 +59,12 @@ resource 'SIZE' (-1) {
     reserved,
     reserved,
     reserved,
-    256 * 1024,
-    256 * 1024
+    768 * 1024,
+    768 * 1024
 };
 
 resource 'ALRT' (128, purgeable) {
-    {50, 60, 220, 420},
+    {42, 48, 260, 432},
     128,
     {
         OK, visible, silent;
@@ -77,33 +77,7 @@ resource 'ALRT' (128, purgeable) {
 
 resource 'DITL' (128, purgeable) {
     {
-        {132, 270, 152, 346}, Button { enabled, "OK" };
-        {16, 64, 118, 342}, StaticText { disabled, "^0" };
-    }
-};
-
-resource 'DLOG' (129, purgeable) {
-    {0, 0, 190, 408},
-    dBoxProc,
-    invisible,
-    noGoAway,
-    0x0,
-    129,
-    "Install GXMetal",
-    centerMainScreen
-};
-
-resource 'DITL' (129, purgeable) {
-    {
-        {150, 312, 170, 392}, Button { enabled, "Install" };
-        {150, 220, 170, 300}, Button { enabled, "Cancel" };
-        {16, 16, 48, 48}, Icon { disabled, 128 };
-        {16, 64, 134, 392}, StaticText { disabled,
-            "GXMetal adds host-accelerated QuickDraw 3D RAVE to this "
-            "ClassicMac Power Mac. Apple Software RAVE remains available "
-            "as a safe fallback.\n\n"
-            "Install or update GXMetal, its startup icon, and automatic "
-            "game mouse capture? Restart required."
-        };
+        {174, 292, 194, 368}, Button { enabled, "OK" };
+        {16, 32, 158, 352}, StaticText { disabled, "^0" };
     }
 };

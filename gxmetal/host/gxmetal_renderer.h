@@ -27,11 +27,15 @@ typedef struct GXMetalRenderContext {
 typedef struct GXMetalRenderer {
     uint8_t *framebuffer;
     uint32_t framebuffer_bytes;
+    uint8_t *shared;
+    uint32_t shared_bytes;
     GXMetalRenderContext contexts[GXMETAL_RENDERER_MAX_CONTEXTS];
 } GXMetalRenderer;
 
 void gxmetal_renderer_init(GXMetalRenderer *renderer, void *framebuffer,
                            uint32_t framebuffer_bytes);
+void gxmetal_renderer_set_shared(GXMetalRenderer *renderer, void *shared,
+                                 uint32_t shared_bytes);
 void gxmetal_renderer_reset(GXMetalRenderer *renderer);
 uint32_t gxmetal_renderer_dispatch(void *opaque,
                                    const GXMetalPacketView *packet);

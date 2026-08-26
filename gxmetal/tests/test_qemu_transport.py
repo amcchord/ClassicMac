@@ -208,7 +208,7 @@ def test_bar_layout(qemu):
     device = find_qemu_vga(replies)
     regions = {region["bar"]: region for region in device["regions"]}
     assert regions[2]["size"] == 0x1000
-    assert regions[4]["size"] == 0x400000
+    assert regions[4]["size"] == 0x800000
     assert regions[4]["prefetch"] is True
 
 

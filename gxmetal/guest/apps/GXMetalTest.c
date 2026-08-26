@@ -321,6 +321,10 @@ static void GXMetalRecordDiagnosticSnapshot(
     GXMETAL_DIAGNOSTIC_FIELD(" sel=", snapshot->last_gestalt_selector);
     GXMETAL_DIAGNOSTIC_FIELD(" reject=", snapshot->display_reject_reason);
     GXMETAL_DIAGNOSTIC_FIELD(" ctxn=", snapshot->draw_private_new_count);
+    GXMETAL_DIAGNOSTIC_FIELD(" ctxok=",
+                             snapshot->draw_private_new_success_count);
+    GXMETAL_DIAGNOSTIC_FIELD(" ctxdel=",
+                             snapshot->draw_private_delete_count);
     GXMETAL_DIAGNOSTIC_FIELD(" flags=", snapshot->context_flags);
     GXMETAL_DIAGNOSTIC_FIELD(" err=", snapshot->context_error);
     GXMETAL_DIAGNOSTIC_FIELD(" cw=", snapshot->context_width);
@@ -1114,16 +1118,22 @@ static TQAError GXMetalRenderATITextureMutation(
     QASetInt(context, kQATag_ZFunction, kQAZFunction_None);
     QASetInt(context, kQATag_ZBufferMask, kQAZBufferMask_Disable);
     QASetInt(context, kQATag_Blend, kQABlend_Interpolate);
+    /* Apple's ATI OpenGL renderer binds the primary unit through the
+     * multitexture pointer tag after selecting RAVE's -1 primary sentinel.
+     * Exercise that exact path so validation cannot silently redirect every
+     * primary OpenGL texture to GXMetal's secondary stage. */
+    QASetInt(context, (TQATagInt)GXMETAL_ATI_PRIVATE_ENABLE_TAG, 1);
+    QASetInt(context, kQATag_MultiTextureCurrent, (unsigned long)-1L);
+    QASetPtr(context, kQATag_MultiTexture, staticTexture);
     QASetInt(context, kQATag_TextureFilter, kQATextureFilter_Fast);
     QASetInt(context, kQATag_TextureOp, kQATextureOp_None);
     QASetInt(context, kQATagGL_TextureWrapU, kQAGL_Clamp);
     QASetInt(context, kQATagGL_TextureWrapV, kQAGL_Clamp);
 
     QARenderStart(context, &dirty, NULL);
-    QASetPtr(context, kQATag_Texture, staticTexture);
     QADrawVTexture(context, 4, kQAVertexMode_Strip,
                    leftQuad, vertexFlags);
-    QASetPtr(context, kQATag_Texture, liveTexture);
+    QASetPtr(context, kQATag_MultiTexture, liveTexture);
     QADrawVTexture(context, 4, kQAVertexMode_Strip,
                    rightQuad, vertexFlags);
     error = QARenderEnd(context, &dirty);
@@ -1146,6 +1156,7 @@ static TQAError GXMetalRenderATITextureMutation(
         GXMetalRecordResult("FAIL: ATI NoCopy texture did not refresh");
         error = kQAError;
     }
+    QASetInt(context, (TQATagInt)GXMETAL_ATI_PRIVATE_ENABLE_TAG, 0);
     QATextureDelete(engine, liveTexture);
     QATextureDelete(engine, staticTexture);
     return error;
@@ -1791,6 +1802,121 @@ static TQAError GXMetalRenderRGB332Format(
     return error;
 }
 
+static TQAError GXMetalRenderRGB24Format(
+    TQADrawContext *context, const TQAEngine *engine,
+    GDHandle graphicsDevice, const TQARect *deviceRect)
+{
+    /* RGB24 is a packed three-byte R, G, B stream. The final three bytes are
+     * row padding and must never become a fourth texel. This format is marked
+     * Win32-only in RAVE.h, but Apple's ATI OpenGL bridge uses it on Mac OS 9
+     * for GL_RGB/UNSIGNED_BYTE texture images. */
+    static unsigned char pixels[12] = {
+        0xff, 0x00, 0x00, 0x00, 0xff, 0x00, 0x00, 0x00, 0xff,
+        0xff, 0xff, 0xff
+    };
+    TQAImage image;
+    TQATexture *texture = NULL;
+    TQABitmap *bitmap = NULL;
+    TQAVTexture quad[4];
+    TQAVGouraud bitmapVertex;
+    unsigned long vertexFlags[4] = {0, 0, 0, 0};
+    TQARect dirty = {0, GXMETAL_WIDTH, 0, GXMETAL_HEIGHT};
+    TQAError error;
+
+    image.width = 3;
+    image.height = 1;
+    image.rowBytes = 12;
+    image.pixmap = pixels;
+    error = QATextureNew(engine, kQATexture_None, kQAPixel_RGB24,
+                         &image, &texture);
+    if (error == kQANoErr) {
+        error = QABitmapNew(engine, kQABitmap_None, kQAPixel_RGB24,
+                            &image, &bitmap);
+    }
+    if (error != kQANoErr) {
+        GXMetalRecordResult("FAIL: RGB24 resource creation");
+        if (bitmap != NULL) {
+            QABitmapDelete(engine, bitmap);
+        }
+        if (texture != NULL) {
+            QATextureDelete(engine, texture);
+        }
+        return error;
+    }
+
+    quad[0] = GXMetalTextureVertex(16.0f, 24.0f, 0.5f, 0.0f, 0.0f);
+    quad[1] = GXMetalTextureVertex(145.0f, 24.0f, 0.5f, 1.0f, 0.0f);
+    quad[2] = GXMetalTextureVertex(16.0f, 196.0f, 0.5f, 0.0f, 1.0f);
+    quad[3] = GXMetalTextureVertex(145.0f, 196.0f, 0.5f, 1.0f, 1.0f);
+    bitmapVertex = GXMetalGouraud(160.0f, 100.0f, 0.4f,
+                                  1.0f, 1.0f, 1.0f, 1.0f);
+    QASetFloat(context, kQATag_ColorBG_r, 0.0f);
+    QASetFloat(context, kQATag_ColorBG_g, 0.0f);
+    QASetFloat(context, kQATag_ColorBG_b, 0.0f);
+    QASetFloat(context, kQATag_ColorBG_a, 1.0f);
+    QASetInt(context, kQATag_ZFunction, kQAZFunction_None);
+    QASetInt(context, kQATag_ZBufferMask, kQAZBufferMask_Disable);
+    QASetInt(context, kQATag_Blend, kQABlend_Interpolate);
+    QASetInt(context, kQATag_AlphaTestFunc, kQAAlphaTest_None);
+    QASetInt(context, kQATag_TextureFilter, kQATextureFilter_Fast);
+    QASetInt(context, kQATag_TextureOp, kQATextureOp_None);
+    QASetInt(context, kQATagGL_TextureWrapU, kQAGL_Clamp);
+    QASetInt(context, kQATagGL_TextureWrapV, kQAGL_Clamp);
+    QARenderStart(context, &dirty, NULL);
+    QASetPtr(context, kQATag_Texture, texture);
+    QADrawVTexture(context, 4, kQAVertexMode_Strip, quad, vertexFlags);
+    QADrawBitmap(context, &bitmapVertex, bitmap);
+    error = QARenderEnd(context, &dirty);
+    if (error == kQANoErr) {
+        error = QASync(context);
+    }
+    if (error == kQANoErr &&
+        !GXMetalPixelMatches(graphicsDevice, deviceRect->left + 37,
+                             deviceRect->top + 110,
+                             kGXMetalPixelRed)) {
+        GXMetalRecordResult("FAIL: RGB24 red texture pixel");
+        error = kQAError;
+    }
+    if (error == kQANoErr &&
+        !GXMetalPixelMatches(graphicsDevice, deviceRect->left + 80,
+                             deviceRect->top + 110,
+                             kGXMetalPixelGreen)) {
+        GXMetalRecordResult("FAIL: RGB24 green texture pixel");
+        error = kQAError;
+    }
+    if (error == kQANoErr &&
+        !GXMetalPixelMatches(graphicsDevice, deviceRect->left + 123,
+                             deviceRect->top + 110,
+                             kGXMetalPixelBlue)) {
+        GXMetalRecordResult("FAIL: RGB24 blue texture pixel");
+        error = kQAError;
+    }
+    if (error == kQANoErr &&
+        !GXMetalPixelMatches(graphicsDevice, deviceRect->left + 160,
+                             deviceRect->top + 100,
+                             kGXMetalPixelRed)) {
+        GXMetalRecordResult("FAIL: RGB24 red bitmap pixel");
+        error = kQAError;
+    }
+    if (error == kQANoErr &&
+        !GXMetalPixelMatches(graphicsDevice, deviceRect->left + 161,
+                             deviceRect->top + 100,
+                             kGXMetalPixelGreen)) {
+        GXMetalRecordResult("FAIL: RGB24 green bitmap pixel");
+        error = kQAError;
+    }
+    if (error == kQANoErr &&
+        !GXMetalPixelMatches(graphicsDevice, deviceRect->left + 162,
+                             deviceRect->top + 100,
+                             kGXMetalPixelBlue)) {
+        GXMetalRecordResult("FAIL: RGB24 blue bitmap pixel");
+        error = kQAError;
+    }
+    QABitmapDelete(engine, bitmap);
+    QATextureDelete(engine, texture);
+    return error;
+}
+
 static TQAError GXMetalRenderBitmapScale(
     TQADrawContext *context, const TQAEngine *engine,
     GDHandle graphicsDevice, const TQARect *deviceRect)
@@ -2229,7 +2355,7 @@ static void GXMetalBuildPassResult(char *result, size_t resultCapacity,
     GXMetalAppendText(&cursor, end, "PASS: version=");
     GXMetalAppendVersion(&cursor, end, revision);
     GXMetalAppendText(&cursor, end,
-        " RAVE discovery capability-contract depth perspective-z blend alpha-test chromakey backface clip texture intensity-formats acl16-88 alpha1-texture-byte+bitmap-packed cl4 rgb8-332 public-multitexture dynamic-resources ATI-private-nocopy large-mesh-batches bitmap bitmap-scale dirty-present double-buffer framebuffer gx_us=");
+        " RAVE discovery capability-contract depth perspective-z blend alpha-test chromakey backface clip texture intensity-formats acl16-88 alpha1-texture-byte+bitmap-packed cl4 rgb8-332 rgb24 public-multitexture dynamic-resources ATI-private-nocopy large-mesh-batches bitmap bitmap-scale dirty-present double-buffer framebuffer gx_us=");
     GXMetalAppendDecimal(&cursor, end, gxMetalMicroseconds);
     GXMetalAppendText(&cursor, end, " sw_us=");
     GXMetalAppendDecimal(&cursor, end, softwareMicroseconds);
@@ -2333,7 +2459,7 @@ int main(void)
     uint64_t softwareMicroseconds = 0;
     uint64_t speedupTimes100;
     char softwareEngineName[64];
-    char passResult[384];
+    char passResult[448];
     char passMessage[320];
     char versionMessage[256];
 
@@ -2517,12 +2643,14 @@ int main(void)
                        kQAOptional_BlendAlpha | kQAOptional_Texture |
                        kQAOptional_TextureHQ | kQAOptional_TextureColor |
                        kQAOptional_CL4 | kQAOptional_CL8 |
+                       kQAOptional_ChannelMask |
                        kQAOptional_ZBufferMask |
                        kQAOptional_ClearZBuffer | kQAOptional_FogDepth |
                        kQAOptional_AlphaTest |
                        kQAOptional_MultiTextures |
                        kQAOptional_AccessTexture |
-                       kQAOptional_AccessBitmap;
+                       kQAOptional_AccessBitmap |
+                       kQAOptional_AccessDrawBuffer;
     requiredFeatures2 = kQAOptional2_SwapBuffers | kQAOptional2_Chromakey |
                         kQAOptional2_FlipOrigin | kQAOptional2_BitmapScale;
     requiredFastFeatures = kQAFast_Line | kQAFast_Gouraud |
@@ -2547,6 +2675,7 @@ int main(void)
                                 (1UL << kQAPixel_Alpha1) |
                                 (1UL << kQAPixel_ARGB16) |
                                 (1UL << kQAPixel_RGB32) |
+                                (1UL << kQAPixel_RGB24) |
                                 (1UL << kQAPixel_ARGB32) |
                                 (1UL << kQAPixel_CL4) |
                                 (1UL << kQAPixel_CL8) |
@@ -2558,6 +2687,7 @@ int main(void)
     requiredBitmapPixelTypes = (1UL << kQAPixel_RGB16) |
                                (1UL << kQAPixel_Alpha1) |
                                (1UL << kQAPixel_RGB32) |
+                               (1UL << kQAPixel_RGB24) |
                                (1UL << kQAPixel_ARGB32) |
                                (1UL << kQAPixel_CL4) |
                                (1UL << kQAPixel_CL8) |
@@ -2603,6 +2733,32 @@ int main(void)
     if (complexRegion == NULL || complexPart == NULL) {
         error = kQAOutOfMemory;
     } else {
+        /* A complex source region whose intersection with the draw surface
+         * is rectangular must be accepted.  QuickDraw commonly produces
+         * this shape for fullscreen windows with unrelated visible runs. */
+        SetRectRgn(complexRegion, (short)windowRect.left,
+                   (short)windowRect.top, (short)windowRect.right,
+                   (short)windowRect.bottom);
+        SetRectRgn(complexPart, (short)(windowRect.right + 8),
+                   (short)windowRect.top, (short)(windowRect.right + 24),
+                   (short)(windowRect.top + 16));
+        UnionRgn(complexRegion, complexPart, complexRegion);
+        memset(&complexClip, 0, sizeof(complexClip));
+        complexClip.clipType = kQAClipRgn;
+        complexClip.clip.clipRgn = complexRegion;
+        error = QADrawContextNew(&device, &deviceRect, &complexClip, engine,
+                                 kQAContext_DoubleBuffer,
+                                 &unexpectedContext);
+        if (error == kQANoErr && unexpectedContext != NULL) {
+            QADrawContextDelete(unexpectedContext);
+            unexpectedContext = NULL;
+        } else {
+            error = kQAError;
+        }
+    }
+    if (error == kQANoErr) {
+        /* A genuinely disjoint intersection exercises the exact region-list
+         * transport rather than falling back to its bounding rectangle. */
         SetRectRgn(complexRegion, (short)windowRect.left,
                    (short)windowRect.top, (short)(windowRect.left + 16),
                    (short)(windowRect.top + 16));
@@ -2616,11 +2772,12 @@ int main(void)
         error = QADrawContextNew(&device, &deviceRect, &complexClip, engine,
                                  kQAContext_DoubleBuffer,
                                  &unexpectedContext);
-        if (unexpectedContext != NULL) {
+        if (error == kQANoErr && unexpectedContext != NULL) {
             QADrawContextDelete(unexpectedContext);
             unexpectedContext = NULL;
+        } else {
+            error = kQAError;
         }
-        error = error == kQANotSupported ? kQANoErr : kQAError;
     }
     if (complexPart != NULL) {
         DisposeRgn(complexPart);
@@ -2674,6 +2831,10 @@ int main(void)
         }
         if (error == kQANoErr) {
             error = GXMetalRenderRGB332Format(
+                context, engine, device.device.gDevice, &deviceRect);
+        }
+        if (error == kQANoErr) {
+            error = GXMetalRenderRGB24Format(
                 context, engine, device.device.gDevice, &deviceRect);
         }
         if (error == kQANoErr) {

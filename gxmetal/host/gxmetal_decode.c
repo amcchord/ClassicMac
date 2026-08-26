@@ -16,6 +16,8 @@ static uint32_t gxmetal_min_packet_bytes(uint16_t opcode)
     case GXMETAL_OP_END_FRAME:
     case GXMETAL_OP_PRESENT:
     case GXMETAL_OP_SET_STATE:
+    case GXMETAL_OP_READBACK:
+    case GXMETAL_OP_SET_CLIP_RECTS:
         return 32;
     case GXMETAL_OP_CONTEXT_CREATE:
     case GXMETAL_OP_TEXTURE_CREATE:
@@ -109,7 +111,7 @@ GXMetalDecodeResult gxmetal_ring_advance(uint32_t position,
 static int gxmetal_pixel_format_valid(uint32_t format)
 {
     return format >= GXMETAL_PIXEL_RGB555 &&
-           format <= GXMETAL_PIXEL_RGB332;
+           format <= GXMETAL_PIXEL_RGB24;
 }
 
 static int gxmetal_draw_pixel_format_valid(uint32_t format)
@@ -175,6 +177,8 @@ uint32_t gxmetal_validate_packet(const GXMetalPacketView *packet,
                                  uint32_t shared_bytes)
 {
     const uint8_t *payload;
+    uint32_t tag;
+    uint32_t type;
     uint32_t value;
 
     if (packet == NULL) {
@@ -216,15 +220,85 @@ uint32_t gxmetal_validate_packet(const GXMetalPacketView *packet,
     case GXMETAL_OP_PRESENT:
         return packet->packet_bytes == 32 && packet->context_id != 0 ?
             GXMETAL_ERROR_NONE : GXMETAL_ERROR_BAD_PACKET;
+    case GXMETAL_OP_READBACK:
+    {
+        uint32_t length = gxmetal_load_le32(
+            payload + GXMETAL_READBACK_LENGTH_OFFSET);
+        uint32_t row_bytes = gxmetal_load_le32(
+            payload + GXMETAL_READBACK_ROW_BYTES_OFFSET);
+
+        return packet->packet_bytes == GXMETAL_READBACK_PACKET_BYTES &&
+               packet->context_id != 0 && row_bytes != 0 &&
+               length >= row_bytes && length % row_bytes == 0 &&
+               gxmetal_load_le32(
+                   payload + GXMETAL_READBACK_RESERVED_OFFSET) == 0 &&
+               gxmetal_shared_range_valid(
+                   gxmetal_load_le32(
+                       payload + GXMETAL_READBACK_SHARED_OFFSET_OFFSET),
+                   length, shared_bytes, 16) ?
+            GXMETAL_ERROR_NONE : GXMETAL_ERROR_BAD_PACKET;
+    }
+    case GXMETAL_OP_SET_CLIP_RECTS:
+    {
+        uint32_t count = gxmetal_load_le32(
+            payload + GXMETAL_CLIP_RECTS_COUNT_OFFSET);
+        uint64_t expected = GXMETAL_CLIP_RECTS_BASE_PACKET_BYTES +
+            (uint64_t)count * GXMETAL_RECT_PAYLOAD_BYTES;
+        uint32_t i;
+
+        if (packet->context_id == 0 || count > GXMETAL_MAX_CLIP_RECTS ||
+            expected != packet->packet_bytes ||
+            gxmetal_load_le32(payload +
+                              GXMETAL_CLIP_RECTS_RESERVED0_OFFSET) != 0 ||
+            gxmetal_load_le32(payload +
+                              GXMETAL_CLIP_RECTS_RESERVED1_OFFSET) != 0 ||
+            gxmetal_load_le32(payload +
+                              GXMETAL_CLIP_RECTS_RESERVED2_OFFSET) != 0) {
+            return GXMETAL_ERROR_BAD_PACKET;
+        }
+        for (i = 0; i < count; i++) {
+            const uint8_t *rect = payload + GXMETAL_CLIP_RECTS_RECTS_OFFSET +
+                i * GXMETAL_RECT_PAYLOAD_BYTES;
+            uint32_t left = gxmetal_load_le32(
+                rect + GXMETAL_RECT_LEFT_OFFSET);
+            uint32_t top = gxmetal_load_le32(
+                rect + GXMETAL_RECT_TOP_OFFSET);
+            uint32_t right = gxmetal_load_le32(
+                rect + GXMETAL_RECT_RIGHT_OFFSET);
+            uint32_t bottom = gxmetal_load_le32(
+                rect + GXMETAL_RECT_BOTTOM_OFFSET);
+
+            if (left >= right || top >= bottom ||
+                right > GXMETAL_MAX_DIMENSION ||
+                bottom > GXMETAL_MAX_DIMENSION) {
+                return GXMETAL_ERROR_BAD_PACKET;
+            }
+        }
+        return GXMETAL_ERROR_NONE;
+    }
 
     case GXMETAL_OP_SET_STATE:
         if (packet->packet_bytes != GXMETAL_SET_STATE_PACKET_BYTES ||
             packet->context_id == 0) {
             return GXMETAL_ERROR_BAD_PACKET;
         }
-        value = gxmetal_load_le32(payload + GXMETAL_STATE_TYPE_OFFSET);
-        return value <= GXMETAL_STATE_RESOURCE ?
-            GXMETAL_ERROR_NONE : GXMETAL_ERROR_BAD_PACKET;
+        tag = gxmetal_load_le32(payload + GXMETAL_STATE_TAG_OFFSET);
+        type = gxmetal_load_le32(payload + GXMETAL_STATE_TYPE_OFFSET);
+        value = gxmetal_load_le32(payload + GXMETAL_STATE_VALUE_OFFSET);
+        if (type > GXMETAL_STATE_RESOURCE) {
+            return GXMETAL_ERROR_BAD_PACKET;
+        }
+        if (tag == GXMETAL_STATE_CHANNEL_MASK ||
+            tag == GXMETAL_STATE_GL_DRAW_BUFFER) {
+            return type == GXMETAL_STATE_UINT32 &&
+                   (value & ~UINT32_C(0x0f)) == 0 ?
+                GXMETAL_ERROR_NONE : GXMETAL_ERROR_BAD_PACKET;
+        }
+        if (tag == GXMETAL_STATE_Z_BUFFER_MASK) {
+            return type == GXMETAL_STATE_UINT32 && value <= 1u ?
+                GXMETAL_ERROR_NONE : GXMETAL_ERROR_BAD_PACKET;
+        }
+        return GXMETAL_ERROR_NONE;
     case GXMETAL_OP_CLEAR:
         return packet->packet_bytes == GXMETAL_CLEAR_PACKET_BYTES &&
                packet->context_id != 0 ?

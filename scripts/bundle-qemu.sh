@@ -26,7 +26,74 @@ THIRD_PARTY_NOTICES="$ROOT_DIR/THIRD_PARTY_NOTICES.md"
 BROWSER_SRC="$ROOT_DIR/browser"
 
 DIST_DIR="$ROOT_DIR/dist"
-APP="$DIST_DIR/ClassicMac.app"
+FINAL_APP="$DIST_DIR/ClassicMac.app"
+BUNDLE_LOCK_DIR="$DIST_DIR/.bundle-qemu.lock"
+BUNDLE_STAGE_DIR=""
+BUNDLE_PREVIOUS_APP=""
+BUNDLE_LOCK_HELD=0
+
+APP_VERSION="${APP_VERSION:-2.1.3}"
+APP_BUILD_VERSION="${APP_BUILD_VERSION:-2.1.3}"
+BUNDLE_ID="com.classicmac.emulator"
+
+log() { printf '\n==> %s\n' "$*"; }
+die() { printf '\nERROR: %s\n' "$*" >&2; exit 1; }
+
+# Packaging is transactional: only the final promotion below may replace the
+# public app path. Everything before it operates in a same-volume staging
+# directory, and the atomic mkdir lock prevents two packagers from mutating the
+# staging/final paths concurrently. Keep cleanup restricted to the exact hidden
+# paths owned by this invocation.
+cleanup_bundle() {
+  local status=$?
+  trap - EXIT HUP INT TERM
+  set +e
+
+  # If promotion moved the previous app aside but did not install the new app,
+  # put the known-good app back before removing the staging directory.
+  if [ -n "$BUNDLE_PREVIOUS_APP" ] && [ -e "$BUNDLE_PREVIOUS_APP" ] && \
+     [ ! -e "$FINAL_APP" ]; then
+    mv "$BUNDLE_PREVIOUS_APP" "$FINAL_APP"
+  fi
+
+  if [ -n "$BUNDLE_STAGE_DIR" ]; then
+    case "$BUNDLE_STAGE_DIR" in
+      "$DIST_DIR"/.bundle-qemu.stage.*)
+        rm -rf -- "$BUNDLE_STAGE_DIR"
+        ;;
+      *)
+        printf '\nWARNING: Refusing to clean unexpected staging path: %s\n' \
+          "$BUNDLE_STAGE_DIR" >&2
+        ;;
+    esac
+  fi
+
+  if [ "$BUNDLE_LOCK_HELD" -eq 1 ]; then
+    rm -f -- "$BUNDLE_LOCK_DIR/owner"
+    rmdir -- "$BUNDLE_LOCK_DIR" 2>/dev/null
+  fi
+
+  exit "$status"
+}
+
+trap cleanup_bundle EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+mkdir -p "$DIST_DIR"
+if ! mkdir "$BUNDLE_LOCK_DIR" 2>/dev/null; then
+  LOCK_OWNER="$(sed -n '1p' "$BUNDLE_LOCK_DIR/owner" 2>/dev/null || true)"
+  if [ -n "$LOCK_OWNER" ]; then
+    die "Another bundle-qemu.sh invocation holds $BUNDLE_LOCK_DIR (PID $LOCK_OWNER). Wait for it to finish, then retry."
+  fi
+  die "Another bundle-qemu.sh invocation holds $BUNDLE_LOCK_DIR. Wait for it to finish, then retry."
+fi
+BUNDLE_LOCK_HELD=1
+printf '%s\n' "$$" > "$BUNDLE_LOCK_DIR/owner"
+
+BUNDLE_STAGE_DIR="$(mktemp -d "$DIST_DIR/.bundle-qemu.stage.XXXXXX")"
+APP="$BUNDLE_STAGE_DIR/ClassicMac.app"
 CONTENTS="$APP/Contents"
 MACOS_DIR="$CONTENTS/MacOS"
 RES_DIR="$CONTENTS/Resources"
@@ -38,13 +105,6 @@ HELPERS_DIR="$CONTENTS/Helpers"
 # "Power Mac G4" with a proper icon, not as a bare qemu-system executable.
 QUADRA_APP="$HELPERS_DIR/Quadra 800.app"
 PPC_APP="$HELPERS_DIR/Power Mac G4.app"
-
-APP_VERSION="${APP_VERSION:-2.1.2}"
-APP_BUILD_VERSION="${APP_BUILD_VERSION:-2.1.2}"
-BUNDLE_ID="com.classicmac.emulator"
-
-log() { printf '\n==> %s\n' "$*"; }
-die() { printf '\nERROR: %s\n' "$*" >&2; exit 1; }
 
 # ---------------------------------------------------------------------------
 # 0. Preconditions
@@ -91,10 +151,10 @@ APP_BIN="$APP_SRC_DIR/.build/release/ClassicMac"
 [ -x "$APP_BIN" ] || die "Swift build did not produce the ClassicMac executable."
 
 # ---------------------------------------------------------------------------
-# 2. Assemble the .app skeleton (clean each run)
+# 2. Assemble the .app skeleton in the private staging directory
 # ---------------------------------------------------------------------------
-log "Assembling $APP"
-rm -rf "$APP"
+log "Assembling staged app at $APP"
+[ ! -e "$APP" ] || die "Staging app path already exists: $APP"
 mkdir -p "$MACOS_DIR" "$QEMU_DEST" "$PCBIOS_DEST"
 mkdir -p "$QUADRA_APP/Contents/MacOS" "$QUADRA_APP/Contents/Frameworks" "$QUADRA_APP/Contents/Resources"
 mkdir -p "$PPC_APP/Contents/MacOS" "$PPC_APP/Contents/Frameworks" "$PPC_APP/Contents/Resources"
@@ -442,5 +502,16 @@ codesign --force --sign "$SIGN_IDENTITY" "$TIMESTAMP_FLAG" --options runtime "$A
 log "Verifying bundle signature"
 codesign --verify --deep --strict --verbose=2 "$APP" || die "Bundle failed signature verification."
 
-log "Done. Built: $APP"
-log "Launch with: open \"$APP\""
+# Promote only a completely assembled and verified app. Both moves are
+# same-volume renames. If the second move fails, cleanup_bundle restores the
+# previous app before removing this invocation's staging directory.
+log "Promoting verified app to $FINAL_APP"
+if [ -e "$FINAL_APP" ]; then
+  BUNDLE_PREVIOUS_APP="$BUNDLE_STAGE_DIR/Previous-ClassicMac.app"
+  [ ! -e "$BUNDLE_PREVIOUS_APP" ] || die "Previous-app staging path already exists: $BUNDLE_PREVIOUS_APP"
+  mv "$FINAL_APP" "$BUNDLE_PREVIOUS_APP"
+fi
+mv "$APP" "$FINAL_APP" || die "Failed to promote verified app to $FINAL_APP"
+
+log "Done. Built: $FINAL_APP"
+log "Launch with: open \"$FINAL_APP\""

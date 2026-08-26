@@ -1,4 +1,4 @@
-GXMetal 2.1.2 for Mac OS 9
+GXMetal 2.1.3 for Mac OS 9
 ==========================
 
 GXMetal is ClassicMac's host-accelerated QuickDraw 3D RAVE engine. It lets
@@ -23,7 +23,7 @@ INSTALL OR UPDATE
 7. Run GXMetal Test. Do not rely on the startup icon alone: the test confirms
    the installed GXMetal version, RAVE discovery, the host transport,
    rendering correctness, presentation, and software fallback. GXMetal Test
-   2.1.2 rejects a mismatched driver and tells you to reinstall and restart.
+   2.1.3 rejects a mismatched driver and tells you to reinstall and restart.
 
 Keep the complete GXMetal folder together while the installer runs. GXMetal is
 the RAVE driver; GXMetal Startup draws the icon during boot; GXMetal Input is
@@ -42,7 +42,9 @@ Test must report PASS before you try a game.
 SAFE FALLBACK
 -------------
 
-GXMetal declines unsupported displays, clip regions, protocol versions, and
+GXMetal accepts bounded complex QuickDraw regions, including disjoint spans and
+holes, and uses the same exact clipping for clear, draw, and present. It still
+declines unsupported displays, oversized region lists, protocol versions, and
 host configurations. QuickDraw 3D RAVE can then select Apple Software RAVE.
 The conformance test explicitly checks that the software engine remains usable.
 
@@ -58,12 +60,30 @@ holding Shift to disable extensions. Move GXMetal, GXMetal Startup, and GXMetal
 Input out of the Extensions folder, then restart normally. Your ClassicMac
 disk image and game files are not changed by the host accelerator.
 
-TESTED GAME
------------
+TESTED GAMES AND OPENGL
+-----------------------
 
-Nanosaur, Carmageddon II, and Quake III Arena Demo are the primary real-game
-tests. GXMetal 2.1.2 has been exercised through their title screens and
-extended gameplay with multitexturing, lightmaps, textures, depth, clipping,
-fog, water, alpha effects, camera movement, HUDs, and dynamic textures.
+Nanosaur, Carmageddon II, Quake III Arena Demo, Bugdom, and Future Cop are the
+primary real-game tests. GXMetal 2.1.3 has been exercised through title
+screens and extended gameplay with multitexturing, lightmaps, textures,
+depth, clipping, fog, water, alpha effects, camera movement, HUDs, and dynamic
+textures. The signed-candidate smoke set also reaches Combat Mission's complete
+3D setup scene and drives Weekend Warrior through scripted selection, textured
+3D play, movement, and a short soak with no fallback frames.
+Cro-Mag Rally's textured title/loading path and Oni's Apple OpenGL main menu
+and new-game UI also render correctly on the current signed candidate. These
+routes exercise the ATI renderer's multitexture binding and effective depth-
+comparison state in addition to the small AGL probe.
+Unreal Tournament's RAVE main menu is also accelerated when the demo is
+started windowed with in-game sound disabled; its default fullscreen/sound
+startup can remain black even with Apple Software and is still being isolated.
+
+GXMetal AGL Probe is included beside GXMetal Test. It requires an accelerated
+Apple OpenGL pixel format, renders a known triangle, verifies glReadPixels,
+checks that readback leaves the display unchanged, and tears the context down.
+A passing probe proves the core Apple OpenGL/ATI driver path; it does not mean
+that every OpenGL game or extension has been qualified.
+
 Rendering bugs should be reported with a screenshot, the Mac OS version,
-display resolution and color depth, and whether GXMetal Test passes.
+display resolution and color depth, whether GXMetal Test and GXMetal AGL Probe
+pass, and the title of the affected game.
