@@ -24,6 +24,12 @@ uint64_t gxmetal_metal_direct_present_count(
     const GXMetalMetalRenderer *renderer);
 uint64_t gxmetal_metal_fallback_present_count(
     const GXMetalMetalRenderer *renderer);
+#ifdef GXMETAL_TESTING
+int gxmetal_metal_test_sampler_state(
+    const GXMetalMetalRenderer *renderer, uint32_t context_id,
+    uint32_t texture_unit, uint32_t *min_filter, uint32_t *mag_filter,
+    uint32_t *mip_filter);
+#endif
 void gxmetal_metal_set_gamma(GXMetalMetalRenderer *renderer,
                              const uint8_t red[256],
                              const uint8_t green[256],

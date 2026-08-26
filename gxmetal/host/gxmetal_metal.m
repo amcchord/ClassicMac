@@ -30,6 +30,20 @@
 #define GXMETAL_METAL_COLOR_MASKS 16u
 #define GXMETAL_METAL_GL_SRC_FACTORS 11u
 #define GXMETAL_METAL_GL_DST_FACTORS 8u
+#define GXMETAL_METAL_MIN_FILTERS 2u
+#define GXMETAL_METAL_MAG_FILTERS 2u
+#define GXMETAL_METAL_MIP_FILTERS 3u
+
+enum GXMetalMetalMinMagFilter {
+    GXMETAL_METAL_FILTER_NEAREST = 0,
+    GXMETAL_METAL_FILTER_LINEAR = 1
+};
+
+enum GXMetalMetalMipFilter {
+    GXMETAL_METAL_MIP_NOT_MIPMAPPED = 0,
+    GXMETAL_METAL_MIP_NEAREST = 1,
+    GXMETAL_METAL_MIP_LINEAR = 2
+};
 
 _Static_assert((GXMETAL_METAL_RESOURCE_HASH_SIZE &
                 (GXMETAL_METAL_RESOURCE_HASH_SIZE - 1)) == 0,
@@ -174,13 +188,17 @@ typedef struct GXMetalMetalContext {
     uint32_t gl_blend_dst;
     uint32_t texture_id;
     uint32_t secondary_texture_id;
-    uint32_t texture_filter;
+    uint32_t texture_min_filter;
+    uint32_t texture_mag_filter;
+    uint32_t texture_mip_filter;
     uint32_t texture_op;
     uint32_t texture_wrap_u;
     uint32_t texture_wrap_v;
     uint32_t perspective_z;
     uint32_t secondary_texture_enable;
-    uint32_t secondary_texture_filter;
+    uint32_t secondary_texture_min_filter;
+    uint32_t secondary_texture_mag_filter;
+    uint32_t secondary_texture_mip_filter;
     uint32_t secondary_texture_wrap_u;
     uint32_t secondary_texture_wrap_v;
     uint32_t ati_private;
@@ -265,7 +283,10 @@ struct GXMetalMetalRenderer {
     uint32_t gamma_table[256];
     id<MTLBuffer> gamma_buffer;
     id<MTLDepthStencilState> depth_states[9][2];
-    id<MTLSamplerState> samplers[3][4];
+    id<MTLSamplerState>
+        samplers[GXMETAL_METAL_MIN_FILTERS]
+                [GXMETAL_METAL_MAG_FILTERS]
+                [GXMETAL_METAL_MIP_FILTERS][4];
     GXMetalMetalContext contexts[GXMETAL_METAL_MAX_CONTEXTS];
     GXMetalMetalResource resources[GXMETAL_METAL_MAX_RESOURCES];
     uint32_t resource_hash[GXMETAL_METAL_RESOURCE_HASH_SIZE];
@@ -1150,8 +1171,13 @@ static uint32_t gxmetal_metal_context_create(
     context->blend = GXMETAL_BLEND_INTERPOLATE;
     context->gl_blend_src = GXMETAL_GL_SRC_ALPHA;
     context->gl_blend_dst = GXMETAL_GL_ONE_MINUS_SRC_ALPHA;
+    context->texture_min_filter = GXMETAL_METAL_FILTER_NEAREST;
+    context->texture_mag_filter = GXMETAL_METAL_FILTER_NEAREST;
+    context->texture_mip_filter = GXMETAL_METAL_MIP_NEAREST;
     context->secondary_texture_enable = 1;
-    context->secondary_texture_filter = GXMETAL_TEXTURE_FILTER_FAST;
+    context->secondary_texture_min_filter = GXMETAL_METAL_FILTER_NEAREST;
+    context->secondary_texture_mag_filter = GXMETAL_METAL_FILTER_NEAREST;
+    context->secondary_texture_mip_filter = GXMETAL_METAL_MIP_NEAREST;
     context->multi_texture.operation = GXMETAL_MULTI_TEXTURE_MODULATE;
     context->multi_texture.factor = 0.5f;
     context->fog.color[3] = 1.0f;
@@ -2110,13 +2136,8 @@ static uint32_t gxmetal_metal_draw_textured(
     uint32_t stride = gxmetal_load_le32(
         packet->payload + GXMETAL_DRAW_VERTEX_STRIDE_OFFSET);
     uint32_t draw_count = count;
-    uint32_t filter = context->texture_filter <= GXMETAL_TEXTURE_FILTER_BEST ?
-        context->texture_filter : GXMETAL_TEXTURE_FILTER_FAST;
     uint32_t address_mode = context->texture_wrap_u |
                             (context->texture_wrap_v << 1);
-    uint32_t secondary_filter =
-        context->secondary_texture_filter <= GXMETAL_TEXTURE_FILTER_BEST ?
-            context->secondary_texture_filter : GXMETAL_TEXTURE_FILTER_FAST;
     uint32_t secondary_address_mode = context->secondary_texture_wrap_u |
                                       (context->secondary_texture_wrap_v << 1);
     uint32_t texture_operation = context->texture_op;
@@ -2231,7 +2252,7 @@ static uint32_t gxmetal_metal_draw_textured(
                 "GXMetal texture first draw: id=%u format=%u "
                 "width=%u height=%u "
                 "op=%u blend=%u z_function=%u fog=%u perspective_z=%u "
-                "filter=%u "
+                "filter=%u/%u/%u "
                 "wrap=%u/%u alpha_test=%u alpha_ref=%.6f "
                 "fog_rgba=%.6f/%.6f/%.6f/%.6f "
                 "fog_start=%.6f fog_end=%.6f fog_density=%.6f "
@@ -2246,7 +2267,8 @@ static uint32_t gxmetal_metal_draw_textured(
                 resource->width, resource->height,
                 context->texture_op, context->blend, context->z_function,
                 context->fog.mode_and_padding[0], context->perspective_z,
-                context->texture_filter, context->texture_wrap_u,
+                context->texture_min_filter, context->texture_mag_filter,
+                context->texture_mip_filter, context->texture_wrap_u,
                 context->texture_wrap_v, context->alpha_test.function,
                 context->alpha_test.reference,
                 context->fog.color[0], context->fog.color[1],
@@ -2402,9 +2424,15 @@ static uint32_t gxmetal_metal_draw_textured(
                                      resource->texture
         atIndex:1];
     [context->encoder setFragmentSamplerState:
-        renderer->samplers[filter][address_mode] atIndex:0];
+        renderer->samplers[context->texture_min_filter]
+                          [context->texture_mag_filter]
+                          [context->texture_mip_filter]
+                          [address_mode] atIndex:0];
     [context->encoder setFragmentSamplerState:
-        renderer->samplers[secondary_filter][secondary_address_mode] atIndex:1];
+        renderer->samplers[context->secondary_texture_min_filter]
+                          [context->secondary_texture_mag_filter]
+                          [context->secondary_texture_mip_filter]
+                          [secondary_address_mode] atIndex:1];
     [context->encoder setFragmentBytes:&texture_operation
         length:sizeof(texture_operation) atIndex:0];
     [context->encoder setFragmentBytes:&context->fog
@@ -3162,6 +3190,85 @@ static int gxmetal_metal_make_depth_states(GXMetalMetalRenderer *renderer)
     return 1;
 }
 
+static int gxmetal_metal_decode_min_filter(uint32_t value,
+                                            uint32_t *min_filter,
+                                            uint32_t *mip_filter)
+{
+    switch (value) {
+    case GXMETAL_GL_NEAREST:
+        *min_filter = GXMETAL_METAL_FILTER_NEAREST;
+        *mip_filter = GXMETAL_METAL_MIP_NOT_MIPMAPPED;
+        return 1;
+    case GXMETAL_GL_LINEAR:
+        *min_filter = GXMETAL_METAL_FILTER_LINEAR;
+        *mip_filter = GXMETAL_METAL_MIP_NOT_MIPMAPPED;
+        return 1;
+    case GXMETAL_GL_NEAREST_MIPMAP_NEAREST:
+        *min_filter = GXMETAL_METAL_FILTER_NEAREST;
+        *mip_filter = GXMETAL_METAL_MIP_NEAREST;
+        return 1;
+    case GXMETAL_GL_LINEAR_MIPMAP_NEAREST:
+        *min_filter = GXMETAL_METAL_FILTER_LINEAR;
+        *mip_filter = GXMETAL_METAL_MIP_NEAREST;
+        return 1;
+    case GXMETAL_GL_NEAREST_MIPMAP_LINEAR:
+        *min_filter = GXMETAL_METAL_FILTER_NEAREST;
+        *mip_filter = GXMETAL_METAL_MIP_LINEAR;
+        return 1;
+    case GXMETAL_GL_LINEAR_MIPMAP_LINEAR:
+        *min_filter = GXMETAL_METAL_FILTER_LINEAR;
+        *mip_filter = GXMETAL_METAL_MIP_LINEAR;
+        return 1;
+    default:
+        return 0;
+    }
+}
+
+static int gxmetal_metal_decode_mag_filter(uint32_t value,
+                                            uint32_t *mag_filter)
+{
+    if (value == GXMETAL_GL_NEAREST) {
+        *mag_filter = GXMETAL_METAL_FILTER_NEAREST;
+        return 1;
+    }
+    if (value == GXMETAL_GL_LINEAR) {
+        *mag_filter = GXMETAL_METAL_FILTER_LINEAR;
+        return 1;
+    }
+    return 0;
+}
+
+static int gxmetal_metal_decode_filter_preset(uint32_t value,
+                                               uint32_t *min_filter,
+                                               uint32_t *mag_filter,
+                                               uint32_t *mip_filter)
+{
+    switch (value) {
+    case GXMETAL_TEXTURE_FILTER_FAST:
+        *min_filter = GXMETAL_METAL_FILTER_NEAREST;
+        *mag_filter = GXMETAL_METAL_FILTER_NEAREST;
+        *mip_filter = GXMETAL_METAL_MIP_NEAREST;
+        return 1;
+    case GXMETAL_TEXTURE_FILTER_MID:
+        *min_filter = GXMETAL_METAL_FILTER_LINEAR;
+        *mag_filter = GXMETAL_METAL_FILTER_LINEAR;
+        *mip_filter = GXMETAL_METAL_MIP_NEAREST;
+        return 1;
+    case GXMETAL_TEXTURE_FILTER_BEST:
+        *min_filter = GXMETAL_METAL_FILTER_LINEAR;
+        *mag_filter = GXMETAL_METAL_FILTER_LINEAR;
+        *mip_filter = GXMETAL_METAL_MIP_LINEAR;
+        return 1;
+    default:
+        if (!gxmetal_metal_decode_min_filter(
+                value, min_filter, mip_filter)) {
+            return 0;
+        }
+        *mag_filter = *min_filter;
+        return 1;
+    }
+}
+
 static uint32_t gxmetal_metal_set_state(GXMetalMetalContext *context,
                                         const GXMetalPacketView *packet)
 {
@@ -3171,7 +3278,6 @@ static uint32_t gxmetal_metal_set_state(GXMetalMetalContext *context,
         packet->payload + GXMETAL_STATE_TYPE_OFFSET);
     uint32_t value = gxmetal_load_le32(
         packet->payload + GXMETAL_STATE_VALUE_OFFSET);
-    uint32_t normalized_filter;
 
     if (tag == GXMETAL_STATE_TEXTURE ||
         tag == GXMETAL_STATE_MULTI_TEXTURE) {
@@ -3278,34 +3384,23 @@ static uint32_t gxmetal_metal_set_state(GXMetalMetalContext *context,
         context->gl_blend_dst = value;
         break;
     case GXMETAL_STATE_TEXTURE_FILTER:
-        normalized_filter = value;
-        if (value == GXMETAL_GL_NEAREST ||
-            value == GXMETAL_GL_NEAREST_MIPMAP_NEAREST) {
-            normalized_filter = GXMETAL_TEXTURE_FILTER_FAST;
-        } else if (value == GXMETAL_GL_LINEAR ||
-                   value == GXMETAL_GL_LINEAR_MIPMAP_NEAREST) {
-            normalized_filter = GXMETAL_TEXTURE_FILTER_MID;
-        } else if (value == GXMETAL_GL_NEAREST_MIPMAP_LINEAR ||
-                   value == GXMETAL_GL_LINEAR_MIPMAP_LINEAR) {
-            normalized_filter = GXMETAL_TEXTURE_FILTER_BEST;
-        }
-        if (normalized_filter > GXMETAL_TEXTURE_FILTER_BEST) {
+        if (!gxmetal_metal_decode_filter_preset(
+                value, &context->texture_min_filter,
+                &context->texture_mag_filter,
+                &context->texture_mip_filter)) {
             return GXMETAL_ERROR_BAD_PACKET;
         }
-        context->texture_filter = normalized_filter;
         break;
     case GXMETAL_STATE_GL_TEXTURE_MAG_FILTER:
+        if (!gxmetal_metal_decode_mag_filter(
+                value, &context->texture_mag_filter)) {
+            return GXMETAL_ERROR_BAD_PACKET;
+        }
+        break;
     case GXMETAL_STATE_GL_TEXTURE_MIN_FILTER:
-        if (value == GXMETAL_GL_NEAREST ||
-            value == GXMETAL_GL_NEAREST_MIPMAP_NEAREST) {
-            context->texture_filter = GXMETAL_TEXTURE_FILTER_FAST;
-        } else if (value == GXMETAL_GL_LINEAR ||
-                   value == GXMETAL_GL_LINEAR_MIPMAP_NEAREST) {
-            context->texture_filter = GXMETAL_TEXTURE_FILTER_MID;
-        } else if (value == GXMETAL_GL_NEAREST_MIPMAP_LINEAR ||
-                   value == GXMETAL_GL_LINEAR_MIPMAP_LINEAR) {
-            context->texture_filter = GXMETAL_TEXTURE_FILTER_BEST;
-        } else {
+        if (!gxmetal_metal_decode_min_filter(
+                value, &context->texture_min_filter,
+                &context->texture_mip_filter)) {
             return GXMETAL_ERROR_BAD_PACKET;
         }
         break;
@@ -3368,23 +3463,25 @@ static uint32_t gxmetal_metal_set_state(GXMetalMetalContext *context,
         context->ati_private = value;
         break;
     case GXMETAL_STATE_MULTI_TEXTURE_FILTER:
-    case GXMETAL_STATE_MULTI_TEXTURE_MAG_FILTER:
-    case GXMETAL_STATE_MULTI_TEXTURE_MIN_FILTER:
-        normalized_filter = value;
-        if (value == GXMETAL_GL_NEAREST ||
-            value == GXMETAL_GL_NEAREST_MIPMAP_NEAREST) {
-            normalized_filter = GXMETAL_TEXTURE_FILTER_FAST;
-        } else if (value == GXMETAL_GL_LINEAR ||
-                   value == GXMETAL_GL_LINEAR_MIPMAP_NEAREST) {
-            normalized_filter = GXMETAL_TEXTURE_FILTER_MID;
-        } else if (value == GXMETAL_GL_NEAREST_MIPMAP_LINEAR ||
-                   value == GXMETAL_GL_LINEAR_MIPMAP_LINEAR) {
-            normalized_filter = GXMETAL_TEXTURE_FILTER_BEST;
-        }
-        if (normalized_filter > GXMETAL_TEXTURE_FILTER_BEST) {
+        if (!gxmetal_metal_decode_filter_preset(
+                value, &context->secondary_texture_min_filter,
+                &context->secondary_texture_mag_filter,
+                &context->secondary_texture_mip_filter)) {
             return GXMETAL_ERROR_BAD_PACKET;
         }
-        context->secondary_texture_filter = normalized_filter;
+        break;
+    case GXMETAL_STATE_MULTI_TEXTURE_MAG_FILTER:
+        if (!gxmetal_metal_decode_mag_filter(
+                value, &context->secondary_texture_mag_filter)) {
+            return GXMETAL_ERROR_BAD_PACKET;
+        }
+        break;
+    case GXMETAL_STATE_MULTI_TEXTURE_MIN_FILTER:
+        if (!gxmetal_metal_decode_min_filter(
+                value, &context->secondary_texture_min_filter,
+                &context->secondary_texture_mip_filter)) {
+            return GXMETAL_ERROR_BAD_PACKET;
+        }
         break;
     case GXMETAL_STATE_MULTI_TEXTURE_WRAP_U:
         if (value > GXMETAL_TEXTURE_WRAP_CLAMP) {
@@ -3539,27 +3636,47 @@ GXMetalMetalRenderer *gxmetal_metal_create(void *framebuffer,
         gxmetal_metal_destroy(renderer);
         return NULL;
     }
-    for (i = 0; i < 3; i++) {
-        uint32_t address_mode;
-        for (address_mode = 0; address_mode < 4; address_mode++) {
-            MTLSamplerDescriptor *sampler =
-                [[MTLSamplerDescriptor alloc] init];
-            sampler.minFilter = i == GXMETAL_TEXTURE_FILTER_FAST ?
-                MTLSamplerMinMagFilterNearest : MTLSamplerMinMagFilterLinear;
-            sampler.magFilter = i == GXMETAL_TEXTURE_FILTER_FAST ?
-                MTLSamplerMinMagFilterNearest : MTLSamplerMinMagFilterLinear;
-            sampler.mipFilter = i == GXMETAL_TEXTURE_FILTER_BEST ?
-                MTLSamplerMipFilterLinear : MTLSamplerMipFilterNearest;
-            sampler.sAddressMode = (address_mode & 1) ?
-                MTLSamplerAddressModeClampToEdge : MTLSamplerAddressModeRepeat;
-            sampler.tAddressMode = (address_mode & 2) ?
-                MTLSamplerAddressModeClampToEdge : MTLSamplerAddressModeRepeat;
-            renderer->samplers[i][address_mode] = [renderer->device
-                newSamplerStateWithDescriptor:sampler];
-            [sampler release];
-            if (renderer->samplers[i][address_mode] == nil) {
-                gxmetal_metal_destroy(renderer);
-                return NULL;
+    for (i = 0; i < GXMETAL_METAL_MIN_FILTERS; i++) {
+        uint32_t mag_filter;
+        for (mag_filter = 0;
+             mag_filter < GXMETAL_METAL_MAG_FILTERS; mag_filter++) {
+            uint32_t mip_filter;
+            for (mip_filter = 0;
+                 mip_filter < GXMETAL_METAL_MIP_FILTERS; mip_filter++) {
+                uint32_t address_mode;
+                for (address_mode = 0; address_mode < 4; address_mode++) {
+                    MTLSamplerDescriptor *sampler =
+                        [[MTLSamplerDescriptor alloc] init];
+                    sampler.minFilter = i == GXMETAL_METAL_FILTER_NEAREST ?
+                        MTLSamplerMinMagFilterNearest :
+                        MTLSamplerMinMagFilterLinear;
+                    sampler.magFilter =
+                        mag_filter == GXMETAL_METAL_FILTER_NEAREST ?
+                            MTLSamplerMinMagFilterNearest :
+                            MTLSamplerMinMagFilterLinear;
+                    if (mip_filter == GXMETAL_METAL_MIP_NOT_MIPMAPPED) {
+                        sampler.mipFilter = MTLSamplerMipFilterNotMipmapped;
+                    } else if (mip_filter == GXMETAL_METAL_MIP_NEAREST) {
+                        sampler.mipFilter = MTLSamplerMipFilterNearest;
+                    } else {
+                        sampler.mipFilter = MTLSamplerMipFilterLinear;
+                    }
+                    sampler.sAddressMode = (address_mode & 1) ?
+                        MTLSamplerAddressModeClampToEdge :
+                        MTLSamplerAddressModeRepeat;
+                    sampler.tAddressMode = (address_mode & 2) ?
+                        MTLSamplerAddressModeClampToEdge :
+                        MTLSamplerAddressModeRepeat;
+                    renderer->samplers[i][mag_filter][mip_filter]
+                                      [address_mode] = [renderer->device
+                        newSamplerStateWithDescriptor:sampler];
+                    [sampler release];
+                    if (renderer->samplers[i][mag_filter][mip_filter]
+                                          [address_mode] == nil) {
+                        gxmetal_metal_destroy(renderer);
+                        return NULL;
+                    }
+                }
             }
         }
     }
@@ -3598,10 +3715,19 @@ void gxmetal_metal_destroy(GXMetalMetalRenderer *renderer)
             }
         }
     }
-    for (i = 0; i < 3; i++) {
-        uint32_t address_mode;
-        for (address_mode = 0; address_mode < 4; address_mode++) {
-            [renderer->samplers[i][address_mode] release];
+    for (i = 0; i < GXMETAL_METAL_MIN_FILTERS; i++) {
+        uint32_t mag_filter;
+        for (mag_filter = 0;
+             mag_filter < GXMETAL_METAL_MAG_FILTERS; mag_filter++) {
+            uint32_t mip_filter;
+            for (mip_filter = 0;
+                 mip_filter < GXMETAL_METAL_MIP_FILTERS; mip_filter++) {
+                uint32_t address_mode;
+                for (address_mode = 0; address_mode < 4; address_mode++) {
+                    [renderer->samplers[i][mag_filter][mip_filter]
+                                       [address_mode] release];
+                }
+            }
         }
     }
     [renderer->vertex_function release];
@@ -3645,6 +3771,36 @@ uint64_t gxmetal_metal_fallback_present_count(
 {
     return renderer != NULL ? renderer->fallback_present_count : 0;
 }
+
+#ifdef GXMETAL_TESTING
+int gxmetal_metal_test_sampler_state(
+    const GXMetalMetalRenderer *renderer, uint32_t context_id,
+    uint32_t texture_unit, uint32_t *min_filter, uint32_t *mag_filter,
+    uint32_t *mip_filter)
+{
+    GXMetalMetalContext *context;
+
+    if (renderer == NULL || texture_unit > 1 || min_filter == NULL ||
+        mag_filter == NULL || mip_filter == NULL) {
+        return 0;
+    }
+    context = gxmetal_metal_find_context(
+        (GXMetalMetalRenderer *)renderer, context_id);
+    if (context == NULL) {
+        return 0;
+    }
+    if (texture_unit == 0) {
+        *min_filter = context->texture_min_filter;
+        *mag_filter = context->texture_mag_filter;
+        *mip_filter = context->texture_mip_filter;
+    } else {
+        *min_filter = context->secondary_texture_min_filter;
+        *mag_filter = context->secondary_texture_mag_filter;
+        *mip_filter = context->secondary_texture_mip_filter;
+    }
+    return 1;
+}
+#endif
 
 void gxmetal_metal_set_gamma(GXMetalMetalRenderer *renderer,
                              const uint8_t red[256],

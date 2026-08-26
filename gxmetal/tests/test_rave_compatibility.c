@@ -20,6 +20,8 @@ int main(void)
     uint32_t mode;
     uint32_t pixel_type;
     uint32_t length;
+    uint32_t min_filter;
+    uint32_t mag_filter;
     static const uint8_t packed[2][4] = {
         {0x40, 0x40, 0xff, 0xff},
         {0x80, 0x80, 0xff, 0xff}
@@ -77,6 +79,76 @@ int main(void)
     CHECK(gxmetal_rave_int_state_is_accepted(
         GXMETAL_RAVE_TAG_TEXTURE_FILTER,
         GXMETAL_RAVE_GL_LINEAR_MIPMAP_LINEAR));
+    CHECK(gxmetal_rave_filter_preset_to_gl(
+        GXMETAL_TEXTURE_FILTER_FAST, &min_filter, &mag_filter));
+    CHECK(min_filter == GXMETAL_RAVE_GL_NEAREST_MIPMAP_NEAREST);
+    CHECK(mag_filter == GXMETAL_RAVE_GL_NEAREST);
+    CHECK(gxmetal_rave_filter_preset_to_gl(
+        GXMETAL_TEXTURE_FILTER_MID, &min_filter, &mag_filter));
+    CHECK(min_filter == GXMETAL_RAVE_GL_LINEAR_MIPMAP_NEAREST);
+    CHECK(mag_filter == GXMETAL_RAVE_GL_LINEAR);
+    CHECK(gxmetal_rave_filter_preset_to_gl(
+        GXMETAL_TEXTURE_FILTER_BEST, &min_filter, &mag_filter));
+    CHECK(min_filter == GXMETAL_RAVE_GL_LINEAR_MIPMAP_LINEAR);
+    CHECK(mag_filter == GXMETAL_RAVE_GL_LINEAR);
+    CHECK(gxmetal_rave_filter_preset_to_gl(
+        GXMETAL_RAVE_GL_NEAREST_MIPMAP_LINEAR,
+        &min_filter, &mag_filter));
+    CHECK(min_filter == GXMETAL_RAVE_GL_NEAREST_MIPMAP_LINEAR);
+    CHECK(mag_filter == GXMETAL_RAVE_GL_NEAREST);
+    CHECK(!gxmetal_rave_filter_preset_to_gl(
+        UINT32_C(0x2704), &min_filter, &mag_filter));
+    CHECK(gxmetal_rave_sampler_state_transition(
+        GXMETAL_RAVE_TAG_GL_TEXTURE_MIN_FILTER,
+        GXMETAL_RAVE_GL_LINEAR_MIPMAP_LINEAR,
+        GXMETAL_RAVE_GL_LINEAR_MIPMAP_LINEAR, GXMETAL_RAVE_GL_LINEAR,
+        &min_filter, &mag_filter) == 0);
+    CHECK(gxmetal_rave_sampler_state_transition(
+        GXMETAL_RAVE_TAG_TEXTURE_FILTER, GXMETAL_TEXTURE_FILTER_FAST,
+        GXMETAL_RAVE_GL_LINEAR_MIPMAP_LINEAR, GXMETAL_RAVE_GL_LINEAR,
+        &min_filter, &mag_filter) == 1);
+    CHECK(min_filter == GXMETAL_RAVE_GL_NEAREST_MIPMAP_NEAREST);
+    CHECK(mag_filter == GXMETAL_RAVE_GL_NEAREST);
+    CHECK(gxmetal_rave_sampler_state_transition(
+        GXMETAL_RAVE_TAG_GL_TEXTURE_MIN_FILTER,
+        GXMETAL_RAVE_GL_LINEAR_MIPMAP_LINEAR, min_filter, mag_filter,
+        &min_filter, &mag_filter) == 1);
+    CHECK(min_filter == GXMETAL_RAVE_GL_LINEAR_MIPMAP_LINEAR);
+    CHECK(mag_filter == GXMETAL_RAVE_GL_NEAREST);
+    CHECK(gxmetal_rave_sampler_state_transition(
+        GXMETAL_RAVE_TAG_GL_TEXTURE_MAG_FILTER, GXMETAL_RAVE_GL_LINEAR,
+        min_filter, mag_filter, &min_filter, &mag_filter) == 1);
+    CHECK(gxmetal_rave_sampler_state_transition(
+        GXMETAL_RAVE_TAG_TEXTURE_FILTER, GXMETAL_TEXTURE_FILTER_FAST,
+        min_filter, mag_filter, &min_filter, &mag_filter) == 1);
+    CHECK(min_filter == GXMETAL_RAVE_GL_NEAREST_MIPMAP_NEAREST);
+    CHECK(mag_filter == GXMETAL_RAVE_GL_NEAREST);
+    CHECK(gxmetal_rave_sampler_tag_is_secondary(
+        GXMETAL_RAVE_TAG_MULTI_TEXTURE_FILTER));
+    CHECK(gxmetal_rave_sampler_tag_is_secondary(
+        GXMETAL_RAVE_TAG_MULTI_TEXTURE_MIN_FILTER));
+    CHECK(gxmetal_rave_sampler_tag_is_secondary(
+        GXMETAL_RAVE_TAG_MULTI_TEXTURE_MAG_FILTER));
+    CHECK(!gxmetal_rave_sampler_tag_is_secondary(
+        GXMETAL_RAVE_TAG_GL_TEXTURE_MIN_FILTER));
+    CHECK(gxmetal_rave_int_state_is_accepted(
+        GXMETAL_RAVE_TAG_GL_TEXTURE_MAG_FILTER,
+        GXMETAL_RAVE_GL_NEAREST));
+    CHECK(gxmetal_rave_int_state_is_accepted(
+        GXMETAL_RAVE_TAG_MULTI_TEXTURE_MAG_FILTER,
+        GXMETAL_RAVE_GL_LINEAR));
+    CHECK(!gxmetal_rave_int_state_is_accepted(
+        GXMETAL_RAVE_TAG_GL_TEXTURE_MAG_FILTER,
+        GXMETAL_RAVE_GL_LINEAR_MIPMAP_NEAREST));
+    CHECK(!gxmetal_rave_int_state_is_accepted(
+        GXMETAL_RAVE_TAG_MULTI_TEXTURE_MAG_FILTER,
+        GXMETAL_RAVE_GL_NEAREST_MIPMAP_LINEAR));
+    CHECK(gxmetal_rave_int_state_is_accepted(
+        GXMETAL_RAVE_TAG_GL_TEXTURE_MIN_FILTER,
+        GXMETAL_RAVE_GL_LINEAR_MIPMAP_LINEAR));
+    CHECK(gxmetal_rave_int_state_is_accepted(
+        GXMETAL_RAVE_TAG_MULTI_TEXTURE_MIN_FILTER,
+        GXMETAL_RAVE_GL_NEAREST_MIPMAP_LINEAR));
     CHECK(!gxmetal_rave_int_state_is_accepted(
         GXMETAL_RAVE_TAG_TEXTURE_FILTER, UINT32_C(0x2704)));
     CHECK(gxmetal_rave_int_state_is_accepted(

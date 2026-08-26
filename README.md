@@ -71,6 +71,8 @@ ClassicMac exists because of years of brilliant work by other engineers. The pat
   Test verifies the advertised RAVE contract and measures both engines before
   a game is launched. GXMetal AGL Probe separately verifies accelerated Apple
   OpenGL context creation, triangle and quad rendering, RGBA textures,
+  independent primary MIN/MAG and mip selection plus the advertised unit-1
+  binding and trilinear path when its ARB entry points are available,
   source-alpha blending, depth ordering, readback, resource deletion, and
   teardown. Protocol 1.24 supports mutable dirty-rectangle draw-buffer access,
   exact complex-region clipping, deep-Z

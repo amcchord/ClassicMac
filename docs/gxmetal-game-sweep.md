@@ -221,12 +221,14 @@ scripts/prepare-gxmetal-game-base.sh \
 
 The tool verifies the signed app, clones the source, replaces GXMetal,
 GXMetal Input, and GXMetal Startup only in the clone, places GXMetal Test in a
-top-level candidate-tools folder, clears inherited test/trace files, and uses
-General Controls inside the guest to persistently disable “Check disk if
-computer was shut down improperly.” It force-stops and reboots the output once,
-requires Finder to appear without Disk First Aid, verifies that the `Smrt`
-preference resource has the Check Disk bit cleared, and then prints source,
-output, Tools CD, and bundled Power Mac QEMU hashes. Set
+top-level candidate-tools folder, and clears inherited test/trace files. While
+the clone is already mounted, it reads the exact id-0 `Smrt` General Controls
+resource. If that single resource already records the disabled startup-disk
+check, the preference is preserved without booting the VM. Otherwise the tool
+uses General Controls inside the guest, force-stops and reboots the output,
+requires Finder to appear without Disk First Aid, and verifies the resource.
+It then prints source, output, Tools CD, and bundled Power Mac QEMU hashes. Set
+`GXMETAL_FORCE_DISK_CHECK_VERIFY=1` to force the full UI/reboot verification or
 `GXMETAL_SKIP_DISK_CHECK_DISABLE=1` only when preparing a special control
 image that must retain the warning.
 
@@ -282,7 +284,9 @@ and host logs are saved.
 For per-commit functional coverage of the four currently proven game routes,
 use `gxmetal/compatibility/four-game-smoke.example.json`. It replaces most
 fixed delays with accepted Finder, menu, and gameplay pixels and gives each
-game its own copy-on-write disk and Unix sockets. The base must contain the
+game its own copy-on-write disk and Unix sockets. Each route closes inherited
+Finder windows before navigating, so a base's last interactive window cannot
+redirect coordinate-driven input. The base must contain the
 installed top-level `FutureCop Preview` folder; media-only bases that contain
 just its installer are intentionally rejected by the launch recipe's semantic
 gate. On a sufficiently large development host, run all four at once:
@@ -314,6 +318,19 @@ python3 scripts/gxmetal-game-sweep.py BASE.img \
 
 Use the longer `signed-unresolved-launch.example.json` routes when a short
 regression changes visually or stops reaching its named semantic capture.
+
+For Oni's historical post-load corruption signature, one focused route checks
+both the +30-second coherent scene and the +45-second transition from the same
+launch. This avoids paying for a second boot, intro, and menu traversal while
+retaining a lossless screenshot and inclusive bright-range assertion at each
+milestone:
+
+```sh
+python3 scripts/gxmetal-game-sweep.py BASE.img \
+  gxmetal/compatibility/oni-transition-smoke.example.json \
+  --modes gxmetal --jobs 1 \
+  --output /path/to/evidence/oni-transition-YYYYMMDD
+```
 
 To replay only failed or recently changed routes without copying the manifest,
 select their stable ids with `--games`:

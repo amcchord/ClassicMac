@@ -72,6 +72,10 @@ typedef struct GXMetalDrawState {
     uint32_t int_state[GXMETAL_STATE_SLOTS];
     uint8_t float_state_valid[GXMETAL_STATE_SLOTS];
     uint8_t int_state_valid[GXMETAL_STATE_SLOTS];
+    uint32_t effective_texture_min_filter;
+    uint32_t effective_texture_mag_filter;
+    uint32_t effective_secondary_texture_min_filter;
+    uint32_t effective_secondary_texture_mag_filter;
     const void *texture;
     uint32_t texture_resource_id;
     const void *secondary_texture;
@@ -2638,6 +2642,9 @@ static void GXMetalSetInt(TQADrawContext *drawContext, TQATagInt tag,
     GXMetalDrawState *state = GXMetalGetState(drawContext);
     GXMetalGuestPacket packet;
     uint8_t *payload;
+    uint32_t nextSamplerMin = 0;
+    uint32_t nextSamplerMag = 0;
+    int samplerTransition = -1;
 
     gDiagnostics.draw_method_stage = 110;
     gDiagnostics.set_int_count++;
@@ -2693,7 +2700,28 @@ static void GXMetalSetInt(TQADrawContext *drawContext, TQATagInt tag,
          * stages without poisoning an otherwise valid draw context. */
         return;
     }
-    if (state->int_state_valid[(uint32_t)tag] &&
+    if (gxmetal_rave_sampler_tag_is_secondary((uint32_t)tag)) {
+        samplerTransition = gxmetal_rave_sampler_state_transition(
+            (uint32_t)tag, (uint32_t)newValue,
+            state->effective_secondary_texture_min_filter,
+            state->effective_secondary_texture_mag_filter,
+            &nextSamplerMin, &nextSamplerMag);
+    } else {
+        samplerTransition = gxmetal_rave_sampler_state_transition(
+            (uint32_t)tag, (uint32_t)newValue,
+            state->effective_texture_min_filter,
+            state->effective_texture_mag_filter,
+            &nextSamplerMin, &nextSamplerMag);
+    }
+    if (samplerTransition == 0) {
+        /* Alias tags have independent getter-visible values even when they
+         * resolve to the sampler state that is already active on the host. */
+        state->int_state[(uint32_t)tag] = (uint32_t)newValue;
+        state->int_state_valid[(uint32_t)tag] = 1;
+        return;
+    }
+    if (samplerTransition < 0 &&
+        state->int_state_valid[(uint32_t)tag] &&
         state->int_state[(uint32_t)tag] == (uint32_t)newValue) {
         return;
     }
@@ -2702,6 +2730,15 @@ static void GXMetalSetInt(TQADrawContext *drawContext, TQATagInt tag,
     }
     state->int_state[(uint32_t)tag] = (uint32_t)newValue;
     state->int_state_valid[(uint32_t)tag] = 1;
+    if (samplerTransition >= 0) {
+        if (gxmetal_rave_sampler_tag_is_secondary((uint32_t)tag)) {
+            state->effective_secondary_texture_min_filter = nextSamplerMin;
+            state->effective_secondary_texture_mag_filter = nextSamplerMag;
+        } else {
+            state->effective_texture_min_filter = nextSamplerMin;
+            state->effective_texture_mag_filter = nextSamplerMag;
+        }
+    }
     if (!GXMetalBeginPacket(state, GXMETAL_OP_SET_STATE,
                             GXMETAL_SET_STATE_PACKET_BYTES, &packet)) {
         return;
@@ -5628,8 +5665,15 @@ static void GXMetalDrawBitmap(const TQADrawContext *drawContext,
                            savedTextureResourceID);
     (void)GXMetalEmitState(state, kQATag_TextureOp, GXMETAL_STATE_UINT32,
                            state->int_state[kQATag_TextureOp]);
-    (void)GXMetalEmitState(state, kQATag_TextureFilter, GXMETAL_STATE_UINT32,
-                           state->int_state[kQATag_TextureFilter]);
+    /* The bitmap's legacy filter preset changes MIN, MAG, and mip selection
+     * on the host. Restore the exact effective OpenGL pair rather than the
+     * last legacy preset, which may predate asymmetric GL state. */
+    (void)GXMetalEmitState(state, kQATagGL_TextureMinFilter,
+                           GXMETAL_STATE_UINT32,
+                           state->effective_texture_min_filter);
+    (void)GXMetalEmitState(state, kQATagGL_TextureMagFilter,
+                           GXMETAL_STATE_UINT32,
+                           state->effective_texture_mag_filter);
     (void)GXMetalEmitState(state, kQATagGL_TextureWrapU,
                            GXMETAL_STATE_UINT32,
                            state->int_state[kQATagGL_TextureWrapU]);
@@ -6107,6 +6151,13 @@ static TQAError GXMetalDrawPrivateNew(TQADrawContext *newDrawContext,
     state->float_state[kQATagGL_DepthBG] = 1.0f;
     state->int_state[kQATag_Blend] = kQABlend_Interpolate;
     state->int_state[kQATag_TextureFilter] = kQATextureFilter_Fast;
+    (void)gxmetal_rave_filter_preset_to_gl(
+        kQATextureFilter_Fast, &state->effective_texture_min_filter,
+        &state->effective_texture_mag_filter);
+    (void)gxmetal_rave_filter_preset_to_gl(
+        kQATextureFilter_Fast,
+        &state->effective_secondary_texture_min_filter,
+        &state->effective_secondary_texture_mag_filter);
     state->int_state[kQATag_TextureOp] = kQATextureOp_None;
     state->int_state[kQATag_BitmapFilter] = kQAFilter_Fast;
     state->int_state[kQATag_ChannelMask] = kQAChannelMask_r |

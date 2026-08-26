@@ -14,6 +14,7 @@
       "steps": [
         {"wait_for_pixel": {"x": 22, "y": 11, "red": 221, "green": 0, "blue": 0, "tolerance": 8, "timeout_seconds": 180, "poll_interval_seconds": 1}},
         {"screenshot": "finder-ready"},
+        {"chord": "Super_L+Alt_L+w", "delay_after": 3},
         {"double_click": [590, 52], "delay_after": 2},
         {"text": "GXMetal Sweep Games", "delay_after": 1},
         {"chord": "Super_L+o", "delay_after": 2},
@@ -79,6 +80,7 @@
       "steps": [
         {"wait_for_pixel": {"x": 22, "y": 11, "red": 221, "green": 0, "blue": 0, "tolerance": 8, "timeout_seconds": 180, "poll_interval_seconds": 1}},
         {"screenshot": "finder-ready"},
+        {"chord": "Super_L+Alt_L+w", "delay_after": 3},
         {"double_click": [590, 52], "delay_after": 3},
         {"double_click": [334, 217], "delay_after": 5},
         {"double_click": [306, 112], "delay_after": 5},

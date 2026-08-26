@@ -92,6 +92,107 @@ static inline int gxmetal_rave_filter_is_accepted(uint32_t value)
            value == GXMETAL_RAVE_GL_LINEAR_MIPMAP_LINEAR;
 }
 
+static inline int gxmetal_rave_mag_filter_is_accepted(uint32_t value)
+{
+    return value == GXMETAL_RAVE_GL_NEAREST ||
+           value == GXMETAL_RAVE_GL_LINEAR;
+}
+
+/* Legacy RAVE exposes one Fast/Mid/Best preset while ATI's OpenGL bridge
+ * supplies independent MIN and MAG tags.  Express the presets as exact GL
+ * values so temporary engine draws can restore asymmetric OpenGL state
+ * without collapsing it back to a single preset. */
+static inline int gxmetal_rave_filter_preset_to_gl(
+    uint32_t value, uint32_t *min_filter, uint32_t *mag_filter)
+{
+    uint32_t min_value;
+    uint32_t mag_value;
+
+    switch (value) {
+    case GXMETAL_TEXTURE_FILTER_FAST:
+        min_value = GXMETAL_RAVE_GL_NEAREST_MIPMAP_NEAREST;
+        mag_value = GXMETAL_RAVE_GL_NEAREST;
+        break;
+    case GXMETAL_TEXTURE_FILTER_MID:
+        min_value = GXMETAL_RAVE_GL_LINEAR_MIPMAP_NEAREST;
+        mag_value = GXMETAL_RAVE_GL_LINEAR;
+        break;
+    case GXMETAL_TEXTURE_FILTER_BEST:
+        min_value = GXMETAL_RAVE_GL_LINEAR_MIPMAP_LINEAR;
+        mag_value = GXMETAL_RAVE_GL_LINEAR;
+        break;
+    case GXMETAL_RAVE_GL_NEAREST:
+    case GXMETAL_RAVE_GL_NEAREST_MIPMAP_NEAREST:
+    case GXMETAL_RAVE_GL_NEAREST_MIPMAP_LINEAR:
+        min_value = value;
+        mag_value = GXMETAL_RAVE_GL_NEAREST;
+        break;
+    case GXMETAL_RAVE_GL_LINEAR:
+    case GXMETAL_RAVE_GL_LINEAR_MIPMAP_NEAREST:
+    case GXMETAL_RAVE_GL_LINEAR_MIPMAP_LINEAR:
+        min_value = value;
+        mag_value = GXMETAL_RAVE_GL_LINEAR;
+        break;
+    default:
+        return 0;
+    }
+    if (min_filter != NULL) {
+        *min_filter = min_value;
+    }
+    if (mag_filter != NULL) {
+        *mag_filter = mag_value;
+    }
+    return 1;
+}
+
+static inline int gxmetal_rave_sampler_tag_is_secondary(uint32_t tag)
+{
+    return tag == GXMETAL_RAVE_TAG_MULTI_TEXTURE_FILTER ||
+           tag == GXMETAL_RAVE_TAG_MULTI_TEXTURE_MAG_FILTER ||
+           tag == GXMETAL_RAVE_TAG_MULTI_TEXTURE_MIN_FILTER;
+}
+
+/* Return -1 for a non-sampler/invalid tag, zero when the effective sampler is
+ * unchanged, and one when the host must receive this transition. Legacy and
+ * GL tags alias the same host sampler, so raw per-tag deduplication is not
+ * sufficient after another alias changes MIN, MAG, or mip selection. */
+static inline int gxmetal_rave_sampler_state_transition(
+    uint32_t tag, uint32_t value, uint32_t current_min,
+    uint32_t current_mag, uint32_t *next_min, uint32_t *next_mag)
+{
+    uint32_t min_filter = current_min;
+    uint32_t mag_filter = current_mag;
+
+    if (tag == GXMETAL_RAVE_TAG_TEXTURE_FILTER ||
+        tag == GXMETAL_RAVE_TAG_MULTI_TEXTURE_FILTER) {
+        if (!gxmetal_rave_filter_preset_to_gl(
+                value, &min_filter, &mag_filter)) {
+            return -1;
+        }
+    } else if (tag == GXMETAL_RAVE_TAG_GL_TEXTURE_MIN_FILTER ||
+               tag == GXMETAL_RAVE_TAG_MULTI_TEXTURE_MIN_FILTER) {
+        if (!gxmetal_rave_filter_is_accepted(value)) {
+            return -1;
+        }
+        min_filter = value;
+    } else if (tag == GXMETAL_RAVE_TAG_GL_TEXTURE_MAG_FILTER ||
+               tag == GXMETAL_RAVE_TAG_MULTI_TEXTURE_MAG_FILTER) {
+        if (!gxmetal_rave_mag_filter_is_accepted(value)) {
+            return -1;
+        }
+        mag_filter = value;
+    } else {
+        return -1;
+    }
+    if (next_min != NULL) {
+        *next_min = min_filter;
+    }
+    if (next_mag != NULL) {
+        *next_mag = mag_filter;
+    }
+    return min_filter != current_min || mag_filter != current_mag;
+}
+
 static inline int gxmetal_rave_gl_blend_factor_is_accepted(uint32_t value)
 {
     return value <= 1u ||
@@ -127,11 +228,13 @@ static inline int gxmetal_rave_int_state_is_accepted(uint32_t tag,
          * additional unit, so only primary (-1) and secondary (0) are valid. */
         return value == UINT32_MAX || value == 0u;
     }
+    if (tag == GXMETAL_RAVE_TAG_GL_TEXTURE_MAG_FILTER ||
+        tag == GXMETAL_RAVE_TAG_MULTI_TEXTURE_MAG_FILTER) {
+        return gxmetal_rave_mag_filter_is_accepted(value);
+    }
     if (tag == GXMETAL_RAVE_TAG_TEXTURE_FILTER ||
         tag == GXMETAL_RAVE_TAG_MULTI_TEXTURE_FILTER ||
-        tag == GXMETAL_RAVE_TAG_MULTI_TEXTURE_MAG_FILTER ||
         tag == GXMETAL_RAVE_TAG_MULTI_TEXTURE_MIN_FILTER ||
-        tag == GXMETAL_RAVE_TAG_GL_TEXTURE_MAG_FILTER ||
         tag == GXMETAL_RAVE_TAG_GL_TEXTURE_MIN_FILTER) {
         return gxmetal_rave_filter_is_accepted(value);
     }

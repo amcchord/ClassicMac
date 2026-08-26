@@ -58,6 +58,32 @@ static int gxmetal_agl_probe_filled_modes_match(
     return 1;
 }
 
+static int gxmetal_agl_probe_sampler_primary_matches(
+    const uint8_t base_only[3], const uint8_t trilinear[3],
+    const uint8_t asymmetric[3], uint32_t error)
+{
+    int red_blue_delta = (int)asymmetric[0] - (int)asymmetric[2];
+
+    if (red_blue_delta < 0) {
+        red_blue_delta = -red_blue_delta;
+    }
+    return error == 0 &&
+           base_only[0] > 176 && base_only[1] < 64 && base_only[2] < 64 &&
+           trilinear[0] > 64 && trilinear[0] < 192 &&
+           trilinear[1] > 64 && trilinear[1] < 192 && trilinear[2] < 64 &&
+           asymmetric[0] > 64 && asymmetric[0] < 192 &&
+           asymmetric[1] < 64 &&
+           asymmetric[2] > 64 && asymmetric[2] < 192 &&
+           red_blue_delta < 64;
+}
+
+static int gxmetal_agl_probe_sampler_unit1_matches(
+    const uint8_t sample[3], uint32_t error)
+{
+    return error == 0 && sample[0] > 64 && sample[0] < 192 &&
+           sample[1] > 64 && sample[1] < 192 && sample[2] > 176;
+}
+
 static int gxmetal_agl_probe_has_extension(const char *extensions,
                                             const char *name)
 {

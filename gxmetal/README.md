@@ -25,7 +25,8 @@ pixel type 1001 as big-endian ARGB4444, preserving the alpha nibble used for
 antialiased menu and HUD glyph masks. This is required for correctly colored
 world textures and overlapping interface sprites. Metal
 provides perspective-correct sampling, repeat/clamp addressing, nearest,
-bilinear, and trilinear mip filtering, plus RAVE decal, modulation, and
+bilinear, and trilinear mip filtering, with independent OpenGL MIN, MAG, and
+mip selection on both texture units, plus RAVE decal, modulation, and
 highlight texture operations. Linear, exponential, and squared-exponential
 RAVE depth fog is applied in both the Gouraud and textured fragment paths. Fog
 distance follows the RAVE contract and is reconstructed from `1 / invW`; the
@@ -86,6 +87,16 @@ a typed `SET_STATE` payload, while pointer-valued texture and bitmap state is
 translated to 32-bit GXMetal resource IDs. Gouraud vertices use eight binary32
 values; textured vertices use the exact sixteen-value RAVE layout. Resource
 uploads name only a validated offset and length in the upload heap.
+
+The existing primary and secondary OpenGL filter tags carry independent MIN
+and MAG state without a protocol extension. MIN accepts all six OpenGL 1.x
+choices and selects both spatial and mip filtering; MAG accepts only nearest
+or linear. Legacy RAVE Fast/Mid/Best tags continue to set the corresponding
+complete sampler preset. GXMetal AGL Probe persists distinct primary base-only,
+trilinear, and asymmetric-filter pixels. When Apple OpenGL exposes two ARB
+texture units and both CFM entry points, it also persists a separate unit-1
+mip sample; older installations report that lane as native-test-only instead
+of failing symbol resolution.
 
 The upload heap is a single staging region, so the guest follows every texture
 or bitmap upload with a fence before reusing those bytes. This prevents games

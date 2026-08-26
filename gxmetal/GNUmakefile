@@ -84,7 +84,7 @@ $(BUILD_DIR)/test_metal: tests/test_metal.m host/gxmetal_metal.m \
                          host/gxmetal_metal.h host/gxmetal_decode.c \
                          host/gxmetal_decode.h protocol/gxmetal_protocol.h
 	@mkdir -p $(BUILD_DIR)
-	$(HOST_CC) $(HOST_CFLAGS) -fno-objc-arc -o $@ tests/test_metal.m \
+	$(HOST_CC) $(HOST_CFLAGS) -DGXMETAL_TESTING -fno-objc-arc -o $@ tests/test_metal.m \
 		host/gxmetal_metal.m host/gxmetal_decode.c \
 		-framework Foundation -framework Metal
 

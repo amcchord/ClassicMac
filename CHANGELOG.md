@@ -4,6 +4,25 @@
 
 ### Changed
 
+- GXMetal game-base preparation now reads the persisted General Controls
+  resource while the cloned disk is already mounted. A verified disabled
+  startup disk-check preference skips two redundant VM boots; release testing
+  can force the full reboot verification with
+  `GXMETAL_FORCE_DISK_CHECK_VERIFY=1`.
+- Game smokes now close inherited Finder windows before coordinate-driven
+  launches. Oni's two post-load corruption milestones share one scripted VM
+  session, avoiding a duplicate boot, intro, and menu traversal.
+- GXMetal now preserves independent OpenGL MIN, MAG, and mip filtering for
+  both texture units. All six legal MIN modes select their exact nearest,
+  bilinear, or trilinear Metal sampler behavior, MAG changes no longer erase
+  mip state, and legacy RAVE Fast/Mid/Best presets retain their prior mapping.
+  Temporary `QADrawBitmap` sampler changes restore the exact asymmetric
+  primary-unit state afterward. Native Metal render/readback coverage uses
+  distinct mip colors to verify base-only minification, trilinear blending,
+  and asymmetric magnification through the real sampler bindings. The Mac OS
+  9 AGL Probe now repeats those checks through accelerated Apple OpenGL and
+  conditionally validates the advertised ARB unit-1 binding/state path, with
+  explicit machine-readable coverage and pixel fields.
 - GXMetal protocol 1.24 adds a separately negotiated draw-buffer-writeback
   command. `QAAccessDrawBufferEnd` now uploads only the validated dirty
   rectangle from the shared readback aperture, fences before that staging

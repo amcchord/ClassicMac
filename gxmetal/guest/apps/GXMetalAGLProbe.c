@@ -69,6 +69,8 @@ enum {
     GX_GL_TEXTURE_MAG_FILTER = 0x2800,
     GX_GL_TEXTURE_MIN_FILTER = 0x2801,
     GX_GL_NEAREST = 0x2600,
+    GX_GL_LINEAR = 0x2601,
+    GX_GL_LINEAR_MIPMAP_LINEAR = 0x2703,
     GX_GL_BLEND = 0x0be2,
     GX_GL_DEPTH_TEST = 0x0b71,
     GX_GL_TEXTURE_2D = 0x0de1,
@@ -83,6 +85,8 @@ enum {
     GX_GL_EXTENSIONS = 0x1f03,
     GX_GL_MAX_LIGHTS = 0x0d31,
     GX_GL_MAX_TEXTURE_SIZE = 0x0d33,
+    GX_GL_TEXTURE0_ARB = 0x84c0,
+    GX_GL_TEXTURE1_ARB = 0x84c1,
     GX_GL_MAX_TEXTURE_UNITS_ARB = 0x84e2
 };
 
@@ -121,6 +125,8 @@ typedef void (*GXGLColor4fProc)(GXGLfloat, GXGLfloat, GXGLfloat, GXGLfloat);
 typedef void (*GXGLVertex2fProc)(GXGLfloat, GXGLfloat);
 typedef void (*GXGLVertex3fProc)(GXGLfloat, GXGLfloat, GXGLfloat);
 typedef void (*GXGLTexCoord2fProc)(GXGLfloat, GXGLfloat);
+typedef void (*GXGLActiveTextureARBProc)(GXGLenum);
+typedef void (*GXGLMultiTexCoord2fARBProc)(GXGLenum, GXGLfloat, GXGLfloat);
 typedef void (*GXGLEndProc)(void);
 typedef void (*GXGLGenTexturesProc)(GXGLsizei, GXGLuint *);
 typedef void (*GXGLBindTextureProc)(GXGLenum, GXGLuint);
@@ -165,6 +171,8 @@ typedef struct GXMetalAGLAPI {
     GXGLVertex2fProc glVertex2f;
     GXGLVertex3fProc glVertex3f;
     GXGLTexCoord2fProc glTexCoord2f;
+    GXGLActiveTextureARBProc glActiveTextureARB;
+    GXGLMultiTexCoord2fARBProc glMultiTexCoord2fARB;
     GXGLEndProc glEnd;
     GXGLGenTexturesProc glGenTextures;
     GXGLBindTextureProc glBindTexture;
@@ -221,10 +229,20 @@ typedef struct GXMetalAGLReport {
     uint8_t depth[3];
     uint8_t filledModes[GXMETAL_AGL_PROBE_FILLED_MODE_COUNT][3];
     uint8_t triangleListGuard[3];
+    uint8_t samplerBaseOnly[3];
+    uint8_t samplerTrilinear[3];
+    uint8_t samplerAsymmetric[3];
+    uint8_t samplerUnit1[3];
     Boolean glReadbackMatches;
     Boolean extendedReadbackMatches;
     Boolean clippedTextureMatches;
     Boolean filledModesMatch;
+    Boolean samplerPrimaryMatches;
+    Boolean samplerUnit1Extension;
+    Boolean samplerUnit1Symbols;
+    Boolean samplerUnit1Available;
+    Boolean samplerUnit1Tested;
+    Boolean samplerUnit1Matches;
     Boolean displayReadbackMatches;
     Boolean textureDeleted;
     Boolean currentReleased;
@@ -472,6 +490,16 @@ static Boolean GXMetalAGLResolveAPI(CFragConnectionID connection,
     GXMETAL_AGL_RESOLVE(glReadPixels, GXGLReadPixelsProc, "glReadPixels");
     GXMETAL_AGL_RESOLVE(glGetError, GXGLGetErrorProc, "glGetError");
 #undef GXMETAL_AGL_RESOLVE
+
+    /* These entry points are optional. Resolve them through the same CFM
+     * boundary, but do not make an OpenGL 1.1 installation fail the core
+     * probe merely because ARB multitexture is unavailable. */
+    if (GXMetalAGLResolve(connection, "glActiveTextureARB", &resolved)) {
+        api->glActiveTextureARB = (GXGLActiveTextureARBProc)resolved;
+    }
+    if (GXMetalAGLResolve(connection, "glMultiTexCoord2fARB", &resolved)) {
+        api->glMultiTexCoord2fARB = (GXGLMultiTexCoord2fARBProc)resolved;
+    }
     return true;
 }
 
@@ -527,6 +555,54 @@ static Boolean GXMetalAGLReadDisplayPixel(GDHandle graphicsDevice,
         return true;
     }
     return false;
+}
+
+static void GXMetalAGLFillSolidRGBA(uint8_t *pixels, size_t pixelCount,
+                                    uint8_t red, uint8_t green,
+                                    uint8_t blue)
+{
+    size_t index;
+
+    for (index = 0; index < pixelCount; ++index) {
+        pixels[index * 4 + 0] = red;
+        pixels[index * 4 + 1] = green;
+        pixels[index * 4 + 2] = blue;
+        pixels[index * 4 + 3] = 255;
+    }
+}
+
+static void GXMetalAGLDrawTexturedQuad(const GXMetalAGLAPI *api,
+                                       GXGLfloat left, GXGLfloat bottom,
+                                       GXGLfloat right, GXGLfloat top)
+{
+    api->glBegin(GX_GL_QUADS);
+    api->glTexCoord2f(0.0f, 0.0f); api->glVertex2f(left, bottom);
+    api->glTexCoord2f(1.0f, 0.0f); api->glVertex2f(right, bottom);
+    api->glTexCoord2f(1.0f, 1.0f); api->glVertex2f(right, top);
+    api->glTexCoord2f(0.0f, 1.0f); api->glVertex2f(left, top);
+    api->glEnd();
+}
+
+static void GXMetalAGLDrawMultiTexturedQuad(const GXMetalAGLAPI *api,
+                                            GXGLfloat left,
+                                            GXGLfloat bottom,
+                                            GXGLfloat right,
+                                            GXGLfloat top)
+{
+    api->glBegin(GX_GL_QUADS);
+    api->glTexCoord2f(0.0f, 0.0f);
+    api->glMultiTexCoord2fARB(GX_GL_TEXTURE1_ARB, 0.0f, 0.0f);
+    api->glVertex2f(left, bottom);
+    api->glTexCoord2f(1.0f, 0.0f);
+    api->glMultiTexCoord2fARB(GX_GL_TEXTURE1_ARB, 1.0f, 0.0f);
+    api->glVertex2f(right, bottom);
+    api->glTexCoord2f(1.0f, 1.0f);
+    api->glMultiTexCoord2fARB(GX_GL_TEXTURE1_ARB, 1.0f, 1.0f);
+    api->glVertex2f(right, top);
+    api->glTexCoord2f(0.0f, 1.0f);
+    api->glMultiTexCoord2fARB(GX_GL_TEXTURE1_ARB, 0.0f, 1.0f);
+    api->glVertex2f(left, top);
+    api->glEnd();
 }
 
 static void GXMetalAGLBuildReport(const GXMetalAGLReport *report,
@@ -645,6 +721,41 @@ static void GXMetalAGLBuildReport(const GXMetalAGLReport *report,
         report->triangleListGuard[2]);
     GXMetalAGLAppendText(&cursor, end, " match=");
     GXMetalAGLAppendUnsigned(&cursor, end, report->filledModesMatch);
+    GXMetalAGLAppendText(&cursor, end, "\nsampler_primary base_only=");
+    GXMetalAGLAppendHex(&cursor, end,
+        ((unsigned long)report->samplerBaseOnly[0] << 16) |
+        ((unsigned long)report->samplerBaseOnly[1] << 8) |
+        report->samplerBaseOnly[2]);
+    GXMetalAGLAppendText(&cursor, end, " trilinear=");
+    GXMetalAGLAppendHex(&cursor, end,
+        ((unsigned long)report->samplerTrilinear[0] << 16) |
+        ((unsigned long)report->samplerTrilinear[1] << 8) |
+        report->samplerTrilinear[2]);
+    GXMetalAGLAppendText(&cursor, end, " asymmetric=");
+    GXMetalAGLAppendHex(&cursor, end,
+        ((unsigned long)report->samplerAsymmetric[0] << 16) |
+        ((unsigned long)report->samplerAsymmetric[1] << 8) |
+        report->samplerAsymmetric[2]);
+    GXMetalAGLAppendText(&cursor, end, " match=");
+    GXMetalAGLAppendUnsigned(&cursor, end, report->samplerPrimaryMatches);
+    GXMetalAGLAppendText(&cursor, end, "\nsampler_unit1 extension=");
+    GXMetalAGLAppendUnsigned(&cursor, end, report->samplerUnit1Extension);
+    GXMetalAGLAppendText(&cursor, end, " symbols=");
+    GXMetalAGLAppendUnsigned(&cursor, end, report->samplerUnit1Symbols);
+    GXMetalAGLAppendText(&cursor, end, " available=");
+    GXMetalAGLAppendUnsigned(&cursor, end, report->samplerUnit1Available);
+    GXMetalAGLAppendText(&cursor, end, " tested=");
+    GXMetalAGLAppendUnsigned(&cursor, end, report->samplerUnit1Tested);
+    GXMetalAGLAppendText(&cursor, end, " sample=");
+    GXMetalAGLAppendHex(&cursor, end,
+        ((unsigned long)report->samplerUnit1[0] << 16) |
+        ((unsigned long)report->samplerUnit1[1] << 8) |
+        report->samplerUnit1[2]);
+    GXMetalAGLAppendText(&cursor, end, " match=");
+    GXMetalAGLAppendUnsigned(&cursor, end, report->samplerUnit1Matches);
+    GXMetalAGLAppendText(&cursor, end, " coverage=");
+    GXMetalAGLAppendText(&cursor, end,
+        report->samplerUnit1Tested ? "agl" : "native-only");
     GXMetalAGLAppendText(&cursor, end, "\ndisplay_readback triangle=");
     GXMetalAGLAppendHex(&cursor, end,
         ((unsigned long)report->displayTriangle[0] << 16) |
@@ -686,7 +797,7 @@ static void GXMetalAGLShowResult(const GXMetalAGLReport *report)
             "PASS: Apple AGL created a software OpenGL context. ");
         GXMetalAGLAppendText(&cursor, end, report->renderer);
         GXMetalAGLAppendText(&cursor, end,
-            " passed all filled primitive modes, clipped texture, alpha-blend, depth, readback, presentation, and resource-lifecycle checks. Detailed caps are in Preferences:GXMetal AGL Probe Results.");
+            " passed filled primitive, clipped texture, sampler MIN/MAG/mip, alpha-blend, depth, readback, presentation, and resource-lifecycle checks. Detailed caps are in Preferences:GXMetal AGL Probe Results.");
     } else if (report->displayReadbackMatches) {
         GXMetalAGLAppendText(&cursor, end,
             "PARTIAL: the accelerated OpenGL context presented the expected triangle, but core glReadPixels returned the wrong pixels. Detailed caps are in Preferences:GXMetal AGL Probe Results.");
@@ -711,10 +822,23 @@ static void GXMetalAGLShowResult(const GXMetalAGLReport *report)
 
 int main(void)
 {
+    enum {
+        kGXMetalAGLTextureScene,
+        kGXMetalAGLTextureSamplerMip,
+        kGXMetalAGLTextureAsymmetric,
+        kGXMetalAGLTextureUnit1Mip,
+        kGXMetalAGLTextureUnit1White,
+        kGXMetalAGLTextureCount
+    };
     static const uint8_t texturePixels[16] = {
         255, 240, 8, 255, 255, 240, 8, 255,
         255, 240, 8, 255, 255, 240, 8, 255
     };
+    static const uint8_t asymmetricPixels[16] = {
+        255, 0, 0, 255, 0, 0, 255, 255,
+        255, 0, 0, 255, 0, 0, 255, 255
+    };
+    static const uint8_t whitePixel[4] = {255, 255, 255, 255};
     static const char windowTitleText[] =
         "GXMetal AGL Probe " GXMETAL_PRODUCT_VERSION_STRING;
     static const GXGLint attributes[] = {
@@ -734,7 +858,11 @@ int main(void)
     WindowPtr window = NULL;
     GXAGLPixelFormat pixelFormat = NULL;
     GXAGLContext context = NULL;
-    GXGLuint textureObject = 0;
+    GXGLuint textureObjects[kGXMetalAGLTextureCount];
+    GXGLsizei textureObjectCount = 0;
+    uint8_t mipLevel0[4 * 4 * 4];
+    uint8_t mipLevel1[2 * 2 * 4];
+    uint8_t mipLevel2[4];
     GXAGLDevice device;
     Point triangleLocation;
     Point backgroundLocation;
@@ -748,6 +876,7 @@ int main(void)
 
     memset(&api, 0, sizeof(api));
     memset(&report, 0, sizeof(report));
+    memset(textureObjects, 0, sizeof(textureObjects));
     report.aglMajor = -1;
     report.aglMinor = -1;
     report.accelerated = -1;
@@ -852,11 +981,17 @@ int main(void)
                            api.glGetString(GX_GL_EXTENSIONS));
     api.glGetIntegerv(GX_GL_MAX_TEXTURE_SIZE, &report.maxTextureSize);
     api.glGetIntegerv(GX_GL_MAX_LIGHTS, &report.maxLights);
-    if (gxmetal_agl_probe_has_extension(report.extensions,
-                                        "GL_ARB_multitexture")) {
+    report.samplerUnit1Extension = gxmetal_agl_probe_has_extension(
+        report.extensions, "GL_ARB_multitexture");
+    report.samplerUnit1Symbols = api.glActiveTextureARB != NULL &&
+                                 api.glMultiTexCoord2fARB != NULL;
+    if (report.samplerUnit1Extension) {
         api.glGetIntegerv(GX_GL_MAX_TEXTURE_UNITS_ARB,
                           &report.maxTextureUnits);
     }
+    report.samplerUnit1Available = report.samplerUnit1Extension &&
+                                   report.samplerUnit1Symbols &&
+                                   report.maxTextureUnits >= 2;
     if (report.vendor[0] == '\0' || report.renderer[0] == '\0' ||
         report.version[0] == '\0' || report.maxTextureSize <= 0 ||
         report.maxLights <= 0 || report.maxTextureUnits <= 0) {
@@ -935,14 +1070,22 @@ int main(void)
     api.glVertex2f(267.0f, 125.0f);
     api.glEnd();
 
-    /* A real texture object and upload, sampled with normalized coordinates. */
-    api.glGenTextures(1, &textureObject);
-    if (textureObject == 0) {
+    /* Real texture objects and uploads, sampled with normalized coordinates. */
+    textureObjectCount = report.samplerUnit1Available ?
+                         kGXMetalAGLTextureCount : 3;
+    api.glGenTextures(textureObjectCount, textureObjects);
+    if (textureObjects[kGXMetalAGLTextureScene] == 0 ||
+        textureObjects[kGXMetalAGLTextureSamplerMip] == 0 ||
+        textureObjects[kGXMetalAGLTextureAsymmetric] == 0 ||
+        (report.samplerUnit1Available &&
+         (textureObjects[kGXMetalAGLTextureUnit1Mip] == 0 ||
+          textureObjects[kGXMetalAGLTextureUnit1White] == 0))) {
         report.glError = api.glGetError();
         report.failureReason = "glGenTextures returned zero";
         goto cleanup;
     }
-    api.glBindTexture(GX_GL_TEXTURE_2D, textureObject);
+    api.glBindTexture(GX_GL_TEXTURE_2D,
+                      textureObjects[kGXMetalAGLTextureScene]);
     api.glTexParameteri(GX_GL_TEXTURE_2D, GX_GL_TEXTURE_MIN_FILTER,
                         GX_GL_NEAREST);
     api.glTexParameteri(GX_GL_TEXTURE_2D, GX_GL_TEXTURE_MAG_FILTER,
@@ -968,6 +1111,91 @@ int main(void)
     api.glTexCoord2f(0.0f, 1.0f); api.glVertex2f(-20.0f, 144.0f);
     api.glEnd();
     api.glDisable(GX_GL_TEXTURE_2D);
+
+    /* A red/green/blue mip chain gives each MIN behavior an unambiguous
+     * readback. A non-mipmap MIN remains red at level zero. Rendering the 4x4
+     * image into three pixels selects fractional LOD log2(4/3), so trilinear
+     * MIN must contain both red level zero and green level one.
+     */
+    GXMetalAGLFillSolidRGBA(mipLevel0, 16, 255, 0, 0);
+    GXMetalAGLFillSolidRGBA(mipLevel1, 4, 0, 255, 0);
+    GXMetalAGLFillSolidRGBA(mipLevel2, 1, 0, 0, 255);
+    api.glBindTexture(GX_GL_TEXTURE_2D,
+                      textureObjects[kGXMetalAGLTextureSamplerMip]);
+    api.glTexImage2D(GX_GL_TEXTURE_2D, 0, GX_GL_RGBA, 4, 4, 0,
+                     GX_GL_RGBA, GX_GL_UNSIGNED_BYTE, mipLevel0);
+    api.glTexImage2D(GX_GL_TEXTURE_2D, 1, GX_GL_RGBA, 2, 2, 0,
+                     GX_GL_RGBA, GX_GL_UNSIGNED_BYTE, mipLevel1);
+    api.glTexImage2D(GX_GL_TEXTURE_2D, 2, GX_GL_RGBA, 1, 1, 0,
+                     GX_GL_RGBA, GX_GL_UNSIGNED_BYTE, mipLevel2);
+    api.glTexParameteri(GX_GL_TEXTURE_2D, GX_GL_TEXTURE_MAG_FILTER,
+                        GX_GL_NEAREST);
+    api.glTexParameteri(GX_GL_TEXTURE_2D, GX_GL_TEXTURE_MIN_FILTER,
+                        GX_GL_NEAREST);
+    api.glEnable(GX_GL_TEXTURE_2D);
+    GXMetalAGLDrawTexturedQuad(&api, 40.0f, 132.0f, 42.0f, 134.0f);
+    api.glTexParameteri(GX_GL_TEXTURE_2D, GX_GL_TEXTURE_MIN_FILTER,
+                        GX_GL_LINEAR_MIPMAP_LINEAR);
+    GXMetalAGLDrawTexturedQuad(&api, 46.0f, 132.0f, 49.0f, 135.0f);
+    api.glDisable(GX_GL_TEXTURE_2D);
+
+    /* Set MAG before MIN so a bridge which collapses the two independent tags
+     * will incorrectly make this magnified red/blue boundary nearest-filtered.
+     */
+    api.glBindTexture(GX_GL_TEXTURE_2D,
+                      textureObjects[kGXMetalAGLTextureAsymmetric]);
+    api.glTexImage2D(GX_GL_TEXTURE_2D, 0, GX_GL_RGBA, 2, 2, 0,
+                     GX_GL_RGBA, GX_GL_UNSIGNED_BYTE, asymmetricPixels);
+    api.glTexParameteri(GX_GL_TEXTURE_2D, GX_GL_TEXTURE_MAG_FILTER,
+                        GX_GL_LINEAR);
+    api.glTexParameteri(GX_GL_TEXTURE_2D, GX_GL_TEXTURE_MIN_FILTER,
+                        GX_GL_NEAREST);
+    api.glEnable(GX_GL_TEXTURE_2D);
+    GXMetalAGLDrawTexturedQuad(&api, 56.0f, 130.0f, 88.0f, 144.0f);
+    api.glDisable(GX_GL_TEXTURE_2D);
+
+    if (report.samplerUnit1Available) {
+        /* Unit zero contributes white while unit one's magenta/cyan mip chain
+         * contributes both colors at the same fractional LOD. This proves
+         * that Apple's ARB path selected the secondary binding, independent
+         * MIN state, and trilinear mip sampler. */
+        api.glActiveTextureARB(GX_GL_TEXTURE0_ARB);
+        api.glBindTexture(GX_GL_TEXTURE_2D,
+                          textureObjects[kGXMetalAGLTextureUnit1White]);
+        api.glTexImage2D(GX_GL_TEXTURE_2D, 0, GX_GL_RGBA, 1, 1, 0,
+                         GX_GL_RGBA, GX_GL_UNSIGNED_BYTE, whitePixel);
+        api.glTexParameteri(GX_GL_TEXTURE_2D, GX_GL_TEXTURE_MAG_FILTER,
+                            GX_GL_NEAREST);
+        api.glTexParameteri(GX_GL_TEXTURE_2D, GX_GL_TEXTURE_MIN_FILTER,
+                            GX_GL_NEAREST);
+        api.glEnable(GX_GL_TEXTURE_2D);
+
+        GXMetalAGLFillSolidRGBA(mipLevel0, 16, 255, 0, 255);
+        GXMetalAGLFillSolidRGBA(mipLevel1, 4, 0, 255, 255);
+        GXMetalAGLFillSolidRGBA(mipLevel2, 1, 255, 255, 0);
+        api.glActiveTextureARB(GX_GL_TEXTURE1_ARB);
+        api.glBindTexture(GX_GL_TEXTURE_2D,
+                          textureObjects[kGXMetalAGLTextureUnit1Mip]);
+        api.glTexImage2D(GX_GL_TEXTURE_2D, 0, GX_GL_RGBA, 4, 4, 0,
+                         GX_GL_RGBA, GX_GL_UNSIGNED_BYTE, mipLevel0);
+        api.glTexImage2D(GX_GL_TEXTURE_2D, 1, GX_GL_RGBA, 2, 2, 0,
+                         GX_GL_RGBA, GX_GL_UNSIGNED_BYTE, mipLevel1);
+        api.glTexImage2D(GX_GL_TEXTURE_2D, 2, GX_GL_RGBA, 1, 1, 0,
+                         GX_GL_RGBA, GX_GL_UNSIGNED_BYTE, mipLevel2);
+        api.glTexParameteri(GX_GL_TEXTURE_2D, GX_GL_TEXTURE_MAG_FILTER,
+                            GX_GL_NEAREST);
+        api.glTexParameteri(GX_GL_TEXTURE_2D, GX_GL_TEXTURE_MIN_FILTER,
+                            GX_GL_LINEAR_MIPMAP_LINEAR);
+        api.glEnable(GX_GL_TEXTURE_2D);
+        api.glActiveTextureARB(GX_GL_TEXTURE0_ARB);
+        GXMetalAGLDrawMultiTexturedQuad(&api, 92.0f, 132.0f,
+                                       95.0f, 135.0f);
+        api.glActiveTextureARB(GX_GL_TEXTURE1_ARB);
+        api.glDisable(GX_GL_TEXTURE_2D);
+        api.glActiveTextureARB(GX_GL_TEXTURE0_ARB);
+        api.glDisable(GX_GL_TEXTURE_2D);
+        report.samplerUnit1Tested = true;
+    }
 
     /* Source-alpha blending over the blue clear color. */
     api.glEnable(GX_GL_BLEND);
@@ -1024,8 +1252,19 @@ int main(void)
     }
     api.glReadPixels(22, 105, 1, 1, GX_GL_RGB, GX_GL_UNSIGNED_BYTE,
                      report.triangleListGuard);
-    api.glDeleteTextures(1, &textureObject);
-    textureObject = 0;
+    api.glReadPixels(40, 132, 1, 1, GX_GL_RGB, GX_GL_UNSIGNED_BYTE,
+                     report.samplerBaseOnly);
+    api.glReadPixels(47, 133, 1, 1, GX_GL_RGB, GX_GL_UNSIGNED_BYTE,
+                     report.samplerTrilinear);
+    api.glReadPixels(72, 137, 1, 1, GX_GL_RGB, GX_GL_UNSIGNED_BYTE,
+                     report.samplerAsymmetric);
+    if (report.samplerUnit1Tested) {
+        api.glReadPixels(93, 133, 1, 1, GX_GL_RGB, GX_GL_UNSIGNED_BYTE,
+                         report.samplerUnit1);
+    }
+    api.glDeleteTextures(textureObjectCount, textureObjects);
+    textureObjectCount = 0;
+    memset(textureObjects, 0, sizeof(textureObjects));
     report.glError = api.glGetError();
     report.textureDeleted = report.glError == GX_GL_NO_ERROR;
     report.glReadbackMatches = gxmetal_agl_probe_readback_matches(
@@ -1038,6 +1277,15 @@ int main(void)
             report.clippedTexture, report.glError);
     report.filledModesMatch = gxmetal_agl_probe_filled_modes_match(
         report.filledModes, report.triangleListGuard, report.glError);
+    report.samplerPrimaryMatches =
+        gxmetal_agl_probe_sampler_primary_matches(
+            report.samplerBaseOnly, report.samplerTrilinear,
+            report.samplerAsymmetric, report.glError);
+    if (report.samplerUnit1Tested) {
+        report.samplerUnit1Matches =
+            gxmetal_agl_probe_sampler_unit1_matches(
+                report.samplerUnit1, report.glError);
+    }
     api.aglSwapBuffers(context);
     report.aglError = api.aglGetError();
     if (report.aglError != GX_GL_NO_ERROR) {
@@ -1068,9 +1316,11 @@ int main(void)
         goto cleanup;
     }
     if (!report.extendedReadbackMatches || !report.clippedTextureMatches ||
-        !report.filledModesMatch || !report.textureDeleted) {
+        !report.filledModesMatch || !report.samplerPrimaryMatches ||
+        (report.samplerUnit1Available && !report.samplerUnit1Matches) ||
+        !report.textureDeleted) {
         report.failureReason =
-            "filled topology, clipping, texture, blend, depth, or lifecycle check failed";
+            "topology, clipping, sampler, texture, blend, depth, or lifecycle check failed";
         goto cleanup;
     }
     report.functional = true;
@@ -1079,10 +1329,11 @@ int main(void)
 cleanup:
     failureStage = report.stage;
     GXMetalAGLRecordCheckpoint(kGXMetalAGLStageTeardown);
-    if (textureObject != 0 && api.glDeleteTextures != NULL &&
+    if (textureObjectCount > 0 && api.glDeleteTextures != NULL &&
         api.aglSetCurrentContext != NULL && context != NULL) {
-        api.glDeleteTextures(1, &textureObject);
-        textureObject = 0;
+        api.glDeleteTextures(textureObjectCount, textureObjects);
+        textureObjectCount = 0;
+        memset(textureObjects, 0, sizeof(textureObjects));
     }
     if (connection != NULL && api.aglSetCurrentContext != NULL) {
         report.currentReleased = api.aglSetCurrentContext(NULL);

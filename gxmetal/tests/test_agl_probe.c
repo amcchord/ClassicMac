@@ -72,6 +72,36 @@ static void test_filled_mode_readback_covers_topology_and_triangle_guard(void)
         filled, background, 0x0502));
 }
 
+static void test_sampler_readback_covers_min_mag_and_mip_selection(void)
+{
+    const uint8_t base_only[3] = {244, 8, 7};
+    const uint8_t trilinear[3] = {149, 106, 8};
+    const uint8_t asymmetric[3] = {119, 5, 136};
+    const uint8_t nearest[3] = {4, 3, 245};
+    const uint8_t wrong_mip[3] = {8, 242, 10};
+
+    assert(gxmetal_agl_probe_sampler_primary_matches(
+        base_only, trilinear, asymmetric, 0));
+    assert(!gxmetal_agl_probe_sampler_primary_matches(
+        wrong_mip, trilinear, asymmetric, 0));
+    assert(!gxmetal_agl_probe_sampler_primary_matches(
+        base_only, wrong_mip, asymmetric, 0));
+    assert(!gxmetal_agl_probe_sampler_primary_matches(
+        base_only, trilinear, nearest, 0));
+    assert(!gxmetal_agl_probe_sampler_primary_matches(
+        base_only, trilinear, asymmetric, 0x0502));
+}
+
+static void test_sampler_unit1_readback_requires_trilinear_mip_blend(void)
+{
+    const uint8_t trilinear[3] = {149, 106, 242};
+    const uint8_t nearest_mip[3] = {8, 242, 240};
+
+    assert(gxmetal_agl_probe_sampler_unit1_matches(trilinear, 0));
+    assert(!gxmetal_agl_probe_sampler_unit1_matches(nearest_mip, 0));
+    assert(!gxmetal_agl_probe_sampler_unit1_matches(trilinear, 0x0502));
+}
+
 static void test_extension_matching_observes_token_boundaries(void)
 {
     const char *extensions =
@@ -95,6 +125,8 @@ int main(void)
     test_extended_readback_covers_texture_blend_and_depth();
     test_clipped_texture_readback_requires_the_visible_remnant();
     test_filled_mode_readback_covers_topology_and_triangle_guard();
+    test_sampler_readback_covers_min_mag_and_mip_selection();
+    test_sampler_unit1_readback_requires_trilinear_mip_blend();
     test_extension_matching_observes_token_boundaries();
     puts("GXMetal AGL probe logic tests passed");
     return 0;

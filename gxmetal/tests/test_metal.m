@@ -2401,6 +2401,375 @@ static void test_metal_draw_buffer_dirty_writeback(void)
     free(shared);
 }
 
+static void test_metal_sampler_filter_state(void)
+{
+    uint8_t framebuffer[8 * 8 * 2] = {0};
+    uint8_t packet[48];
+    uint8_t *payload;
+    uint8_t *shared = calloc(1, GXMETAL_SHARED_BYTES);
+    GXMetalMetalRenderer *renderer;
+    uint32_t min_filter;
+    uint32_t mag_filter;
+    uint32_t mip_filter;
+    static const uint32_t min_values[6] = {
+        GXMETAL_GL_NEAREST,
+        GXMETAL_GL_LINEAR,
+        GXMETAL_GL_NEAREST_MIPMAP_NEAREST,
+        GXMETAL_GL_LINEAR_MIPMAP_NEAREST,
+        GXMETAL_GL_NEAREST_MIPMAP_LINEAR,
+        GXMETAL_GL_LINEAR_MIPMAP_LINEAR
+    };
+    static const uint32_t expected_min[6] = {0, 1, 0, 1, 0, 1};
+    static const uint32_t expected_mip[6] = {0, 0, 1, 1, 2, 2};
+    uint32_t i;
+
+    CHECK(shared != NULL);
+    if (shared == NULL) {
+        return;
+    }
+    renderer = gxmetal_metal_create(framebuffer, sizeof(framebuffer),
+                                     shared, GXMETAL_SHARED_BYTES);
+    if (renderer == NULL) {
+        free(shared);
+        return;
+    }
+    make_packet(packet, GXMETAL_OP_CONTEXT_CREATE, 48, 17);
+    payload = packet + GXMETAL_PACKET_HEADER_BYTES;
+    gxmetal_store_le32(payload + GXMETAL_CONTEXT_WIDTH_OFFSET, 8);
+    gxmetal_store_le32(payload + GXMETAL_CONTEXT_HEIGHT_OFFSET, 8);
+    gxmetal_store_le32(payload + GXMETAL_CONTEXT_ROW_BYTES_OFFSET, 16);
+    gxmetal_store_le32(payload + GXMETAL_CONTEXT_PIXEL_FORMAT_OFFSET,
+                       GXMETAL_PIXEL_RGB555);
+    CHECK(dispatch(renderer, packet, 48) == GXMETAL_ERROR_NONE);
+
+    /* Fast defaults preserve the legacy nearest-mip preset on both units. */
+    CHECK(gxmetal_metal_test_sampler_state(
+        renderer, 17, 0, &min_filter, &mag_filter, &mip_filter));
+    CHECK(min_filter == 0 && mag_filter == 0 && mip_filter == 1);
+    CHECK(gxmetal_metal_test_sampler_state(
+        renderer, 17, 1, &min_filter, &mag_filter, &mip_filter));
+    CHECK(min_filter == 0 && mag_filter == 0 && mip_filter == 1);
+
+    /* Each of OpenGL's six legal MIN enums updates spatial minification and
+     * mip selection without disturbing the independently selected MAG mode. */
+    set_int_state(renderer, packet, 17,
+                  GXMETAL_STATE_GL_TEXTURE_MAG_FILTER, GXMETAL_GL_LINEAR);
+    for (i = 0; i < 6; i++) {
+        set_int_state(renderer, packet, 17,
+                      GXMETAL_STATE_GL_TEXTURE_MIN_FILTER, min_values[i]);
+        CHECK(gxmetal_metal_test_sampler_state(
+            renderer, 17, 0, &min_filter, &mag_filter, &mip_filter));
+        CHECK(min_filter == expected_min[i]);
+        CHECK(mag_filter == 1);
+        CHECK(mip_filter == expected_mip[i]);
+    }
+    set_int_state(renderer, packet, 17,
+                  GXMETAL_STATE_GL_TEXTURE_MAG_FILTER, GXMETAL_GL_NEAREST);
+    CHECK(gxmetal_metal_test_sampler_state(
+        renderer, 17, 0, &min_filter, &mag_filter, &mip_filter));
+    CHECK(min_filter == 1 && mag_filter == 0 && mip_filter == 2);
+
+    /* A mipmapped value is invalid for MAG and must not alter prior state. */
+    make_packet(packet, GXMETAL_OP_SET_STATE, 32, 17);
+    payload = packet + GXMETAL_PACKET_HEADER_BYTES;
+    gxmetal_store_le32(payload + GXMETAL_STATE_TAG_OFFSET,
+                       GXMETAL_STATE_GL_TEXTURE_MAG_FILTER);
+    gxmetal_store_le32(payload + GXMETAL_STATE_TYPE_OFFSET,
+                       GXMETAL_STATE_UINT32);
+    gxmetal_store_le32(payload + GXMETAL_STATE_VALUE_OFFSET,
+                       GXMETAL_GL_LINEAR_MIPMAP_LINEAR);
+    CHECK(dispatch(renderer, packet, 32) == GXMETAL_ERROR_BAD_PACKET);
+    CHECK(gxmetal_metal_test_sampler_state(
+        renderer, 17, 0, &min_filter, &mag_filter, &mip_filter));
+    CHECK(min_filter == 1 && mag_filter == 0 && mip_filter == 2);
+
+    /* Legacy presets still atomically select MIN, MAG, and mip behavior. */
+    set_int_state(renderer, packet, 17, GXMETAL_STATE_TEXTURE_FILTER,
+                  GXMETAL_TEXTURE_FILTER_FAST);
+    CHECK(gxmetal_metal_test_sampler_state(
+        renderer, 17, 0, &min_filter, &mag_filter, &mip_filter));
+    CHECK(min_filter == 0 && mag_filter == 0 && mip_filter == 1);
+    set_int_state(renderer, packet, 17, GXMETAL_STATE_TEXTURE_FILTER,
+                  GXMETAL_TEXTURE_FILTER_MID);
+    CHECK(gxmetal_metal_test_sampler_state(
+        renderer, 17, 0, &min_filter, &mag_filter, &mip_filter));
+    CHECK(min_filter == 1 && mag_filter == 1 && mip_filter == 1);
+    set_int_state(renderer, packet, 17, GXMETAL_STATE_TEXTURE_FILTER,
+                  GXMETAL_TEXTURE_FILTER_BEST);
+    CHECK(gxmetal_metal_test_sampler_state(
+        renderer, 17, 0, &min_filter, &mag_filter, &mip_filter));
+    CHECK(min_filter == 1 && mag_filter == 1 && mip_filter == 2);
+
+    /* Unit one has the same independent state machine. In particular, MAG
+     * changes cannot erase a trilinear secondary MIN selection. */
+    set_int_state(renderer, packet, 17,
+                  GXMETAL_STATE_MULTI_TEXTURE_MIN_FILTER,
+                  GXMETAL_GL_NEAREST_MIPMAP_LINEAR);
+    set_int_state(renderer, packet, 17,
+                  GXMETAL_STATE_MULTI_TEXTURE_MAG_FILTER,
+                  GXMETAL_GL_LINEAR);
+    CHECK(gxmetal_metal_test_sampler_state(
+        renderer, 17, 1, &min_filter, &mag_filter, &mip_filter));
+    CHECK(min_filter == 0 && mag_filter == 1 && mip_filter == 2);
+    set_int_state(renderer, packet, 17,
+                  GXMETAL_STATE_MULTI_TEXTURE_FILTER,
+                  GXMETAL_TEXTURE_FILTER_MID);
+    CHECK(gxmetal_metal_test_sampler_state(
+        renderer, 17, 1, &min_filter, &mag_filter, &mip_filter));
+    CHECK(min_filter == 1 && mag_filter == 1 && mip_filter == 1);
+
+    CHECK(!gxmetal_metal_test_sampler_state(
+        renderer, 17, 2, &min_filter, &mag_filter, &mip_filter));
+    gxmetal_metal_destroy(renderer);
+    free(shared);
+}
+
+static void upload_sampler_test_texture(
+    GXMetalMetalRenderer *renderer, uint8_t *packet, uint8_t *shared,
+    uint32_t resource_id, uint32_t width, uint32_t height,
+    uint32_t levels, const uint8_t colors[][4])
+{
+    uint8_t *payload;
+    uint32_t level;
+
+    make_packet(packet, GXMETAL_OP_TEXTURE_CREATE,
+                GXMETAL_RESOURCE_CREATE_PACKET_BYTES, 0);
+    payload = packet + GXMETAL_PACKET_HEADER_BYTES;
+    gxmetal_store_le32(payload + GXMETAL_RESOURCE_ID_OFFSET, resource_id);
+    gxmetal_store_le32(payload + GXMETAL_RESOURCE_WIDTH_OFFSET, width);
+    gxmetal_store_le32(payload + GXMETAL_RESOURCE_HEIGHT_OFFSET, height);
+    gxmetal_store_le32(payload + GXMETAL_RESOURCE_ROW_BYTES_OFFSET,
+                       width * 4);
+    gxmetal_store_le32(payload + GXMETAL_RESOURCE_PIXEL_FORMAT_OFFSET,
+                       GXMETAL_PIXEL_ARGB8888);
+    gxmetal_store_le32(payload + GXMETAL_RESOURCE_LEVELS_OFFSET, levels);
+    CHECK(dispatch(renderer, packet,
+                   GXMETAL_RESOURCE_CREATE_PACKET_BYTES) ==
+          GXMETAL_ERROR_NONE);
+
+    for (level = 0; level < levels; level++) {
+        uint32_t level_width = width >> level;
+        uint32_t level_height = height >> level;
+        uint32_t pixel_count;
+        uint32_t i;
+
+        if (level_width == 0) {
+            level_width = 1;
+        }
+        if (level_height == 0) {
+            level_height = 1;
+        }
+        pixel_count = level_width * level_height;
+        for (i = 0; i < pixel_count; i++) {
+            memcpy(shared + GXMETAL_UPLOAD_OFFSET + i * 4,
+                   colors[level], 4);
+        }
+        make_packet(packet, GXMETAL_OP_TEXTURE_UPLOAD,
+                    GXMETAL_RESOURCE_UPLOAD_PACKET_BYTES, 0);
+        payload = packet + GXMETAL_PACKET_HEADER_BYTES;
+        gxmetal_store_le32(payload + GXMETAL_UPLOAD_RESOURCE_ID_OFFSET,
+                           resource_id);
+        gxmetal_store_le32(payload + GXMETAL_UPLOAD_LEVEL_OFFSET, level);
+        gxmetal_store_le32(payload + GXMETAL_UPLOAD_SHARED_OFFSET_OFFSET,
+                           GXMETAL_UPLOAD_OFFSET);
+        gxmetal_store_le32(payload + GXMETAL_UPLOAD_LENGTH_OFFSET,
+                           pixel_count * 4);
+        gxmetal_store_le32(payload + GXMETAL_UPLOAD_ROW_BYTES_OFFSET,
+                           level_width * 4);
+        gxmetal_store_le32(payload + GXMETAL_UPLOAD_WIDTH_OFFSET,
+                           level_width);
+        gxmetal_store_le32(payload + GXMETAL_UPLOAD_HEIGHT_OFFSET,
+                           level_height);
+        CHECK(dispatch(renderer, packet,
+                       GXMETAL_RESOURCE_UPLOAD_PACKET_BYTES) ==
+              GXMETAL_ERROR_NONE);
+    }
+}
+
+static void upload_sampler_magnification_texture(
+    GXMetalMetalRenderer *renderer, uint8_t *packet, uint8_t *shared,
+    uint32_t resource_id)
+{
+    uint8_t *payload;
+    static const uint8_t pixels[16] = {
+        0xff, 0xff, 0x00, 0x00, 0xff, 0x00, 0x00, 0xff,
+        0xff, 0xff, 0x00, 0x00, 0xff, 0x00, 0x00, 0xff
+    };
+
+    memcpy(shared + GXMETAL_UPLOAD_OFFSET, pixels, sizeof(pixels));
+    make_packet(packet, GXMETAL_OP_TEXTURE_CREATE,
+                GXMETAL_RESOURCE_CREATE_PACKET_BYTES, 0);
+    payload = packet + GXMETAL_PACKET_HEADER_BYTES;
+    gxmetal_store_le32(payload + GXMETAL_RESOURCE_ID_OFFSET, resource_id);
+    gxmetal_store_le32(payload + GXMETAL_RESOURCE_WIDTH_OFFSET, 2);
+    gxmetal_store_le32(payload + GXMETAL_RESOURCE_HEIGHT_OFFSET, 2);
+    gxmetal_store_le32(payload + GXMETAL_RESOURCE_ROW_BYTES_OFFSET, 8);
+    gxmetal_store_le32(payload + GXMETAL_RESOURCE_PIXEL_FORMAT_OFFSET,
+                       GXMETAL_PIXEL_ARGB8888);
+    gxmetal_store_le32(payload + GXMETAL_RESOURCE_LEVELS_OFFSET, 1);
+    CHECK(dispatch(renderer, packet,
+                   GXMETAL_RESOURCE_CREATE_PACKET_BYTES) ==
+          GXMETAL_ERROR_NONE);
+
+    make_packet(packet, GXMETAL_OP_TEXTURE_UPLOAD,
+                GXMETAL_RESOURCE_UPLOAD_PACKET_BYTES, 0);
+    payload = packet + GXMETAL_PACKET_HEADER_BYTES;
+    gxmetal_store_le32(payload + GXMETAL_UPLOAD_RESOURCE_ID_OFFSET,
+                       resource_id);
+    gxmetal_store_le32(payload + GXMETAL_UPLOAD_SHARED_OFFSET_OFFSET,
+                       GXMETAL_UPLOAD_OFFSET);
+    gxmetal_store_le32(payload + GXMETAL_UPLOAD_LENGTH_OFFSET,
+                       sizeof(pixels));
+    gxmetal_store_le32(payload + GXMETAL_UPLOAD_ROW_BYTES_OFFSET, 8);
+    gxmetal_store_le32(payload + GXMETAL_UPLOAD_WIDTH_OFFSET, 2);
+    gxmetal_store_le32(payload + GXMETAL_UPLOAD_HEIGHT_OFFSET, 2);
+    CHECK(dispatch(renderer, packet,
+                   GXMETAL_RESOURCE_UPLOAD_PACKET_BYTES) ==
+          GXMETAL_ERROR_NONE);
+}
+
+static void draw_sampler_test_quad(
+    GXMetalMetalRenderer *renderer, uint8_t *packet, uint32_t context,
+    float left, float top, float right, float bottom,
+    float maximum_u, float maximum_v)
+{
+    uint8_t *payload;
+    uint8_t *vertices;
+
+    make_packet(packet, GXMETAL_OP_DRAW_TEXTURED, 416, context);
+    payload = packet + GXMETAL_PACKET_HEADER_BYTES;
+    gxmetal_store_le32(payload + GXMETAL_DRAW_PRIMITIVE_OFFSET,
+                       GXMETAL_PRIMITIVE_TRIANGLE);
+    gxmetal_store_le32(payload + GXMETAL_DRAW_VERTEX_COUNT_OFFSET, 6);
+    gxmetal_store_le32(payload + GXMETAL_DRAW_VERTEX_STRIDE_OFFSET,
+                       GXMETAL_TEXTURE_VERTEX_BYTES);
+    vertices = payload + GXMETAL_DRAW_VERTICES_OFFSET;
+    set_texture_vertex(vertices + 0 * GXMETAL_TEXTURE_VERTEX_BYTES,
+                       left, top, 0.0f, 0.0f);
+    set_texture_vertex(vertices + 1 * GXMETAL_TEXTURE_VERTEX_BYTES,
+                       right, top, maximum_u, 0.0f);
+    set_texture_vertex(vertices + 2 * GXMETAL_TEXTURE_VERTEX_BYTES,
+                       left, bottom, 0.0f, maximum_v);
+    set_texture_vertex(vertices + 3 * GXMETAL_TEXTURE_VERTEX_BYTES,
+                       right, top, maximum_u, 0.0f);
+    set_texture_vertex(vertices + 4 * GXMETAL_TEXTURE_VERTEX_BYTES,
+                       right, bottom, maximum_u, maximum_v);
+    set_texture_vertex(vertices + 5 * GXMETAL_TEXTURE_VERTEX_BYTES,
+                       left, bottom, 0.0f, maximum_v);
+    CHECK(dispatch(renderer, packet, 416) == GXMETAL_ERROR_NONE);
+}
+
+static void test_metal_sampler_rendering(void)
+{
+    uint8_t framebuffer[64 * 64 * 2] = {0};
+    uint8_t packet[416];
+    uint8_t *payload;
+    uint8_t *shared = calloc(1, GXMETAL_SHARED_BYTES);
+    GXMetalMetalRenderer *renderer;
+    uint16_t magnified;
+    uint16_t base_only;
+    uint16_t trilinear;
+    uint32_t red;
+    uint32_t green;
+    uint32_t blue;
+    static const uint8_t mip_colors[4][4] = {
+        {0xff, 0xff, 0x00, 0x00},
+        {0xff, 0x00, 0xff, 0x00},
+        {0xff, 0x00, 0x00, 0xff},
+        {0xff, 0xff, 0xff, 0xff}
+    };
+
+    CHECK(shared != NULL);
+    if (shared == NULL) {
+        return;
+    }
+    renderer = gxmetal_metal_create(framebuffer, sizeof(framebuffer),
+                                     shared, GXMETAL_SHARED_BYTES);
+    if (renderer == NULL) {
+        free(shared);
+        return;
+    }
+    upload_sampler_test_texture(renderer, packet, shared, 30, 8, 8, 4,
+                                mip_colors);
+    upload_sampler_magnification_texture(renderer, packet, shared, 31);
+
+    make_packet(packet, GXMETAL_OP_CONTEXT_CREATE,
+                GXMETAL_CONTEXT_CREATE_PACKET_BYTES, 18);
+    payload = packet + GXMETAL_PACKET_HEADER_BYTES;
+    gxmetal_store_le32(payload + GXMETAL_CONTEXT_WIDTH_OFFSET, 64);
+    gxmetal_store_le32(payload + GXMETAL_CONTEXT_HEIGHT_OFFSET, 64);
+    gxmetal_store_le32(payload + GXMETAL_CONTEXT_ROW_BYTES_OFFSET, 128);
+    gxmetal_store_le32(payload + GXMETAL_CONTEXT_PIXEL_FORMAT_OFFSET,
+                       GXMETAL_PIXEL_RGB555);
+    CHECK(dispatch(renderer, packet,
+                   GXMETAL_CONTEXT_CREATE_PACKET_BYTES) ==
+          GXMETAL_ERROR_NONE);
+
+    make_packet(packet, GXMETAL_OP_BEGIN_FRAME, 32, 18);
+    CHECK(dispatch(renderer, packet, 32) == GXMETAL_ERROR_NONE);
+    make_packet(packet, GXMETAL_OP_CLEAR, GXMETAL_CLEAR_PACKET_BYTES, 18);
+    payload = packet + GXMETAL_PACKET_HEADER_BYTES;
+    gxmetal_store_le32(payload + GXMETAL_CLEAR_FLAGS_OFFSET,
+                       GXMETAL_CLEAR_COLOR);
+    store_float(payload + GXMETAL_CLEAR_COLOR_A_OFFSET, 1.0f);
+    gxmetal_store_le32(payload + GXMETAL_CLEAR_RECT_OFFSET +
+                       GXMETAL_RECT_RIGHT_OFFSET, 64);
+    gxmetal_store_le32(payload + GXMETAL_CLEAR_RECT_OFFSET +
+                       GXMETAL_RECT_BOTTOM_OFFSET, 64);
+    CHECK(dispatch(renderer, packet, GXMETAL_CLEAR_PACKET_BYTES) ==
+          GXMETAL_ERROR_NONE);
+
+    /* Set MAG first, then MIN. A renderer that collapses both tags into one
+     * preset will incorrectly turn this magnified red/blue boundary into a
+     * nearest-filtered solid texel. */
+    set_int_state(renderer, packet, 18,
+                  GXMETAL_STATE_GL_TEXTURE_MAG_FILTER, GXMETAL_GL_LINEAR);
+    set_int_state(renderer, packet, 18,
+                  GXMETAL_STATE_GL_TEXTURE_MIN_FILTER, GXMETAL_GL_NEAREST);
+    set_resource_state(renderer, packet, 18, GXMETAL_STATE_TEXTURE, 31);
+    draw_sampler_test_quad(renderer, packet, 18,
+                           0.0f, 0.0f, 32.0f, 16.0f, 1.0f, 1.0f);
+
+    /* GL_NEAREST has no mip component. Heavy minification must therefore
+     * continue sampling the solid-red base rather than any lower level. */
+    set_resource_state(renderer, packet, 18, GXMETAL_STATE_TEXTURE, 30);
+    draw_sampler_test_quad(renderer, packet, 18,
+                           0.0f, 20.0f, 16.0f, 36.0f, 8.0f, 8.0f);
+
+    /* Six texture repetitions over sixteen pixels produce a stable
+     * fractional LOD between the solid-green and solid-blue mip levels.
+     * Trilinear filtering must retain substantial contributions from both. */
+    set_int_state(renderer, packet, 18,
+                  GXMETAL_STATE_GL_TEXTURE_MIN_FILTER,
+                  GXMETAL_GL_LINEAR_MIPMAP_LINEAR);
+    draw_sampler_test_quad(renderer, packet, 18,
+                           20.0f, 20.0f, 36.0f, 36.0f, 6.0f, 6.0f);
+
+    make_packet(packet, GXMETAL_OP_END_FRAME, 32, 18);
+    CHECK(dispatch(renderer, packet, 32) == GXMETAL_ERROR_NONE);
+    present_rect(renderer, packet, 18, 0, 0, 64, 64);
+
+    magnified = framebuffer_pixel(framebuffer, 16, 8);
+    red = (magnified >> 10) & 31u;
+    blue = magnified & 31u;
+    CHECK(red >= 8u && blue >= 8u);
+
+    base_only = framebuffer_pixel(framebuffer, 8, 28);
+    CHECK(((base_only >> 10) & 31u) >= 28u);
+    CHECK(((base_only >> 5) & 31u) <= 2u);
+    CHECK((base_only & 31u) <= 2u);
+
+    trilinear = framebuffer_pixel(framebuffer, 28, 28);
+    red = (trilinear >> 10) & 31u;
+    green = (trilinear >> 5) & 31u;
+    blue = trilinear & 31u;
+    CHECK(red <= 2u);
+    CHECK(green >= 5u && blue >= 5u);
+
+    gxmetal_metal_destroy(renderer);
+    free(shared);
+}
+
 int main(void)
 {
     @autoreleasepool {
@@ -2413,6 +2782,8 @@ int main(void)
         test_metal_carmageddon_resource_working_set();
         test_metal_gamma_present();
         test_metal_draw_buffer_dirty_writeback();
+        test_metal_sampler_filter_state();
+        test_metal_sampler_rendering();
     }
     if (failures != 0) {
         fprintf(stderr, "GXMetal Metal: %u failure(s)\n", failures);

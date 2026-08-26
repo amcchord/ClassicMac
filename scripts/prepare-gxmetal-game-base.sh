@@ -10,6 +10,7 @@
 # Optional environment:
 #   GXMETAL_APP=/path/to/ClassicMac.app
 #   GXMETAL_SKIP_DISK_CHECK_DISABLE=1
+#   GXMETAL_FORCE_DISK_CHECK_VERIFY=1
 
 set -euo pipefail
 
@@ -26,6 +27,8 @@ ATTACH_DEVICE=""
 HFS_PARTITION=""
 MOUNT_POINT=""
 HFSUTILS_MOUNTED=0
+DISK_CHECK_ALREADY_DISABLED=0
+DISK_CHECK_RESOURCE=""
 
 log() { printf '\n==> %s\n' "$*"; }
 die() { printf '\nERROR: %s\n' "$*" >&2; exit 1; }
@@ -47,7 +50,7 @@ cleanup() {
 trap cleanup EXIT
 
 for tool in cp diskutil ditto grep hcopy hmount humount mktemp plutil shasum \
-            stat strings unar; do
+            stat strings unar xcrun; do
   command -v "$tool" >/dev/null 2>&1 || die "Required tool not found: $tool"
 done
 
@@ -151,6 +154,23 @@ for stale in 'GXMetal Test Results' 'GXMetal AGL Probe Results' \
   fi
 done
 
+# Installing a driver and test application cannot change General Controls.
+# Probe the persisted preference while the clone is already mounted so bases
+# derived from a verified predecessor do not pay for two redundant VM boots.
+if [ -f "$MOUNT_POINT/System Folder/Preferences/General Controls Prefs" ]; then
+  DISK_CHECK_RESOURCE="$(xcrun DeRez -only Smrt \
+     "$MOUNT_POINT/System Folder/Preferences/General Controls Prefs" \
+     2>/dev/null || true)"
+  if [ "$(printf '%s\n' "$DISK_CHECK_RESOURCE" | \
+           grep -Ec "^data 'Smrt'")" = "1" ] && \
+     printf '%s\n' "$DISK_CHECK_RESOURCE" | \
+       grep -Eq "^data 'Smrt' \\(0\\) \\{$" && \
+     printf '%s\n' "$DISK_CHECK_RESOURCE" | \
+       grep -Eq '^[[:space:]]*\$"0000 0002"'; then
+    DISK_CHECK_ALREADY_DISABLED=1
+  fi
+fi
+
 sync
 diskutil unmount "$HFS_PARTITION" >/dev/null
 HFS_PARTITION=""
@@ -159,9 +179,14 @@ diskutil eject "$ATTACH_DEVICE" >/dev/null
 ATTACH_DEVICE=""
 
 if [ "${GXMETAL_SKIP_DISK_CHECK_DISABLE:-0}" != "1" ]; then
-  log "Persistently disabling Mac OS 9's improper-shutdown disk check"
-  GXMETAL_APP="$APP" \
-    "$ROOT_DIR/scripts/disable-os9-disk-check.sh" "$OUTPUT_DISK"
+  if [ "$DISK_CHECK_ALREADY_DISABLED" -eq 1 ] && \
+     [ "${GXMETAL_FORCE_DISK_CHECK_VERIFY:-0}" != "1" ]; then
+    log "Mac OS 9 startup disk-check preference preserved from the verified base"
+  else
+    log "Persistently disabling Mac OS 9's improper-shutdown disk check"
+    GXMETAL_APP="$APP" \
+      "$ROOT_DIR/scripts/disable-os9-disk-check.sh" "$OUTPUT_DISK"
+  fi
 fi
 
 [ "$(stat -f '%z' "$SOURCE_DISK")" = "$SOURCE_SIZE" ] && \

@@ -82,8 +82,10 @@ started windowed with in-game sound disabled; its default fullscreen/sound
 startup can remain black even with Apple Software and is still being isolated.
 
 GXMetal AGL Probe is included beside GXMetal Test. It requires an accelerated
-Apple OpenGL pixel format, renders a known triangle, verifies glReadPixels,
-checks that readback leaves the display unchanged, and tears the context down.
+Apple OpenGL pixel format, renders known geometry, verifies independent MIN,
+MAG, and mip filtering with distinct readback colors (including ARB texture
+unit 1 when available), checks that glReadPixels leaves the display unchanged,
+and tears the context down.
 A passing probe proves the core Apple OpenGL/ATI driver path; it does not mean
 that every OpenGL game or extension has been qualified.
 

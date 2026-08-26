@@ -15,7 +15,7 @@ early enough for the RAVE manager to select Apple Software RAVE.
 | Primitives | Points, lines, triangles, strips, fans, indexed meshes, and submitted vertex arrays | Supported for Gouraud and textured vertices | Protocol, renderer, Metal, and guest conformance tests |
 | Color and depth | Color clear, Z16 clear, all RAVE depth comparisons, and depth-write mask | Supported | Metal and guest framebuffer checks |
 | Blending | Premultiplied, interpolated-alpha, and the OpenGL source/destination factors used by the system GLD | Supported | Metal alpha and OpenGL pipeline tests |
-| Textures | Alpha1, RGB8_332, RGB555, RGB565, ARGB1555, ARGB4444, RGB32, ARGB32, CL4, CL8, ACL16_88, I8, and AI16_88; mipmaps; repeat/clamp; nearest, bilinear, and trilinear filtering | Supported | Apple Software RAVE oracle, asymmetric upload/sample, packed-nibble and byte-layout, channel-expansion, byte-order, per-pixel alpha, transparent-index, odd-width and row-padding tests, and classic-game runs |
+| Textures | Alpha1, RGB8_332, RGB555, RGB565, ARGB1555, ARGB4444, RGB32, ARGB32, CL4, CL8, ACL16_88, I8, and AI16_88; mipmaps; repeat/clamp; independent per-unit MIN/MAG state with nearest, bilinear, and trilinear filtering | Supported | Apple Software RAVE oracle, exact primary/secondary sampler-state regressions, distinct-color native and accelerated-AGL mip readback, asymmetric upload/sample, packed-nibble and byte-layout, channel-expansion, byte-order, per-pixel alpha, transparent-index, odd-width and row-padding tests, and classic-game runs |
 | Texture operations | Decal, modulation, highlight, and their documented combinations | Supported | Metal shader tests |
 | Fog | Alpha, linear depth, exponential, and squared-exponential | Supported | Metal and guest conformance tests |
 | Alpha test | All seven RAVE comparisons, before blend and depth write | Supported | Metal and guest conformance tests |
@@ -38,10 +38,9 @@ early enough for the RAVE manager to select Apple Software RAVE.
    should query every advertised bit and exercise its state, method, and
    fallback behavior. Unknown or malformed host state must never fault the
    command queue merely because an application probed an unadvertised feature.
-2. Complete or narrow extended OpenGL semantics. In particular, split MIN,
-   MAG, and mip sampler state, add point/line polygon modes, and either
-   implement stipple behavior or document why the system GLD never exposes it
-   to applications.
+2. Complete or narrow extended OpenGL semantics. In particular, add point/line
+   polygon modes and either implement stipple behavior or document why the
+   system GLD never exposes it to applications.
 3. Measure remaining specialized formats against real software before adding
    them. The packed YUV variants stay unadvertised until a game or standards
    probe establishes their value and exact conversion semantics.
