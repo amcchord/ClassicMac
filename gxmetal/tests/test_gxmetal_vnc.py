@@ -130,6 +130,36 @@ class ManifestValidationTests(unittest.TestCase):
             "GXMetal sweep: Combat Mission Oni and Unreal Tournament "
             "(gxmetal)")
 
+    def test_sweep_audio_backend_defaults_to_none(self):
+        self.assertEqual(SWEEP.DEFAULT_AUDIO_BACKEND, "none")
+        self.assertEqual(
+            SWEEP.qemu_audio_device_spec(SWEEP.DEFAULT_AUDIO_BACKEND),
+            "none,id=snd0")
+
+    def test_sweep_coreaudio_matches_power_mac_launcher(self):
+        self.assertEqual(
+            SWEEP.qemu_audio_device_spec("coreaudio"),
+            "coreaudio,id=snd0,out.buffer-length=50000")
+        with self.assertRaisesRegex(ValueError, "unsupported audio backend"):
+            SWEEP.qemu_audio_device_spec("invalid")
+
+    def test_qemu_command_selects_requested_audio_backend(self):
+        spec = SWEEP.RunSpec(
+            game_id="audio-probe", name="Audio Probe", mode="gxmetal",
+            cdrom=None, source_url=None, source_sha256=None,
+            boot_wait_seconds=0, observation_seconds=0,
+            capture_interval_seconds=1, resolution="640x480x15", steps=())
+        command = SWEEP.qemu_command(
+            ROOT, Path("/qemu"), Path("/disk.img"), Path("/evidence"),
+            Path("/sockets"), spec, Path("/ndrvloader"), Path("/pc-bios"),
+            None, 512, "7400", "tcg,tb-size=512", "coreaudio")
+
+        audio_option = command.index("-audiodev")
+        self.assertEqual(
+            command[audio_option + 1],
+            "coreaudio,id=snd0,out.buffer-length=50000")
+        self.assertEqual(command.count("-audiodev"), 1)
+
     def test_named_keys_are_case_sensitive_and_checked_before_runtime(self):
         self.assertEqual(
             SWEEP.validate_step({"key": "Space"}, "steps[0]"),

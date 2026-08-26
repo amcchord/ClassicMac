@@ -32,6 +32,11 @@ from typing import Any
 
 SCHEMA_VERSION = 1
 VALID_MODES = ("gxmetal", "software")
+DEFAULT_AUDIO_BACKEND = "none"
+AUDIO_DEVICE_SPECS = {
+    "none": "none,id=snd0",
+    "coreaudio": "coreaudio,id=snd0,out.buffer-length=50000",
+}
 ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
 STEP_ACTIONS = (
     "wait", "wait_for_frame_change", "wait_for_pixel", "click",
@@ -459,6 +464,14 @@ def clone_disk(source: Path, destination: Path) -> str:
     return method
 
 
+def qemu_audio_device_spec(audio_backend: str) -> str:
+    """Return the app-matching QEMU audiodev specification."""
+    try:
+        return AUDIO_DEVICE_SPECS[audio_backend]
+    except KeyError as error:
+        raise ValueError(f"unsupported audio backend: {audio_backend}") from error
+
+
 def qemu_command(
     root: Path,
     qemu: Path,
@@ -472,6 +485,7 @@ def qemu_command(
     ram_mb: int,
     cpu: str,
     accel: str,
+    audio_backend: str,
 ) -> list[str]:
     paths = [base_clone, loader, firmware]
     if spec.cdrom is not None:
@@ -503,7 +517,7 @@ def qemu_command(
         "-device", f"loader,addr=0x4000000,file={loader}",
         "-device", "virtio-tablet-pci",
         "-prom-env", "boot-command=init-program go",
-        "-audiodev", "none,id=snd0",
+        "-audiodev", qemu_audio_device_spec(audio_backend),
         "-serial", f"file:{run_dir / 'serial.log'}",
         "-monitor", f"unix:{socket_dir / 'monitor.sock'},server=on,wait=off",
         "-action", "reboot=shutdown",
@@ -863,7 +877,7 @@ def execute_run(
         events.write("clone_completed", method=clone_method, size=clone.stat().st_size)
         command = qemu_command(root, qemu, clone, run_dir, socket_dir, spec,
                                loader, firmware, tools_cd, args.ram_mb,
-                               args.cpu, args.accel)
+                               args.cpu, args.accel, args.audio_backend)
         write_json(run_dir / "qemu-command.json", command)
         write_json(run_dir / "run.json", {
             "game_id": spec.game_id,
@@ -874,13 +888,14 @@ def execute_run(
             "cdrom": str(spec.cdrom) if spec.cdrom else None,
             "started_at": wall_started,
             "resolution": spec.resolution,
+            "audio_backend": args.audio_backend,
             "steps": spec.steps,
         })
         qemu_log = (run_dir / "qemu.log").open("wb")
         environment = os.environ.copy()
         if spec.mode == "gxmetal":
             environment["GXMETAL_PROFILE"] = "1"
-        events.write("qemu_started")
+        events.write("qemu_started", audio_backend=args.audio_backend)
         process = subprocess.Popen(command, cwd=root, env=environment,
                                    stdout=qemu_log, stderr=subprocess.STDOUT)
         wait_for_socket(monitor_socket, process, args.start_timeout)
@@ -973,6 +988,7 @@ def execute_run(
         "game_id": spec.game_id,
         "name": spec.name,
         "mode": spec.mode,
+        "audio_backend": args.audio_backend,
         "status": status,
         "error": error_text,
         "started_at": wall_started,
@@ -1069,6 +1085,11 @@ def main() -> int:
     parser.add_argument("--ram-mb", type=int, default=512)
     parser.add_argument("--cpu", default="7400")
     parser.add_argument("--accel", default="tcg,tb-size=512")
+    parser.add_argument(
+        "--audio-backend", choices=tuple(AUDIO_DEVICE_SPECS),
+        default=DEFAULT_AUDIO_BACKEND,
+        help=("host audio backend (default: none; coreaudio matches the "
+              "ClassicMac sound-on launcher)"))
     parser.add_argument("--start-timeout", type=float, default=15.0)
     parser.add_argument("--keep-disks", action="store_true",
                         help="retain every modified per-run disk clone")
@@ -1121,6 +1142,7 @@ def main() -> int:
             "base_disk": str(source_disk),
             "manifest": str(manifest),
             "jobs": args.jobs,
+            "audio_backend": args.audio_backend,
             "games": args.games,
             "runs": [
                 {
@@ -1172,6 +1194,7 @@ def main() -> int:
         "tools_cd": file_record(tools_cd) if tools_cd else None,
         "media": media_records,
         "jobs": args.jobs,
+        "audio_backend": args.audio_backend,
         "games": args.games,
         "modes": args.modes,
         "runs": [spec.run_id for spec in specs],

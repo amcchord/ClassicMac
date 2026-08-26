@@ -347,6 +347,23 @@ Do not reuse an output directory; the harness refuses to overwrite one.
 for a follow-up run. `--discard-failed-disks` opts out of the safer default of
 retaining a failed clone.
 
+Audio is disabled at the host by default so unattended parallel sweeps remain
+silent and preserve the harness's established behavior. To test game audio on
+macOS, select the same buffered CoreAudio backend used by ClassicMac's normal
+Power Mac sound-on launcher:
+
+```sh
+python3 scripts/gxmetal-game-sweep.py BASE.img MANIFEST.json \
+  --audio-backend coreaudio \
+  --output /path/to/evidence/audio-check-YYYYMMDD
+```
+
+`--audio-backend` accepts `none` (the default) or `coreaudio`. The selection is
+recorded in the top-level `session.json`, each run's `run.json` and
+`result.json`, the `qemu_started` event, and the archived QEMU command. A live
+CoreAudio run can mix sound from parallel guests, so use a small `--jobs` value
+when listening to and reviewing individual games.
+
 The classic Unreal Tournament port currently stops before its first RAVE
 submission when `UseSound=True` under the test VM's audio path. Fullscreen is
 not causal: sound-disabled windowed and fullscreen controls render the same
@@ -365,10 +382,10 @@ to overwrite its output.
 ## Evidence and review
 
 The top-level `session.json` contains hashes for the manifest, executable,
-loader, base disk, Tools CD, and game media, plus the host/Python identity,
-QEMU version, repository commit/status, and before/after base-image integrity
-result. `manifest.json` is the exact archived input, and `summary.json`
-contains one automation result per variant.
+loader, base disk, Tools CD, and game media, plus the selected audio backend,
+host/Python identity, QEMU version, repository commit/status, and before/after
+base-image integrity result. `manifest.json` is the exact archived input, and
+`summary.json` contains one automation result per variant.
 Each run directory contains:
 
 - `qemu-command.json`, `qemu.log`, and `serial.log`;

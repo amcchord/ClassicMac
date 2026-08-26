@@ -52,6 +52,10 @@ trap cleanup EXIT INT TERM
 
 SOURCE_SHA="$(shasum -a 256 "$SOURCE_IMAGE" | awk '{print $1}')"
 cp -c "$SOURCE_IMAGE" "$OUTPUT_IMAGE"
+# Immutable sweep bases are deliberately mode 0444. The clone is the only
+# image this helper ever mounts for mutation, so grant its owner write access
+# before attaching it without weakening the source image.
+chmod u+w "$OUTPUT_IMAGE"
 
 ATTACH_OUTPUT="$(hdiutil attach -nomount \
     -imagekey diskimage-class=CRawDiskImage "$OUTPUT_IMAGE")"
@@ -111,6 +115,10 @@ AFTER_SOURCE_SHA="$(shasum -a 256 "$SOURCE_IMAGE" | awk '{print $1}')"
     echo "source image changed unexpectedly" >&2
     exit 1
 }
+
+# This output becomes a sweep base. Individual runs receive their own writable
+# clones, so lock the prepared image against accidental direct attachment.
+chmod a-w "$OUTPUT_IMAGE"
 
 echo "Prepared Unreal Tournament test image: $OUTPUT_IMAGE"
 echo "Source SHA-256: $SOURCE_SHA"
