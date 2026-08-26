@@ -2507,9 +2507,9 @@ static uint32_t gxmetal_metal_readback(GXMetalMetalRenderer *renderer,
             uint8_t b = source[x * 4 + 2];
             uint8_t a = source[x * 4 + 3];
 
-            r = (uint8_t)(renderer->gamma_table[r] >> 16);
-            g = (uint8_t)(renderer->gamma_table[g] >> 8);
-            b = (uint8_t)renderer->gamma_table[b];
+            /* AccessDrawBuffer exposes the render target before display
+             * gamma, matching the portable renderer and avoiding a second
+             * gamma transform when an unchanged pixel is written back. */
             if (context->pixel_format == GXMETAL_PIXEL_RGB555) {
                 uint16_t value = (uint16_t)(
                     ((uint16_t)(r >> 3) << 10) |
@@ -2533,6 +2533,83 @@ static uint32_t gxmetal_metal_readback(GXMetalMetalRenderer *renderer,
      * with an empty continuation while retaining the context textures and all
      * render state; unlike PRESENT this does not resolve guest VRAM or end the
      * logical frame. */
+    return gxmetal_metal_begin_frame(renderer, context) ?
+        GXMETAL_ERROR_NONE : GXMETAL_ERROR_RENDERER;
+}
+
+static uint32_t gxmetal_metal_draw_buffer_writeback(
+    GXMetalMetalRenderer *renderer, GXMetalMetalContext *context,
+    const GXMetalPacketView *packet)
+{
+    uint32_t shared_offset = gxmetal_load_le32(packet->payload +
+        GXMETAL_DRAW_BUFFER_WRITEBACK_SHARED_OFFSET_OFFSET);
+    uint32_t length = gxmetal_load_le32(packet->payload +
+        GXMETAL_DRAW_BUFFER_WRITEBACK_LENGTH_OFFSET);
+    uint32_t row_bytes = gxmetal_load_le32(packet->payload +
+        GXMETAL_DRAW_BUFFER_WRITEBACK_ROW_BYTES_OFFSET);
+    const uint8_t *wire_rect = packet->payload +
+        GXMETAL_DRAW_BUFFER_WRITEBACK_RECT_OFFSET;
+    uint32_t left = gxmetal_load_le32(wire_rect + GXMETAL_RECT_LEFT_OFFSET);
+    uint32_t top = gxmetal_load_le32(wire_rect + GXMETAL_RECT_TOP_OFFSET);
+    uint32_t right = gxmetal_load_le32(wire_rect + GXMETAL_RECT_RIGHT_OFFSET);
+    uint32_t bottom = gxmetal_load_le32(
+        wire_rect + GXMETAL_RECT_BOTTOM_OFFSET);
+    uint32_t bytes_per_pixel = gxmetal_metal_bytes_per_pixel(
+        context->pixel_format);
+    uint32_t width;
+    uint32_t height;
+    uint8_t *converted;
+    uint32_t x;
+    uint32_t y;
+
+    if (renderer->shared == NULL || bytes_per_pixel == 0 ||
+        row_bytes != context->row_bytes ||
+        length != (uint64_t)row_bytes * context->height ||
+        row_bytes < (uint64_t)context->width * bytes_per_pixel ||
+        left >= right || top >= bottom || right > context->width ||
+        bottom > context->height ||
+        !gxmetal_shared_range_valid(shared_offset, length,
+                                    renderer->shared_bytes,
+                                    GXMETAL_PACKET_ALIGNMENT)) {
+        return GXMETAL_ERROR_BAD_PACKET;
+    }
+    if (context->encoder != nil) {
+        [context->encoder endEncoding];
+        [context->encoder release];
+        context->encoder = nil;
+    }
+    if (context->command_buffer != nil && !context->committed) {
+        [context->command_buffer commit];
+        context->committed = 1;
+    }
+    if (!gxmetal_metal_wait_render(context)) {
+        return GXMETAL_ERROR_RENDERER;
+    }
+
+    width = right - left;
+    height = bottom - top;
+    converted = malloc((size_t)width * height * 4u);
+    if (converted == NULL) {
+        return GXMETAL_ERROR_RENDERER;
+    }
+    for (y = 0; y < height; y++) {
+        const uint8_t *source = renderer->shared + shared_offset +
+            (uint64_t)(top + y) * row_bytes +
+            (uint64_t)left * bytes_per_pixel;
+
+        for (x = 0; x < width; x++) {
+            gxmetal_metal_convert_pixel(
+                context->pixel_format, source + x * bytes_per_pixel,
+                converted + ((size_t)y * width + x) * 4u);
+        }
+    }
+    [context->texture replaceRegion:MTLRegionMake2D(
+            left, top, width, height)
+        mipmapLevel:0 withBytes:converted bytesPerRow:width * 4u];
+    free(converted);
+
+    /* Resume the logical frame after the synchronous CPU-side replacement.
+     * Subsequent queued draws therefore observe the modified color target. */
     return gxmetal_metal_begin_frame(renderer, context) ?
         GXMETAL_ERROR_NONE : GXMETAL_ERROR_RENDERER;
 }
@@ -3663,6 +3740,9 @@ uint32_t gxmetal_metal_dispatch(void *opaque,
             return gxmetal_metal_present(renderer, context, packet);
         case GXMETAL_OP_READBACK:
             return gxmetal_metal_readback(renderer, context, packet);
+        case GXMETAL_OP_DRAW_BUFFER_WRITEBACK:
+            return gxmetal_metal_draw_buffer_writeback(renderer, context,
+                                                        packet);
         case GXMETAL_OP_SET_CLIP_RECTS:
             return gxmetal_metal_set_clip_rects(context, packet);
         case GXMETAL_OP_SET_STATE:

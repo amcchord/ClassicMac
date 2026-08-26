@@ -106,6 +106,17 @@ static uint32_t gxmetal_render_dispatch(void *opaque,
              * more often than the 60 Hz host console can display it. */
             gxmetal_console_present(state);
         }
+    } else if (packet->opcode == GXMETAL_OP_DRAW_BUFFER_WRITEBACK) {
+        dirty_result = gxmetal_dirty_writeback_range(
+            &state->dirty, packet, &dirty_range);
+        if (dirty_result == GXMETAL_DIRTY_RANGE) {
+            memory_region_set_dirty(state->framebuffer_region,
+                                    dirty_range.offset,
+                                    dirty_range.length);
+        } else if (dirty_result == GXMETAL_DIRTY_FALLBACK) {
+            memory_region_set_dirty(state->framebuffer_region, 0,
+                                    state->renderer.framebuffer_bytes);
+        }
     } else if (packet->opcode == GXMETAL_OP_CLEAR ||
                packet->opcode == GXMETAL_OP_DRAW_GOURAUD) {
         /* The portable oracle renders directly into guest VRAM. */
@@ -295,9 +306,11 @@ bool gxmetal_qemu_init(GXMetalQemuState *state, Object *owner,
                            GXMETAL_FEATURE_ACCESS_DRAW_BUFFER |
                            GXMETAL_FEATURE_DEEP_Z |
                            GXMETAL_FEATURE_REGION_CLIP |
-                           GXMETAL_FEATURE_RGB24_FORMAT;
+                           GXMETAL_FEATURE_RGB24_FORMAT |
+                           GXMETAL_FEATURE_DRAW_BUFFER_WRITEBACK;
     } else {
         state->features |= GXMETAL_FEATURE_ACCESS_DRAW_BUFFER |
+                           GXMETAL_FEATURE_DRAW_BUFFER_WRITEBACK |
                            GXMETAL_FEATURE_TRACE;
     }
     gxmetal_queue_init(&state->queue, shared, GXMETAL_SHARED_BYTES,

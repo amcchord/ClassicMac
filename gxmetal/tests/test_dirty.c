@@ -75,6 +75,37 @@ static GXMetalPacketView make_present(uint8_t *packet, uint32_t id,
     return decode(packet, 32);
 }
 
+static GXMetalPacketView make_writeback(uint8_t *packet, uint32_t id,
+                                        uint32_t left, uint32_t top,
+                                        uint32_t right, uint32_t bottom)
+{
+    uint8_t *payload;
+
+    make_packet(packet, GXMETAL_OP_DRAW_BUFFER_WRITEBACK,
+                GXMETAL_DRAW_BUFFER_WRITEBACK_PACKET_BYTES, id);
+    payload = packet + GXMETAL_PACKET_HEADER_BYTES;
+    gxmetal_store_le32(payload +
+        GXMETAL_DRAW_BUFFER_WRITEBACK_SHARED_OFFSET_OFFSET,
+        GXMETAL_UPLOAD_OFFSET);
+    gxmetal_store_le32(payload +
+        GXMETAL_DRAW_BUFFER_WRITEBACK_LENGTH_OFFSET, 640u * 480u * 2u);
+    gxmetal_store_le32(payload +
+        GXMETAL_DRAW_BUFFER_WRITEBACK_ROW_BYTES_OFFSET, 1280);
+    gxmetal_store_le32(payload +
+        GXMETAL_DRAW_BUFFER_WRITEBACK_RECT_OFFSET + GXMETAL_RECT_LEFT_OFFSET,
+        left);
+    gxmetal_store_le32(payload +
+        GXMETAL_DRAW_BUFFER_WRITEBACK_RECT_OFFSET + GXMETAL_RECT_TOP_OFFSET,
+        top);
+    gxmetal_store_le32(payload +
+        GXMETAL_DRAW_BUFFER_WRITEBACK_RECT_OFFSET + GXMETAL_RECT_RIGHT_OFFSET,
+        right);
+    gxmetal_store_le32(payload +
+        GXMETAL_DRAW_BUFFER_WRITEBACK_RECT_OFFSET + GXMETAL_RECT_BOTTOM_OFFSET,
+        bottom);
+    return decode(packet, GXMETAL_DRAW_BUFFER_WRITEBACK_PACKET_BYTES);
+}
+
 static void test_full_and_partial_ranges(void)
 {
     GXMetalDirtyTracker tracker;
@@ -162,6 +193,30 @@ static void test_clip_offset_padding_and_lifetime(void)
           GXMETAL_DIRTY_FALLBACK);
 }
 
+static void test_writeback_range(void)
+{
+    GXMetalDirtyTracker tracker;
+    GXMetalDirtyRange range;
+    GXMetalPacketView view;
+    uint8_t packet[GXMETAL_DRAW_BUFFER_WRITEBACK_PACKET_BYTES];
+
+    gxmetal_dirty_init(&tracker, 64u * 1024u * 1024u);
+    make_context(packet, 12, 640, 480, 1280, GXMETAL_PIXEL_RGB555,
+                 4096, 0, 0, 0, 0, 0);
+    view = decode(packet, GXMETAL_CONTEXT_CREATE_PACKET_BYTES);
+    gxmetal_dirty_observe_success(&tracker, &view);
+
+    view = make_writeback(packet, 12, 10, 20, 30, 40);
+    CHECK(gxmetal_dirty_writeback_range(&tracker, &view, &range) ==
+          GXMETAL_DIRTY_RANGE);
+    CHECK(range.offset == 4096u + 20u * 1280u + 10u * 2u);
+    CHECK(range.length == 19u * 1280u + 20u * 2u);
+
+    view.opcode = GXMETAL_OP_PRESENT;
+    CHECK(gxmetal_dirty_writeback_range(&tracker, &view, &range) ==
+          GXMETAL_DIRTY_FALLBACK);
+}
+
 static void test_invalid_metadata_falls_back(void)
 {
     GXMetalDirtyTracker tracker;
@@ -192,6 +247,7 @@ int main(void)
 {
     test_full_and_partial_ranges();
     test_clip_offset_padding_and_lifetime();
+    test_writeback_range();
     test_invalid_metadata_falls_back();
     if (failures != 0) {
         fprintf(stderr, "GXMetal dirty tracking: %u failure(s)\n", failures);

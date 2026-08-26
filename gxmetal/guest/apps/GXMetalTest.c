@@ -504,6 +504,162 @@ static Boolean GXMetalPixelMatches(GDHandle graphicsDevice,
            blue > maximum * 3 / 5 && green < maximum / 5;
 }
 
+static Boolean GXMetalAccessPixelMatches(
+    const TQAPixelBuffer *buffer, long x, long y,
+    enum GXMetalExpectedPixel expected)
+{
+    const unsigned char *pixel;
+    long red;
+    long green;
+    long blue;
+    long maximum;
+
+    if (buffer == NULL || buffer->baseAddr == NULL || x < 0 || y < 0 ||
+        x >= buffer->width || y >= buffer->height || buffer->rowBytes <= 0) {
+        return false;
+    }
+    pixel = (const unsigned char *)buffer->baseAddr + y * buffer->rowBytes;
+    if (buffer->pixelType == kQAPixel_RGB16) {
+        unsigned short value;
+
+        pixel += x * 2;
+        value = (unsigned short)(((unsigned short)pixel[0] << 8) |
+                                 (unsigned short)pixel[1]);
+        red = (value >> 10) & 31;
+        green = (value >> 5) & 31;
+        blue = value & 31;
+        maximum = 31;
+    } else if (buffer->pixelType == kQAPixel_RGB32 ||
+               buffer->pixelType == kQAPixel_ARGB32) {
+        pixel += x * 4;
+        red = pixel[1];
+        green = pixel[2];
+        blue = pixel[3];
+        maximum = 255;
+    } else {
+        return false;
+    }
+    if (expected == kGXMetalPixelRed) {
+        return red > maximum * 2 / 3 && green < maximum / 3 &&
+               blue < maximum / 3;
+    }
+    if (expected == kGXMetalPixelBlue) {
+        return blue > maximum * 2 / 3 && red < maximum / 3 &&
+               green < maximum / 3;
+    }
+    return false;
+}
+
+static TQAError GXMetalRenderDrawBufferWriteback(
+    TQADrawContext *context, GDHandle graphicsDevice,
+    const TQARect *deviceRect)
+{
+    TQAPixelBuffer access;
+    TQARect full = {0, GXMETAL_WIDTH, 0, GXMETAL_HEIGHT};
+    TQARect dirty = {32, 40, 32, 40};
+    TQARect noDirty = {0, 0, 0, 0};
+    TQAError error;
+    long x;
+    long y;
+
+    QASetFloat(context, kQATag_ColorBG_r, 0.0f);
+    QASetFloat(context, kQATag_ColorBG_g, 0.0f);
+    QASetFloat(context, kQATag_ColorBG_b, 1.0f);
+    QASetFloat(context, kQATag_ColorBG_a, 1.0f);
+    error = QAClearDrawBuffer(context, &full, NULL);
+    if (error == kQANoErr) {
+        error = QASync(context);
+    }
+    memset(&access, 0, sizeof(access));
+    if (error == kQANoErr) {
+        error = QAAccessDrawBuffer(context, &access);
+    }
+    if (error == kQANoErr &&
+        (access.baseAddr == NULL || access.width != GXMETAL_WIDTH ||
+         access.height != GXMETAL_HEIGHT || access.rowBytes <= 0 ||
+         (access.pixelType != kQAPixel_RGB16 &&
+          access.pixelType != kQAPixel_RGB32 &&
+          access.pixelType != kQAPixel_ARGB32))) {
+        error = kQAError;
+    }
+    if (error == kQANoErr &&
+        !GXMetalAccessPixelMatches(&access, 10, 20,
+                                   kGXMetalPixelBlue)) {
+        error = kQAError;
+    }
+    if (error == kQANoErr) {
+        for (y = dirty.top; y < dirty.bottom; y++) {
+            unsigned char *row = (unsigned char *)access.baseAddr +
+                y * access.rowBytes;
+
+            for (x = dirty.left; x < dirty.right; x++) {
+                unsigned char *pixel;
+
+                if (access.pixelType == kQAPixel_RGB16) {
+                    pixel = row + x * 2;
+                    pixel[0] = 0x7c;
+                    pixel[1] = 0x00;
+                } else {
+                    pixel = row + x * 4;
+                    pixel[0] = access.pixelType == kQAPixel_ARGB32 ?
+                        0xff : 0x00;
+                    pixel[1] = 0xff;
+                    pixel[2] = 0x00;
+                    pixel[3] = 0x00;
+                }
+            }
+        }
+        error = QAAccessDrawBufferEnd(context, &dirty);
+        access.baseAddr = NULL;
+    } else if (access.baseAddr != NULL) {
+        (void)QAAccessDrawBufferEnd(context, &noDirty);
+        access.baseAddr = NULL;
+    }
+    if (error == kQANoErr) {
+        error = QASync(context);
+    }
+
+    /* Read the target back through the same API before presenting. This
+     * catches a host that accepts AccessDrawBufferEnd but drops its writes. */
+    memset(&access, 0, sizeof(access));
+    if (error == kQANoErr) {
+        error = QAAccessDrawBuffer(context, &access);
+    }
+    if (error == kQANoErr &&
+        (!GXMetalAccessPixelMatches(&access, 35, 35, kGXMetalPixelRed) ||
+         !GXMetalAccessPixelMatches(&access, 10, 20, kGXMetalPixelBlue))) {
+        error = kQAError;
+    }
+    if (access.baseAddr != NULL) {
+        TQAError endError = QAAccessDrawBufferEnd(context, &noDirty);
+
+        if (error == kQANoErr) {
+            error = endError;
+        }
+    }
+    if (error == kQANoErr) {
+        error = QASwapBuffers(context, &full);
+    }
+    if (error == kQANoErr) {
+        error = QASync(context);
+    }
+    if (error == kQANoErr &&
+        (!GXMetalPixelMatches(graphicsDevice,
+                              deviceRect->left + 35,
+                              deviceRect->top + 35,
+                              kGXMetalPixelRed) ||
+         !GXMetalPixelMatches(graphicsDevice,
+                              deviceRect->left + 10,
+                              deviceRect->top + 20,
+                              kGXMetalPixelBlue))) {
+        error = kQAError;
+    }
+    if (error != kQANoErr) {
+        GXMetalRecordResult("FAIL: mutable draw-buffer dirty writeback");
+    }
+    return error;
+}
+
 static TQAError GXMetalRenderPattern(TQADrawContext *context,
                                      const TQAEngine *engine,
                                      GDHandle graphicsDevice,
@@ -2797,6 +2953,10 @@ int main(void)
         clip.clip.clipRgn = clipRegion;
         error = QADrawContextNew(&device, &deviceRect, &clip, engine,
                                  kQAContext_DoubleBuffer, &context);
+    }
+    if (error == kQANoErr) {
+        error = GXMetalRenderDrawBufferWriteback(
+            context, device.device.gDevice, &deviceRect);
     }
     if (error == kQANoErr) {
         error = GXMetalRenderPattern(context, engine,

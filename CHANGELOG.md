@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- GXMetal protocol 1.24 adds a separately negotiated draw-buffer-writeback
+  command. `QAAccessDrawBufferEnd` now uploads only the validated dirty
+  rectangle from the shared readback aperture, fences before that staging
+  memory can be reused, and preserves the active target outside the rectangle.
+- GXMetal Test now clears the draw buffer blue, writes a red 8-by-8 region
+  through the public RAVE access API, and verifies the mutation through a
+  second access, presentation, and framebuffer readback in both supported
+  display pixel layouts.
+- Draw-buffer reads now expose the pre-display-gamma render target so an
+  unchanged read/modify/write round trip receives the gamma ramp exactly once
+  at presentation. The portable renderer also invalidates the precise written
+  VGA range so software fallback displays cannot retain stale pixels.
+
 ## 2.1.4 — 2026-08-26
 
 ### Added

@@ -22,7 +22,7 @@ extern "C" {
 
 #define GXMETAL_PROTOCOL_MAGIC            UINT32_C(0x47584d54) /* "GXMT" */
 #define GXMETAL_PROTOCOL_VERSION_MAJOR    1u
-#define GXMETAL_PROTOCOL_VERSION_MINOR    23u
+#define GXMETAL_PROTOCOL_VERSION_MINOR    24u
 #define GXMETAL_PROTOCOL_VERSION \
     ((GXMETAL_PROTOCOL_VERSION_MAJOR << 16) | GXMETAL_PROTOCOL_VERSION_MINOR)
 
@@ -138,7 +138,10 @@ enum GXMetalFeature {
      * regions with holes instead of rendering through their bounding box. */
     GXMETAL_FEATURE_REGION_CLIP = UINT64_C(1) << 24,
     /* The host expands RAVE's three-byte R, G, B texture/bitmap format. */
-    GXMETAL_FEATURE_RGB24_FORMAT = UINT64_C(1) << 25
+    GXMETAL_FEATURE_RGB24_FORMAT = UINT64_C(1) << 25,
+    /* AccessDrawBufferEnd can upload a validated dirty rectangle from the
+     * shared readback staging area into the active render target. */
+    GXMETAL_FEATURE_DRAW_BUFFER_WRITEBACK = UINT64_C(1) << 26
 };
 
 /* C11 enum constants are restricted to int even though the feature word is 64-bit. */
@@ -184,6 +187,7 @@ enum GXMetalOpcode {
     GXMETAL_OP_FENCE            = 0x0105,
     GXMETAL_OP_READBACK         = 0x0106,
     GXMETAL_OP_SET_CLIP_RECTS   = 0x0107,
+    GXMETAL_OP_DRAW_BUFFER_WRITEBACK = 0x0108,
 
     GXMETAL_OP_SET_STATE        = 0x0200,
     GXMETAL_OP_CLEAR            = 0x0201,
@@ -466,6 +470,15 @@ enum GXMetalResourceFlag {
 #define GXMETAL_READBACK_LENGTH_OFFSET             4u
 #define GXMETAL_READBACK_ROW_BYTES_OFFSET          8u
 #define GXMETAL_READBACK_RESERVED_OFFSET          12u
+
+/* The writeback source retains the full draw-buffer row stride. Only the
+ * nonempty dirty rectangle is read and replaced in the active color target. */
+#define GXMETAL_DRAW_BUFFER_WRITEBACK_PACKET_BYTES        48u
+#define GXMETAL_DRAW_BUFFER_WRITEBACK_SHARED_OFFSET_OFFSET 0u
+#define GXMETAL_DRAW_BUFFER_WRITEBACK_LENGTH_OFFSET        4u
+#define GXMETAL_DRAW_BUFFER_WRITEBACK_ROW_BYTES_OFFSET     8u
+#define GXMETAL_DRAW_BUFFER_WRITEBACK_RESERVED_OFFSET     12u
+#define GXMETAL_DRAW_BUFFER_WRITEBACK_RECT_OFFSET         16u
 
 #define GXMETAL_SET_STATE_PACKET_BYTES            32u
 #define GXMETAL_STATE_TAG_OFFSET                   0u

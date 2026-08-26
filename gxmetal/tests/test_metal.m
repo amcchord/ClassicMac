@@ -2230,15 +2230,173 @@ static void test_metal_gamma_present(void)
     gxmetal_store_le32(payload + GXMETAL_READBACK_ROW_BYTES_OFFSET, 16);
     CHECK(dispatch(renderer, packet, GXMETAL_READBACK_PACKET_BYTES) ==
           GXMETAL_ERROR_NONE);
-    CHECK(shared[GXMETAL_UPLOAD_OFFSET] == 0x5d);
-    CHECK(shared[GXMETAL_UPLOAD_OFFSET + 1] == 0x00);
+    /* Resource access is pre-display-gamma. Submit one unchanged pixel back
+     * to ensure presentation applies the nonidentity ramp exactly once. */
+    CHECK(shared[GXMETAL_UPLOAD_OFFSET] == 0x22);
+    CHECK(shared[GXMETAL_UPLOAD_OFFSET + 1] == 0x1f);
     CHECK(framebuffer[0] == 0 && framebuffer[1] == 0);
+
+    make_packet(packet, GXMETAL_OP_DRAW_BUFFER_WRITEBACK,
+                GXMETAL_DRAW_BUFFER_WRITEBACK_PACKET_BYTES, 1);
+    payload = packet + GXMETAL_PACKET_HEADER_BYTES;
+    gxmetal_store_le32(payload +
+        GXMETAL_DRAW_BUFFER_WRITEBACK_SHARED_OFFSET_OFFSET,
+        GXMETAL_UPLOAD_OFFSET);
+    gxmetal_store_le32(payload +
+        GXMETAL_DRAW_BUFFER_WRITEBACK_LENGTH_OFFSET, sizeof(framebuffer));
+    gxmetal_store_le32(payload +
+        GXMETAL_DRAW_BUFFER_WRITEBACK_ROW_BYTES_OFFSET, 16);
+    gxmetal_store_le32(payload +
+        GXMETAL_DRAW_BUFFER_WRITEBACK_RECT_OFFSET +
+        GXMETAL_RECT_RIGHT_OFFSET, 1);
+    gxmetal_store_le32(payload +
+        GXMETAL_DRAW_BUFFER_WRITEBACK_RECT_OFFSET +
+        GXMETAL_RECT_BOTTOM_OFFSET, 1);
+    CHECK(dispatch(renderer, packet,
+                   GXMETAL_DRAW_BUFFER_WRITEBACK_PACKET_BYTES) ==
+          GXMETAL_ERROR_NONE);
 
     present_rect(renderer, packet, 1, 0, 0, 8, 8);
 
     CHECK(framebuffer[0] == 0x5d);
     CHECK(framebuffer[1] == 0x00);
     CHECK(gxmetal_metal_fallback_present_count(renderer) == 1);
+    gxmetal_metal_destroy(renderer);
+    free(shared);
+}
+
+static void test_metal_draw_buffer_dirty_writeback(void)
+{
+    uint8_t framebuffer[8 * 8 * 2] = {0};
+    uint8_t *shared = calloc(1, GXMETAL_SHARED_BYTES);
+    uint8_t packet[64];
+    uint8_t *payload;
+    uint8_t *staging;
+    uint32_t x;
+    uint32_t y;
+    GXMetalMetalRenderer *renderer = gxmetal_metal_create(
+        framebuffer, sizeof(framebuffer), shared, GXMETAL_SHARED_BYTES);
+
+    CHECK(shared != NULL);
+    if (renderer == NULL || shared == NULL) {
+        free(shared);
+        return;
+    }
+    make_packet(packet, GXMETAL_OP_CONTEXT_CREATE, 48, 7);
+    payload = packet + GXMETAL_PACKET_HEADER_BYTES;
+    gxmetal_store_le32(payload + GXMETAL_CONTEXT_WIDTH_OFFSET, 8);
+    gxmetal_store_le32(payload + GXMETAL_CONTEXT_HEIGHT_OFFSET, 8);
+    gxmetal_store_le32(payload + GXMETAL_CONTEXT_ROW_BYTES_OFFSET, 16);
+    gxmetal_store_le32(payload + GXMETAL_CONTEXT_PIXEL_FORMAT_OFFSET,
+                       GXMETAL_PIXEL_RGB555);
+    CHECK(dispatch(renderer, packet, 48) == GXMETAL_ERROR_NONE);
+
+    make_packet(packet, GXMETAL_OP_BEGIN_FRAME, 32, 7);
+    CHECK(dispatch(renderer, packet, 32) == GXMETAL_ERROR_NONE);
+    make_packet(packet, GXMETAL_OP_CLEAR, 64, 7);
+    payload = packet + GXMETAL_PACKET_HEADER_BYTES;
+    gxmetal_store_le32(payload + GXMETAL_CLEAR_FLAGS_OFFSET,
+                       GXMETAL_CLEAR_COLOR);
+    store_float(payload + GXMETAL_CLEAR_COLOR_B_OFFSET, 1.0f);
+    store_float(payload + GXMETAL_CLEAR_COLOR_A_OFFSET, 1.0f);
+    gxmetal_store_le32(payload + GXMETAL_CLEAR_RECT_OFFSET +
+                       GXMETAL_RECT_RIGHT_OFFSET, 8);
+    gxmetal_store_le32(payload + GXMETAL_CLEAR_RECT_OFFSET +
+                       GXMETAL_RECT_BOTTOM_OFFSET, 8);
+    CHECK(dispatch(renderer, packet, 64) == GXMETAL_ERROR_NONE);
+    make_packet(packet, GXMETAL_OP_END_FRAME, 32, 7);
+    CHECK(dispatch(renderer, packet, 32) == GXMETAL_ERROR_NONE);
+
+    make_packet(packet, GXMETAL_OP_READBACK,
+                GXMETAL_READBACK_PACKET_BYTES, 7);
+    payload = packet + GXMETAL_PACKET_HEADER_BYTES;
+    gxmetal_store_le32(payload + GXMETAL_READBACK_SHARED_OFFSET_OFFSET,
+                       GXMETAL_UPLOAD_OFFSET);
+    gxmetal_store_le32(payload + GXMETAL_READBACK_LENGTH_OFFSET,
+                       sizeof(framebuffer));
+    gxmetal_store_le32(payload + GXMETAL_READBACK_ROW_BYTES_OFFSET, 16);
+    CHECK(dispatch(renderer, packet, GXMETAL_READBACK_PACKET_BYTES) ==
+          GXMETAL_ERROR_NONE);
+    staging = shared + GXMETAL_UPLOAD_OFFSET;
+    CHECK(staging[0] == 0x00 && staging[1] == 0x1f);
+
+    /* Corrupt one staged pixel outside the dirty rectangle. A correct host
+     * replacement must leave that target pixel blue. */
+    staging[0] = 0x7c;
+    staging[1] = 0x00;
+    for (y = 3; y < 5; y++) {
+        for (x = 2; x < 4; x++) {
+            staging[y * 16 + x * 2] = 0x7c;
+            staging[y * 16 + x * 2 + 1] = 0x00;
+        }
+    }
+    make_packet(packet, GXMETAL_OP_DRAW_BUFFER_WRITEBACK,
+                GXMETAL_DRAW_BUFFER_WRITEBACK_PACKET_BYTES, 7);
+    payload = packet + GXMETAL_PACKET_HEADER_BYTES;
+    gxmetal_store_le32(payload +
+        GXMETAL_DRAW_BUFFER_WRITEBACK_SHARED_OFFSET_OFFSET,
+        GXMETAL_UPLOAD_OFFSET);
+    gxmetal_store_le32(payload +
+        GXMETAL_DRAW_BUFFER_WRITEBACK_LENGTH_OFFSET, sizeof(framebuffer));
+    gxmetal_store_le32(payload +
+        GXMETAL_DRAW_BUFFER_WRITEBACK_ROW_BYTES_OFFSET, 16);
+    gxmetal_store_le32(payload +
+        GXMETAL_DRAW_BUFFER_WRITEBACK_RECT_OFFSET +
+        GXMETAL_RECT_LEFT_OFFSET, 2);
+    gxmetal_store_le32(payload +
+        GXMETAL_DRAW_BUFFER_WRITEBACK_RECT_OFFSET +
+        GXMETAL_RECT_TOP_OFFSET, 3);
+    gxmetal_store_le32(payload +
+        GXMETAL_DRAW_BUFFER_WRITEBACK_RECT_OFFSET +
+        GXMETAL_RECT_RIGHT_OFFSET, 4);
+    gxmetal_store_le32(payload +
+        GXMETAL_DRAW_BUFFER_WRITEBACK_RECT_OFFSET +
+        GXMETAL_RECT_BOTTOM_OFFSET, 5);
+    CHECK(dispatch(renderer, packet,
+                   GXMETAL_DRAW_BUFFER_WRITEBACK_PACKET_BYTES) ==
+          GXMETAL_ERROR_NONE);
+
+    make_packet(packet, GXMETAL_OP_READBACK,
+                GXMETAL_READBACK_PACKET_BYTES, 7);
+    payload = packet + GXMETAL_PACKET_HEADER_BYTES;
+    gxmetal_store_le32(payload + GXMETAL_READBACK_SHARED_OFFSET_OFFSET,
+                       GXMETAL_UPLOAD_OFFSET);
+    gxmetal_store_le32(payload + GXMETAL_READBACK_LENGTH_OFFSET,
+                       sizeof(framebuffer));
+    gxmetal_store_le32(payload + GXMETAL_READBACK_ROW_BYTES_OFFSET, 16);
+    CHECK(dispatch(renderer, packet, GXMETAL_READBACK_PACKET_BYTES) ==
+          GXMETAL_ERROR_NONE);
+    CHECK(staging[0] == 0x00 && staging[1] == 0x1f);
+    CHECK(staging[3 * 16 + 2 * 2] == 0x7c &&
+          staging[3 * 16 + 2 * 2 + 1] == 0x00);
+
+    make_packet(packet, GXMETAL_OP_END_FRAME, 32, 7);
+    CHECK(dispatch(renderer, packet, 32) == GXMETAL_ERROR_NONE);
+    present_rect(renderer, packet, 7, 0, 0, 8, 8);
+    CHECK(framebuffer[0] == 0x00 && framebuffer[1] == 0x1f);
+    CHECK(framebuffer[3 * 16 + 2 * 2] == 0x7c &&
+          framebuffer[3 * 16 + 2 * 2 + 1] == 0x00);
+
+    make_packet(packet, GXMETAL_OP_DRAW_BUFFER_WRITEBACK,
+                GXMETAL_DRAW_BUFFER_WRITEBACK_PACKET_BYTES, 7);
+    payload = packet + GXMETAL_PACKET_HEADER_BYTES;
+    gxmetal_store_le32(payload +
+        GXMETAL_DRAW_BUFFER_WRITEBACK_SHARED_OFFSET_OFFSET,
+        GXMETAL_UPLOAD_OFFSET);
+    gxmetal_store_le32(payload +
+        GXMETAL_DRAW_BUFFER_WRITEBACK_LENGTH_OFFSET, sizeof(framebuffer));
+    gxmetal_store_le32(payload +
+        GXMETAL_DRAW_BUFFER_WRITEBACK_ROW_BYTES_OFFSET, 16);
+    gxmetal_store_le32(payload +
+        GXMETAL_DRAW_BUFFER_WRITEBACK_RECT_OFFSET +
+        GXMETAL_RECT_RIGHT_OFFSET, 9);
+    gxmetal_store_le32(payload +
+        GXMETAL_DRAW_BUFFER_WRITEBACK_RECT_OFFSET +
+        GXMETAL_RECT_BOTTOM_OFFSET, 1);
+    CHECK(dispatch(renderer, packet,
+                   GXMETAL_DRAW_BUFFER_WRITEBACK_PACKET_BYTES) ==
+          GXMETAL_ERROR_BAD_PACKET);
+
     gxmetal_metal_destroy(renderer);
     free(shared);
 }
@@ -2254,6 +2412,7 @@ int main(void)
         test_metal_direct_present_formats();
         test_metal_carmageddon_resource_working_set();
         test_metal_gamma_present();
+        test_metal_draw_buffer_dirty_writeback();
     }
     if (failures != 0) {
         fprintf(stderr, "GXMetal Metal: %u failure(s)\n", failures);

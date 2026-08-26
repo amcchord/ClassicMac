@@ -65,7 +65,7 @@ remains a small Gouraud correctness oracle.
 
 ## Transport contract
 
-The backward-compatible version 1.14 wire contract is defined in
+The backward-compatible version 1.24 wire contract is defined in
 `protocol/gxmetal_protocol.h`. All registers and shared-memory packets are
 little-endian. Packet sizes are multiples of 16 bytes, packets never cross the
 end of the circular command ring, and offsets in commands refer only to the

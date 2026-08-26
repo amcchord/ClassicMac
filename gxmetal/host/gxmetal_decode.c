@@ -24,6 +24,7 @@ static uint32_t gxmetal_min_packet_bytes(uint16_t opcode)
     case GXMETAL_OP_TEXTURE_UPLOAD:
     case GXMETAL_OP_BITMAP_CREATE:
     case GXMETAL_OP_BITMAP_UPLOAD:
+    case GXMETAL_OP_DRAW_BUFFER_WRITEBACK:
         return 48;
     case GXMETAL_OP_CLEAR:
     case GXMETAL_OP_DRAW_GOURAUD:
@@ -236,6 +237,35 @@ uint32_t gxmetal_validate_packet(const GXMetalPacketView *packet,
                    gxmetal_load_le32(
                        payload + GXMETAL_READBACK_SHARED_OFFSET_OFFSET),
                    length, shared_bytes, 16) ?
+            GXMETAL_ERROR_NONE : GXMETAL_ERROR_BAD_PACKET;
+    }
+    case GXMETAL_OP_DRAW_BUFFER_WRITEBACK:
+    {
+        uint32_t length = gxmetal_load_le32(
+            payload + GXMETAL_DRAW_BUFFER_WRITEBACK_LENGTH_OFFSET);
+        uint32_t row_bytes = gxmetal_load_le32(
+            payload + GXMETAL_DRAW_BUFFER_WRITEBACK_ROW_BYTES_OFFSET);
+        const uint8_t *rect = payload +
+            GXMETAL_DRAW_BUFFER_WRITEBACK_RECT_OFFSET;
+        uint32_t left = gxmetal_load_le32(rect + GXMETAL_RECT_LEFT_OFFSET);
+        uint32_t top = gxmetal_load_le32(rect + GXMETAL_RECT_TOP_OFFSET);
+        uint32_t right = gxmetal_load_le32(rect + GXMETAL_RECT_RIGHT_OFFSET);
+        uint32_t bottom = gxmetal_load_le32(
+            rect + GXMETAL_RECT_BOTTOM_OFFSET);
+
+        return packet->packet_bytes ==
+                   GXMETAL_DRAW_BUFFER_WRITEBACK_PACKET_BYTES &&
+               packet->context_id != 0 && row_bytes != 0 &&
+               length >= row_bytes && length % row_bytes == 0 &&
+               gxmetal_load_le32(payload +
+                   GXMETAL_DRAW_BUFFER_WRITEBACK_RESERVED_OFFSET) == 0 &&
+               left < right && top < bottom &&
+               right <= GXMETAL_MAX_DIMENSION &&
+               bottom <= GXMETAL_MAX_DIMENSION &&
+               gxmetal_shared_range_valid(
+                   gxmetal_load_le32(payload +
+                       GXMETAL_DRAW_BUFFER_WRITEBACK_SHARED_OFFSET_OFFSET),
+                   length, shared_bytes, GXMETAL_PACKET_ALIGNMENT) ?
             GXMETAL_ERROR_NONE : GXMETAL_ERROR_BAD_PACKET;
     }
     case GXMETAL_OP_SET_CLIP_RECTS:

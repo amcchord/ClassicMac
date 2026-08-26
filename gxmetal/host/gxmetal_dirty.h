@@ -53,6 +53,9 @@ void gxmetal_dirty_observe_success(GXMetalDirtyTracker *tracker,
 GXMetalDirtyResult gxmetal_dirty_present_range(
     const GXMetalDirtyTracker *tracker, const GXMetalPacketView *packet,
     GXMetalDirtyRange *range);
+GXMetalDirtyResult gxmetal_dirty_writeback_range(
+    const GXMetalDirtyTracker *tracker, const GXMetalPacketView *packet,
+    GXMetalDirtyRange *range);
 
 #ifdef __cplusplus
 }

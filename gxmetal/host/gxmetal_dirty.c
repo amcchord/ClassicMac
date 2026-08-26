@@ -156,9 +156,9 @@ void gxmetal_dirty_observe_success(GXMetalDirtyTracker *tracker,
     }
 }
 
-GXMetalDirtyResult gxmetal_dirty_present_range(
+static GXMetalDirtyResult gxmetal_dirty_rect_range(
     const GXMetalDirtyTracker *tracker, const GXMetalPacketView *packet,
-    GXMetalDirtyRange *range)
+    uint32_t rect_offset, GXMetalDirtyRange *range)
 {
     const GXMetalDirtyContext *context;
     int32_t left;
@@ -169,8 +169,7 @@ GXMetalDirtyResult gxmetal_dirty_present_range(
     uint64_t end;
 
     if (tracker == NULL || packet == NULL || range == NULL ||
-        packet->opcode != GXMETAL_OP_PRESENT ||
-        packet->payload_bytes < GXMETAL_RECT_PAYLOAD_BYTES) {
+        packet->payload_bytes < rect_offset + GXMETAL_RECT_PAYLOAD_BYTES) {
         return GXMETAL_DIRTY_FALLBACK;
     }
     context = gxmetal_dirty_find_context_const(tracker, packet->context_id);
@@ -178,13 +177,13 @@ GXMetalDirtyResult gxmetal_dirty_present_range(
         return GXMETAL_DIRTY_FALLBACK;
     }
     left = (int32_t)gxmetal_load_le32(
-        packet->payload + GXMETAL_RECT_LEFT_OFFSET);
+        packet->payload + rect_offset + GXMETAL_RECT_LEFT_OFFSET);
     top = (int32_t)gxmetal_load_le32(
-        packet->payload + GXMETAL_RECT_TOP_OFFSET);
+        packet->payload + rect_offset + GXMETAL_RECT_TOP_OFFSET);
     right = (int32_t)gxmetal_load_le32(
-        packet->payload + GXMETAL_RECT_RIGHT_OFFSET);
+        packet->payload + rect_offset + GXMETAL_RECT_RIGHT_OFFSET);
     bottom = (int32_t)gxmetal_load_le32(
-        packet->payload + GXMETAL_RECT_BOTTOM_OFFSET);
+        packet->payload + rect_offset + GXMETAL_RECT_BOTTOM_OFFSET);
     if (left > right || top > bottom) {
         return GXMETAL_DIRTY_FALLBACK;
     }
@@ -231,4 +230,26 @@ GXMetalDirtyResult gxmetal_dirty_present_range(
     range->offset = (uint32_t)start;
     range->length = (uint32_t)(end - start);
     return GXMETAL_DIRTY_RANGE;
+}
+
+GXMetalDirtyResult gxmetal_dirty_present_range(
+    const GXMetalDirtyTracker *tracker, const GXMetalPacketView *packet,
+    GXMetalDirtyRange *range)
+{
+    if (packet == NULL || packet->opcode != GXMETAL_OP_PRESENT) {
+        return GXMETAL_DIRTY_FALLBACK;
+    }
+    return gxmetal_dirty_rect_range(tracker, packet, 0, range);
+}
+
+GXMetalDirtyResult gxmetal_dirty_writeback_range(
+    const GXMetalDirtyTracker *tracker, const GXMetalPacketView *packet,
+    GXMetalDirtyRange *range)
+{
+    if (packet == NULL ||
+        packet->opcode != GXMETAL_OP_DRAW_BUFFER_WRITEBACK) {
+        return GXMETAL_DIRTY_FALLBACK;
+    }
+    return gxmetal_dirty_rect_range(
+        tracker, packet, GXMETAL_DRAW_BUFFER_WRITEBACK_RECT_OFFSET, range);
 }

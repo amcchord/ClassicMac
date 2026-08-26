@@ -5744,7 +5744,10 @@ static TQAError GXMetalAccessDrawBuffer(const TQADrawContext *drawContext,
         return kQAError;
     }
     if ((state->transport->features &
-         GXMETAL_FEATURE_ACCESS_DRAW_BUFFER) == 0 ||
+         (GXMETAL_FEATURE_ACCESS_DRAW_BUFFER |
+          GXMETAL_FEATURE_DRAW_BUFFER_WRITEBACK)) !=
+            (GXMETAL_FEATURE_ACCESS_DRAW_BUFFER |
+             GXMETAL_FEATURE_DRAW_BUFFER_WRITEBACK) ||
         !gxmetal_rave_draw_buffer_layout(
             state->width, state->height, state->row_bytes,
             state->pixel_format, GXMETAL_UPLOAD_BYTES,
@@ -5786,17 +5789,66 @@ static TQAError GXMetalAccessDrawBufferEnd(
     const TQADrawContext *drawContext, const TQARect *dirtyRect)
 {
     GXMetalDrawState *state = GXMetalGetState(drawContext);
+    GXMetalGuestPacket packet;
+    uint8_t *payload;
+    uint32_t pixelType;
+    uint32_t length;
+    uint32_t sequence;
     uint32_t left;
     uint32_t top;
     uint32_t width;
     uint32_t height;
+    TQAError error;
 
     if (state == NULL || state->access_draw_buffer_active == 0) {
         return kQAParamErr;
     }
     state->access_draw_buffer_active = 0;
-    return GXMetalAccessRect(dirtyRect, state->width, state->height,
-                             &left, &top, &width, &height);
+    if (state->failed) {
+        return kQAError;
+    }
+    error = GXMetalAccessRect(dirtyRect, state->width, state->height,
+                              &left, &top, &width, &height);
+    if (error != kQANoErr || width == 0 || height == 0) {
+        return error;
+    }
+    if (!gxmetal_rave_draw_buffer_layout(
+            state->width, state->height, state->row_bytes,
+            state->pixel_format, GXMETAL_UPLOAD_BYTES,
+            &pixelType, &length) ||
+        !gxmetal_guest_packet_begin(
+            state->transport, GXMETAL_OP_DRAW_BUFFER_WRITEBACK,
+            GXMETAL_DRAW_BUFFER_WRITEBACK_PACKET_BYTES,
+            state->context_id, &packet)) {
+        state->failed = 1;
+        return kQAError;
+    }
+    payload = packet.bytes + GXMETAL_PACKET_HEADER_BYTES;
+    gxmetal_store_le32(payload +
+        GXMETAL_DRAW_BUFFER_WRITEBACK_SHARED_OFFSET_OFFSET,
+        GXMETAL_UPLOAD_OFFSET);
+    gxmetal_store_le32(payload +
+        GXMETAL_DRAW_BUFFER_WRITEBACK_LENGTH_OFFSET, length);
+    gxmetal_store_le32(payload +
+        GXMETAL_DRAW_BUFFER_WRITEBACK_ROW_BYTES_OFFSET, state->row_bytes);
+    gxmetal_store_le32(payload +
+        GXMETAL_DRAW_BUFFER_WRITEBACK_RESERVED_OFFSET, 0);
+    payload += GXMETAL_DRAW_BUFFER_WRITEBACK_RECT_OFFSET;
+    gxmetal_store_le32(payload + GXMETAL_RECT_LEFT_OFFSET, left);
+    gxmetal_store_le32(payload + GXMETAL_RECT_TOP_OFFSET, top);
+    gxmetal_store_le32(payload + GXMETAL_RECT_RIGHT_OFFSET, left + width);
+    gxmetal_store_le32(payload + GXMETAL_RECT_BOTTOM_OFFSET, top + height);
+    gxmetal_guest_packet_commit(state->transport, &packet);
+
+    /* The fixed staging aperture is also used by resource uploads. Wait for
+     * the host to consume the dirty pixels before returning it to callers. */
+    if (!gxmetal_guest_emit_fence(state->transport, &sequence) ||
+        !gxmetal_guest_wait(state->transport, sequence,
+                            GXMETAL_SYNC_SPINS)) {
+        state->failed = 1;
+        return kQAError;
+    }
+    return kQANoErr;
 }
 
 static TQAError GXMetalRenderAbort(const TQADrawContext *drawContext)
@@ -5934,7 +5986,10 @@ static TQAError GXMetalRegisterMethods(TQADrawContext *drawContext)
                                     GXMetalSubmitMultiTextureParams);
         }
         if ((gTransport.features &
-             GXMETAL_FEATURE_ACCESS_DRAW_BUFFER) != 0) {
+             (GXMETAL_FEATURE_ACCESS_DRAW_BUFFER |
+              GXMETAL_FEATURE_DRAW_BUFFER_WRITEBACK)) ==
+            (GXMETAL_FEATURE_ACCESS_DRAW_BUFFER |
+             GXMETAL_FEATURE_DRAW_BUFFER_WRITEBACK)) {
             GXMETAL_REGISTER_METHOD(kQAccessDrawBuffer, accessDrawBuffer,
                                     GXMetalAccessDrawBuffer);
             GXMETAL_REGISTER_METHOD(kQAccessDrawBufferEnd,
@@ -6333,7 +6388,11 @@ static TQAError GXMetalEngineGestalt(TQAGestaltSelector selector,
             value |= kQAOptional_AccessTexture |
                      kQAOptional_AccessBitmap;
         }
-        if (features & GXMETAL_FEATURE_ACCESS_DRAW_BUFFER) {
+        if ((features &
+             (GXMETAL_FEATURE_ACCESS_DRAW_BUFFER |
+              GXMETAL_FEATURE_DRAW_BUFFER_WRITEBACK)) ==
+            (GXMETAL_FEATURE_ACCESS_DRAW_BUFFER |
+             GXMETAL_FEATURE_DRAW_BUFFER_WRITEBACK)) {
             value |= kQAOptional_AccessDrawBuffer;
         }
         break;

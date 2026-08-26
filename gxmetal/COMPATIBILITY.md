@@ -27,7 +27,7 @@ early enough for the RAVE manager to select Apple Software RAVE.
 | Public RAVE multitexture | One RAVE 1.6 secondary stage, `QASubmitMultiTextureParams`, independent reciprocal-W/UV values, add/modulate/alpha/fixed composition, filter, wrap, and enable/disable | Supported and advertised as one accelerated stage | Native Metal tests plus signed-bundle Mac OS 9 conformance |
 | Perspective Z | `kQATag_PerspectiveZ` | Positive reciprocal-W is mapped monotonically over its full finite range for hidden-surface removal; fog retains reciprocal distance, with ordinary Z-function semantics preserved | Host textured and guest Gouraud tests make normalized Z and reciprocal W disagree while exercising values above one |
 | Extended OpenGL state | Wrap, filters, scissor, standard blend factors, and the ATI bridge's source-color vendor factors are honored | Draw-buffer selection, line/area stipple, border color, and environment color are not yet implemented | Required GLD paths plus Future Cop's `GL_SRC_COLOR/GL_ONE` pair are covered; unimplemented state must not become a silent dependency |
-| Resource access | `QAAccessTexture`, `QAAccessBitmap`, draw-buffer access, and Z-buffer access | Direct-color texture and bitmap access is supported, including mip levels and dirty-rectangle uploads. Writable backing is allocated lazily on first `kQANoCopyNeeded` access, and retained for later read/modify access; framebuffer and Z-buffer access remain unavailable | Native partial-upload preservation test, fixed-heap Quake III level-load regression, and signed-bundle Mac OS 9 conformance |
+| Resource access | `QAAccessTexture`, `QAAccessBitmap`, draw-buffer access, and Z-buffer access | Direct-color texture and bitmap access is supported, including mip levels and dirty-rectangle uploads. Draw-buffer access performs synchronized read/modify/write with bounded dirty-rectangle replacement; Z-buffer access remains unavailable | Native partial-upload and dirty-writeback preservation tests, fixed-heap Quake III level-load regression, and Mac OS 9 conformance |
 | Offscreen and scaled contexts | Offscreen allocation, draw-context copy, and scaling | Deliberately declined | Software fallback |
 | Chromakey | `kQATag_Chromakey_r/g/b` and `kQATag_ChromakeyEnable` | Primary texel RGB is compared in the normalized 8-bit color domain before texture operations, fog, blending, or depth writes | Native Metal matching/non-matching tests plus guest conformance |
 | Deep Z, CSG, antialias, channel mask, Z sorting | Optional RAVE features | Not advertised | Software fallback |
@@ -38,14 +38,15 @@ early enough for the RAVE manager to select Apple Software RAVE.
    should query every advertised bit and exercise its state, method, and
    fallback behavior. Unknown or malformed host state must never fault the
    command queue merely because an application probed an unadvertised feature.
-2. Complete or narrow extended OpenGL semantics. In particular, either
-   implement draw-buffer and stipple behavior or document why the system GLD
-   never exposes it to applications.
+2. Complete or narrow extended OpenGL semantics. In particular, split MIN,
+   MAG, and mip sampler state, add point/line polygon modes, and either
+   implement stipple behavior or document why the system GLD never exposes it
+   to applications.
 3. Measure remaining specialized formats against real software before adding
    them. The packed YUV variants stay unadvertised until a game or standards
    probe establishes their value and exact conversion semantics.
-4. Prioritize channel masks and the OpenGL draw-buffer contract before more
-   specialized features such as CSG or Z-sorted transparency.
+4. Instrument unmapped ATI private callbacks before implementing them so new
+   games cannot silently depend on a success-returning no-op.
 
 ## Game qualification
 

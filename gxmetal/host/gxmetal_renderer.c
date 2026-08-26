@@ -488,6 +488,56 @@ static uint32_t gxmetal_render_readback(GXMetalRenderer *renderer,
     return GXMETAL_ERROR_NONE;
 }
 
+static uint32_t gxmetal_render_draw_buffer_writeback(
+    GXMetalRenderer *renderer, const GXMetalRenderContext *context,
+    const GXMetalPacketView *packet)
+{
+    uint32_t shared_offset = gxmetal_load_le32(packet->payload +
+        GXMETAL_DRAW_BUFFER_WRITEBACK_SHARED_OFFSET_OFFSET);
+    uint32_t length = gxmetal_load_le32(packet->payload +
+        GXMETAL_DRAW_BUFFER_WRITEBACK_LENGTH_OFFSET);
+    uint32_t row_bytes = gxmetal_load_le32(packet->payload +
+        GXMETAL_DRAW_BUFFER_WRITEBACK_ROW_BYTES_OFFSET);
+    const uint8_t *wire_rect = packet->payload +
+        GXMETAL_DRAW_BUFFER_WRITEBACK_RECT_OFFSET;
+    uint32_t left = gxmetal_load_le32(wire_rect + GXMETAL_RECT_LEFT_OFFSET);
+    uint32_t top = gxmetal_load_le32(wire_rect + GXMETAL_RECT_TOP_OFFSET);
+    uint32_t right = gxmetal_load_le32(wire_rect + GXMETAL_RECT_RIGHT_OFFSET);
+    uint32_t bottom = gxmetal_load_le32(
+        wire_rect + GXMETAL_RECT_BOTTOM_OFFSET);
+    uint32_t bytes_per_pixel = gxmetal_bytes_per_pixel(context->pixel_format);
+    uint32_t copy_bytes;
+    uint32_t y;
+
+    if (renderer->shared == NULL || bytes_per_pixel == 0 ||
+        row_bytes != context->row_bytes ||
+        length != (uint64_t)row_bytes * context->height ||
+        row_bytes < (uint64_t)context->width * bytes_per_pixel ||
+        left >= right || top >= bottom || right > context->width ||
+        bottom > context->height ||
+        !gxmetal_shared_range_valid(shared_offset, length,
+                                    renderer->shared_bytes,
+                                    GXMETAL_PACKET_ALIGNMENT)) {
+        return GXMETAL_ERROR_BAD_PACKET;
+    }
+    copy_bytes = (right - left) * bytes_per_pixel;
+    for (y = top; y < bottom; y++) {
+        uint64_t source_offset = (uint64_t)shared_offset +
+            (uint64_t)y * row_bytes + (uint64_t)left * bytes_per_pixel;
+        uint64_t destination_offset = (uint64_t)context->framebuffer_offset +
+            (uint64_t)y * context->row_bytes +
+            (uint64_t)left * bytes_per_pixel;
+
+        if (source_offset + copy_bytes > renderer->shared_bytes ||
+            destination_offset + copy_bytes > renderer->framebuffer_bytes) {
+            return GXMETAL_ERROR_RENDERER;
+        }
+        memcpy(renderer->framebuffer + destination_offset,
+               renderer->shared + source_offset, copy_bytes);
+    }
+    return GXMETAL_ERROR_NONE;
+}
+
 void gxmetal_renderer_init(GXMetalRenderer *renderer, void *framebuffer,
                            uint32_t framebuffer_bytes)
 {
@@ -536,6 +586,9 @@ uint32_t gxmetal_renderer_dispatch(void *opaque,
         return GXMETAL_ERROR_NONE;
     case GXMETAL_OP_READBACK:
         return gxmetal_render_readback(renderer, context, packet);
+    case GXMETAL_OP_DRAW_BUFFER_WRITEBACK:
+        return gxmetal_render_draw_buffer_writeback(renderer, context,
+                                                     packet);
     case GXMETAL_OP_CLEAR:
         return gxmetal_render_clear(renderer, context, packet);
     case GXMETAL_OP_DRAW_GOURAUD:

@@ -72,7 +72,8 @@ ClassicMac exists because of years of brilliant work by other engineers. The pat
   a game is launched. GXMetal AGL Probe separately verifies accelerated Apple
   OpenGL context creation, triangle and quad rendering, RGBA textures,
   source-alpha blending, depth ordering, readback, resource deletion, and
-  teardown. Protocol 1.23 supports exact complex-region clipping, deep-Z
+  teardown. Protocol 1.24 supports mutable dirty-rectangle draw-buffer access,
+  exact complex-region clipping, deep-Z
   contexts, public RGB24 and private RGBA uploads, and the ATI/OpenGL filled
   triangle, strip, fan, quad, quad-strip, polygon, and clipped-fan paths
   exercised by Cro-Mag Rally and Oni. The ATI compatibility layer synchronizes

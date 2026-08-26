@@ -106,6 +106,13 @@ static void test_packet_and_wrap(void)
     CHECK(registers[GXMETAL_REG_PRODUCER / 4] == packet.next_producer);
     CHECK(registers[GXMETAL_REG_DOORBELL / 4] == packet.sequence);
 
+    CHECK(gxmetal_guest_packet_begin(
+        &transport, GXMETAL_OP_DRAW_BUFFER_WRITEBACK,
+        GXMETAL_DRAW_BUFFER_WRITEBACK_PACKET_BYTES, 7, &packet));
+    gxmetal_guest_packet_commit(&transport, &packet);
+    CHECK(registers[GXMETAL_REG_PRODUCER / 4] == packet.next_producer);
+    CHECK(registers[GXMETAL_REG_DOORBELL / 4] == packet.sequence);
+
     transport.producer = GXMETAL_RING_BYTES - 32;
     transport.published_producer = transport.producer;
     transport.consumer = 192;
