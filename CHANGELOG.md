@@ -1,9 +1,13 @@
 # Changelog
 
-## Unreleased
+## 2.2.0 beta 1 — 2026-08-26
 
 ### Changed
 
+- The parallel game-sweep harness can now select either its silent null audio
+  backend or the same buffered CoreAudio backend used by ClassicMac. The exact
+  choice is recorded in session, run, result, event, and QEMU-command evidence
+  so sound-sensitive startup failures can be tested as reproducible A/B pairs.
 - GXMetal game-base preparation now reads the persisted General Controls
   resource while the cloned disk is already mounted. A verified disabled
   startup disk-check preference skips two redundant VM boots; release testing
@@ -35,6 +39,12 @@
   unchanged read/modify/write round trip receives the gamma ramp exactly once
   at presentation. The portable renderer also invalidates the precise written
   VGA range so software fallback displays cannot retain stale pixels.
+
+### Fixed
+
+- Unreal Tournament preparation now makes only its copy-on-write clone
+  writable while editing and locks the resulting sweep base again afterward.
+  Immutable source images remain protected throughout preparation.
 
 ## 2.1.4 — 2026-08-26
 
