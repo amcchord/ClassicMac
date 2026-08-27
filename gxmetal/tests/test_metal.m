@@ -724,6 +724,16 @@ static void test_metal_ati_homogeneous_eye_plane_clipping(void)
     CHECK(dispatch(renderer, packet, kPacketBytes) ==
           GXMETAL_ERROR_BAD_PACKET);
 
+    /* Myth II's ATI-private RAVE terrain uses a small positive reciprocal-W
+     * and leaves eye-space depth near -20000 in Z while depth and fog are
+     * disabled.  That is legacy screen-space input, not OpenGL homogeneous
+     * geometry: clamp its unused depth so Metal does not clip the terrain. */
+    set_int_state(renderer, control, kContext,
+                  GXMETAL_STATE_Z_FUNCTION, GXMETAL_Z_NONE);
+    draw_textured_triangle_frame(renderer, packet, kContext,
+                                 -20000.0f, 0.00005f, 0.5f, 0.5f);
+    CHECK(framebuffer_pixel(framebuffer, 32, 32) != 0);
+
     gxmetal_metal_destroy(renderer);
     free(shared);
 }

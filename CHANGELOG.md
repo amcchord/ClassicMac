@@ -13,6 +13,10 @@
   III uses that form for ordinary world geometry; treating the marker as an
   enable bit caused missing floors, walls, pedestals, and other polygon-shaped
   gaps in the 2.2.0 betas.
+- Kept Myth II's ATI-private, screen-space terrain vertices on the legacy RAVE
+  depth path when depth and fog are disabled. The broader OpenGL homogeneous
+  clipping path could otherwise clip the entire battlefield while leaving its
+  units, HUD, foliage, and effects visible.
 
 ### Changed
 
@@ -27,7 +31,7 @@
   unit move, longer Future Cop gameplay/action and soak evidence, Oni's
   176-second coherent rendering route, and distinct Dark Vengeance/HAVOC media
   and application-memory controls that stop before creating a RAVE context.
-- The Quake III gate keeps four human-reviewed Q3DM1 geometry views and adds
+- The Quake III gate keeps five human-reviewed Q3DM1 geometry views and adds
   named-frame transition plus cropped missing-surface assertions. Weekend
   Warrior now passes title → OS Force Quit → Finder → same-boot relaunch and a
   second-title soak on the exact signed candidate.

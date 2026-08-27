@@ -54,7 +54,14 @@ but the evidence still does not support a universal-compatibility claim.
   does prove Oni's explicit main-menu Quit→Yes return to Finder and immediate
   clean relaunch; Load Game also reaches the stored warehouse checkpoint, but
   its first input gates overlap an active portrait-dialogue sequence and are
-  not counted as gameplay control.
+  not counted as gameplay control. A corrected warehouse route on the rebuilt
+  signed candidate closes the modal first, then proves relative look
+  (0.724367 world change), forward movement (0.874583), F1 Data Comlink
+  open/resume (0.942946), Escape main menu, Quit/Yes, and a clean Finder
+  return. All 9,186 frames are direct across 68 profiles with zero fallback,
+  corruption, reject, or transport fault. A same-boot second process renders
+  its animated Bungie intro coherently, but VNC Escape does not advance that
+  intro; second-process exit is therefore still unproven.
 - Dark Vengeance and HAVOC reproduce deterministic failures before either app
   submits accelerated work. The genuine Dark Vengeance Demo 1.2 VISE install
   completes, but its unchanged application stops at `Memory allocation failed
@@ -63,15 +70,28 @@ but the evidence still does not support a universal-compatibility claim.
   stops at the same resource-allocation dialog on exact beta-3; the log
   contains no RAVE context or GXMetal profile traffic. Raising that
   application's classic Mac preferred partition from 5.76 MB to 32 MB still
-  produces the identical dialog before RAVE. The original builds' Apple
-  Software controls match the pre-RAVE classification.
+  produces the identical dialog before RAVE. A separately preserved full
+  retail DiskDup image (`ba90fbd9…adebd`) mounts correctly, its installer
+  completes, and its CD-backed application is distinct from both demos, but
+  both its original 5.64 MB partition and a data-fork-identical 32 MiB
+  partition reproduce the same dialog before any GXMetal profile. The
+  original builds' Apple Software controls match the pre-RAVE classification.
   Unreal Tournament's default startup also remains black on its software
   control. Controlled GXMetal runs isolate `UseSound=True` as the blocker:
   sound-disabled starts render the same correct main menu in windowed and
   fullscreen modes, while a sound-enabled/windowed start submits no RAVE work.
   The final sound-disabled route now advances through the Tempest ready state
   into live Practice gameplay with working movement, turning, firing, damage,
-  death, and respawn rendering.
+  death, and respawn rendering. On the rebuilt candidate, a focus-corrected
+  route again reaches coherent Tempest and proves initial live transition
+  (0.289531), forward movement (0.737702), and turn/strafe change (0.901147).
+  Its minute-one frame has health 100 and ammo 21 rather than the starting 30;
+  minutes two through five remain coherent but byte-identical despite further
+  inputs, so they count as stable retained rendering rather than a dynamic
+  five-minute action soak. All 15,084 frames across 63 profiles are direct,
+  with zero fallback, writebacks, rejects, out-of-range draws, or Metal/queue
+  faults. The focused viewport consumes the later menu click, so clean exit
+  and same-boot relaunch remain unproven.
   Myth II now reaches its fully rendered “Into the Breach” battlefield after
   the animated map and journal. GXMetal implements the proven flags-zero,
   single-level ATI private slot-2 base-image replacement and slot 4's
@@ -87,16 +107,26 @@ but the evidence still does not support a universal-compatibility claim.
   fallback, rejects, or geometry anomalies. Band/Select All, group orders,
   Stop, zoom-out, and orbit remain unproven; its final 38.37 seconds were
   byte-identical despite live direct presentation and therefore are not
-  counted as input evidence.
+  counted as input evidence. An effects-film replay then exposed a release
+  regression: treating every ATI-private, non-perspective-Z draw as OpenGL
+  homogeneous geometry clipped Myth's terrain at eye-space Z near -20,000
+  while leaving its HUD, units, foliage, and effects visible. GXMetal now
+  requires negative reciprocal-W, active depth, or active fog before selecting
+  that OpenGL path. On the rebuilt signed candidate, the effects film's
+  playfield is only 0.001222 near-black initially and 0.010420 at +25 seconds
+  (the bad build measured 0.605066 and 0.804112), with 0.951820 frame change,
+  3,075 sampled draws free of out-of-range Z, 2,882 direct frames, and zero
+  fallback, writebacks, rejects, or transport faults.
 - Quake III's 2.2 beta visual regression was localized to valid ATI-private
   slot-60 triangle fans whose fourth argument is zero. Rendering those calls
-  again restores the missing world surfaces. The final silent Q3DM1 route
-  retains four useful human-reviewed views covering the spawn courtyard,
+  again restores the missing world surfaces. A refreshed silent Q3DM1 route
+  retains five useful human-reviewed views covering the spawn courtyard,
   ornate and lit passage arches, walls, floor, statues, pedestals, and steps.
-  Cropped near-black missing-surface fractions are 0.002006, 0.013210,
-  0.001198, and 0.001357 against a 0.05 limit; the spawn-to-courtyard changed
-  fraction is 0.850492 against a 0.05 minimum. The signed render-owner-reset
-  candidate records no queue/context fault, rejected draw, or host fallback.
+  On the rebuilt Myth-depth-fix candidate, its two explicit near-black
+  missing-surface crops measure 0.002068 and 0.006214 against a 0.05 limit,
+  while four independent viewpoint changes measure 0.590449 through 0.741227
+  against a 0.05 minimum. All 32 GXMetal profiles report zero fallback, and
+  the signed candidate records no queue/context fault or rejected draw.
 - Force Quit recovery now uses an owner-only rendering-generation reset. An
   intermediate packet-reset design exposed the exact two-client race: the
   InputSprocket-side connection could overwrite a RAVE context header reserved
@@ -129,10 +159,10 @@ but the evidence still does not support a universal-compatibility claim.
 | Weekend Warrior | Gameplay smoke + recovery lifecycle pass on exact beta-3 | Fully scripted selection, Center Stage 3D play, strong movement/camera change, 1,585,966 traced draws with zero fallback/rejects; separate title → OS Force Quit → Finder → same-boot relaunch and second-title soak pass | Longer arena soak and audio |
 | Cro-Mag Rally | Gameplay smoke pass on current Q3 fix | Correct accelerated title/menu/loading and Practice/Desert gameplay at 640x480; acceleration and steering visibly alter position/heading; 24-28 fps, ~204 direct draws/frame, zero fallback; expected demo exit screen | Complete-lap/longer lifecycle soak and audio |
 | Dark Vengeance | Pre-RAVE app/runtime blocker across three routes | Demo 1.0.2 fails identically in accelerated/software modes; the retail updater requires its legitimate CD; the genuine 1.2 demo installs but exits with memory allocation size -49 and zero contexts/draws | Determine supported 1.2 engine/setup path and why its default HARDWARE field is blank, then rerun a software A/B |
-| HAVOC | Matched pre-RAVE app/runtime blocker | Both independently preserved demos stop at the same resource-allocation dialog before renderer creation; the alternate exact-beta-3 build records no RAVE/profile traffic and an isolated 5.76→32 MB application-partition increase does not change the result | Investigate individual resource files/legacy runtime assumptions or a known-different retail build |
-| Myth II | Battlefield rendering and partial-input pass on exact beta-3 | Correct main UI, campaign map, journal, and coherent battlefield; visibly proven single selection, forward/back and left/right camera motion, rotation, and zoom-in; refreshed replay at 25.4-26.6 fps, 3,589,155 traced draws, zero fallback/rejects | Prove group selection/orders, Stop, zoom-out/orbit, effects-heavy combat, and clean relaunch; audio |
-| Oni | Long-rendering + menu-lifecycle partial pass on exact beta-3 | Correct ATI/OpenGL menus and coherent Combat Training through the formerly corrupt +45 transition plus ~176 seconds live; 11,238,479 queued triangles and 7,475 direct frames with zero rejects/fallback; explicit menu Quit→Yes returns Finder and cleanly relaunches; saved warehouse checkpoint loads | Prove gameplay input and in-game F1 quit/relaunch; audio |
-| Unreal Tournament | Live Practice gameplay pass with startup workaround | Sound-disabled current driver reaches Tempest gameplay with coherent world, weapon and HUD; movement, turning, firing, damage, death and respawn are visually proven; 9,472 direct frames, zero fallback/rejects, 80.36-131.59 fps | Longer bot-match and clean relaunch soak; keep sound disabled under the current VM audio path |
+| HAVOC | Matched pre-RAVE app/runtime blocker | Two independently preserved demos and a separately installed full retail/CD build stop at the same resource-allocation dialog before renderer creation; both demo and retail 32 MiB application-partition controls remain pre-RAVE | Investigate individual resource files, screen/runtime assumptions, and the allocation call site; the known-different retail-build route is exhausted |
+| Myth II | Battlefield/effects rendering and partial-input pass on rebuilt beta-3 | Correct main UI, campaign map, journal, coherent battlefield, and an effects-heavy film with intact terrain through +25; visibly proven single selection, camera movement/rotation, and zoom-in; fixed effects replay has 2,882 direct frames and zero fallback/rejects/out-of-range-Z draws | Prove group selection/orders, Stop, zoom-out/orbit, and clean film exit/relaunch; audio |
+| Oni | Gameplay/input + first-process lifecycle pass on rebuilt beta-3 | Correct ATI/OpenGL menus and coherent warehouse gameplay; relative look, forward movement, F1 Comlink/resume, Escape menu, Quit/Yes, and Finder return are visibly proven; 9,186 direct frames with zero fallback/rejects; same-boot second process renders its animated intro | Make VNC input advance/exit the second-process intro, then prove second quit; audio |
+| Unreal Tournament | Live Practice gameplay/rendering pass with startup workaround | Sound-disabled rebuilt driver reaches coherent Tempest; initial transition, forward, and turn/strafe changes are proven; minute one shows ammo 21, while minutes 2–5 retain a coherent but byte-identical frame; 15,084 direct frames, zero fallback/rejects | Diagnose the post-minute-one lack of visible advance and make Game-menu Quit work after viewport capture; keep sound disabled under the current VM audio path |
 
 ## Driver gates on the exact candidate
 
@@ -166,6 +196,8 @@ Accepted evidence:
 - `context/gxmetal-games/evidence/gxmetal-quake3-ut-layout-fixed-candidate-20260827`
 - `context/gxmetal-games/evidence/gxmetal-quake3-homogeneous-clip-regression-20260827`
 - `context/gxmetal-games/evidence/gxmetal-quake3-render-owner-reset-candidate-20260827`
+- `context/gxmetal-games/evidence/gxmetal-quake3-five-view-regression-20260827`
+- `context/gxmetal-games/evidence/gxmetal-quake3-myth-depth-fix-five-view-20260827`
 - `context/gxmetal-games/evidence/gxmetal-ut-beta3-combinedreal-slot2compact-menu-control-20260827`
 - `context/gxmetal-games/evidence/gxmetal-ut-beta3-homogeneous-clip-live-gameplay-20260827`
 - `context/gxmetal-games/evidence/gxmetal-ut-render-owner-reset-dedicated-retry-20260827`
@@ -185,6 +217,12 @@ Accepted evidence:
 - `context/gxmetal-games/evidence/gxmetal-oni-beta3-final-menu-quit-load-input-retry2-20260827`
 - `context/gxmetal-games/evidence/gxmetal-havoc-tucows-beta3-20260827`
 - `context/gxmetal-games/evidence/gxmetal-havoc-tucows-size32-beta3-20260827`
+- `context/gxmetal-games/evidence/gxmetal-havoc-full-install-20260827`
+- `context/gxmetal-games/evidence/gxmetal-havoc-full-installed-launch-20260827`
+- `context/gxmetal-games/evidence/gxmetal-havoc-full-size32-launch-20260827`
+- `context/gxmetal-games/evidence/gxmetal-mythii-ati-depth-fix-effects-20260827`
+- `context/gxmetal-games/evidence/gxmetal-oni-render-owner-reset-lifecycle-retry4-20260827`
+- `context/gxmetal-games/evidence/gxmetal-ut-release-candidate-five-minute-lifecycle-retry-20260827`
 - `context/gxmetal-games/evidence/gxmetal-dark-vengeance-demo12-beta3-exact-final-20260827`
 - `context/gxmetal-games/evidence/ut-current-q3fix-20260826-exact-rc6`
 - `context/gxmetal-games/evidence/dark-vengeance12-current-q3fix-20260826-qualification`
@@ -228,16 +266,24 @@ driver work occurred.
   `035b0905a09a3b75917d957d05e767828ed63d880c63b106231f9cebaf9cb284`
 - Prepared render-owner-reset Unreal Tournament base SHA-256:
   `321cacd4950e38886f3546d7dd34072ffe5702bb0f48519a2c7b8bee926767d0`
+- Prepared unlimited-score Unreal Tournament soak derivative SHA-256:
+  `431033669630bb7929c5dba3234b32b3b482c53ec9fadef779af70b54c94a9d9`
+- Prepared render-owner-reset Myth II base SHA-256:
+  `19fc30b1df7b0a21d1d2476d643e06d6af765f4f3143dacc460bdeaabd8a6261`
 - Immutable dedicated Myth II evidence base SHA-256:
   `48efe79ecca390bda19fe52e06c9664216401406c015da184fd2df3f6f1c2ac9`
 - Immutable exact-final Oni evidence base SHA-256:
   `c5646c8fcf9d499d9ec3498c99a50baf0bfe0b7a5967c5fefe444142f24c387d`
+- Prepared render-owner-reset Oni base SHA-256:
+  `58948903a2efe6cc15b893dc11d23739244d003c1562704e293ae50c426616e7`
 - Immutable alternate-media staging base SHA-256:
   `66d134bde978624864b2ac126a941f2518cebc3c3a58ce7527a802f8ac3748e8`
+- Prepared full-retail HAVOC installed base SHA-256:
+  `b2ff47a759be6b4848f2195a29c97dbef48b62964bc56d12103380bcd868ab13`
 - Signed Power Mac QEMU SHA-256:
-  `6bb046d418fcd59fc5c6447ec1c971e32c13fc5e8f0744043f10b0aa1deb4df4`
+  `e62f95486b7d8526fbfa0ca6d299f9f88cf9f2edcbcbee01d84529202fdfc72e`
 - Packaged Tools CD SHA-256:
-  `73afd095d17803a8e2c6b25ae064b850193b98ae0c949b5fe0778883f6318154`
+  `fb2bb086d28fd840cb6284dd64c6e6cd9aab2153cb91e185ba3a706c17df2250`
 - Packaged Power Mac video NDRV SHA-256:
   `c5e63db45de7b58ea286f785e56811209b090673635da81fea07f9871312b27d`
 - NDRV loader SHA-256:
@@ -378,20 +424,22 @@ signed candidate:
 
 ## Next compatibility gates
 
-1. Repair Oni's scripted focus/control route so input is visibly proven and
-   its in-game exit reaches Finder before relaunch. Retain the now-passing
-   long-rendering route, pale RGB-range oracle, and method-50 fan counters as
-   the fast regression gate.
-2. Extend Unreal Tournament's passing sound-disabled live route into a longer
-   bot match and clean relaunch. Extend Myth II through group selection/orders,
-   effects, a longer soak, and clean quit/relaunch while retaining the short
-   transition regression.
+1. Preserve Oni's now-passing warehouse input, F1, in-game quit, pale-range,
+   and method-50 fan gates. Determine why VNC Escape does not advance the
+   same-boot second process's coherently animated Bungie intro, then prove its
+   second quit without weakening the first-process route.
+2. Diagnose why Unreal Tournament's focus-corrected route retains a coherent
+   but byte-identical frame after minute one, and make its Game-menu Quit work
+   after viewport capture before claiming a longer bot match or clean relaunch.
+   Extend Myth II through group selection/orders and clean film quit/relaunch
+   while retaining the now-passing effects/terrain regression.
 3. For Dark Vengeance 1.2, determine its supported engine/setup path and why
    the installed default leaves `HARDWARE` blank before running a software
-   A/B. For HAVOC, the bounded application-partition increase is now exhausted;
-   investigate its individual resource files/legacy runtime assumptions or a
-   known-different retail build. Do not weaken driver or VM memory safety
-   around failures that occur before RAVE.
+   A/B. For HAVOC, both the bounded application-partition increase and the
+   known-different full-retail/CD build are now exhausted; investigate its
+   individual resource files, screen/runtime assumptions, and allocation call
+   site. Do not weaken driver or VM memory safety around failures that occur
+   before RAVE.
 4. Require reviewed screenshots, direct presentation profiles with zero
    unexpected fallback, representative input, a longer soak, and clean
    lifecycle for every title advertised as supported.
@@ -400,3 +448,8 @@ signed candidate:
 6. Continue publishing exact hashes and retaining failed evidence; do not
    collapse partial, pre-context, or OpenGL-initialization results into a
    single pass/fail number.
+7. Replace the bounded ATI/OpenGL depth/fog/W heuristic with an additive,
+   feature-gated whole-draw homogeneous-coordinate flag emitted by the guest's
+   private-geometry choke point. Until then, do not claim compatibility for
+   the unobserved case of ATI private OpenGL geometry with depth and fog both
+   disabled, all-positive reciprocal-W, and clip-range Z.

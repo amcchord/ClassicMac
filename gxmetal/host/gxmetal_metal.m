@@ -2078,11 +2078,14 @@ static int gxmetal_metal_read_texture_vertex(
         vertex->a = 1.0f;
     }
     /* OpenGLRendererATI submits finite transformed vertices before clipping.
-     * Signed reciprocal-W and Z outside Metal's normalized range identify
-     * eye-plane, near-plane, and far-plane crossings; preserve them only on
-     * that private path so the GPU can perform homogeneous clipping. */
+     * A signed reciprocal-W or active depth/fog state distinguishes that GL
+     * path from Myth II's ATI-private RAVE terrain, which keeps positive W and
+     * unused eye-space Z while both depth and fog are disabled. */
     ati_homogeneous_coordinates = context->ati_private != 0 &&
-        context->perspective_z == 0;
+        context->perspective_z == 0 &&
+        (vertex->inv_w < 0.0f ||
+         context->z_function != GXMETAL_Z_NONE ||
+         context->fog.mode_and_padding[0] != GXMETAL_FOG_NONE);
 
     if (!isfinite(vertex->x) || !isfinite(vertex->y) ||
         !isfinite(vertex->z) || !isfinite(vertex->inv_w) ||
