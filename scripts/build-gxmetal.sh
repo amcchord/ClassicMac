@@ -139,6 +139,6 @@ done
 for artifact in GXMetal.bin GXMetalInput.bin GXMetalStartup.bin \
                 GXMetalInstaller.bin GXMetalTest.bin GXMetalAGLProbe.bin; do
     file "$GUEST_DIR/bin/$artifact"
-    strings "$GUEST_DIR/bin/$artifact" | grep -F "2.2 beta 1" >/dev/null || \
-        die "$artifact does not report GXMetal version 2.2 beta 1"
+    strings "$GUEST_DIR/bin/$artifact" | grep -F "2.2 beta 3" >/dev/null || \
+        die "$artifact does not report GXMetal version 2.2 beta 3"
 done

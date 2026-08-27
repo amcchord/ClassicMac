@@ -27,9 +27,9 @@ resource 'BNDL' (128, purgeable) {
 };
 
 resource 'vers' (1) {
-    2, 2, beta, 1, verUS,
-    "2.2 beta 1",
-    "GXMetal AGL Probe 2.2 beta 1"
+    2, 2, beta, 3, verUS,
+    "2.2 beta 3",
+    "GXMetal AGL Probe 2.2 beta 3"
 };
 
 resource 'cfrg' (0) {
