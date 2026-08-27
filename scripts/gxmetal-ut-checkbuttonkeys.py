@@ -28,6 +28,26 @@ PRIOR_MODIFIERS_TOC_OFFSET = -11988
 CONTROL_MODIFIER_INDEX = 1
 LM_KEY_MAP_ADDRESS = 0x0174
 LM_KEY_MAP_BYTES = 16
+LOCATOR_WINDOW_BEFORE = 16
+LOCATOR_WINDOW_BYTES = 64
+LOCATOR_MATCH_BYTES = 12
+LOCATOR_VERIFY_OFFSETS = (
+    CHECK_BUTTON_KEYS_OFFSET,
+    CONTROL_MASKED_OFFSET,
+    CONTROL_EMIT_OFFSET,
+)
+
+
+class CodeFragmentNotFound(RuntimeError):
+    def __init__(self, message: str, observations: list[dict[str, object]]):
+        super().__init__(message)
+        self.observations = observations
+
+
+class ProbeFailure(RuntimeError):
+    def __init__(self, result: dict[str, object]):
+        super().__init__(str(result.get("error", "probe failed")))
+        self.result = result
 
 
 def sha256(path: Path) -> str:
@@ -219,10 +239,67 @@ def connect_rsp(host: str, port: int, timeout: float) -> RSPClient:
             time.sleep(min(0.1, remaining))
 
 
+def code_window_candidates(
+    code_index: dict[bytes, Optional[int]], live: bytes, live_address: int,
+) -> list[dict[str, int]]:
+    """Return relocation candidates from invariant aligned live subwindows."""
+    candidates = []
+    seen_bases = set()
+    for live_offset in range(
+            0, len(live) - LOCATOR_MATCH_BYTES + 1, 4):
+        segment = live[live_offset:live_offset + LOCATOR_MATCH_BYTES]
+        code_offset = code_index.get(segment)
+        if code_offset is None:
+            continue
+        runtime_base = live_address + live_offset - code_offset
+        if runtime_base in seen_bases:
+            continue
+        seen_bases.add(runtime_base)
+        candidates.append({
+            "runtime_base": runtime_base,
+            "code_offset": code_offset,
+            "live_offset": live_offset,
+            "match_bytes": LOCATOR_MATCH_BYTES,
+        })
+    return candidates
+
+
+def build_code_index(code: bytes) -> dict[bytes, Optional[int]]:
+    """Index only unique aligned instruction triples from the PEF code."""
+    index: dict[bytes, Optional[int]] = {}
+    for offset in range(0, len(code) - LOCATOR_MATCH_BYTES + 1, 4):
+        segment = code[offset:offset + LOCATOR_MATCH_BYTES]
+        if segment in index:
+            index[segment] = None
+        else:
+            index[segment] = offset
+    return index
+
+
+def runtime_base_matches(
+    client: RSPClient, code: bytes, runtime_base: int,
+    verify_offsets: tuple[int, ...],
+) -> bool:
+    if runtime_base < 0 or runtime_base + len(code) > 0x100000000:
+        return False
+    try:
+        return all(
+            client.memory(runtime_base + offset, 4) == code[offset:offset + 4]
+            for offset in verify_offsets
+        )
+    except RuntimeError:
+        return False
+
+
 def locate_code_fragment(
-    client: RSPClient, code: bytes, samples: int = 80,
+    client: RSPClient,
+    code: bytes,
+    samples: int = 320,
+    interval: float = 0.02,
+    verify_offsets: tuple[int, ...] = LOCATOR_VERIFY_OFFSETS,
 ) -> tuple[int, list[dict[str, object]]]:
     observations = []
+    code_index = build_code_index(code)
     if client.running:
         client.interrupt()
     for index in range(samples):
@@ -235,31 +312,34 @@ def locate_code_fragment(
         }}
         observations.append(sample)
         for name, address in candidates.items():
-            if address < 8 or address > 0xFFFFFFE0:
+            if address < LOCATOR_WINDOW_BEFORE or address > 0xFFFFFFC0:
                 continue
+            window_address = address - LOCATOR_WINDOW_BEFORE
             try:
-                live = client.memory(address, 24)
-            except RuntimeError:
+                live = client.memory(window_address, LOCATOR_WINDOW_BYTES)
+            except RuntimeError as error:
+                sample[f"{name}_read_error"] = str(error)
                 continue
-            positions = []
-            start = 0
-            while True:
-                position = code.find(live, start)
-                if position < 0:
-                    break
-                positions.append(position)
-                start = position + 1
-            if len(positions) == 1:
-                base = address - positions[0]
+            matches = code_window_candidates(code_index, live, window_address)
+            sample[f"{name}_candidate_count"] = len(matches)
+            for match in matches:
+                base = match["runtime_base"]
+                if not runtime_base_matches(
+                        client, code, base, verify_offsets):
+                    continue
                 sample["matched_register"] = name
-                sample["code_offset"] = f"0x{positions[0]:x}"
+                sample["matched_live_address"] = (
+                    f"0x{window_address + match['live_offset']:x}")
+                sample["match_bytes"] = match["match_bytes"]
+                sample["code_offset"] = f"0x{match['code_offset']:x}"
                 sample["runtime_base"] = f"0x{base:x}"
                 return base, observations
         client.continue_guest()
-        time.sleep(0.02)
+        time.sleep(interval)
         client.interrupt()
-    raise RuntimeError(
-        f"could not identify UT code fragment in {samples} PC/LR samples")
+    raise CodeFragmentNotFound(
+        f"could not identify UT code fragment in {samples} PC/LR samples",
+        observations)
 
 
 def step_seen(
@@ -361,7 +441,16 @@ def run(args: argparse.Namespace) -> dict[str, object]:
         # processing. Query that initial stop instead of sending Ctrl-C; QEMU
         # does not send a second stop reply for an already-stopped CPU.
         result["initial_stop_reply"] = client.command("?")
-        runtime_base, samples = locate_code_fragment(client, code)
+        try:
+            runtime_base, samples = locate_code_fragment(
+                client, code, args.locator_samples, args.locator_interval)
+        except CodeFragmentNotFound as error:
+            result.update({
+                "outcome": "locator-failed",
+                "error": str(error),
+                "locator_samples": error.observations,
+            })
+            raise ProbeFailure(result) from error
         result["runtime_base"] = f"0x{runtime_base:x}"
         result["locator_samples"] = samples
 
@@ -471,21 +560,32 @@ def main() -> None:
     parser.add_argument("--attach-timeout", type=float, default=180)
     parser.add_argument("--marker-timeout", type=float, default=30)
     parser.add_argument("--transition-timeout", type=float, default=2)
+    parser.add_argument("--locator-samples", type=int, default=320)
+    parser.add_argument("--locator-interval", type=float, default=0.02)
     args = parser.parse_args()
     if args.key_step_index < 0:
         parser.error("--key-step-index must be nonnegative")
     if args.attach_step_index is not None and args.attach_step_index < 0:
         parser.error("--attach-step-index must be nonnegative")
     if (args.attach_timeout <= 0 or args.marker_timeout <= 0 or
-            args.transition_timeout <= 0):
-        parser.error("timeouts must be positive")
+            args.transition_timeout <= 0 or args.locator_samples <= 0 or
+            args.locator_interval <= 0):
+        parser.error(
+            "timeouts, locator samples, and locator interval must be positive")
 
-    result = run(args)
+    failed = False
+    try:
+        result = run(args)
+    except ProbeFailure as error:
+        result = error.result
+        failed = True
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(
         json.dumps(result, indent=2, sort_keys=True) + "\n",
         encoding="utf-8")
     print(json.dumps(result, indent=2, sort_keys=True))
+    if failed:
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":
