@@ -62,7 +62,7 @@ done
 [ -f "$TOOLS_CD" ] || die "Bundled Tools CD not found: $TOOLS_CD"
 [ -x "$PPC_QEMU" ] || die "Bundled Power Mac QEMU not found: $PPC_QEMU"
 [ -f "$PPC_NDRV" ] || die "Bundled Power Mac NDRV not found: $PPC_NDRV"
-CANDIDATE_VERSION="$(plutil -extract CFBundleShortVersionString raw \
+CANDIDATE_APP_VERSION="$(plutil -extract CFBundleShortVersionString raw \
   "$APP/Contents/Info.plist")"
 CANDIDATE_APP_ID="$(stat -f '%d:%i' "$APP")"
 CANDIDATE_TOOLS_SHA="$(shasum -a 256 "$TOOLS_CD" | awk '{ print $1 }')"
@@ -91,9 +91,14 @@ hcopy -m ':GXMetal:GXMetal Test' "$SCRATCH/macbinary/GXMetalTest.bin"
 humount >/dev/null
 HFSUTILS_MOUNTED=0
 
+CANDIDATE_GXMETAL_VERSION="$(strings \
+  "$SCRATCH/macbinary/GXMetal.bin" | \
+  awk '/^[0-9]+\.[0-9]+([.][0-9]+| beta [0-9]+)?$/ { print; exit }')"
+[ -n "$CANDIDATE_GXMETAL_VERSION" ] || \
+  die "Packaged GXMetal driver does not contain a recognizable version."
 for archive in "$SCRATCH"/macbinary/*.bin; do
-  strings "$archive" | grep -F "$CANDIDATE_VERSION" >/dev/null || \
-    die "$(basename "$archive") does not report version $CANDIDATE_VERSION"
+  strings "$archive" | grep -Fx "$CANDIDATE_GXMETAL_VERSION" >/dev/null || \
+    die "$(basename "$archive") does not report GXMetal version $CANDIDATE_GXMETAL_VERSION"
   unar -quiet -output-directory "$SCRATCH/guest" "$archive"
 done
 
@@ -127,7 +132,7 @@ MOUNT_POINT="$(diskutil info -plist "$HFS_PARTITION" | \
 [ -d "$MOUNT_POINT/System Folder/Extensions" ] || \
   die "The output image does not contain a Mac OS System Folder."
 
-BACKUP="$MOUNT_POINT/GXMetal Sweep Backups/Before $CANDIDATE_VERSION"
+BACKUP="$MOUNT_POINT/GXMetal Sweep Backups/Before $CANDIDATE_GXMETAL_VERSION"
 TOOLS_FOLDER="$MOUNT_POINT/GXMetal Candidate Tools"
 mkdir -p "$BACKUP" "$TOOLS_FOLDER"
 for name in 'GXMetal' 'GXMetal Input' 'GXMetal Startup'; do
@@ -208,7 +213,8 @@ fi
 chmod a-w "$OUTPUT_DISK"
 
 log "Prepared immutable GXMetal game base"
-printf '    Version:        %s\n' "$CANDIDATE_VERSION"
+printf '    App version:    %s\n' "$CANDIDATE_APP_VERSION"
+printf '    GXMetal version: %s\n' "$CANDIDATE_GXMETAL_VERSION"
 printf '    Source:         %s\n' "$SOURCE_DISK"
 printf '    Source SHA-256: %s\n' "$(shasum -a 256 "$SOURCE_DISK" | awk '{ print $1 }')"
 printf '    Output:         %s\n' "$OUTPUT_DISK"

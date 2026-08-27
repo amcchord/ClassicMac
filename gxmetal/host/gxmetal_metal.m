@@ -254,6 +254,7 @@ struct GXMetalMetalRenderer {
     uint64_t profile_draw_ns;
     uint64_t profile_clear_count;
     uint64_t profile_depth_clear_count;
+    uint64_t profile_draw_buffer_writeback_count;
     float profile_last_depth_clear;
     uint64_t profile_resource_lookup_count;
     uint64_t profile_resource_lookup_probes;
@@ -513,6 +514,7 @@ static void gxmetal_metal_profile_present(GXMetalMetalRenderer *renderer,
             "fog_end=%.6f fog_alpha=%.6f translucent_vertex_pct=%.2f "
             "zero_alpha_vertex_pct=%.2f "
             "clears_per_frame=%.2f depth_clears_per_frame=%.2f "
+            "writebacks_per_frame=%.2f "
             "depth_clear=%.6f resource_probes_per_lookup=%.2f\n",
             frames_per_second,
             (unsigned long long)renderer->profile_present_count,
@@ -533,6 +535,9 @@ static void gxmetal_metal_profile_present(GXMetalMetalRenderer *renderer,
                     (double)renderer->profile_present_count : 0.0,
             renderer->profile_present_count != 0 ?
                 (double)renderer->profile_depth_clear_count /
+                    (double)renderer->profile_present_count : 0.0,
+            renderer->profile_present_count != 0 ?
+                (double)renderer->profile_draw_buffer_writeback_count /
                     (double)renderer->profile_present_count : 0.0,
             renderer->profile_last_depth_clear, probes_per_lookup);
     renderer->profile_window_start_ns = now_ns;
@@ -559,6 +564,7 @@ static void gxmetal_metal_profile_present(GXMetalMetalRenderer *renderer,
     renderer->profile_draw_ns = 0;
     renderer->profile_clear_count = 0;
     renderer->profile_depth_clear_count = 0;
+    renderer->profile_draw_buffer_writeback_count = 0;
     renderer->profile_resource_lookup_count = 0;
     renderer->profile_resource_lookup_probes = 0;
 }
@@ -2589,6 +2595,10 @@ static uint32_t gxmetal_metal_draw_buffer_writeback(
     uint8_t *converted;
     uint32_t x;
     uint32_t y;
+
+    if (renderer->profile_enabled) {
+        renderer->profile_draw_buffer_writeback_count++;
+    }
 
     if (renderer->shared == NULL || bytes_per_pixel == 0 ||
         row_bytes != context->row_bytes ||

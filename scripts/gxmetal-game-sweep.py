@@ -265,7 +265,7 @@ def validate_step(step: Any, field: str) -> dict[str, Any]:
                 f"{field}.assert_color_range_fraction_below must be "
                 "an object")
         unknown_assertion_fields = set(value) - {
-            "minimum_rgb", "maximum_rgb", "maximum_fraction",
+            "minimum_rgb", "maximum_rgb", "maximum_fraction", "region",
         }
         if unknown_assertion_fields:
             raise ValueError(
@@ -295,6 +295,17 @@ def validate_step(step: Any, field: str) -> dict[str, Any]:
             raise ValueError(
                 f"{field}.assert_color_range_fraction_below minimum_rgb "
                 "must not exceed maximum_rgb")
+        region = value.get("region")
+        if (region is not None and
+                (not isinstance(region, list) or len(region) != 4 or
+                 any(isinstance(item, bool) or not isinstance(item, int)
+                     for item in region) or
+                 region[0] < 0 or region[1] < 0 or
+                 region[2] <= 0 or region[3] <= 0)):
+            raise ValueError(
+                f"{field}.assert_color_range_fraction_below.region must be "
+                "[x, y, width, height] with nonnegative coordinates and "
+                "positive dimensions")
     elif action in ("click", "double_click"):
         if (not isinstance(value, list) or len(value) != 2 or
                 any(isinstance(item, bool) or not isinstance(item, int)
@@ -663,6 +674,27 @@ def color_range_fraction(
     return matched / pixel_count
 
 
+def crop_rgb_region(rgb: bytes, width: int, height: int,
+                    region: tuple[int, int, int, int]) -> bytes:
+    """Return a tightly packed RGB crop from one validated frame."""
+    if width <= 0 or height <= 0 or len(rgb) != width * height * 3:
+        raise ValueError("RGB frame dimensions do not match its byte length")
+    x, y, region_width, region_height = region
+    if (x < 0 or y < 0 or region_width <= 0 or region_height <= 0 or
+            x + region_width > width or y + region_height > height):
+        raise ValueError(
+            f"region {region} is outside {width}x{height} frame")
+    row_bytes = width * 3
+    crop_row_bytes = region_width * 3
+    cropped = bytearray(crop_row_bytes * region_height)
+    for row in range(region_height):
+        source = (y + row) * row_bytes + x * 3
+        destination = row * crop_row_bytes
+        cropped[destination:destination + crop_row_bytes] = \
+            rgb[source:source + crop_row_bytes]
+    return bytes(cropped)
+
+
 def captured_command(command: list[str], cwd: Path) -> dict[str, Any]:
     result = subprocess.run(command, cwd=cwd, text=True,
                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
@@ -859,17 +891,24 @@ def execute_run(
         current = client.capture()
         width = client.width
         height = client.height
-        fraction = color_range_fraction(current, minimum, maximum)
+        region_value = settings.get("region")
+        region = (tuple(int(item) for item in region_value)
+                  if region_value is not None else None)
+        measured = (crop_rgb_region(current, width, height, region)
+                    if region is not None else current)
+        fraction = color_range_fraction(measured, minimum, maximum)
         capture_frame(label, current, width, height)
         events.write(
             "color_range_assertion", label=label, minimum_rgb=minimum,
             maximum_rgb=maximum, fraction=round(fraction, 6),
-            maximum_fraction=maximum_fraction, width=width, height=height,
+            maximum_fraction=maximum_fraction, region=region,
+            width=width, height=height,
             passed=fraction < maximum_fraction)
         if fraction >= maximum_fraction:
             raise RuntimeError(
                 f"color range fraction {fraction:.6f} for {minimum}.."
-                f"{maximum} is not below {maximum_fraction:.6f}")
+                f"{maximum} in {region or 'the full frame'} is not below "
+                f"{maximum_fraction:.6f}")
 
     try:
         events.write("clone_started", source=str(source_disk))

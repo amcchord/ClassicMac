@@ -160,17 +160,19 @@ over several nearby colors, count an inclusive RGB box instead:
   "assert_color_range_fraction_below": {
     "minimum_rgb": [224, 224, 208],
     "maximum_rgb": [255, 255, 255],
-    "maximum_fraction": 0.10
+    "maximum_fraction": 0.10,
+    "region": [100, 120, 320, 180]
   }
 }
 ```
 
 Every pixel whose red, green, and blue channels each fall between the two
 triplets, including the endpoints, contributes to the measured fraction. The
-harness records the range, fraction, dimensions, outcome, and lossless
-screenshot in the evidence. Choose a narrow scene-specific range from reviewed
-good and bad captures; a broad bright-color range can reject legitimate skies,
-menus, or flashes in another title.
+harness records the range, fraction, optional `[x, y, width, height]` region,
+frame dimensions, outcome, and lossless screenshot in the evidence. Omit
+`region` to measure the full frame. Prefer a stable region that excludes HUDs,
+skies, and animated characters, and choose its range and threshold from
+reviewed good and bad captures.
 
 ## Validate, then run
 

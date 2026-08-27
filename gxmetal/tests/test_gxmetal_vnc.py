@@ -267,6 +267,7 @@ class ManifestValidationTests(unittest.TestCase):
                 "minimum_rgb": [224, 224, 208],
                 "maximum_rgb": [255, 255, 255],
                 "maximum_fraction": 0.1,
+                "region": [100, 120, 320, 180],
             }
         }
         self.assertEqual(SWEEP.validate_step(step, "steps[0]"), step)
@@ -286,6 +287,15 @@ class ManifestValidationTests(unittest.TestCase):
                     "maximum_fraction": 0.1,
                 }
             }, "steps[0]")
+        with self.assertRaisesRegex(ValueError, "region must be"):
+            SWEEP.validate_step({
+                "assert_color_range_fraction_below": {
+                    "minimum_rgb": [0, 0, 0],
+                    "maximum_rgb": [8, 8, 8],
+                    "maximum_fraction": 0.1,
+                    "region": [10, 20, 0, 30],
+                }
+            }, "steps[0]")
 
     def test_color_range_fraction_is_inclusive(self):
         rgb = bytes((
@@ -299,6 +309,14 @@ class ManifestValidationTests(unittest.TestCase):
             SWEEP.color_range_fraction(
                 rgb, (224, 224, 208), (255, 255, 254)),
             0.6)
+
+    def test_crop_rgb_region_preserves_rows(self):
+        rgb = bytes(range(4 * 3 * 3))
+        self.assertEqual(
+            SWEEP.crop_rgb_region(rgb, 4, 3, (1, 1, 2, 2)),
+            rgb[15:21] + rgb[27:33])
+        with self.assertRaisesRegex(ValueError, "outside 4x3 frame"):
+            SWEEP.crop_rgb_region(rgb, 4, 3, (3, 2, 2, 1))
 
     def test_rgb_pixel_match_uses_tolerance_and_checks_bounds(self):
         rgb = bytes((10, 20, 30, 40, 50, 60))
