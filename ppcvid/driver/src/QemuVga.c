@@ -1,9 +1,15 @@
 #include "VideoDriverPrivate.h"
 #include "VideoDriverPrototypes.h"
 #include "DriverQDCalls.h"
+#include "GammaContract.h"
 #include "ModeContract.h"
 #include "QemuVga.h"
 #include <Timer.h>
+
+typedef char QemuVgaNativeGammaDataOffsetMustMatch[
+	(offsetof(GammaTbl, gFormulaData) == QEMU_VGA_GAMMA_DATA_OFFSET) ? 1 : -1];
+typedef char QemuVgaNativeGammaHeaderSizeMustMatch[
+	(sizeof(GammaTbl) == QEMU_VGA_GAMMA_COMPAT_HEADER_BYTES) ? 1 : -1];
 
 /*
 static struct _vMode defaultVModes[] =  {
@@ -104,9 +110,27 @@ static UInt8 QemuVga_ScaleGammaValue(UInt32 value, UInt32 bits)
 	return (UInt8)((value * 255UL + maximum / 2UL) / maximum);
 }
 
+static QemuVgaGammaStorage gCurrentGamma;
+static Boolean gCurrentGammaInitialized;
+
+static void QemuVga_InitializeGamma(void)
+{
+	if (gCurrentGammaInitialized)
+		return;
+	QemuVgaGammaInitializeIdentity(&gCurrentGamma);
+	gCurrentGammaInitialized = TRUE;
+}
+
+GammaTbl *QemuVga_GetGamma(void)
+{
+	QemuVga_InitializeGamma();
+	return (GammaTbl *)&gCurrentGamma;
+}
+
 OSStatus QemuVga_SetGamma(const GammaTbl *table)
 {
 	const UInt8 *data;
+	UInt8 *current;
 	UInt32 channels;
 	UInt32 count;
 	UInt32 bits;
@@ -127,6 +151,8 @@ OSStatus QemuVga_SetGamma(const GammaTbl *table)
 	bytes = bits <= 8 ? 1 : (bits <= 16 ? 2 : 4);
 	data = (const UInt8 *)table->gFormulaData +
 		(UInt32)table->gFormulaSize;
+	QemuVga_InitializeGamma();
+	current = (UInt8 *)gCurrentGamma.gFormulaData;
 
 	ExtWriteL(QEMU_EXT_REG_GAMMA_INDEX, 0);
 	for (i = 0; i < 256; i++) {
@@ -143,6 +169,9 @@ OSStatus QemuVga_SetGamma(const GammaTbl *table)
 		UInt32 blue = QemuVga_ScaleGammaValue(
 			QemuVga_ReadGammaValue(data + blueOffset, bytes), bits);
 
+		current[i] = (UInt8)red;
+		current[256 + i] = (UInt8)green;
+		current[512 + i] = (UInt8)blue;
 		ExtWriteL(QEMU_EXT_REG_GAMMA_VALUE,
 			(red << 16) | (green << 8) | blue);
 	}

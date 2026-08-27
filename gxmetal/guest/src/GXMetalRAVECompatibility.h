@@ -49,6 +49,26 @@
 #define GXMETAL_RAVE_PIXEL_RGB16 UINT32_C(1)
 #define GXMETAL_RAVE_PIXEL_RGB32 UINT32_C(3)
 #define GXMETAL_RAVE_PIXEL_ARGB32 UINT32_C(4)
+#define GXMETAL_RAVE_IMAGE_BUFFER_2D_COMPOSITE_METHOD UINT32_C(4)
+#define GXMETAL_RAVE_IMAGE_BUFFER_NOTICE_FEATURES \
+    (GXMETAL_FEATURE_ACCESS_DRAW_BUFFER | \
+     GXMETAL_FEATURE_DRAW_BUFFER_WRITEBACK)
+
+/* QAGetNoticeMethod has two independent output parameters. Period RAVE
+ * clients legitimately request only the callback or only the refCon, so the
+ * operation is invalid only when neither result has somewhere to go. */
+static inline int gxmetal_rave_notice_outputs_are_valid(
+    void *callback_out, void *refcon_out)
+{
+    return callback_out != NULL || refcon_out != NULL;
+}
+
+static inline int gxmetal_rave_image_buffer_notice_is_supported(
+    uint64_t features)
+{
+    return (features & GXMETAL_RAVE_IMAGE_BUFFER_NOTICE_FEATURES) ==
+        GXMETAL_RAVE_IMAGE_BUFFER_NOTICE_FEATURES;
+}
 
 static inline int gxmetal_rave_draw_buffer_layout(
     uint32_t width, uint32_t height, uint32_t row_bytes,

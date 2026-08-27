@@ -6076,6 +6076,7 @@ static TQAError GXMetalRenderEnd(const TQADrawContext *drawContext,
                                  const TQARect *modifiedRect)
 {
     GXMetalDrawState *state = GXMetalGetState(drawContext);
+    TQADevice compositeDevice;
     TQAError error;
 
     gDiagnostics.draw_method_stage = 210;
@@ -6084,6 +6085,26 @@ static TQAError GXMetalRenderEnd(const TQADrawContext *drawContext,
         return kQAError;
     }
     error = GXMetalEmitRect(state, GXMETAL_OP_END_FRAME, modifiedRect);
+    if (error == kQANoErr &&
+        state->notices[kQAMethod_ImageBuffer2DComposite].bufferNoticeMethod !=
+            NULL) {
+        /* Selector 4 is a synchronous buffer notice, not a declaration that
+         * GXMetal implements initial-buffer blending. Complete a readback,
+         * expose its public memory-device shape for exactly the callback's
+         * lifetime, then release the read-only access latch. */
+        memset(&compositeDevice, 0, sizeof(compositeDevice));
+        error = GXMetalAccessDrawBuffer(
+            drawContext, &compositeDevice.device.memoryDevice);
+        if (error == kQANoErr) {
+            compositeDevice.deviceType = kQADeviceMemory;
+            state->notices[
+                kQAMethod_ImageBuffer2DComposite].bufferNoticeMethod(
+                    drawContext, &compositeDevice, modifiedRect,
+                    state->notice_refcons[
+                        kQAMethod_ImageBuffer2DComposite]);
+            state->access_draw_buffer_active = 0;
+        }
+    }
     if (error == kQANoErr &&
         state->int_state[kQATag_DontSwap] == 0) {
         error = GXMetalEmitRect(state, GXMETAL_OP_PRESENT, modifiedRect);
@@ -6276,6 +6297,13 @@ static TQAError GXMetalSetNoticeMethod(const TQADrawContext *drawContext,
     if (state == NULL || method < 0 || method >= kQAMethod_NumSelectors) {
         return kQAParamErr;
     }
+    if ((uint32_t)method ==
+            GXMETAL_RAVE_IMAGE_BUFFER_2D_COMPOSITE_METHOD &&
+        callback.bufferNoticeMethod != NULL &&
+        !gxmetal_rave_image_buffer_notice_is_supported(
+            state->transport->features)) {
+        return kQANotSupported;
+    }
     state->notices[method] = callback;
     state->notice_refcons[method] = refCon;
     return kQANoErr;
@@ -6288,12 +6316,17 @@ static TQAError GXMetalGetNoticeMethod(const TQADrawContext *drawContext,
 {
     GXMetalDrawState *state = GXMetalGetState(drawContext);
     gDiagnostics.draw_method_stage = 251;
-    if (state == NULL || callback == NULL || refCon == NULL || method < 0 ||
-        method >= kQAMethod_NumSelectors) {
+    if (state == NULL ||
+        !gxmetal_rave_notice_outputs_are_valid(callback, refCon) ||
+        method < 0 || method >= kQAMethod_NumSelectors) {
         return kQAParamErr;
     }
-    *callback = state->notices[method];
-    *refCon = state->notice_refcons[method];
+    if (callback != NULL) {
+        *callback = state->notices[method];
+    }
+    if (refCon != NULL) {
+        *refCon = state->notice_refcons[method];
+    }
     return kQANoErr;
 }
 
@@ -6393,11 +6426,8 @@ static TQAError GXMetalRegisterMethods(TQADrawContext *drawContext)
                                     submitMultiTextureParams,
                                     GXMetalSubmitMultiTextureParams);
         }
-        if ((gTransport.features &
-             (GXMETAL_FEATURE_ACCESS_DRAW_BUFFER |
-              GXMETAL_FEATURE_DRAW_BUFFER_WRITEBACK)) ==
-            (GXMETAL_FEATURE_ACCESS_DRAW_BUFFER |
-             GXMETAL_FEATURE_DRAW_BUFFER_WRITEBACK)) {
+        if (gxmetal_rave_image_buffer_notice_is_supported(
+                gTransport.features)) {
             GXMETAL_REGISTER_METHOD(kQAccessDrawBuffer, accessDrawBuffer,
                                     GXMetalAccessDrawBuffer);
             GXMETAL_REGISTER_METHOD(kQAccessDrawBufferEnd,
@@ -6837,11 +6867,7 @@ static TQAError GXMetalEngineGestalt(TQAGestaltSelector selector,
             value |= kQAOptional_AccessTexture |
                      kQAOptional_AccessBitmap;
         }
-        if ((features &
-             (GXMETAL_FEATURE_ACCESS_DRAW_BUFFER |
-              GXMETAL_FEATURE_DRAW_BUFFER_WRITEBACK)) ==
-            (GXMETAL_FEATURE_ACCESS_DRAW_BUFFER |
-             GXMETAL_FEATURE_DRAW_BUFFER_WRITEBACK)) {
+        if (gxmetal_rave_image_buffer_notice_is_supported(features)) {
             value |= kQAOptional_AccessDrawBuffer;
         }
         break;

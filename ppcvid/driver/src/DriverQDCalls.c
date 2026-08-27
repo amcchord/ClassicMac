@@ -130,10 +130,17 @@ OSStatus
 GraphicsCoreGetGamma(VDGammaRecord *gammaRecord)
 {
 	CHECK_OPEN( statusErr );
-		
+	if (gammaRecord == NULL)
+		return paramErr;
+	gammaRecord->csGTable = NULL;
+	if (!GLOBAL.gammaLUTAvail)
+		return statusErr;
+
 	Trace(GraphicsCoreGetGamma);
 
-	gammaRecord->csGTable = NULL;
+	/* Returning noErr with NULL made clients dereference low memory. Return
+	 * the driver's normalized, persistent copy of the active table. */
+	gammaRecord->csGTable = (Ptr)QemuVga_GetGamma();
 
 	return noErr;
 }

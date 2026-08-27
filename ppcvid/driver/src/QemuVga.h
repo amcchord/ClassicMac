@@ -145,6 +145,7 @@ extern OSStatus QemuVga_SetMode(UInt32 modeIndex, UInt32 depth, UInt32 page);
 
 extern OSStatus QemuVga_Blank(Boolean blank);
 extern OSStatus QemuVga_SetGamma(const GammaTbl *table);
+extern GammaTbl *QemuVga_GetGamma(void);
 
 /* --- Host-window-driven live resizing --- */
 

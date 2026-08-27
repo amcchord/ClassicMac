@@ -29,8 +29,9 @@ LIBS := -lDriverServicesLib -lNameRegistryLib -lPCILib -lVideoServicesLib
 
 all: bin/qemu_vga.ndrv
 
-test: bin/test_mode_contract
+test: bin/test_mode_contract bin/test_gamma_contract
 	./bin/test_mode_contract
+	./bin/test_gamma_contract
 
 clean:
 	rm -rf bin
@@ -45,6 +46,10 @@ bin/qemu_vga.ndrv: bin/qemu_vga.so
 	MakePEF -o $@ $<
 
 bin/test_mode_contract: tests/test_mode_contract.c src/ModeContract.h GNUmakefile
+	@mkdir -p bin
+	$(HOST_CC) -std=c99 -Wall -Wextra -Werror -Isrc -o $@ $<
+
+bin/test_gamma_contract: tests/test_gamma_contract.c src/GammaContract.h GNUmakefile
 	@mkdir -p bin
 	$(HOST_CC) -std=c99 -Wall -Wextra -Werror -Isrc -o $@ $<
 

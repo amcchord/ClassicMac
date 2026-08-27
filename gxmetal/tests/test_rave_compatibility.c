@@ -32,6 +32,20 @@ int main(void)
     };
     uint8_t expanded[2][10];
 
+    CHECK(gxmetal_rave_notice_outputs_are_valid(
+        &pixel_type, &length));
+    CHECK(gxmetal_rave_notice_outputs_are_valid(&pixel_type, NULL));
+    CHECK(gxmetal_rave_notice_outputs_are_valid(NULL, &length));
+    CHECK(!gxmetal_rave_notice_outputs_are_valid(NULL, NULL));
+    CHECK(GXMETAL_RAVE_IMAGE_BUFFER_2D_COMPOSITE_METHOD == 4u);
+    CHECK(gxmetal_rave_image_buffer_notice_is_supported(
+        GXMETAL_RAVE_IMAGE_BUFFER_NOTICE_FEATURES));
+    CHECK(!gxmetal_rave_image_buffer_notice_is_supported(
+        GXMETAL_FEATURE_ACCESS_DRAW_BUFFER));
+    CHECK(!gxmetal_rave_image_buffer_notice_is_supported(
+        GXMETAL_FEATURE_DRAW_BUFFER_WRITEBACK));
+    CHECK(!gxmetal_rave_image_buffer_notice_is_supported(0));
+
     CHECK(gxmetal_rave_draw_buffer_layout(
         1024, 768, 4096, GXMETAL_PIXEL_RGB8888, GXMETAL_UPLOAD_BYTES,
         &pixel_type, &length));
