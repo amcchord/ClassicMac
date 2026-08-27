@@ -156,6 +156,19 @@ static inline int gxmetal_ati_private_contiguous_vertex_bytes(
     return 1;
 }
 
+/* Slot 60's final argument reports whether the ATI GLD clipped the staged
+ * pointer fan. It is descriptive, not an enable: Quake III emits real world
+ * geometry with a zero marker, while clipped fans use nonzero values. Keep
+ * the count check and marker semantics together so neither form can be
+ * silently discarded by a game-specific compatibility heuristic. */
+static inline int gxmetal_ati_private_pointer_fan_should_render(
+    uint32_t vertex_count, uint32_t clip_marker)
+{
+    (void)clip_marker;
+    return vertex_count >= UINT32_C(3) &&
+        vertex_count <= GXMETAL_ATI_PRIVATE_MAX_VERTEX_COUNT;
+}
+
 /* The generic ATI GLD callbacks are overloaded between a batch form
  * (arg2=count, arg6=OpenGL mode) and a reduced triangle form where arg2 is a
  * guest vertex pointer. Guest pointers are well above the bounded count

@@ -4519,9 +4519,10 @@ static TQABoolean GXMetalATIPrivateConvertVertex(uint32_t address,
  * them as a pointer fan redraws already-submitted surfaces, including Oni's
  * full-screen transition quad. Slot 59 is a safe no-op until its internal
  * four-float state meaning is evidenced. Real ATI hardware has already staged
- * clipped geometry by slot 60; GXMetal reconstructs that fan only when the
- * GLD supplies a nonzero clip marker, then flushes the pending batch. */
-static TQAError GXMetalATIPrivateDrawClippedPointerFan(
+ * clipped geometry by slot 60.  The fourth argument describes that clipping
+ * state; zero means an ordinary, unclipped fan rather than an empty draw.
+ * Reconstruct the fan for both forms, then flush the pending batch. */
+static TQAError GXMetalATIPrivateDrawPointerFan(
     uint32_t sourceMethod, uint32_t rendererAddress,
     uint32_t pointerAddress, uint32_t vertexCount)
 {
@@ -4597,9 +4598,10 @@ static TQAError GXMetalATIPrivateMethod60(uint32_t arg0, uint32_t arg1,
     GXMetalTraceATIPrivateMethod(60, arg0, arg1, arg2, arg3, arg4, arg5,
                                  arg6, arg7);
     (void)arg3; (void)arg5; (void)arg6; (void)arg7;
-    if (arg4 != 0) {
-        (void)GXMetalATIPrivateDrawClippedPointerFan(
-            60u, arg0, arg1, arg2);
+    if (gxmetal_ati_private_pointer_fan_should_render(arg2, arg4)) {
+        (void)GXMetalATIPrivateDrawPointerFan(60u, arg0, arg1, arg2);
+    } else {
+        GXMetalATIPrivateRecordInputReject(60u);
     }
     return GXMetalATIPrivateFinish(arg0);
 }

@@ -194,6 +194,16 @@ static void test_private_generic_callback_abi_discriminator(void)
         UINT32_C(0x1f7d0b80)));
 }
 
+static void test_private_pointer_fan_clip_marker(void)
+{
+    CHECK(gxmetal_ati_private_pointer_fan_should_render(3, 0));
+    CHECK(gxmetal_ati_private_pointer_fan_should_render(4, 1));
+    CHECK(gxmetal_ati_private_pointer_fan_should_render(64, UINT32_MAX));
+    CHECK(!gxmetal_ati_private_pointer_fan_should_render(2, 0));
+    CHECK(!gxmetal_ati_private_pointer_fan_should_render(
+        GXMETAL_ATI_PRIVATE_MAX_VERTEX_COUNT + UINT32_C(1), 0));
+}
+
 static void test_private_triangle_strip_expansion(void)
 {
     static const uint32_t expected[4][3] = {
@@ -506,6 +516,7 @@ int main(void)
     test_private_polygon_mode();
     test_private_contiguous_vertex_bounds();
     test_private_generic_callback_abi_discriminator();
+    test_private_pointer_fan_clip_marker();
     test_private_triangle_strip_expansion();
     test_private_generic_primitive_expansion();
     test_private_clear_color_state();

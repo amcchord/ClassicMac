@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- Restored valid ATI OpenGL pointer-fan draws whose clip marker is zero. Quake
+  III uses that form for ordinary world geometry; treating the marker as an
+  enable bit caused missing floors, walls, pedestals, and other polygon-shaped
+  gaps in the 2.2.0 betas.
+
+### Changed
+
+- Added a silent, deterministic Q3DM1 regression route and a region-scoped
+  near-black pixel oracle derived from reviewed broken and corrected frames.
+  The game-sweep harness can now apply inclusive RGB-range assertions to a
+  stable subregion while excluding skies, HUDs, and animated scene content.
+
 ## 2.2.0 beta 2 — 2026-08-26
 
 ### Fixed

@@ -1,0 +1,30 @@
+{
+  "schema": 1,
+  "defaults": {
+    "boot_wait_seconds": 5,
+    "observation_seconds": 0,
+    "capture_interval_seconds": 5,
+    "resolution": "1024x768x15"
+  },
+  "games": [
+    {
+      "id": "quake3-q3dm1-regression",
+      "name": "Quake III Q3DM1 missing-world regression",
+      "modes": ["gxmetal"],
+      "steps": [
+        {"wait_for_pixel": {"x": 22, "y": 11, "red": 221, "green": 0, "blue": 0, "tolerance": 8, "timeout_seconds": 180, "poll_interval_seconds": 1}},
+        {"note": "This recipe expects the prepared Quake III base to boot with its Quake 3 Demo folder open and the application at 821,375."},
+        {"screenshot": "finder-before-launch"},
+        {"double_click": [821, 375], "delay_after": 20},
+        {"screenshot": "main-menu"},
+        {"click": [320, 148], "delay_after": 2},
+        {"screenshot": "single-player"},
+        {"click": [575, 447], "delay_after": 2},
+        {"click": [320, 184], "delay_after": 2},
+        {"click": [575, 447], "delay_after": 30},
+        {"screenshot": "q3dm1-live"},
+        {"assert_color_range_fraction_below": {"minimum_rgb": [0, 0, 0], "maximum_rgb": [12, 12, 12], "maximum_fraction": 0.05, "region": [350, 300, 270, 120]}}
+      ]
+    }
+  ]
+}
