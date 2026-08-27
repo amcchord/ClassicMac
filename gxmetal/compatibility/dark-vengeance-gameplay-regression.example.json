@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "defaults": {
+    "boot_wait_seconds": 5,
+    "observation_seconds": 0,
+    "capture_interval_seconds": 2,
+    "resolution": "1024x768x15"
+  },
+  "games": [
+    {
+      "id": "dark-notice-title-menu-gameplay",
+      "name": "Dark Vengeance notice contract title-to-gameplay route",
+      "modes": ["gxmetal"],
+      "steps": [
+        {"wait_for_pixel": {"x": 22, "y": 11, "red": 221, "green": 0, "blue": 0, "tolerance": 8, "timeout_seconds": 180, "poll_interval_seconds": 1}},
+        {"rehome_pointer": true, "delay_after": 0.25},
+        {"chord": "Super_L+Alt_L+w", "delay_after": 2},
+        {"double_click": [590, 52], "delay_after": 3},
+        {"text": "GXMetal Sweep Games", "delay_after": 1},
+        {"chord": "Super_L+o", "delay_after": 3},
+        {"text": "Dark Vengeance", "delay_after": 1},
+        {"chord": "Super_L+o", "delay_after": 3},
+        {"text": "Dark Vengeance", "delay_after": 1},
+        {"chord": "Super_L+o", "delay_after": 16},
+        {"screenshot": "title-sequence"},
+        {"key": "Return", "delay_after": 6},
+        {"screenshot": "menu-selection"},
+        {"key": "Return", "delay_after": 15},
+        {"wait_for_pixel": {"x": 75, "y": 80, "red": 80, "green": 88, "blue": 0, "tolerance": 8, "timeout_seconds": 30, "poll_interval_seconds": 1}},
+        {"screenshot": "gameplay-ready"},
+        {"screenshot": "before-forward-input"},
+        {"key": "w", "hold_ms": 1000, "delay_after": 3},
+        {"screenshot": "after-forward-input"},
+        {"assert_frame_changed_since": {"screenshot": "before-forward-input", "minimum_changed_fraction": 0.10, "channel_tolerance": 16}},
+        {"wait": 15},
+        {"screenshot": "short-soak"}
+      ]
+    }
+  ]
+}

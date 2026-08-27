@@ -256,6 +256,20 @@ scripts/prepare-gxmetal-game-base.sh \
   /path/to/os9-ten-game-gxmetal-release.img
 ```
 
+For a source-built checkpoint, keep the signed app/QEMU unchanged and supply
+the candidate Tools CD and PPC NDRV explicitly. `build-guest-cd.sh` accepts an
+alternate output path so the stable packaged ISO is never overwritten:
+
+```sh
+GXMETAL_TOOLS_OUTPUT=/path/to/candidate-tools.iso \
+  scripts/build-guest-cd.sh
+GXMETAL_TOOLS_CD=/path/to/candidate-tools.iso \
+GXMETAL_NDRV=/path/to/qemu_vga.ndrv \
+  scripts/prepare-gxmetal-game-base.sh \
+    /path/to/installed-ten-game-golden.img \
+    /path/to/os9-ten-game-source-candidate.img
+```
+
 The tool verifies the signed app, clones the source, replaces GXMetal,
 GXMetal Input, and GXMetal Startup only in the clone, places GXMetal Test in a
 top-level candidate-tools folder, moves inherited GXMetal conformance apps out
@@ -414,6 +428,38 @@ python3 scripts/gxmetal-game-sweep.py BASE.img \
 
 Use the longer `signed-unresolved-launch.example.json` routes when a short
 regression changes visually or stops reaching its named semantic capture.
+
+Five focused routes retain the late-2.2.1 compatibility fixes and the visual
+failures that timing-only recipes missed:
+
+- `dark-vengeance-gameplay-regression.example.json` navigates from the common
+  ten-game folder, requires the in-game Reality Bytes marker, holds forward,
+  and requires a changed gameplay frame. A Finder window cannot satisfy it.
+- `havoc-gameplay-regression.example.json` handles HAVOC's first-run tutorial,
+  gates the main screen and cockpit HUD independently, uses steering-only input
+  before the low-shield demo can end, and rejects the observed solid-red death
+  frame as a successful soak.
+- `oni-relaunch-regression.example.json` keeps the 90-second first-process
+  warehouse workload, clean Quit/Yes, pointer rehome, exact `-nosound` launch
+  argument, active second cinematic, and a four-pixel second-menu signature.
+- `unreal-tournament-checkbuttonkeys.example.json` cleanly quits process one,
+  reaches second-process Tempest, and brackets a held Control transition for
+  `scripts/gxmetal-ut-checkbuttonkeys.py`. Pair it with QEMU's
+  `input_event_key_qcode` and `adb_device_kbd_readreg` trace events; this is a
+  discriminator, not a general release smoke test. The probe relocates the
+  loaded PEF from aligned invariant instruction triples around sampled PC/LR
+  values, verifies three exact `CheckButtonKeys` instructions, and always
+  persists its locator observations on failure. A successful result records
+  the low-memory key map, UT's stack-local modifier, its prior modifier state,
+  and whether UT reached the Control transition-emission instruction.
+- `quake3-five-view-regression.example.json` retains five Q3DM1 courtyard,
+  arch, statue, and passage views, four motion assertions, and two dark-world
+  rejection regions.
+
+Run independent game routes in parallel from immutable bases, but keep each
+game's quit/relaunch steps sequential inside its own VM. All five recipes are
+silent with the harness default `--audio-backend none`; the harness also
+hard-disables guest networking with `-nic none`.
 
 For Oni's historical post-load corruption signature, one focused route checks
 both the +30-second coherent scene and the +45-second transition from the same

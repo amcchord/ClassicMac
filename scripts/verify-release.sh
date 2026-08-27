@@ -17,6 +17,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TARGET="${1:-$ROOT_DIR/dist/ClassicMac.dmg}"
 EXPECTED_VERSION="${2:-${APP_VERSION:-}}"
 EXPECTED_BUILD="${3:-${APP_BUILD_VERSION:-}}"
+SKIP_REPO_FRESHNESS="${VERIFY_RELEASE_SKIP_REPO_FRESHNESS:-0}"
 MOUNT_ROOT=""
 ATTACH_DEVICE=""
 
@@ -85,11 +86,13 @@ for required in "$PLIST" "$PPC_HELPER/Contents/Info.plist" \
   [ -e "$required" ] || die "Required release component is missing: $required"
 done
 [ -s "$TOOLS_CD" ] || die "Bundled ClassicMac Tools CD is empty"
-if [ -f "$ROOT_DIR/dist/ClassicMacTools.iso" ]; then
+if [ "$SKIP_REPO_FRESHNESS" != "1" ] && \
+   [ -f "$ROOT_DIR/dist/ClassicMacTools.iso" ]; then
   cmp -s "$ROOT_DIR/dist/ClassicMacTools.iso" "$TOOLS_CD" || \
     die "Bundled Tools CD differs from the freshly built dist image"
 fi
-if [ -f "$ROOT_DIR/ppcvid/qemu_vga.ndrv" ]; then
+if [ "$SKIP_REPO_FRESHNESS" != "1" ] && \
+   [ -f "$ROOT_DIR/ppcvid/qemu_vga.ndrv" ]; then
   cmp -s "$ROOT_DIR/ppcvid/qemu_vga.ndrv" "$PPC_NDRV" || \
     die "Bundled Power Mac NDRV differs from the freshly built driver"
 fi

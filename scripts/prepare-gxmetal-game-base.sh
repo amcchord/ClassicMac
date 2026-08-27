@@ -12,6 +12,7 @@
 # Optional environment:
 #   GXMETAL_APP=/path/to/ClassicMac.app
 #   GXMETAL_TOOLS_CD=/path/to/source-built/ClassicMacTools.iso
+#   GXMETAL_NDRV=/path/to/source-built/qemu_vga.ndrv
 #   GXMETAL_SKIP_DISK_CHECK_DISABLE=1
 #   GXMETAL_FORCE_DISK_CHECK_VERIFY=1
 
@@ -23,7 +24,7 @@ OUTPUT_DISK="${2:-}"
 APP="${GXMETAL_APP:-$ROOT_DIR/dist/ClassicMac.app}"
 TOOLS_CD="${GXMETAL_TOOLS_CD:-$APP/Contents/Resources/ClassicMacTools.iso}"
 PPC_QEMU="$APP/Contents/Helpers/Power Mac G4.app/Contents/MacOS/qemu-system-ppc"
-PPC_NDRV="$APP/Contents/Resources/qemu/pc-bios/qemu_vga.ndrv"
+PPC_NDRV="${GXMETAL_NDRV:-$APP/Contents/Resources/qemu/pc-bios/qemu_vga.ndrv}"
 
 SCRATCH=""
 ATTACH_DEVICE=""
@@ -81,7 +82,14 @@ SOURCE_SIZE="$(stat -f '%z' "$SOURCE_DISK")"
 SOURCE_MTIME="$(stat -f '%m' "$SOURCE_DISK")"
 
 log "Verifying the signed application candidate"
-"$ROOT_DIR/scripts/verify-release.sh" "$APP"
+if [ -n "${GXMETAL_TOOLS_CD:-}" ] || [ -n "${GXMETAL_NDRV:-}" ]; then
+  # Source-built guest/NDRV candidates still use the exact signed QEMU app,
+  # but intentionally differ from the repository's packaged artifacts.
+  VERIFY_RELEASE_SKIP_REPO_FRESHNESS=1 \
+    "$ROOT_DIR/scripts/verify-release.sh" "$APP"
+else
+  "$ROOT_DIR/scripts/verify-release.sh" "$APP"
+fi
 
 SCRATCH="$(mktemp -d "${TMPDIR:-/tmp}/gxmetal-game-base.XXXXXX")"
 mkdir -p "$SCRATCH/macbinary" "$SCRATCH/guest"

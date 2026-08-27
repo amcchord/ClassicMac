@@ -1,0 +1,41 @@
+{
+  "schema": 1,
+  "defaults": {
+    "boot_wait_seconds": 5,
+    "observation_seconds": 0,
+    "capture_interval_seconds": 5,
+    "resolution": "1024x768x15"
+  },
+  "games": [
+    {
+      "id": "quake3-q3dm1-five-view-regression",
+      "name": "Quake III Q3DM1 five-view visual regression",
+      "modes": ["gxmetal"],
+      "steps": [
+        {"wait_for_pixel": {"x": 22, "y": 11, "red": 221, "green": 0, "blue": 0, "tolerance": 8, "timeout_seconds": 180, "poll_interval_seconds": 1}},
+        {"note": "Prepared base boots with the Quake 3 Demo folder open and its application at 821,375."},
+        {"double_click": [821, 375], "delay_after": 20},
+        {"click": [320, 148], "delay_after": 2},
+        {"click": [575, 447], "delay_after": 2},
+        {"click": [320, 184], "delay_after": 2},
+        {"click": [575, 447], "delay_after": 30},
+        {"screenshot": "01-spawn-courtyard-and-arches"},
+        {"assert_color_range_fraction_below": {"minimum_rgb": [0, 0, 0], "maximum_rgb": [12, 12, 12], "maximum_fraction": 0.05, "region": [350, 300, 270, 120]}},
+        {"key": "Left", "hold_ms": 300, "delay_after": 2},
+        {"screenshot": "02-left-courtyard-geometry"},
+        {"assert_frame_changed_since": {"screenshot": "01-spawn-courtyard-and-arches", "minimum_changed_fraction": 0.05, "channel_tolerance": 8, "region": [0, 0, 640, 400]}},
+        {"key": "Right", "hold_ms": 600, "delay_after": 2},
+        {"screenshot": "03-right-arches-and-statue"},
+        {"assert_frame_changed_since": {"screenshot": "02-left-courtyard-geometry", "minimum_changed_fraction": 0.05, "channel_tolerance": 8, "region": [0, 0, 640, 400]}},
+        {"key": "Left", "hold_ms": 300, "delay_after": 1},
+        {"key": "Up", "hold_ms": 650, "delay_after": 2},
+        {"screenshot": "04-forward-courtyard-detail"},
+        {"assert_frame_changed_since": {"screenshot": "01-spawn-courtyard-and-arches", "minimum_changed_fraction": 0.05, "channel_tolerance": 8, "region": [0, 0, 640, 400]}},
+        {"key": "Right", "hold_ms": 300, "delay_after": 2},
+        {"screenshot": "05-forward-right-passage"},
+        {"assert_frame_changed_since": {"screenshot": "04-forward-courtyard-detail", "minimum_changed_fraction": 0.05, "channel_tolerance": 8, "region": [0, 0, 640, 400]}},
+        {"assert_color_range_fraction_below": {"minimum_rgb": [0, 0, 0], "maximum_rgb": [12, 12, 12], "maximum_fraction": 0.05, "region": [180, 180, 420, 200]}}
+      ]
+    }
+  ]
+}

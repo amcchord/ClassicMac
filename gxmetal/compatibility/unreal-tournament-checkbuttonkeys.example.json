@@ -1,0 +1,170 @@
+{
+  "schema": 1,
+  "defaults": {
+    "boot_wait_seconds": 5,
+    "observation_seconds": 2,
+    "capture_interval_seconds": 5,
+    "resolution": "1024x768x15"
+  },
+  "games": [
+    {
+      "id": "unreal-tournament-checkbuttonkeys-exact221",
+      "name": "Unreal Tournament exact 2.2.1 second-process CheckButtonKeys probe",
+      "modes": [
+        "gxmetal"
+      ],
+      "steps": [
+        {
+          "note": "Silent disposable-clone probe: invoke with --audio-backend none. The helper attaches only after the second-process-probe-ready step and observes guest state without patching it."
+        },
+        {
+          "wait_for_pixel": {
+            "x": 22,
+            "y": 11,
+            "red": 221,
+            "green": 0,
+            "blue": 0,
+            "tolerance": 8,
+            "timeout_seconds": 180,
+            "poll_interval_seconds": 1
+          }
+        },
+        {
+          "screenshot": "finder-ready"
+        },
+        {
+          "chord": "Super_L+Alt_L+w",
+          "delay_after": 2
+        },
+        {
+          "double_click": [
+            590,
+            52
+          ],
+          "delay_after": 3
+        },
+        {
+          "text": "GXMetal Sweep Games",
+          "delay_after": 1
+        },
+        {
+          "chord": "Super_L+o",
+          "delay_after": 3
+        },
+        {
+          "text": "Unreal Tournament",
+          "delay_after": 1
+        },
+        {
+          "chord": "Super_L+o",
+          "delay_after": 3
+        },
+        {
+          "double_click": [
+            329,
+            220
+          ],
+          "delay_after": 45
+        },
+        {
+          "screenshot": "first-process-rave-selection"
+        },
+        {
+          "key": "Return",
+          "delay_after": 15
+        },
+        {
+          "screenshot": "first-process-startup-settings"
+        },
+        {
+          "key": "Return",
+          "delay_after": 55
+        },
+        {
+          "screenshot": "first-process-tempest-ready"
+        },
+        {
+          "key": "Control_L",
+          "delay_after": 12
+        },
+        {
+          "screenshot": "first-process-tempest-live"
+        },
+        {
+          "key": "Escape",
+          "delay_after": 7
+        },
+        {
+          "screenshot": "first-process-title-after-escape"
+        },
+        {
+          "chord": "Super_L+q",
+          "delay_after": 3
+        },
+        {
+          "wait_for_pixel": {
+            "x": 22,
+            "y": 11,
+            "red": 221,
+            "green": 0,
+            "blue": 0,
+            "tolerance": 8,
+            "timeout_seconds": 45,
+            "poll_interval_seconds": 1
+          }
+        },
+        {
+          "screenshot": "finder-after-first-process"
+        },
+        {
+          "double_click": [
+            329,
+            220
+          ],
+          "delay_after": 45
+        },
+        {
+          "screenshot": "second-process-press-fire"
+        },
+        {
+          "key": "Return",
+          "delay_after": 15
+        },
+        {
+          "screenshot": "second-process-waiting-for-ready"
+        },
+        {
+          "key": "Control_L",
+          "delay_after": 55
+        },
+        {
+          "screenshot": "second-process-probe-ready"
+        },
+        {
+          "wait": 12
+        },
+        {
+          "key_down": "Control_L"
+        },
+        {
+          "wait": 8
+        },
+        {
+          "key_up": "Control_L"
+        },
+        {
+          "screenshot": "second-process-after-probe"
+        },
+        {
+          "note": "Do not treat Command-Q from the fullscreen death state as a clean-quit oracle; process one already proves Escape/title/Command-Q. End this diagnostic after the held-Control discriminator."
+        },
+        {
+          "wait": 3
+        },
+        {
+          "screenshot": "second-process-probe-final"
+        }
+      ]
+    }
+  ]
+}
