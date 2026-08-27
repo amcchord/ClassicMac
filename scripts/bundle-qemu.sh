@@ -33,7 +33,7 @@ BUNDLE_PREVIOUS_APP=""
 BUNDLE_LOCK_HELD=0
 
 APP_VERSION="${APP_VERSION:-2.2.0}"
-APP_BUILD_VERSION="${APP_BUILD_VERSION:-2.2.1}"
+APP_BUILD_VERSION="${APP_BUILD_VERSION:-2.2.2}"
 BUNDLE_ID="com.classicmac.emulator"
 
 log() { printf '\n==> %s\n' "$*"; }

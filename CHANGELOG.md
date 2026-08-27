@@ -1,5 +1,27 @@
 # Changelog
 
+## 2.2.0 beta 2 — 2026-08-26
+
+### Fixed
+
+- Restored QEMU's native Cocoa machine window as the default viewer for both
+  the Quadra 800 and Power Mac G4. Existing machine packages without an
+  explicit viewer preference migrate to the native window automatically.
+- Browser/VNC viewing is now an opt-in per-machine setting instead of the only
+  display path. The **View in browser (VNC)** toggle appears during machine
+  creation and under Viewer in machine settings, and takes effect on the next
+  start.
+- Start, restart, toolbar activation, screen-preview activation, and browser
+  server cleanup now follow the selected viewer. Native machines do not start
+  a VNC server; browser machines retain their private loopback-only noVNC URL
+  across Power Mac restarts.
+
+### Changed
+
+- Release verification now requires both bundled emulators to contain the
+  Cocoa backend, optional VNC/WebSocket support, and ClassicMac's native-window
+  Command-key, secondary-click, and scrolling options.
+
 ## 2.2.0 beta 1 — 2026-08-26
 
 ### Changed
