@@ -11,10 +11,12 @@
 
 ### Changed
 
-- Added a silent, deterministic Q3DM1 regression route and a region-scoped
-  near-black pixel oracle derived from reviewed broken and corrected frames.
-  The game-sweep harness can now apply inclusive RGB-range assertions to a
-  stable subregion while excluding skies, HUDs, and animated scene content.
+- Added a silent, deterministic Q3DM1 regression route with six gameplay
+  viewpoints covering the courtyard, ornate and side arches, pedestals,
+  passage geometry, portal effects, and HUD. A region-scoped near-black pixel
+  oracle is derived from reviewed broken and corrected frames. The game-sweep
+  harness can now apply inclusive RGB-range assertions to a stable subregion
+  while excluding skies, HUDs, and animated scene content.
 
 ## 2.2.0 beta 2 — 2026-08-26
 

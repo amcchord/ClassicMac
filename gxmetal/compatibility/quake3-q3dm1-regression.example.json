@@ -22,8 +22,20 @@
         {"click": [575, 447], "delay_after": 2},
         {"click": [320, 184], "delay_after": 2},
         {"click": [575, 447], "delay_after": 30},
-        {"screenshot": "q3dm1-live"},
-        {"assert_color_range_fraction_below": {"minimum_rgb": [0, 0, 0], "maximum_rgb": [12, 12, 12], "maximum_fraction": 0.05, "region": [350, 300, 270, 120]}}
+        {"screenshot": "q3dm1-spawn-arches"},
+        {"assert_color_range_fraction_below": {"minimum_rgb": [0, 0, 0], "maximum_rgb": [12, 12, 12], "maximum_fraction": 0.05, "region": [350, 300, 270, 120]}},
+        {"key": "Left", "hold_ms": 500, "delay_after": 1},
+        {"key": "Up", "hold_ms": 1000, "delay_after": 2},
+        {"screenshot": "q3dm1-courtyard-left"},
+        {"key": "Right", "hold_ms": 350, "delay_after": 1},
+        {"screenshot": "q3dm1-carved-arch-close"},
+        {"key": "Up", "hold_ms": 1000, "delay_after": 2},
+        {"screenshot": "q3dm1-under-arch"},
+        {"key": "Down", "hold_ms": 900, "delay_after": 1},
+        {"key": "Right", "hold_ms": 750, "delay_after": 1},
+        {"screenshot": "q3dm1-side-arch"},
+        {"key": "Up", "hold_ms": 800, "delay_after": 2},
+        {"screenshot": "q3dm1-side-passage"}
       ]
     }
   ]
