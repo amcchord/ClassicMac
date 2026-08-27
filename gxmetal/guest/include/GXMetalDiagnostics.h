@@ -46,7 +46,7 @@ enum GXMetalDisplayRejectReason {
 };
 
 #define GXMETAL_DIAGNOSTIC_MAGIC UINT32_C(0x47584447) /* GXDG */
-#define GXMETAL_DIAGNOSTIC_VERSION UINT32_C(0x0001001C)
+#define GXMETAL_DIAGNOSTIC_VERSION UINT32_C(0x0001001E)
 #define GXMETAL_DIAGNOSTIC_PIXEL_TYPES 18u
 #define GXMETAL_DIAGNOSTIC_PRIVATE_PIXEL_TYPES 16u
 #define GXMETAL_DIAGNOSTIC_ATI_DRAW47_WORDS 30u
@@ -67,6 +67,8 @@ enum GXMetalDisplayRejectReason {
 #define GXMETAL_DIAGNOSTIC_ATI_ANOMALY_VERTICES 3u
 #define GXMETAL_DIAGNOSTIC_ATI_ANOMALY_WORDS 39u
 #define GXMETAL_DIAGNOSTIC_ATI_GEOMETRY_BURST_CALLS 256u
+#define GXMETAL_DIAGNOSTIC_ATI_METHOD4_ARGUMENTS 8u
+#define GXMETAL_DIAGNOSTIC_ATI_METHOD4_SNAPSHOT_WORDS 6u
 #define GXMETAL_DIAGNOSTIC_PROPERTY "AAPL,GXMetalEngineDiagnostic"
 
 typedef struct GXMetalDiagnosticSnapshot {
@@ -420,6 +422,37 @@ typedef struct GXMetalDiagnosticSnapshot {
         GXMETAL_DIAGNOSTIC_ATI_ANOMALY_VERTICES];
     uint32_t ati_private_geometry_first_burst_vertex_words[
         GXMETAL_DIAGNOSTIC_ATI_ANOMALY_WORDS];
+    uint32_t ati_private_texture_update_arg0;
+    uint32_t ati_private_texture_update_arg1;
+    uint32_t ati_private_texture_update_arg2;
+    uint32_t ati_private_texture_update_arg3;
+    uint32_t ati_private_texture_update_image_snapshot_valid;
+    uint32_t ati_private_texture_update_image_pixmap;
+    uint32_t ati_private_texture_update_image_width;
+    uint32_t ati_private_texture_update_image_height;
+    uint32_t ati_private_texture_update_image_row_bytes;
+    uint32_t ati_private_texture_update_texture_snapshot_valid;
+    uint32_t ati_private_texture_update_texture_magic;
+    uint32_t ati_private_texture_update_resource_id;
+    uint32_t ati_private_texture_update_source_pixel_type;
+    uint32_t ati_private_texture_update_pixel_format;
+    uint32_t ati_private_texture_update_texture_width;
+    uint32_t ati_private_texture_update_texture_height;
+    uint32_t ati_private_texture_update_texture_levels;
+    uint32_t ati_private_texture_update_source_flags;
+    uint32_t ati_private_texture_update_access_active;
+    uint32_t ati_private_texture_update_stage;
+    uint32_t ati_private_texture_update_reject_reason;
+    int32_t ati_private_texture_update_result;
+    uint32_t ati_private_method4_args[
+        GXMETAL_DIAGNOSTIC_ATI_METHOD4_ARGUMENTS];
+    uint32_t ati_private_method4_before_snapshot_valid;
+    uint32_t ati_private_method4_before_snapshot_words[
+        GXMETAL_DIAGNOSTIC_ATI_METHOD4_SNAPSHOT_WORDS];
+    uint32_t ati_private_method4_after_snapshot_valid;
+    uint32_t ati_private_method4_after_snapshot_words[
+        GXMETAL_DIAGNOSTIC_ATI_METHOD4_SNAPSHOT_WORDS];
+    int32_t ati_private_method4_result;
 } GXMetalDiagnosticSnapshot;
 
 int32_t GXMetalGetDiagnosticStatus(void);

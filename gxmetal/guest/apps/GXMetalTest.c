@@ -28,6 +28,12 @@ extern void QAExit(void);
 #define GXMETAL_BENCHMARK_FRAMES 120
 #define GXMETAL_BENCHMARK_WARMUP_FRAMES 4
 #define GXMETAL_ATI_PIXEL_RGB16 ((TQAImagePixelType)1001)
+#define GXMETAL_ATI_PREALLOC_TEST_TEXTURES 43
+
+typedef TQAError (*GXMetalATIPrivateMethodProc)(
+    unsigned long arg0, unsigned long arg1, unsigned long arg2,
+    unsigned long arg3, unsigned long arg4, unsigned long arg5,
+    unsigned long arg6, unsigned long arg7);
 
 static const unsigned char kGXMetalResultName[] = {
     20, 'G', 'X', 'M', 'e', 't', 'a', 'l', ' ', 'T', 'e', 's', 't', ' ',
@@ -555,6 +561,8 @@ static TQAError GXMetalRenderDrawBufferWriteback(
     const TQARect *deviceRect)
 {
     TQAPixelBuffer access;
+    TQADevice privateDevice;
+    GXMetalATIPrivateMethodProc *privateMethods;
     TQARect full = {0, GXMETAL_WIDTH, 0, GXMETAL_HEIGHT};
     TQARect dirty = {32, 40, 32, 40};
     TQARect noDirty = {0, 0, 0, 0};
@@ -637,6 +645,62 @@ static TQAError GXMetalRenderDrawBufferWriteback(
             error = endError;
         }
     }
+
+    /* ATI private slot 4 predates public QAAccessDrawBuffer and returns the
+     * same memory descriptor inside a full TQADevice. Myth II calls it more
+     * than once without an End method, so two consecutive reads must succeed
+     * and a subsequent public access must prove the private path left no
+     * access latch set. */
+    privateMethods = (GXMetalATIPrivateMethodProc *)QAGetPtr(
+        context, (TQATagPtr)GXMETAL_ATI_PRIVATE_METHODS_TAG);
+    if (error == kQANoErr &&
+        (privateMethods == NULL || privateMethods[4] == NULL)) {
+        error = kQANotSupported;
+    }
+    memset(&privateDevice, 0xa5, sizeof(privateDevice));
+    if (error == kQANoErr) {
+        error = privateMethods[4](
+            (unsigned long)(uintptr_t)context,
+            (unsigned long)(uintptr_t)&privateDevice, 0, 0, 0, 0, 0, 0);
+    }
+    if (error == kQANoErr &&
+        (privateDevice.deviceType != kQADeviceMemory ||
+         privateDevice.device.memoryDevice.baseAddr == NULL ||
+         privateDevice.device.memoryDevice.width != GXMETAL_WIDTH ||
+         privateDevice.device.memoryDevice.height != GXMETAL_HEIGHT ||
+         privateDevice.device.memoryDevice.rowBytes <= 0 ||
+         !GXMetalAccessPixelMatches(
+             &privateDevice.device.memoryDevice, 35, 35,
+             kGXMetalPixelRed) ||
+         !GXMetalAccessPixelMatches(
+             &privateDevice.device.memoryDevice, 10, 20,
+             kGXMetalPixelBlue))) {
+        error = kQAError;
+    }
+    memset(&privateDevice, 0x5a, sizeof(privateDevice));
+    if (error == kQANoErr) {
+        error = privateMethods[4](
+            (unsigned long)(uintptr_t)context,
+            (unsigned long)(uintptr_t)&privateDevice, 0, 0, 0, 0, 0, 0);
+    }
+    if (error == kQANoErr &&
+        (privateDevice.deviceType != kQADeviceMemory ||
+         !GXMetalAccessPixelMatches(
+             &privateDevice.device.memoryDevice, 35, 35,
+             kGXMetalPixelRed))) {
+        error = kQAError;
+    }
+    memset(&access, 0, sizeof(access));
+    if (error == kQANoErr) {
+        error = QAAccessDrawBuffer(context, &access);
+    }
+    if (access.baseAddr != NULL) {
+        TQAError endError = QAAccessDrawBufferEnd(context, &noDirty);
+
+        if (error == kQANoErr) {
+            error = endError;
+        }
+    }
     if (error == kQANoErr) {
         error = QASwapBuffers(context, &full);
     }
@@ -655,7 +719,8 @@ static TQAError GXMetalRenderDrawBufferWriteback(
         error = kQAError;
     }
     if (error != kQANoErr) {
-        GXMetalRecordResult("FAIL: mutable draw-buffer dirty writeback");
+        GXMetalRecordResult(
+            "FAIL: mutable or ATI-private draw-buffer readback");
     }
     return error;
 }
@@ -1315,6 +1380,148 @@ static TQAError GXMetalRenderATITextureMutation(
     QASetInt(context, (TQATagInt)GXMETAL_ATI_PRIVATE_ENABLE_TAG, 0);
     QATextureDelete(engine, liveTexture);
     QATextureDelete(engine, staticTexture);
+    return error;
+}
+
+static TQAError GXMetalRenderATITextureUpdate(
+    TQADrawContext *context, const TQAEngine *engine,
+    GDHandle graphicsDevice, const TQARect *deviceRect)
+{
+    unsigned short blankPublicPixels[4] = {0, 0, 0, 0};
+    unsigned short greenPublicPixels[4] = {
+        0x03e0, 0x03e0, 0x03e0, 0x03e0
+    };
+    unsigned char blankPrivatePixels[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+    unsigned char redPrivatePixels[8];
+    TQAImage image;
+    TQATexture *textures[GXMETAL_ATI_PREALLOC_TEST_TEXTURES];
+    GXMetalATIPrivateMethodProc *privateMethods;
+    TQAVTexture publicQuad[4];
+    TQAVTexture privateQuad[4];
+    unsigned long vertexFlags[4] = {0, 0, 0, 0};
+    TQARect dirty = {0, GXMETAL_WIDTH, 0, GXMETAL_HEIGHT};
+    TQAError error = kQANoErr;
+    int textureIndex;
+
+    memset(textures, 0, sizeof(textures));
+    GXMetalFillATITexture(redPrivatePixels, 0xff, 0x00);
+    privateMethods = (GXMetalATIPrivateMethodProc *)QAGetPtr(
+        context, (TQATagPtr)GXMETAL_ATI_PRIVATE_METHODS_TAG);
+    if (privateMethods == NULL || privateMethods[2] == NULL) {
+        GXMetalRecordResult("FAIL: ATI private texture-update method lookup");
+        return kQANotSupported;
+    }
+
+    /* Match Myth II's transition pattern: 43 client-owned handles are first
+     * backed by blank resources, then populated in place through slot 2. The
+     * first resource also covers public RGB16 while the remaining resources
+     * exercise ATI's private ARGB4444 type 1001. */
+    image.width = 2;
+    image.height = 2;
+    image.rowBytes = 4;
+    for (textureIndex = 0;
+         textureIndex < GXMETAL_ATI_PREALLOC_TEST_TEXTURES;
+         ++textureIndex) {
+        TQAImagePixelType pixelType = textureIndex == 0 ?
+            kQAPixel_RGB16 : GXMETAL_ATI_PIXEL_RGB16;
+
+        image.pixmap = textureIndex == 0 ?
+            (void *)blankPublicPixels : (void *)blankPrivatePixels;
+        error = QATextureNew(engine, kQATexture_None, pixelType,
+                             &image, &textures[textureIndex]);
+        if (error != kQANoErr) {
+            GXMetalRecordResult(
+                "FAIL: ATI private texture-update pool creation");
+            break;
+        }
+    }
+    if (error == kQANoErr) {
+        image.pixmap = greenPublicPixels;
+        error = privateMethods[2](
+            0, (unsigned long)kQAPixel_RGB16,
+            (unsigned long)(uintptr_t)&image,
+            (unsigned long)(uintptr_t)textures[0], 0, 0, 0, 0);
+    }
+    for (textureIndex = 1;
+         error == kQANoErr &&
+             textureIndex < GXMETAL_ATI_PREALLOC_TEST_TEXTURES;
+         ++textureIndex) {
+        image.pixmap = redPrivatePixels;
+        error = privateMethods[2](
+            0, (unsigned long)GXMETAL_ATI_PIXEL_RGB16,
+            (unsigned long)(uintptr_t)&image,
+            (unsigned long)(uintptr_t)textures[textureIndex], 0, 0, 0, 0);
+    }
+    if (error != kQANoErr) {
+        GXMetalRecordResult("FAIL: ATI private texture-update slot 2 upload");
+    }
+
+    publicQuad[0] = GXMetalTextureVertex(12.0f, 12.0f, 0.5f,
+                                         0.0f, 0.0f);
+    publicQuad[1] = GXMetalTextureVertex(150.0f, 12.0f, 0.5f,
+                                         1.0f, 0.0f);
+    publicQuad[2] = GXMetalTextureVertex(12.0f, 208.0f, 0.5f,
+                                         0.0f, 1.0f);
+    publicQuad[3] = GXMetalTextureVertex(150.0f, 208.0f, 0.5f,
+                                         1.0f, 1.0f);
+    privateQuad[0] = GXMetalTextureVertex(170.0f, 12.0f, 0.5f,
+                                          0.0f, 0.0f);
+    privateQuad[1] = GXMetalTextureVertex(308.0f, 12.0f, 0.5f,
+                                          1.0f, 0.0f);
+    privateQuad[2] = GXMetalTextureVertex(170.0f, 208.0f, 0.5f,
+                                          0.0f, -1.0f);
+    privateQuad[3] = GXMetalTextureVertex(308.0f, 208.0f, 0.5f,
+                                          1.0f, -1.0f);
+    if (error == kQANoErr) {
+        QASetFloat(context, kQATag_ColorBG_r, 0.0f);
+        QASetFloat(context, kQATag_ColorBG_g, 0.0f);
+        QASetFloat(context, kQATag_ColorBG_b, 0.0f);
+        QASetFloat(context, kQATag_ColorBG_a, 1.0f);
+        QASetInt(context, kQATag_ZFunction, kQAZFunction_None);
+        QASetInt(context, kQATag_ZBufferMask, kQAZBufferMask_Disable);
+        QASetInt(context, kQATag_TextureFilter, kQATextureFilter_Fast);
+        QASetInt(context, kQATag_TextureOp, kQATextureOp_None);
+        QASetInt(context, kQATagGL_TextureWrapU, kQAGL_Clamp);
+        QASetInt(context, kQATagGL_TextureWrapV, kQAGL_Clamp);
+        QARenderStart(context, &dirty, NULL);
+        QASetPtr(context, kQATag_Texture, textures[0]);
+        QADrawVTexture(context, 4, kQAVertexMode_Strip,
+                       publicQuad, vertexFlags);
+        QASetPtr(context, kQATag_Texture, textures[1]);
+        QADrawVTexture(context, 4, kQAVertexMode_Strip,
+                       privateQuad, vertexFlags);
+        error = QARenderEnd(context, &dirty);
+        if (error == kQANoErr) {
+            error = QASync(context);
+        }
+    }
+    if (error == kQANoErr &&
+        !GXMetalPixelMatches(graphicsDevice,
+                             deviceRect->left + 80,
+                             deviceRect->top + 110,
+                             kGXMetalPixelGreen)) {
+        GXMetalRecordResult(
+            "FAIL: public RGB16 private texture-update pixel");
+        error = kQAError;
+    }
+    if (error == kQANoErr &&
+        !GXMetalPixelMatches(graphicsDevice,
+                             deviceRect->left + 240,
+                             deviceRect->top + 110,
+                             kGXMetalPixelRed)) {
+        GXMetalRecordResult(
+            "FAIL: ATI-1001 private texture-update pixel");
+        error = kQAError;
+    }
+
+    QASetPtr(context, kQATag_Texture, NULL);
+    for (textureIndex = 0;
+         textureIndex < GXMETAL_ATI_PREALLOC_TEST_TEXTURES;
+         ++textureIndex) {
+        if (textures[textureIndex] != NULL) {
+            QATextureDelete(engine, textures[textureIndex]);
+        }
+    }
     return error;
 }
 
@@ -2511,7 +2718,7 @@ static void GXMetalBuildPassResult(char *result, size_t resultCapacity,
     GXMetalAppendText(&cursor, end, "PASS: version=");
     GXMetalAppendVersion(&cursor, end, revision);
     GXMetalAppendText(&cursor, end,
-        " RAVE discovery capability-contract depth perspective-z blend alpha-test chromakey backface clip texture intensity-formats acl16-88 alpha1-texture-byte+bitmap-packed cl4 rgb8-332 rgb24 public-multitexture dynamic-resources ATI-private-nocopy large-mesh-batches bitmap bitmap-scale dirty-present double-buffer framebuffer gx_us=");
+        " RAVE discovery capability-contract depth perspective-z blend alpha-test chromakey backface clip texture intensity-formats acl16-88 alpha1-texture-byte+bitmap-packed cl4 rgb8-332 rgb24 public-multitexture dynamic-resources ATI-private-nocopy ATI-private-update ATI-private-readback large-mesh-batches bitmap bitmap-scale dirty-present double-buffer framebuffer gx_us=");
     GXMetalAppendDecimal(&cursor, end, gxMetalMicroseconds);
     GXMetalAppendText(&cursor, end, " sw_us=");
     GXMetalAppendDecimal(&cursor, end, softwareMicroseconds);
@@ -2967,6 +3174,10 @@ int main(void)
         }
         if (error == kQANoErr) {
             error = GXMetalRenderATITextureMutation(
+                context, engine, device.device.gDevice, &deviceRect);
+        }
+        if (error == kQANoErr) {
+            error = GXMetalRenderATITextureUpdate(
                 context, engine, device.device.gDevice, &deviceRect);
         }
         if (error == kQANoErr) {

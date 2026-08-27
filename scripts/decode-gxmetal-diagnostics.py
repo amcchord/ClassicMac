@@ -196,6 +196,41 @@ ATI_PRIVATE_BURST_FIELDS = (
     "ati_private_geometry_first_burst_vertex_addresses",
     "ati_private_geometry_first_burst_vertex_words",
 )
+ATI_PRIVATE_TEXTURE_UPDATE_FIELDS = (
+    "ati_private_texture_update_arg0",
+    "ati_private_texture_update_arg1",
+    "ati_private_texture_update_arg2",
+    "ati_private_texture_update_arg3",
+    "ati_private_texture_update_image_snapshot_valid",
+    "ati_private_texture_update_image_pixmap",
+    "ati_private_texture_update_image_width",
+    "ati_private_texture_update_image_height",
+    "ati_private_texture_update_image_row_bytes",
+    "ati_private_texture_update_texture_snapshot_valid",
+    "ati_private_texture_update_texture_magic",
+    "ati_private_texture_update_resource_id",
+    "ati_private_texture_update_source_pixel_type",
+    "ati_private_texture_update_pixel_format",
+    "ati_private_texture_update_texture_width",
+    "ati_private_texture_update_texture_height",
+    "ati_private_texture_update_texture_levels",
+    "ati_private_texture_update_source_flags",
+    "ati_private_texture_update_access_active",
+    "ati_private_texture_update_stage",
+    "ati_private_texture_update_reject_reason",
+    "ati_private_texture_update_result",
+)
+ATI_PRIVATE_METHOD4_FIELDS = (
+    "ati_private_method4_args",
+    "ati_private_method4_before_snapshot_valid",
+    "ati_private_method4_before_snapshot_words",
+    "ati_private_method4_after_snapshot_valid",
+    "ati_private_method4_after_snapshot_words",
+    "ati_private_method4_result",
+)
+ATI_PRIVATE_CURRENT_FIELDS = (
+    ATI_PRIVATE_TEXTURE_UPDATE_FIELDS + ATI_PRIVATE_METHOD4_FIELDS
+)
 ATI_PRIVATE_FINISH_FIELDS = (
     ATI_PRIVATE_FINISH_COUNTER_FIELDS + ATI_PRIVATE_FINISH_DETAIL_FIELDS
     + ATI_PRIVATE_TRANSITION_FIELDS + ATI_PRIVATE_BURST_FIELDS
@@ -217,7 +252,8 @@ LEGACY_TRAILING_FIELDS = {
                 + ATI_PRIVATE_PIXEL21_FIELDS + ATI_PRIVATE_STRIP_FIELDS
                 + ATI_PRIVATE_PRIMITIVE_FIELDS + ATI_PRIVATE_FILL_FIELDS
                 + ATI_PRIVATE_GEOMETRY_FIELDS
-                + ATI_PRIVATE_VERTEX_CAPTURE_FIELDS),
+                + ATI_PRIVATE_VERTEX_CAPTURE_FIELDS
+                + ATI_PRIVATE_CURRENT_FIELDS),
     0x0001000D: (FOG_STATE_FIELDS + ATI_PRIVATE_TRACE_FIELDS
                 + ATI_PRIVATE_DRAW47_FIELDS
                 + ATI_PRIVATE_DRAW47_VERTEX_FIELDS
@@ -225,54 +261,71 @@ LEGACY_TRAILING_FIELDS = {
                 + ATI_PRIVATE_PIXEL21_FIELDS + ATI_PRIVATE_STRIP_FIELDS
                 + ATI_PRIVATE_PRIMITIVE_FIELDS + ATI_PRIVATE_FILL_FIELDS
                 + ATI_PRIVATE_GEOMETRY_FIELDS
-                + ATI_PRIVATE_VERTEX_CAPTURE_FIELDS),
+                + ATI_PRIVATE_VERTEX_CAPTURE_FIELDS
+                + ATI_PRIVATE_CURRENT_FIELDS),
     0x0001000E: (ATI_PRIVATE_TRACE_FIELDS + ATI_PRIVATE_DRAW47_FIELDS
                 + ATI_PRIVATE_DRAW47_VERTEX_FIELDS
                 + ATI_PRIVATE_CLEAR_STATE_FIELDS
                 + ATI_PRIVATE_PIXEL21_FIELDS + ATI_PRIVATE_STRIP_FIELDS
                 + ATI_PRIVATE_PRIMITIVE_FIELDS + ATI_PRIVATE_FILL_FIELDS
                 + ATI_PRIVATE_GEOMETRY_FIELDS
-                + ATI_PRIVATE_VERTEX_CAPTURE_FIELDS),
+                + ATI_PRIVATE_VERTEX_CAPTURE_FIELDS
+                + ATI_PRIVATE_CURRENT_FIELDS),
     0x0001000F: (ATI_PRIVATE_DRAW47_FIELDS
                 + ATI_PRIVATE_DRAW47_VERTEX_FIELDS
                 + ATI_PRIVATE_CLEAR_STATE_FIELDS
                 + ATI_PRIVATE_PIXEL21_FIELDS + ATI_PRIVATE_STRIP_FIELDS
                 + ATI_PRIVATE_PRIMITIVE_FIELDS + ATI_PRIVATE_FILL_FIELDS
                 + ATI_PRIVATE_GEOMETRY_FIELDS
-                + ATI_PRIVATE_VERTEX_CAPTURE_FIELDS),
+                + ATI_PRIVATE_VERTEX_CAPTURE_FIELDS
+                + ATI_PRIVATE_CURRENT_FIELDS),
     0x00010010: (ATI_PRIVATE_DRAW47_VERTEX_FIELDS
                  + ATI_PRIVATE_CLEAR_STATE_FIELDS
                  + ATI_PRIVATE_PIXEL21_FIELDS + ATI_PRIVATE_STRIP_FIELDS
                  + ATI_PRIVATE_PRIMITIVE_FIELDS + ATI_PRIVATE_FILL_FIELDS
                  + ATI_PRIVATE_GEOMETRY_FIELDS
-                 + ATI_PRIVATE_VERTEX_CAPTURE_FIELDS),
+                 + ATI_PRIVATE_VERTEX_CAPTURE_FIELDS
+                 + ATI_PRIVATE_CURRENT_FIELDS),
     0x00010011: (ATI_PRIVATE_CLEAR_STATE_FIELDS
                  + ATI_PRIVATE_PIXEL21_FIELDS + ATI_PRIVATE_STRIP_FIELDS
                  + ATI_PRIVATE_PRIMITIVE_FIELDS + ATI_PRIVATE_FILL_FIELDS
                  + ATI_PRIVATE_GEOMETRY_FIELDS
-                 + ATI_PRIVATE_VERTEX_CAPTURE_FIELDS),
+                 + ATI_PRIVATE_VERTEX_CAPTURE_FIELDS
+                 + ATI_PRIVATE_CURRENT_FIELDS),
     0x00010012: (ATI_PRIVATE_PIXEL21_FIELDS + ATI_PRIVATE_STRIP_FIELDS
                  + ATI_PRIVATE_PRIMITIVE_FIELDS + ATI_PRIVATE_FILL_FIELDS
                  + ATI_PRIVATE_GEOMETRY_FIELDS
-                 + ATI_PRIVATE_VERTEX_CAPTURE_FIELDS),
+                 + ATI_PRIVATE_VERTEX_CAPTURE_FIELDS
+                 + ATI_PRIVATE_CURRENT_FIELDS),
     0x00010013: (ATI_PRIVATE_STRIP_FIELDS + ATI_PRIVATE_PRIMITIVE_FIELDS
                  + ATI_PRIVATE_FILL_FIELDS + ATI_PRIVATE_GEOMETRY_FIELDS
-                 + ATI_PRIVATE_VERTEX_CAPTURE_FIELDS),
+                 + ATI_PRIVATE_VERTEX_CAPTURE_FIELDS
+                 + ATI_PRIVATE_CURRENT_FIELDS),
     0x00010014: (ATI_PRIVATE_PRIMITIVE_FIELDS + ATI_PRIVATE_FILL_FIELDS
                  + ATI_PRIVATE_GEOMETRY_FIELDS
-                 + ATI_PRIVATE_VERTEX_CAPTURE_FIELDS),
+                 + ATI_PRIVATE_VERTEX_CAPTURE_FIELDS
+                 + ATI_PRIVATE_CURRENT_FIELDS),
     0x00010015: (ATI_PRIVATE_GEOMETRY_FIELDS
-                 + ATI_PRIVATE_VERTEX_CAPTURE_FIELDS),
-    0x00010016: ATI_PRIVATE_VERTEX_CAPTURE_FIELDS,
+                 + ATI_PRIVATE_VERTEX_CAPTURE_FIELDS
+                 + ATI_PRIVATE_CURRENT_FIELDS),
+    0x00010016: (ATI_PRIVATE_VERTEX_CAPTURE_FIELDS
+                 + ATI_PRIVATE_CURRENT_FIELDS),
     0x00010017: (ATI_PRIVATE_DRAW48_CAPTURE_FIELDS
-                 + ATI_PRIVATE_FINISH_FIELDS),
-    0x00010018: ATI_PRIVATE_FINISH_FIELDS,
+                 + ATI_PRIVATE_FINISH_FIELDS
+                 + ATI_PRIVATE_CURRENT_FIELDS),
+    0x00010018: (ATI_PRIVATE_FINISH_FIELDS
+                 + ATI_PRIVATE_CURRENT_FIELDS),
     0x00010019: (ATI_PRIVATE_FINISH_DETAIL_FIELDS
                  + ATI_PRIVATE_TRANSITION_FIELDS
-                 + ATI_PRIVATE_BURST_FIELDS),
+                 + ATI_PRIVATE_BURST_FIELDS
+                 + ATI_PRIVATE_CURRENT_FIELDS),
     0x0001001A: (ATI_PRIVATE_TRANSITION_FIELDS
-                 + ATI_PRIVATE_BURST_FIELDS),
-    0x0001001B: ATI_PRIVATE_BURST_FIELDS,
+                 + ATI_PRIVATE_BURST_FIELDS
+                 + ATI_PRIVATE_CURRENT_FIELDS),
+    0x0001001B: (ATI_PRIVATE_BURST_FIELDS
+                 + ATI_PRIVATE_CURRENT_FIELDS),
+    0x0001001C: ATI_PRIVATE_CURRENT_FIELDS,
+    0x0001001D: ATI_PRIVATE_METHOD4_FIELDS,
 }
 
 
@@ -327,15 +380,23 @@ def decode_snapshot(data: bytes, fields):
     if len(data) != expected and len(data) >= 8:
         version = struct.unpack_from(">I", data, 4)[0]
         missing = LEGACY_TRAILING_FIELDS.get(version, ())
-        trailing_names = [
-            name for name, _, _ in fields[-len(missing):]
-        ] if missing else []
-        if trailing_names == list(missing) and missing:
-            legacy_fields = fields[:-len(missing)]
+        # Accept the complete current schema and intermediate historical
+        # headers used by the decoder's version-by-version regression tests.
+        # Appended field groups stay ordered, so an older schema can only
+        # contain a prefix of the fields missing from that snapshot.
+        for missing_count in range(len(missing), 0, -1):
+            candidate = missing[:missing_count]
+            trailing_names = [
+                name for name, _, _ in fields[-missing_count:]
+            ]
+            if trailing_names != list(candidate):
+                continue
+            legacy_fields = fields[:-missing_count]
             legacy_expected = sum(
                 extent for _, _, extent in legacy_fields) * 4
             if len(data) == legacy_expected:
                 decode_fields = legacy_fields
+                break
     decoded_expected = sum(extent for _, _, extent in decode_fields) * 4
     if len(data) != decoded_expected:
         raise ValueError(

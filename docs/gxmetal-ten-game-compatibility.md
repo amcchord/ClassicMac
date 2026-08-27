@@ -1,7 +1,7 @@
 # GXMetal ten-game compatibility snapshot
 
 This is the evidence-backed state of the Mac OS 9 ten-game corpus on
-2026-08-26. It is intentionally stricter than “the application opened.” A
+2026-08-27. It is intentionally stricter than “the application opened.” A
 gameplay pass requires coherent accelerated rendering, live input, sustained
 presentation, and no fallback/error evidence. Clean quit/relaunch and audio
 are tracked separately.
@@ -48,21 +48,22 @@ but the evidence still does not support a universal-compatibility claim.
   control. Controlled GXMetal runs isolate `UseSound=True` as the blocker:
   sound-disabled starts render the same correct main menu in windowed and
   fullscreen modes, while a sound-enabled/windowed start submits no RAVE work.
-  Myth II's black display transition is avoided by disabling its startup
-  resolution switch. A corrected route proves that the animated map and
-  complete “Into the Breach” journal advance normally. Pressing Escape during
-  the journal sends the isolated Apple Software control into a fully rendered
-  battlefield and Mission Objectives dialog, while current GXMetal remains
-  black after exactly 43 intentional blank texture preallocations. This is now
-  a confirmed driver-specific gameplay-transition blocker, localized before
-  Myth's first populated replacement texture or draw.
+  Myth II now reaches its fully rendered “Into the Breach” battlefield after
+  the animated map and journal. GXMetal implements the proven flags-zero,
+  single-level ATI private slot-2 base-image replacement and slot 4's
+  synchronous one-shot draw-buffer readback, and accepts finite legacy
+  eye-space Z in textured draws when both depth and fog are disabled. The
+  final-candidate silent run records 775,456 draws, balanced 896/896 frames,
+  28,247 private slot-2 calls and 496 slot-4 calls with successful final
+  observed results, direct presentation, and zero transport or resource
+  rejects. Representative battlefield input and lifecycle remain open.
 - Quake III's 2.2 beta visual regression was localized to valid ATI-private
   slot-60 triangle fans whose fourth argument is zero. Rendering those calls
   again restores the missing world surfaces. A silent six-view Q3DM1 route now
   retains the spawn courtyard, large carved arch, small side arch, under-arch
   angle, lit passage, and side approach as a permanent visual regression gate.
 
-## Current signed-candidate matrix
+## Current candidate matrix
 
 | Game | Classification | Furthest qualified state | Important open item |
 |---|---|---|---|
@@ -73,7 +74,7 @@ but the evidence still does not support a universal-compatibility claim.
 | Cro-Mag Rally | Gameplay smoke pass on current Q3 fix | Correct accelerated title/menu/loading and Practice/Desert gameplay at 640x480; acceleration and steering visibly alter position/heading; 24-28 fps, ~204 direct draws/frame, zero fallback; expected demo exit screen | Complete-lap/longer lifecycle soak and audio |
 | Dark Vengeance | Matched app/runtime blocker | Demo 1.0.2 deterministically fails before RAVE in accelerated/software modes; the official retail 1.2 updater installs but all matched controls then require the legitimate game CD before renderer creation | Source the separate 1.2 demo or a legitimate retail Mac CD/install |
 | HAVOC | Matched app/runtime blocker | Deterministic resource-allocation failure in accelerated and software modes, including memory controls | Test alternate media/build or application-memory patch |
-| Myth II | Confirmed GXMetal gameplay-transition blocker | Correct main UI, New Game flow, animated campaign map, and complete “Into the Breach” journal at 640x480; early Escape reaches the battlefield/objectives in isolated Apple Software but current GXMetal remains black after 43 blank texture preallocations | Instrument texture create/upload/fence completion and the expected first populated replacement texture; add a 43-blank-pool replacement regression |
+| Myth II | Battlefield rendering pass on current driver | Correct main UI, New Game flow, animated campaign map, complete journal, and coherent 640x480 battlefield with terrain, units, trees, shadows, selection marker, and UI; 21-26.5 fps during the retained gameplay segment, direct frames, zero transport/resource rejects | Script pan, zoom, rotate, unit selection/orders, effects, longer soak, and clean relaunch; audio |
 | Oni | Gameplay smoke pass on rc23 | Correct ATI/OpenGL main menu, new-game confirmation, loading, and coherent Combat Training through the formerly corrupt +45-second transition; method-50 fan topology corrected with zero rejected geometry or fallback | Longer gameplay/input soak, clean lifecycle, and audio |
 | Unreal Tournament | Accelerated menu-rendering pass with startup workaround | Sound-disabled current driver reaches a coherent 640x480 v348 main menu; 26,854 direct frames, zero fallback, 185-312 fps after warmup, exactly 250 draws/frame | Practice configuration/gameplay input remains unqualified; keep sound disabled under the current VM audio path |
 
@@ -105,6 +106,9 @@ Accepted evidence:
 - `context/gxmetal-games/evidence/gxmetal-driver-smoke-rc23-20260826`
 - `context/gxmetal-games/evidence/gxmetal-oni-fan-topology-rc23-20260826`
 - `context/gxmetal-games/evidence/gxmetal-quake3-multiview-current2-20260826`
+- `context/gxmetal-games/evidence/gxmetal-quake3-final-upload-order-20260827`
+- `context/gxmetal-games/evidence/gxmetal-slot4-noz-conformance-20260827`
+- `context/gxmetal-games/evidence/gxmetal-mythii-final-upload-order-20260827`
 - `context/gxmetal-games/evidence/cromag-current-q3fix-20260826-route1`
 - `context/gxmetal-games/evidence/combat-mission-current-q3fix-20260826-battle-v3`
 - `context/gxmetal-games/evidence/combat-mission-current-q3fix-20260826-input-v4`
@@ -257,7 +261,7 @@ signed candidate:
 - HAVOC:
   `context/gxmetal-games/evidence/havoc-launch-128mb-20260825`
 - Myth II:
-  `context/gxmetal-games/evidence/mythii-gameplay-20260825`
+  `context/gxmetal-games/evidence/gxmetal-mythii-final-upload-order-20260827`
 - Oni:
   `context/gxmetal-games/evidence/oni-gxmetal-fatal-relaunch-20260825`
 - Unreal Tournament:
@@ -268,9 +272,9 @@ signed candidate:
 1. Extend the now-passing shortened Oni route into a longer gameplay/input and
    clean-lifecycle soak. Keep the pale RGB-range oracle and method-50 fan
    counters as the fast regression gate.
-2. Script Unreal Tournament match gameplay with sound disabled. For Myth II,
-   trace completion of the 43 blank preallocations and the first populated
-   replacement texture; reproduce that exact contract in a focused regression.
+2. Script Unreal Tournament match gameplay with sound disabled. Extend Myth
+   II through camera movement, unit selection/orders, effects, a longer soak,
+   and clean quit/relaunch while retaining the short transition regression.
 3. Try alternate builds/media for Dark Vengeance and HAVOC rather than
    weakening driver or VM memory safety around deterministic app failures.
 4. Require reviewed screenshots, direct presentation profiles with zero

@@ -454,6 +454,67 @@ class DiagnosticDecoderTests(unittest.TestCase):
             "counters": [7, 11],
         })
 
+    def test_version_1001c_accepts_all_new_missing_fields(self):
+        trailing_declarations = "\n".join(
+            ("    int32_t " if name.endswith("_result") else
+             "    uint32_t ") + name + ";"
+            for name in (DECODER.ATI_PRIVATE_TEXTURE_UPDATE_FIELDS
+                         + DECODER.ATI_PRIVATE_METHOD4_FIELDS))
+        self.header.write_text(
+            HEADER.replace(
+                "    uint32_t counters[GXMETAL_DIAGNOSTIC_COUNTER47_COUNT];",
+                "    uint32_t counters[GXMETAL_DIAGNOSTIC_COUNTER47_COUNT];\n"
+                + trailing_declarations),
+            encoding="utf-8")
+        fields = DECODER.parse_schema(self.header)
+        snapshot = struct.pack(">IIiII", 0x47584447, 0x0001001C,
+                               -49, 7, 11)
+        self.assertEqual(DECODER.decode_snapshot(snapshot, fields), {
+            "magic": 0x47584447,
+            "version": 0x0001001C,
+            "result": -49,
+            "counters": [7, 11],
+        })
+
+    def test_version_1001d_accepts_missing_method4_fields(self):
+        method4_declarations = "\n".join(
+            ("    int32_t " if name.endswith("_result") else
+             "    uint32_t ") + name + ";"
+            for name in DECODER.ATI_PRIVATE_METHOD4_FIELDS)
+        self.header.write_text(
+            HEADER.replace(
+                "    uint32_t counters[GXMETAL_DIAGNOSTIC_COUNTER47_COUNT];",
+                "    uint32_t counters[GXMETAL_DIAGNOSTIC_COUNTER47_COUNT];\n"
+                + method4_declarations),
+            encoding="utf-8")
+        fields = DECODER.parse_schema(self.header)
+        snapshot = struct.pack(">IIiII", 0x47584447, 0x0001001D,
+                               -49, 7, 11)
+        self.assertEqual(DECODER.decode_snapshot(snapshot, fields), {
+            "magic": 0x47584447,
+            "version": 0x0001001D,
+            "result": -49,
+            "counters": [7, 11],
+        })
+
+    def test_every_legacy_version_decodes_against_current_header(self):
+        fields = DECODER.parse_schema(
+            ROOT / "gxmetal" / "guest" / "include" /
+            "GXMetalDiagnostics.h")
+        for version, missing in DECODER.LEGACY_TRAILING_FIELDS.items():
+            with self.subTest(version=hex(version)):
+                self.assertEqual(
+                    [name for name, _, _ in fields[-len(missing):]],
+                    list(missing))
+                legacy_fields = fields[:-len(missing)]
+                snapshot = bytearray(
+                    sum(extent for _, _, extent in legacy_fields) * 4)
+                struct.pack_into(">I", snapshot, 0, 0x47584447)
+                struct.pack_into(">I", snapshot, 4, version)
+                decoded = DECODER.decode_snapshot(snapshot, fields)
+                self.assertEqual(decoded["magic"], 0x47584447)
+                self.assertEqual(decoded["version"], version)
+
 
 if __name__ == "__main__":
     unittest.main()

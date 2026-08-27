@@ -163,6 +163,8 @@ static GXMetalDiagnosticSnapshot gDiagnostics = {
 
 static TQABoolean GXMetalFlushPendingDraws(GXMetalDrawState *state);
 static TQAError GXMetalSync(const TQADrawContext *drawContext);
+static TQAError GXMetalAccessDrawBuffer(const TQADrawContext *drawContext,
+                                        TQAPixelBuffer *buffer);
 
 static const unsigned char kGXMetalDriverTraceName[] = {
     20, 'G', 'X', 'M', 'e', 't', 'a', 'l', ' ', 'D', 'r', 'i', 'v', 'e',
@@ -3480,9 +3482,225 @@ static TQAError GXMetalATIPrivateMethod1(uint32_t arg0, uint32_t arg1,
         return kQANoErr;                                                    \
     }
 
-GXMETAL_ATI_PRIVATE_NOOP_WRAPPER(2)
+/* Myth II preallocates a pool of blank RAVE textures, then asks ATI private
+ * method-table slot 2 to replace each resource's base image in place. The
+ * inferred signature is (flags, pixelType, image, existingTexture). Preserve
+ * the caller's texture handle and resource ID: recreating the resource would
+ * invalidate bindings retained by the game and GLD. Flags-zero updates are
+ * deliberately not snapshotted, matching ordinary immutable QATextureNew
+ * storage and avoiding a second copy of Myth's level textures. */
+static TQAError GXMetalFinishATIPrivateTextureUpdate(TQAError result)
+{
+    gDiagnostics.ati_private_texture_update_result = result;
+    if (gDiagnostics.ati_private_method_call_count[2] == 1) {
+        GXMetalPublishDiagnostics();
+        GXMetalPersistDiagnostics();
+    }
+    return result;
+}
+
+static TQAError GXMetalATIPrivateMethod2(uint32_t arg0, uint32_t arg1,
+                                         uint32_t arg2, uint32_t arg3,
+                                         uint32_t arg4, uint32_t arg5,
+                                         uint32_t arg6, uint32_t arg7)
+{
+    const TQAImage *image = (const TQAImage *)(uintptr_t)arg2;
+    TQATexture *texture = (TQATexture *)(uintptr_t)arg3;
+    GXMetalDrawState *state;
+    uint32_t format = 0;
+    uint32_t bytesPerPixel = 0;
+    uint64_t sourceBytes;
+    TQAError error;
+
+    GXMetalTraceATIPrivateMethod(2, arg0, arg1, arg2, arg3, arg4, arg5,
+                                 arg6, arg7);
+    (void)arg4; (void)arg5; (void)arg6; (void)arg7;
+    gDiagnostics.ati_private_texture_update_arg0 = arg0;
+    gDiagnostics.ati_private_texture_update_arg1 = arg1;
+    gDiagnostics.ati_private_texture_update_arg2 = arg2;
+    gDiagnostics.ati_private_texture_update_arg3 = arg3;
+    gDiagnostics.ati_private_texture_update_image_snapshot_valid = 0;
+    gDiagnostics.ati_private_texture_update_texture_snapshot_valid = 0;
+    gDiagnostics.ati_private_texture_update_stage = 1;
+    gDiagnostics.ati_private_texture_update_reject_reason = 0;
+    gDiagnostics.ati_private_texture_update_result = kQAParamErr;
+    if (!GXMetalDiagnosticMemoryRangeIsReadable(
+            arg2, (uint32_t)sizeof(*image))) {
+        gDiagnostics.ati_private_texture_update_reject_reason = 1;
+        return GXMetalFinishATIPrivateTextureUpdate(kQAParamErr);
+    }
+    gDiagnostics.ati_private_texture_update_image_snapshot_valid = 1;
+    gDiagnostics.ati_private_texture_update_image_pixmap =
+        (uint32_t)(uintptr_t)image->pixmap;
+    gDiagnostics.ati_private_texture_update_image_width =
+        (uint32_t)image->width;
+    gDiagnostics.ati_private_texture_update_image_height =
+        (uint32_t)image->height;
+    gDiagnostics.ati_private_texture_update_image_row_bytes =
+        (uint32_t)image->rowBytes;
+    gDiagnostics.ati_private_texture_update_stage = 2;
+    if (!GXMetalDiagnosticMemoryRangeIsReadable(
+            arg3, (uint32_t)sizeof(*texture))) {
+        gDiagnostics.ati_private_texture_update_reject_reason = 2;
+        return GXMetalFinishATIPrivateTextureUpdate(kQAParamErr);
+    }
+    gDiagnostics.ati_private_texture_update_texture_snapshot_valid = 1;
+    gDiagnostics.ati_private_texture_update_texture_magic = texture->magic;
+    gDiagnostics.ati_private_texture_update_resource_id =
+        texture->resource_id;
+    gDiagnostics.ati_private_texture_update_source_pixel_type =
+        texture->source_pixel_type;
+    gDiagnostics.ati_private_texture_update_pixel_format =
+        texture->pixel_format;
+    gDiagnostics.ati_private_texture_update_texture_width = texture->width;
+    gDiagnostics.ati_private_texture_update_texture_height = texture->height;
+    gDiagnostics.ati_private_texture_update_texture_levels = texture->levels;
+    gDiagnostics.ati_private_texture_update_source_flags =
+        texture->source_flags;
+    gDiagnostics.ati_private_texture_update_access_active =
+        texture->access_active;
+    gDiagnostics.ati_private_texture_update_stage = 3;
+    if (texture->magic != GXMETAL_TEXTURE_MAGIC) {
+        gDiagnostics.ati_private_texture_update_reject_reason = 3;
+        return GXMetalFinishATIPrivateTextureUpdate(kQAParamErr);
+    }
+    if (texture->resource_id == 0) {
+        gDiagnostics.ati_private_texture_update_reject_reason = 4;
+        return GXMetalFinishATIPrivateTextureUpdate(kQAParamErr);
+    }
+    if (texture->access_active != 0) {
+        gDiagnostics.ati_private_texture_update_reject_reason = 5;
+        return GXMetalFinishATIPrivateTextureUpdate(kQAParamErr);
+    }
+    if ((texture->source_flags &
+         (kQATexture_Mipmap | kQATexture_NoCopy)) != 0) {
+        gDiagnostics.ati_private_texture_update_reject_reason = 6;
+        return GXMetalFinishATIPrivateTextureUpdate(kQAParamErr);
+    }
+    if (!GXMetalTextureFormat((TQAImagePixelType)arg1, &format,
+                              &bytesPerPixel)) {
+        gDiagnostics.ati_private_texture_update_reject_reason = 7;
+        return GXMetalFinishATIPrivateTextureUpdate(kQAParamErr);
+    }
+    if (format != texture->pixel_format) {
+        gDiagnostics.ati_private_texture_update_reject_reason = 8;
+        return GXMetalFinishATIPrivateTextureUpdate(kQAParamErr);
+    }
+    if (!gxmetal_ati_private_texture_update_is_valid(
+            arg0, arg1, texture->source_pixel_type,
+            image->width, image->height, image->rowBytes,
+            texture->width, texture->height, texture->levels,
+            bytesPerPixel, GXMETAL_UPLOAD_BYTES)) {
+        gDiagnostics.ati_private_texture_update_reject_reason = 9;
+        return GXMetalFinishATIPrivateTextureUpdate(kQAParamErr);
+    }
+    gDiagnostics.ati_private_texture_update_stage = 4;
+    sourceBytes = (uint64_t)(uint32_t)image->rowBytes * texture->height;
+    if (image->pixmap == NULL || sourceBytes > UINT32_MAX) {
+        gDiagnostics.ati_private_texture_update_reject_reason = 10;
+        return GXMetalFinishATIPrivateTextureUpdate(kQAParamErr);
+    }
+    if (!GXMetalDiagnosticMemoryRangeIsReadable(
+            (uint32_t)(uintptr_t)image->pixmap, (uint32_t)sourceBytes)) {
+        gDiagnostics.ati_private_texture_update_reject_reason = 11;
+        return GXMetalFinishATIPrivateTextureUpdate(kQAParamErr);
+    }
+    gDiagnostics.ati_private_texture_update_stage = 5;
+
+    /* Preserve packet ordering when a caller updates a texture that still
+     * has guest-side geometry batched against its old pixels. */
+    for (state = gDrawStates; state != NULL; state = state->next_state) {
+        if (state->texture == texture ||
+            state->texture_resource_id == texture->resource_id ||
+            state->secondary_texture == texture ||
+            state->secondary_texture_resource_id == texture->resource_id) {
+            if (!GXMetalFlushPendingDraws(state)) {
+                gDiagnostics.ati_private_texture_update_reject_reason = 12;
+                return GXMetalFinishATIPrivateTextureUpdate(kQAError);
+            }
+        }
+    }
+    gDiagnostics.ati_private_texture_update_stage = 6;
+    error = GXMetalUploadResourceRegion(
+        texture->resource_id, 0, image->pixmap,
+        (uint32_t)image->rowBytes, bytesPerPixel,
+        0, 0, texture->width, texture->height);
+    if (error != kQANoErr) {
+        gDiagnostics.ati_private_texture_update_reject_reason = 13;
+        return GXMetalFinishATIPrivateTextureUpdate(error);
+    }
+    gDiagnostics.ati_private_texture_update_stage = 7;
+    return GXMetalFinishATIPrivateTextureUpdate(kQANoErr);
+}
 GXMETAL_ATI_PRIVATE_NOOP_WRAPPER(3)
-GXMETAL_ATI_PRIVATE_NOOP_WRAPPER(4)
+/* ATI private slot 4 is the pre-RAVE-1.6 one-shot draw-buffer readback used by
+ * Myth II. The caller supplies a public TQADevice: deviceType occupies its
+ * first word and the embedded TQADeviceMemory begins at +4. Unlike public
+ * QAAccessDrawBuffer, this private method has no matching End call; leave the
+ * shared readback pixels available to the caller but release GXMetal's access
+ * latch before returning so later public/private reads cannot deadlock it. */
+static TQAError GXMetalATIPrivateMethod4(uint32_t arg0, uint32_t arg1,
+                                         uint32_t arg2, uint32_t arg3,
+                                         uint32_t arg4, uint32_t arg5,
+                                         uint32_t arg6, uint32_t arg7)
+{
+    const uint32_t arguments[GXMETAL_DIAGNOSTIC_ATI_METHOD4_ARGUMENTS] = {
+        arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7
+    };
+    TQADevice *device = (TQADevice *)(uintptr_t)arg1;
+    GXMetalDrawState *state;
+    TQAError error = kQAParamErr;
+    uint32_t argumentIndex;
+    uint32_t wordIndex;
+
+    GXMetalTraceATIPrivateMethod(4, arg0, arg1, arg2, arg3, arg4, arg5,
+                                 arg6, arg7);
+    for (argumentIndex = 0;
+         argumentIndex < GXMETAL_DIAGNOSTIC_ATI_METHOD4_ARGUMENTS;
+         ++argumentIndex) {
+        gDiagnostics.ati_private_method4_args[argumentIndex] =
+            arguments[argumentIndex];
+    }
+    gDiagnostics.ati_private_method4_before_snapshot_valid = 0;
+    gDiagnostics.ati_private_method4_after_snapshot_valid = 0;
+    gDiagnostics.ati_private_method4_result = kQAParamErr;
+    if (GXMetalDiagnosticMemoryRangeIsReadable(
+            arg1, (uint32_t)sizeof(*device))) {
+        const uint32_t *deviceWords = (const uint32_t *)device;
+
+        for (wordIndex = 0;
+             wordIndex < GXMETAL_DIAGNOSTIC_ATI_METHOD4_SNAPSHOT_WORDS;
+             ++wordIndex) {
+            gDiagnostics.ati_private_method4_before_snapshot_words[
+                wordIndex] = deviceWords[wordIndex];
+        }
+        gDiagnostics.ati_private_method4_before_snapshot_valid = 1;
+        error = GXMetalAccessDrawBuffer(
+            (const TQADrawContext *)(uintptr_t)arg0,
+            &device->device.memoryDevice);
+        if (error == kQANoErr) {
+            device->deviceType = kQADeviceMemory;
+            state = GXMetalGetState(
+                (const TQADrawContext *)(uintptr_t)arg0);
+            if (state != NULL) {
+                state->access_draw_buffer_active = 0;
+            }
+        }
+        for (wordIndex = 0;
+             wordIndex < GXMETAL_DIAGNOSTIC_ATI_METHOD4_SNAPSHOT_WORDS;
+             ++wordIndex) {
+            gDiagnostics.ati_private_method4_after_snapshot_words[
+                wordIndex] = deviceWords[wordIndex];
+        }
+        gDiagnostics.ati_private_method4_after_snapshot_valid = 1;
+    }
+    gDiagnostics.ati_private_method4_result = error;
+    if (gDiagnostics.ati_private_method_call_count[4] == 1u) {
+        GXMetalPublishDiagnostics();
+        GXMetalPersistDiagnostics();
+    }
+    return error;
+}
 GXMETAL_ATI_PRIVATE_NOOP_WRAPPER(5)
 GXMETAL_ATI_PRIVATE_NOOP_WRAPPER(6)
 GXMETAL_ATI_PRIVATE_NOOP_WRAPPER(7)

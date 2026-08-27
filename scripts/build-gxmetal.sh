@@ -129,6 +129,12 @@ for symbol in QAInit QAExit QADeviceGetFirstEngine QADeviceGetNextEngine \
     strings "$GUEST_DIR/bin/GXMetalTest.pef" | grep -F "$symbol" >/dev/null ||
         die "GXMetal Test PEF is missing required import $symbol"
 done
+strings "$GUEST_DIR/bin/GXMetalTest.pef" | \
+    grep -F "ATI-private-update" >/dev/null ||
+    die "GXMetal Test PEF is missing ATI private texture-update coverage"
+strings "$GUEST_DIR/bin/GXMetalTest.pef" | \
+    grep -F "ATI-private-readback" >/dev/null ||
+    die "GXMetal Test PEF is missing ATI private readback coverage"
 for symbol in OpenGLLibrary aglChoosePixelFormat aglCreateContext \
     aglSetDrawable aglSetCurrentContext glGetString glBegin glReadPixels \
     glGenTextures glTexImage2D glBlendFunc glDepthFunc glDeleteTextures \

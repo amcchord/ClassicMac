@@ -107,6 +107,33 @@ static void test_private_method_diagnostic_masks(void)
     CHECK(gxmetal_ati_private_method_mask(0, 2) == 0);
 }
 
+static void test_private_texture_update_validation(void)
+{
+    const uint32_t upload_capacity = UINT32_C(16) * UINT32_C(1024) *
+        UINT32_C(1024);
+
+    CHECK(gxmetal_ati_private_texture_update_is_valid(
+        0, 1, 1, 64, 64, 128, 64, 64, 1, 2, upload_capacity));
+    CHECK(gxmetal_ati_private_texture_update_is_valid(
+        0, 1001, 1001, 256, 128, 520, 256, 128, 1, 2,
+        upload_capacity));
+    CHECK(!gxmetal_ati_private_texture_update_is_valid(
+        1, 1, 1, 64, 64, 128, 64, 64, 1, 2, upload_capacity));
+    CHECK(!gxmetal_ati_private_texture_update_is_valid(
+        0, 1, 1001, 64, 64, 128, 64, 64, 1, 2, upload_capacity));
+    CHECK(!gxmetal_ati_private_texture_update_is_valid(
+        0, 1, 1, 63, 64, 128, 64, 64, 1, 2, upload_capacity));
+    CHECK(!gxmetal_ati_private_texture_update_is_valid(
+        0, 1, 1, 64, 65, 128, 64, 64, 1, 2, upload_capacity));
+    CHECK(!gxmetal_ati_private_texture_update_is_valid(
+        0, 1, 1, 64, 64, 127, 64, 64, 1, 2, upload_capacity));
+    CHECK(!gxmetal_ati_private_texture_update_is_valid(
+        0, 1, 1, 64, 64, 128, 64, 64, 2, 2, upload_capacity));
+    CHECK(!gxmetal_ati_private_texture_update_is_valid(
+        0, 1, 1, 4096, 4096, 8192, 4096, 4096, 1, 2,
+        upload_capacity));
+}
+
 static void test_private_polygon_mode(void)
 {
     CHECK(!gxmetal_ati_private_polygon_mode_is_fill(
@@ -513,6 +540,7 @@ int main(void)
     test_larger_four_by_three_context();
     test_later_ati_game_identity();
     test_private_method_diagnostic_masks();
+    test_private_texture_update_validation();
     test_private_polygon_mode();
     test_private_contiguous_vertex_bounds();
     test_private_generic_callback_abi_discriminator();

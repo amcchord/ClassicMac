@@ -957,6 +957,41 @@ static int gxmetal_metal_begin_frame(GXMetalMetalRenderer *renderer,
     return context->command_buffer != nil;
 }
 
+/* Texture uploads use replaceRegion:, a CPU-side mutation that is not ordered
+ * behind uncommitted render encoders. Finish every outstanding context before
+ * changing resource storage so draws already accepted from the guest observe
+ * the old pixels and subsequent draws observe the replacement. A later draw
+ * transparently creates a continuation command buffer with load semantics. */
+static int gxmetal_metal_finish_pending_contexts(
+    GXMetalMetalRenderer *renderer)
+{
+    uint32_t i;
+    int success = 1;
+
+    for (i = 0; i < GXMETAL_METAL_MAX_CONTEXTS; i++) {
+        GXMetalMetalContext *context = &renderer->contexts[i];
+
+        if (!context->active || context->command_buffer == nil) {
+            continue;
+        }
+        if (context->encoder != nil) {
+            [context->encoder endEncoding];
+            [context->encoder release];
+            context->encoder = nil;
+        }
+        if (!context->committed) {
+            [context->command_buffer commit];
+            context->committed = 1;
+        }
+        [context->command_buffer waitUntilCompleted];
+        if (context->command_buffer.status == MTLCommandBufferStatusError) {
+            success = 0;
+        }
+        gxmetal_metal_release_frame(context);
+    }
+    return success;
+}
+
 static int gxmetal_metal_ensure_encoder(GXMetalMetalRenderer *renderer,
                                         GXMetalMetalContext *context,
                                         uint32_t clear_flags,
@@ -1599,6 +1634,10 @@ static uint32_t gxmetal_metal_resource_upload(
                 visible_pixels != 0 ? blue_min : 0,
                 red_max, green_max, blue_max);
     }
+    if (!gxmetal_metal_finish_pending_contexts(renderer)) {
+        free(converted);
+        return GXMETAL_ERROR_RENDERER;
+    }
     [resource->texture replaceRegion:MTLRegionMake2D(
             destination_x, destination_y, width, height)
         mipmapLevel:level withBytes:converted bytesPerRow:width * 4];
@@ -2036,12 +2075,29 @@ static int gxmetal_metal_read_texture_vertex(
     if (!isfinite(vertex->x) || !isfinite(vertex->y) ||
         !isfinite(vertex->z) || !isfinite(vertex->inv_w) ||
         !isfinite(vertex->a) || !isfinite(vertex->u_over_w) ||
-        !isfinite(vertex->v_over_w) || vertex->z < 0.0f ||
-        vertex->z > 1.0f || vertex->inv_w <= 0.0f) {
+        !isfinite(vertex->v_over_w) ||
+        (context->perspective_z == 0 &&
+         (vertex->z < 0.0f || vertex->z > 1.0f) &&
+         (context->z_function != GXMETAL_Z_NONE ||
+          context->fog.mode_and_padding[0] != GXMETAL_FOG_NONE)) ||
+        vertex->inv_w <= 0.0f) {
         return 0;
     }
     if (context->perspective_z != 0) {
+        /* Perspective-Z selects reciprocal W as the depth source. Classic
+         * clients may retain a finite eye-space value in the now-unused
+         * normalized-Z slot; validate finiteness above, but do not reject
+         * its range before replacing it here. */
         vertex->z = gxmetal_metal_perspective_depth(vertex->inv_w);
+    } else if (context->z_function == GXMETAL_Z_NONE &&
+               context->fog.mode_and_padding[0] == GXMETAL_FOG_NONE &&
+               (vertex->z < 0.0f || vertex->z > 1.0f)) {
+        /* Myth II disables its Z buffer and fog, then leaves signed eye depth
+         * in z. Metal still requires normalized position depth, so supply a
+         * harmless in-range value for this legacy out-of-range case. Preserve
+         * valid normalized Z because non-perspective fog can consume it even
+         * when depth testing is off. */
+        vertex->z = 0.0f;
     }
 
     /* RAVE only requires color, diffuse, and specular components when the

@@ -14,6 +14,35 @@
 #define GXMETAL_ATI_PRIVATE_ENABLE_TAG UINT32_C(1020)
 #define GXMETAL_ATI_PRIVATE_METHODS_TAG UINT32_C(1021)
 
+/* ATI 3D Accelerator's private method-table slot 2 replaces the pixels of an
+ * already allocated texture. Myth II uses it to fill a pool of blank RAVE
+ * textures when a map becomes active. Keep the inferred contract narrow:
+ * shipping calls use flags zero, a single base image, and the same format and
+ * dimensions that created the resource. The engine performs pointer, magic,
+ * format, and transport validation around this arithmetic-only predicate. */
+static inline int gxmetal_ati_private_texture_update_is_valid(
+    uint32_t flags, uint32_t pixel_type, uint32_t texture_pixel_type,
+    int32_t image_width, int32_t image_height, int32_t image_row_bytes,
+    uint32_t texture_width, uint32_t texture_height,
+    uint32_t texture_levels, uint32_t bytes_per_pixel,
+    uint32_t upload_capacity)
+{
+    uint64_t minimum_row_bytes;
+    uint64_t upload_bytes;
+
+    if (flags != 0 || pixel_type != texture_pixel_type ||
+        image_width <= 0 || image_height <= 0 || image_row_bytes <= 0 ||
+        (uint32_t)image_width != texture_width ||
+        (uint32_t)image_height != texture_height || texture_levels != 1 ||
+        bytes_per_pixel == 0) {
+        return 0;
+    }
+    minimum_row_bytes = (uint64_t)texture_width * bytes_per_pixel;
+    upload_bytes = minimum_row_bytes * texture_height;
+    return (uint64_t)(uint32_t)image_row_bytes >= minimum_row_bytes &&
+        upload_bytes != 0 && upload_bytes <= upload_capacity;
+}
+
 /* ATI 3D Accelerator exposes its chip-family version through private integer
  * tag 1011.  A value of 0x0500 selects the Rage 128 feature path used by
  * Bugdom-era clients.  GXMetal implements the associated public RAVE state

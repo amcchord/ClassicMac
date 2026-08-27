@@ -424,11 +424,9 @@ static void set_texture_vertex_depth(uint8_t *bytes, float x, float y,
     store_float(bytes + GXMETAL_VERTEX_V_OVER_W_OFFSET, v * inv_w);
 }
 
-static void draw_textured_triangle_depth(GXMetalMetalRenderer *renderer,
-                                         uint8_t *packet,
-                                         uint32_t context,
-                                         float z, float inv_w,
-                                         float u, float v)
+static uint32_t dispatch_textured_triangle_depth(
+    GXMetalMetalRenderer *renderer, uint8_t *packet, uint32_t context,
+    uint32_t primitive, float z, float inv_w, float u, float v)
 {
     enum {
         kPacketBytes = GXMETAL_PACKET_HEADER_BYTES +
@@ -440,7 +438,7 @@ static void draw_textured_triangle_depth(GXMetalMetalRenderer *renderer,
     make_packet(packet, GXMETAL_OP_DRAW_TEXTURED, kPacketBytes, context);
     payload = packet + GXMETAL_PACKET_HEADER_BYTES;
     gxmetal_store_le32(payload + GXMETAL_DRAW_PRIMITIVE_OFFSET,
-                       GXMETAL_PRIMITIVE_TRIANGLE);
+                       primitive);
     gxmetal_store_le32(payload + GXMETAL_DRAW_VERTEX_COUNT_OFFSET, 3);
     gxmetal_store_le32(payload + GXMETAL_DRAW_VERTEX_STRIDE_OFFSET,
                        GXMETAL_TEXTURE_VERTEX_BYTES);
@@ -450,7 +448,19 @@ static void draw_textured_triangle_depth(GXMetalMetalRenderer *renderer,
                              56, 8, z, inv_w, u, v);
     set_texture_vertex_depth(vertices + 2 * GXMETAL_TEXTURE_VERTEX_BYTES,
                              32, 56, z, inv_w, u, v);
-    CHECK(dispatch(renderer, packet, kPacketBytes) == GXMETAL_ERROR_NONE);
+    return dispatch(renderer, packet, kPacketBytes);
+}
+
+static void draw_textured_triangle_depth(GXMetalMetalRenderer *renderer,
+                                         uint8_t *packet,
+                                         uint32_t context,
+                                         float z, float inv_w,
+                                         float u, float v)
+{
+    CHECK(dispatch_textured_triangle_depth(
+              renderer, packet, context, GXMETAL_PRIMITIVE_TRIANGLE,
+              z, inv_w, u, v) ==
+          GXMETAL_ERROR_NONE);
 }
 
 static void draw_textured_triangle_frame(GXMetalMetalRenderer *renderer,
@@ -678,6 +688,79 @@ static void test_metal_texture_upload_and_sampling(void)
                   GXMETAL_TEXTURE_WRAP_CLAMP);
     set_int_state(renderer, packet, 3, GXMETAL_STATE_TEXTURE_WRAP_V,
                   GXMETAL_TEXTURE_WRAP_CLAMP);
+
+    /* A resource replacement is a stream-ordering boundary. The left draw
+     * must finish with the old red texel before replaceRegion mutates the
+     * Metal texture; the continuation draw on the right must see blue. */
+    {
+        const uint8_t red[4] = {0xff, 0xff, 0x00, 0x00};
+        const uint8_t blue[4] = {0xff, 0x00, 0x00, 0xff};
+
+        upload_single_pixel_texture(renderer, packet, shared, 19,
+                                    GXMETAL_PIXEL_ARGB8888, red);
+        set_resource_state(renderer, packet, 3, GXMETAL_STATE_TEXTURE, 19);
+        set_int_state(renderer, packet, 3, GXMETAL_STATE_TEXTURE_OP, 0);
+        make_packet(control, GXMETAL_OP_BEGIN_FRAME, 32, 3);
+        CHECK(dispatch(renderer, control, 32) == GXMETAL_ERROR_NONE);
+        make_packet(control, GXMETAL_OP_CLEAR, 64, 3);
+        payload = control + GXMETAL_PACKET_HEADER_BYTES;
+        gxmetal_store_le32(payload + GXMETAL_CLEAR_FLAGS_OFFSET,
+                           GXMETAL_CLEAR_COLOR);
+        store_float(payload + GXMETAL_CLEAR_COLOR_A_OFFSET, 1.0f);
+        gxmetal_store_le32(payload + GXMETAL_CLEAR_RECT_OFFSET +
+                           GXMETAL_RECT_RIGHT_OFFSET, 64);
+        gxmetal_store_le32(payload + GXMETAL_CLEAR_RECT_OFFSET +
+                           GXMETAL_RECT_BOTTOM_OFFSET, 64);
+        CHECK(dispatch(renderer, control, 64) == GXMETAL_ERROR_NONE);
+
+        make_packet(packet, GXMETAL_OP_DRAW_TEXTURED, 224, 3);
+        payload = packet + GXMETAL_PACKET_HEADER_BYTES;
+        gxmetal_store_le32(payload + GXMETAL_DRAW_PRIMITIVE_OFFSET,
+                           GXMETAL_PRIMITIVE_TRIANGLE);
+        gxmetal_store_le32(payload + GXMETAL_DRAW_VERTEX_COUNT_OFFSET, 3);
+        gxmetal_store_le32(payload + GXMETAL_DRAW_VERTEX_STRIDE_OFFSET,
+                           GXMETAL_TEXTURE_VERTEX_BYTES);
+        vertices = payload + GXMETAL_DRAW_VERTICES_OFFSET;
+        set_texture_vertex(vertices + 0 * 64, 4, 4, 0, 0);
+        set_texture_vertex(vertices + 1 * 64, 28, 4, 0, 0);
+        set_texture_vertex(vertices + 2 * 64, 4, 28, 0, 0);
+        CHECK(dispatch(renderer, packet, 224) == GXMETAL_ERROR_NONE);
+
+        memcpy(shared + GXMETAL_UPLOAD_OFFSET, blue, sizeof(blue));
+        make_packet(control, GXMETAL_OP_TEXTURE_UPLOAD, 48, 0);
+        payload = control + GXMETAL_PACKET_HEADER_BYTES;
+        gxmetal_store_le32(payload + GXMETAL_UPLOAD_RESOURCE_ID_OFFSET, 19);
+        gxmetal_store_le32(payload + GXMETAL_UPLOAD_SHARED_OFFSET_OFFSET,
+                           GXMETAL_UPLOAD_OFFSET);
+        gxmetal_store_le32(payload + GXMETAL_UPLOAD_LENGTH_OFFSET, 4);
+        gxmetal_store_le32(payload + GXMETAL_UPLOAD_ROW_BYTES_OFFSET, 4);
+        gxmetal_store_le32(payload + GXMETAL_UPLOAD_WIDTH_OFFSET, 1);
+        gxmetal_store_le32(payload + GXMETAL_UPLOAD_HEIGHT_OFFSET, 1);
+        CHECK(dispatch(renderer, control, 48) == GXMETAL_ERROR_NONE);
+
+        make_packet(packet, GXMETAL_OP_DRAW_TEXTURED, 224, 3);
+        payload = packet + GXMETAL_PACKET_HEADER_BYTES;
+        gxmetal_store_le32(payload + GXMETAL_DRAW_PRIMITIVE_OFFSET,
+                           GXMETAL_PRIMITIVE_TRIANGLE);
+        gxmetal_store_le32(payload + GXMETAL_DRAW_VERTEX_COUNT_OFFSET, 3);
+        gxmetal_store_le32(payload + GXMETAL_DRAW_VERTEX_STRIDE_OFFSET,
+                           GXMETAL_TEXTURE_VERTEX_BYTES);
+        vertices = payload + GXMETAL_DRAW_VERTICES_OFFSET;
+        set_texture_vertex(vertices + 0 * 64, 36, 36, 0, 0);
+        set_texture_vertex(vertices + 1 * 64, 60, 36, 0, 0);
+        set_texture_vertex(vertices + 2 * 64, 36, 60, 0, 0);
+        CHECK(dispatch(renderer, packet, 224) == GXMETAL_ERROR_NONE);
+        make_packet(control, GXMETAL_OP_END_FRAME, 32, 3);
+        CHECK(dispatch(renderer, control, 32) == GXMETAL_ERROR_NONE);
+        present_rect(renderer, control, 3, 0, 0, 64, 64);
+        CHECK(framebuffer_pixel(framebuffer, 12, 12) == 0x7c00);
+        CHECK(framebuffer_pixel(framebuffer, 44, 44) == 0x001f);
+
+        make_packet(control, GXMETAL_OP_TEXTURE_DESTROY, 32, 0);
+        payload = control + GXMETAL_PACKET_HEADER_BYTES;
+        gxmetal_store_le32(payload + GXMETAL_DESTROY_RESOURCE_ID_OFFSET, 19);
+        CHECK(dispatch(renderer, control, 32) == GXMETAL_ERROR_NONE);
+    }
     make_packet(packet, GXMETAL_OP_SET_STATE, 32, 3);
     payload = packet + 16;
     gxmetal_store_le32(payload + GXMETAL_STATE_TAG_OFFSET,
@@ -760,6 +843,35 @@ static void test_metal_texture_upload_and_sampling(void)
     gxmetal_store_le32(payload + GXMETAL_CLEAR_RECT_OFFSET +
                        GXMETAL_RECT_BOTTOM_OFFSET, 64);
     CHECK(dispatch(renderer, packet, 64) == GXMETAL_ERROR_NONE);
+    /* Myth II's first battlefield draw is exactly one 224-byte textured fan
+     * (16-byte packet header, 16-byte draw header, and three 64-byte
+     * vertices). Its no-Z context leaves Perspective-Z disabled and stores
+     * finite signed eye depth directly in z. Since depth is unused, that
+     * legacy value must not fault the queue or clip the triangle. */
+    CHECK(dispatch_textured_triangle_depth(
+              renderer, packet, 3, GXMETAL_PRIMITIVE_TRIANGLE_FAN,
+              -128.0f, 1.0f, 0.0f, 0.0f) == GXMETAL_ERROR_NONE);
+    make_packet(control, GXMETAL_OP_END_FRAME, 32, 3);
+    CHECK(dispatch(renderer, control, 32) == GXMETAL_ERROR_NONE);
+    present_rect(renderer, control, 3, 0, 0, 64, 64);
+    CHECK(framebuffer_pixel(framebuffer, 32, 24) == 0x001f);
+    CHECK(dispatch_textured_triangle_depth(
+              renderer, packet, 3, GXMETAL_PRIMITIVE_TRIANGLE_FAN,
+              NAN, 1.0f, 0.0f, 0.0f) == GXMETAL_ERROR_BAD_PACKET);
+
+    make_packet(control, GXMETAL_OP_BEGIN_FRAME, 32, 3);
+    CHECK(dispatch(renderer, control, 32) == GXMETAL_ERROR_NONE);
+    make_packet(packet, GXMETAL_OP_CLEAR, 64, 3);
+    payload = packet + GXMETAL_PACKET_HEADER_BYTES;
+    gxmetal_store_le32(payload + GXMETAL_CLEAR_FLAGS_OFFSET,
+                       GXMETAL_CLEAR_COLOR | GXMETAL_CLEAR_DEPTH);
+    store_float(payload + GXMETAL_CLEAR_COLOR_A_OFFSET, 1.0f);
+    store_float(payload + GXMETAL_CLEAR_DEPTH_OFFSET, 1.0f);
+    gxmetal_store_le32(payload + GXMETAL_CLEAR_RECT_OFFSET +
+                       GXMETAL_RECT_RIGHT_OFFSET, 64);
+    gxmetal_store_le32(payload + GXMETAL_CLEAR_RECT_OFFSET +
+                       GXMETAL_RECT_BOTTOM_OFFSET, 64);
+    CHECK(dispatch(renderer, packet, 64) == GXMETAL_ERROR_NONE);
     set_int_state(renderer, packet, 3, GXMETAL_STATE_Z_FUNCTION,
                   GXMETAL_Z_LT);
     set_int_state(renderer, packet, 3, GXMETAL_STATE_Z_BUFFER_MASK, 1);
@@ -773,6 +885,10 @@ static void test_metal_texture_upload_and_sampling(void)
     present_rect(renderer, control, 3, 0, 0, 64, 64);
     CHECK(framebuffer_pixel(framebuffer, 32, 24) == 0x7c00);
     set_int_state(renderer, packet, 3, GXMETAL_STATE_PERSPECTIVE_Z, 0);
+    CHECK(dispatch_textured_triangle_depth(
+              renderer, packet, 3, GXMETAL_PRIMITIVE_TRIANGLE_FAN,
+              -128.0f, 1.0f, 0.0f, 0.0f) ==
+          GXMETAL_ERROR_BAD_PACKET);
     set_int_state(renderer, packet, 3, GXMETAL_STATE_Z_FUNCTION,
                   GXMETAL_Z_NONE);
 
@@ -1416,14 +1532,20 @@ static void test_metal_texture_upload_and_sampling(void)
     CHECK((framebuffer_pixel(framebuffer, 32, 24) & 31) <= 25);
     CHECK((framebuffer_pixel(framebuffer, 32, 24) & 0x7fe0) == 0);
 
-    /* Without perspective-Z, Gouraud invW is undefined and must not affect
-     * fog. A normalized Z of 0.25 keeps 75% red and mixes in 25% blue. */
+    /* Without perspective-Z, invW is undefined and must not affect fog.
+     * Preserve normalized textured Z even with depth testing disabled: a Z
+     * of 0.25 keeps 75% red and mixes in 25% blue. */
     set_float_state(renderer, packet, 3, GXMETAL_STATE_FOG_COLOR_B, 1.0f);
     set_float_state(renderer, packet, 3, GXMETAL_STATE_FOG_START, 0.0f);
     set_float_state(renderer, packet, 3, GXMETAL_STATE_FOG_END, 1.0f);
     set_int_state(renderer, packet, 3, GXMETAL_STATE_FOG_MODE,
                   GXMETAL_FOG_LINEAR);
     set_int_state(renderer, packet, 3, GXMETAL_STATE_PERSPECTIVE_Z, 0);
+    set_int_state(renderer, packet, 3, GXMETAL_STATE_Z_FUNCTION,
+                  GXMETAL_Z_NONE);
+    CHECK(dispatch_textured_triangle_depth(
+              renderer, packet, 3, GXMETAL_PRIMITIVE_TRIANGLE_FAN,
+              -128.0f, 1.0f, 0.0f, 1.0f) == GXMETAL_ERROR_BAD_PACKET);
     make_packet(packet, GXMETAL_OP_BEGIN_FRAME, 32, 3);
     CHECK(dispatch(renderer, packet, 32) == GXMETAL_ERROR_NONE);
     make_packet(packet, GXMETAL_OP_CLEAR, 64, 3);
@@ -1436,7 +1558,8 @@ static void test_metal_texture_upload_and_sampling(void)
     gxmetal_store_le32(payload + GXMETAL_CLEAR_RECT_OFFSET +
                        GXMETAL_RECT_BOTTOM_OFFSET, 64);
     CHECK(dispatch(renderer, packet, 64) == GXMETAL_ERROR_NONE);
-    draw_triangle(renderer, packet, 3, 0.25f, 1.0f, 0.0f, 0.0f, 1.0f);
+    draw_textured_triangle_depth(renderer, packet, 3,
+                                 0.25f, 1.0f, 0.0f, 1.0f);
     make_packet(packet, GXMETAL_OP_END_FRAME, 32, 3);
     CHECK(dispatch(renderer, packet, 32) == GXMETAL_ERROR_NONE);
     present_rect(renderer, packet, 3, 0, 0, 64, 64);

@@ -21,7 +21,7 @@ records sources, hashes, recipes, evidence descriptions, and driver fixes.
 | `weekend-warrior` | Weekend Warrior | QuickDraw 3D / RAVE | Load the first arena; verify camera clipping, textured characters, UI, depth ordering, and transitions for five minutes | Gameplay smoke pass through scripted selection, Center Stage play, movement/turning/action input, and short soak with zero fallback |
 | `future-cop` | Future Cop: LAPD Demo | Selectable QuickDraw 3D RAVE | Select RAVE; enter Crime War; verify weapon blending, transparent HUD, depth, and explosions | Qualified on GXMetal: coherent ATI-private rendering, live gameplay/input, 2,610 direct frames, zero fallback, and clean exit |
 | `dark-vengeance` | Dark Vengeance Demo | Direct RAVE | Reach first combat and scripted sequence; inspect lighting, translucent effects, animated geometry, and camera motion | Demo 1.0.2 fails identically before RAVE in GXMetal/software; official retail 1.2 updater installs but then requires a legitimate game CD in every matched control |
-| `myth-ii` | Myth II: Soulblighter 1.5.1 Demo | RAVE | Select RAVE; load a solo map; pan, zoom, rotate, issue orders, and verify terrain, water, units, decals, projectiles, and explosions | Confirmed GXMetal transition blocker: the isolated Apple Software control reaches the rendered battlefield/objectives after early Escape, while GXMetal stays black after exactly 43 intentional blank texture preallocations and before the first populated replacement/draw |
+| `myth-ii` | Myth II: Soulblighter 1.5.1 Demo | RAVE | Select RAVE; load a solo map; pan, zoom, rotate, issue orders, and verify terrain, water, units, decals, projectiles, and explosions | Current-driver battlefield rendering pass: the silent journal-Escape route renders terrain, units, trees, shadows, selection marker, and UI with direct presentation and no transport/resource rejects; representative input and lifecycle remain open |
 | `unreal-tournament` | Unreal Tournament 348m3 Demo | ATI renderer through RAVE | Confirm RAVE; render intro flyby; run a five-minute bot match checking lightmaps, fog, weapon alpha, HUD, and texture cycling | Sound-disabled current driver sustains the correct 640x480 v348 main menu for 26,854 direct frames with zero fallback; Practice configuration and gameplay input remain unqualified |
 | `combat-mission` | Combat Mission: Beyond Overlord 1.02 Demo | RAVE hardware probe | Complete detection; load Chance Encounter; move through the map and execute a turn with terrain, markers, smoke, and animation | Two fresh current-driver clones render Chance Encounter and visibly advance Setup to Orders; 207-265-second soaks, 16.7M combined draws, zero fallback/rejects; later camera/unit/lifecycle probes remained byte-identical |
 | `oni` | Oni Demo | Classic Apple OpenGL | Reach training and first fight; verify animation, lightmaps, transparency, HUD, and an indoor/outdoor transition | Gameplay smoke pass through Combat Training and the formerly corrupt +45-second transition; corrected ATI fan topology, coherent rendering, and zero rejected geometry/fallback |
@@ -396,10 +396,16 @@ VMs, each with an independent clone and unique local VNC and monitor sockets.
   read-only data disc, and explicit SOFT8 controls all stop at the same retail
   game-CD validation before creating RAVE. The separate 1.2 demo or a
   legitimate retail Mac CD/install is still required.
-- Corrected Myth II automation to press Escape while the complete “Into the
-  Breach” journal is still active. An isolated Apple Software control reaches
-  the fully rendered battlefield and Mission Objectives dialog; current
-  GXMetal instead remains black after exactly 43 intentional blank texture
-  preallocations and before the expected first populated replacement texture
-  or draw. This is now a confirmed driver-specific transition blocker with a
-  narrowly defined tracing and regression target.
+- Corrected Myth II's driver-specific transition failure. Proven ATI private
+  slot-2 calls now replace flags-zero, single-level base images with the
+  existing texture's exact format and dimensions without changing its resource
+  identity; slot 4 returns the synchronous 24-byte `TQADevice` draw-buffer
+  view used by Myth; and textured rendering with depth and fog disabled accepts
+  finite signed eye depth while still rejecting non-finite input. The retained
+  final-candidate silent route reaches a coherent battlefield at 25.74-26.59
+  fps, records 775,456 draws, balanced 896/896 frames, 28,247 slot-2 calls and
+  496 slot-4 calls with successful final observed results, and zero
+  transport/resource rejects. Evidence is retained under
+  `context/gxmetal-games/evidence/gxmetal-mythii-final-upload-order-20260827`.
+  Focused guest and Metal tests retain the exact update, readback, upload
+  ordering, and 224-byte textured-fan contracts.
