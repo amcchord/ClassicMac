@@ -505,6 +505,229 @@ static uint16_t framebuffer_pixel(const uint8_t *framebuffer,
                       framebuffer[offset + 1]);
 }
 
+static void test_metal_ati_homogeneous_eye_plane_clipping(void)
+{
+    enum {
+        kContext = 31,
+        kResource = 601,
+        kVertexCount = 4,
+        kPacketBytes = GXMETAL_PACKET_HEADER_BYTES +
+            GXMETAL_DRAW_HEADER_BYTES +
+            kVertexCount * GXMETAL_TEXTURE_VERTEX_BYTES
+    };
+    uint8_t framebuffer[64 * 64 * 2] = {0};
+    uint8_t control[64];
+    uint8_t packet[kPacketBytes];
+    uint8_t *shared = calloc(1, GXMETAL_SHARED_BYTES);
+    uint8_t *payload;
+    uint8_t *vertices;
+    const uint8_t white[4] = {0xff, 0xff, 0xff, 0xff};
+    GXMetalMetalRenderer *renderer;
+    uint32_t i;
+    uint32_t drawn_pixels = 0;
+
+    CHECK(shared != NULL);
+    if (shared == NULL) {
+        return;
+    }
+    renderer = gxmetal_metal_create(framebuffer, sizeof(framebuffer),
+                                     shared, GXMETAL_SHARED_BYTES);
+    if (renderer == NULL) {
+        free(shared);
+        return;
+    }
+    upload_single_pixel_texture(renderer, packet, shared, kResource,
+                                GXMETAL_PIXEL_ARGB8888, white);
+    make_packet(packet, GXMETAL_OP_CONTEXT_CREATE, 48, kContext);
+    payload = packet + GXMETAL_PACKET_HEADER_BYTES;
+    gxmetal_store_le32(payload + GXMETAL_CONTEXT_WIDTH_OFFSET, 64);
+    gxmetal_store_le32(payload + GXMETAL_CONTEXT_HEIGHT_OFFSET, 64);
+    gxmetal_store_le32(payload + GXMETAL_CONTEXT_ROW_BYTES_OFFSET, 128);
+    gxmetal_store_le32(payload + GXMETAL_CONTEXT_PIXEL_FORMAT_OFFSET,
+                       GXMETAL_PIXEL_RGB555);
+    CHECK(dispatch(renderer, packet, 48) == GXMETAL_ERROR_NONE);
+    set_resource_state(renderer, packet, kContext,
+                       GXMETAL_STATE_TEXTURE, kResource);
+    set_int_state(renderer, packet, kContext,
+                  GXMETAL_STATE_TEXTURE_OP, GXMETAL_TEXTURE_MODULATE);
+    set_int_state(renderer, packet, kContext,
+                  GXMETAL_STATE_Z_FUNCTION, GXMETAL_Z_LE);
+    set_int_state(renderer, packet, kContext,
+                  GXMETAL_STATE_Z_BUFFER_MASK, 1);
+    set_int_state(renderer, packet, kContext,
+                  GXMETAL_STATE_ATI_PRIVATE, 1);
+
+    make_packet(packet, GXMETAL_OP_BEGIN_FRAME, 32, kContext);
+    CHECK(dispatch(renderer, packet, 32) == GXMETAL_ERROR_NONE);
+    make_packet(packet, GXMETAL_OP_CLEAR, 64, kContext);
+    payload = packet + GXMETAL_PACKET_HEADER_BYTES;
+    gxmetal_store_le32(payload + GXMETAL_CLEAR_FLAGS_OFFSET,
+                       GXMETAL_CLEAR_COLOR | GXMETAL_CLEAR_DEPTH);
+    store_float(payload + GXMETAL_CLEAR_COLOR_B_OFFSET, 1.0f);
+    store_float(payload + GXMETAL_CLEAR_COLOR_A_OFFSET, 1.0f);
+    store_float(payload + GXMETAL_CLEAR_DEPTH_OFFSET, 1.0f);
+    gxmetal_store_le32(payload + GXMETAL_CLEAR_RECT_OFFSET +
+                       GXMETAL_RECT_RIGHT_OFFSET, 64);
+    gxmetal_store_le32(payload + GXMETAL_CLEAR_RECT_OFFSET +
+                       GXMETAL_RECT_BOTTOM_OFFSET, 64);
+    CHECK(dispatch(renderer, packet, 64) == GXMETAL_ERROR_NONE);
+
+    /* Unreal Tournament v348 submits this finite behind-eye anchor during
+     * the Tempest ready transition.  ATI's OpenGL bridge expects hardware
+     * homogeneous clipping; rejecting its signed reciprocal-W faults the
+     * whole GXMetal queue and is surfaced misleadingly as texture error 3. */
+    make_packet(packet, GXMETAL_OP_DRAW_TEXTURED, kPacketBytes, kContext);
+    payload = packet + GXMETAL_PACKET_HEADER_BYTES;
+    gxmetal_store_le32(payload + GXMETAL_DRAW_PRIMITIVE_OFFSET,
+                       GXMETAL_PRIMITIVE_TRIANGLE_FAN);
+    gxmetal_store_le32(payload + GXMETAL_DRAW_VERTEX_COUNT_OFFSET,
+                       kVertexCount);
+    gxmetal_store_le32(payload + GXMETAL_DRAW_VERTEX_STRIDE_OFFSET,
+                       GXMETAL_TEXTURE_VERTEX_BYTES);
+    vertices = payload + GXMETAL_DRAW_VERTICES_OFFSET;
+    set_texture_vertex_depth(vertices, 254.395813f, 98.656395f,
+                             1.05521989f, -0.0551876426f, 0.0f, 1.0f);
+    set_texture_vertex_depth(vertices + GXMETAL_TEXTURE_VERTEX_BYTES,
+                             254.395813f, 263.896484f,
+                             1.05521989f, -0.0551876426f, 0.0f, 0.0f);
+    set_texture_vertex_depth(vertices + 2 * GXMETAL_TEXTURE_VERTEX_BYTES,
+                             419.635925f, 263.896484f,
+                             1.05521989f, -0.0551876426f, 1.0f, 0.0f);
+    set_texture_vertex_depth(vertices + 3 * GXMETAL_TEXTURE_VERTEX_BYTES,
+                             419.635925f, 98.656395f,
+                             1.05521989f, -0.0551876426f, 1.0f, 1.0f);
+    for (i = 0; i < kVertexCount; i++) {
+        uint8_t *vertex = vertices + i * GXMETAL_TEXTURE_VERTEX_BYTES;
+
+        poison_unused_texture_color(vertex);
+        store_float(vertex + GXMETAL_VERTEX_A_OFFSET, 0.5f);
+        store_float(vertex + GXMETAL_VERTEX_KD_R_OFFSET, 0.501960814f);
+        store_float(vertex + GXMETAL_VERTEX_KD_G_OFFSET, 0.501960814f);
+        store_float(vertex + GXMETAL_VERTEX_KD_B_OFFSET, 0.501960814f);
+        store_float(vertex + GXMETAL_VERTEX_KS_R_OFFSET, NAN);
+        store_float(vertex + GXMETAL_VERTEX_KS_G_OFFSET, NAN);
+        store_float(vertex + GXMETAL_VERTEX_KS_B_OFFSET, NAN);
+    }
+    CHECK(dispatch(renderer, packet, kPacketBytes) == GXMETAL_ERROR_NONE);
+
+    /* The next UT packet is the complementary near-plane case: positive W,
+     * but finite Z below Metal's normalized clip volume. */
+    set_texture_vertex_depth(vertices, 0.25f, 0.25f,
+                             -5.72204304f, 6.72186852f, 0.0f, 0.0f);
+    set_texture_vertex_depth(vertices + GXMETAL_TEXTURE_VERTEX_BYTES,
+                             0.25f, 480.25f,
+                             -5.72204304f, 6.72186852f, 0.0f, 0.0f);
+    set_texture_vertex_depth(vertices + 2 * GXMETAL_TEXTURE_VERTEX_BYTES,
+                             640.25f, 480.25f,
+                             -5.72204304f, 6.72186852f, 0.0f, 0.0f);
+    set_texture_vertex_depth(vertices + 3 * GXMETAL_TEXTURE_VERTEX_BYTES,
+                             640.25f, 0.25f,
+                             -5.72204304f, 6.72186852f, 0.0f, 0.0f);
+    store_float(vertices + GXMETAL_VERTEX_U_OVER_W_OFFSET, 0.620256126f);
+    store_float(vertices + GXMETAL_VERTEX_V_OVER_W_OFFSET, 5.09879494f);
+    store_float(vertices + GXMETAL_TEXTURE_VERTEX_BYTES +
+                GXMETAL_VERTEX_U_OVER_W_OFFSET, 0.620256126f);
+    store_float(vertices + GXMETAL_TEXTURE_VERTEX_BYTES +
+                GXMETAL_VERTEX_V_OVER_W_OFFSET, 0.608643174f);
+    store_float(vertices + 2 * GXMETAL_TEXTURE_VERTEX_BYTES +
+                GXMETAL_VERTEX_U_OVER_W_OFFSET, 6.60712528f);
+    store_float(vertices + 2 * GXMETAL_TEXTURE_VERTEX_BYTES +
+                GXMETAL_VERTEX_V_OVER_W_OFFSET, 0.608643174f);
+    store_float(vertices + 3 * GXMETAL_TEXTURE_VERTEX_BYTES +
+                GXMETAL_VERTEX_U_OVER_W_OFFSET, 6.60712528f);
+    store_float(vertices + 3 * GXMETAL_TEXTURE_VERTEX_BYTES +
+                GXMETAL_VERTEX_V_OVER_W_OFFSET, 5.09879494f);
+    for (i = 0; i < kVertexCount; i++) {
+        uint8_t *vertex = vertices + i * GXMETAL_TEXTURE_VERTEX_BYTES;
+
+        poison_unused_texture_color(vertex);
+        store_float(vertex + GXMETAL_VERTEX_A_OFFSET, 0.5f);
+        store_float(vertex + GXMETAL_VERTEX_KD_R_OFFSET, 0.262745112f);
+        store_float(vertex + GXMETAL_VERTEX_KD_G_OFFSET, 0.262745112f);
+        store_float(vertex + GXMETAL_VERTEX_KD_B_OFFSET, 0.262745112f);
+        store_float(vertex + GXMETAL_VERTEX_KS_R_OFFSET, NAN);
+        store_float(vertex + GXMETAL_VERTEX_KS_G_OFFSET, NAN);
+        store_float(vertex + GXMETAL_VERTEX_KS_B_OFFSET, NAN);
+    }
+    CHECK(dispatch(renderer, packet, kPacketBytes) == GXMETAL_ERROR_NONE);
+    make_packet(control, GXMETAL_OP_END_FRAME, 32, kContext);
+    CHECK(dispatch(renderer, control, 32) == GXMETAL_ERROR_NONE);
+    present_rect(renderer, control, kContext, 0, 0, 64, 64);
+    for (i = 0; i < 64u * 64u; i++) {
+        uint16_t pixel = (uint16_t)((uint16_t)framebuffer[i * 2] << 8 |
+                                    framebuffer[i * 2 + 1]);
+
+        if (pixel != 0x001f) {
+            drawn_pixels++;
+        }
+    }
+    CHECK(drawn_pixels == 0);
+
+    /* A mixed-sign control proves that signed W clips the crossing edges
+     * instead of dropping the complete fan. */
+    make_packet(control, GXMETAL_OP_BEGIN_FRAME, 32, kContext);
+    CHECK(dispatch(renderer, control, 32) == GXMETAL_ERROR_NONE);
+    make_packet(control, GXMETAL_OP_CLEAR, 64, kContext);
+    payload = control + GXMETAL_PACKET_HEADER_BYTES;
+    gxmetal_store_le32(payload + GXMETAL_CLEAR_FLAGS_OFFSET,
+                       GXMETAL_CLEAR_COLOR | GXMETAL_CLEAR_DEPTH);
+    store_float(payload + GXMETAL_CLEAR_COLOR_B_OFFSET, 1.0f);
+    store_float(payload + GXMETAL_CLEAR_COLOR_A_OFFSET, 1.0f);
+    store_float(payload + GXMETAL_CLEAR_DEPTH_OFFSET, 1.0f);
+    gxmetal_store_le32(payload + GXMETAL_CLEAR_RECT_OFFSET +
+                       GXMETAL_RECT_RIGHT_OFFSET, 64);
+    gxmetal_store_le32(payload + GXMETAL_CLEAR_RECT_OFFSET +
+                       GXMETAL_RECT_BOTTOM_OFFSET, 64);
+    CHECK(dispatch(renderer, control, 64) == GXMETAL_ERROR_NONE);
+    set_texture_vertex_depth(vertices, 32.0f, 32.0f,
+                             1.05521989f, -0.0551876426f, 0.0f, 1.0f);
+    set_texture_vertex_depth(vertices + GXMETAL_TEXTURE_VERTEX_BYTES,
+                             0.0f, 0.0f, 0.5f, 1.0f, 0.0f, 0.0f);
+    set_texture_vertex_depth(vertices + 2 * GXMETAL_TEXTURE_VERTEX_BYTES,
+                             64.0f, 0.0f, 0.5f, 1.0f, 1.0f, 0.0f);
+    set_texture_vertex_depth(vertices + 3 * GXMETAL_TEXTURE_VERTEX_BYTES,
+                             32.0f, 64.0f, 0.5f, 1.0f, 0.5f, 1.0f);
+    for (i = 0; i < kVertexCount; i++) {
+        uint8_t *vertex = vertices + i * GXMETAL_TEXTURE_VERTEX_BYTES;
+
+        poison_unused_texture_color(vertex);
+        store_float(vertex + GXMETAL_VERTEX_KS_R_OFFSET, NAN);
+        store_float(vertex + GXMETAL_VERTEX_KS_G_OFFSET, NAN);
+        store_float(vertex + GXMETAL_VERTEX_KS_B_OFFSET, NAN);
+    }
+    CHECK(dispatch(renderer, packet, kPacketBytes) == GXMETAL_ERROR_NONE);
+    make_packet(control, GXMETAL_OP_END_FRAME, 32, kContext);
+    CHECK(dispatch(renderer, control, 32) == GXMETAL_ERROR_NONE);
+    present_rect(renderer, control, kContext, 0, 0, 64, 64);
+    drawn_pixels = 0;
+    for (i = 0; i < 64u * 64u; i++) {
+        uint16_t pixel = (uint16_t)((uint16_t)framebuffer[i * 2] << 8 |
+                                    framebuffer[i * 2 + 1]);
+
+        if (pixel != 0x001f) {
+            drawn_pixels++;
+        }
+    }
+    CHECK(drawn_pixels != 0);
+
+    /* Public RAVE remains strict, and even ATI-private clipping never accepts
+     * a zero or nonfinite reciprocal-W. */
+    set_int_state(renderer, control, kContext, GXMETAL_STATE_ATI_PRIVATE, 0);
+    CHECK(dispatch(renderer, packet, kPacketBytes) ==
+          GXMETAL_ERROR_BAD_PACKET);
+    set_int_state(renderer, control, kContext, GXMETAL_STATE_ATI_PRIVATE, 1);
+    store_float(vertices + GXMETAL_VERTEX_Z_OFFSET, 0.5f);
+    store_float(vertices + GXMETAL_VERTEX_INV_W_OFFSET, 0.0f);
+    CHECK(dispatch(renderer, packet, kPacketBytes) ==
+          GXMETAL_ERROR_BAD_PACKET);
+    store_float(vertices + GXMETAL_VERTEX_INV_W_OFFSET, NAN);
+    CHECK(dispatch(renderer, packet, kPacketBytes) ==
+          GXMETAL_ERROR_BAD_PACKET);
+
+    gxmetal_metal_destroy(renderer);
+    free(shared);
+}
+
 static void test_metal_large_vertex_batches(void)
 {
     enum {
@@ -2898,6 +3121,7 @@ int main(void)
     @autoreleasepool {
         test_metal_triangle();
         test_metal_large_vertex_batches();
+        test_metal_ati_homogeneous_eye_plane_clipping();
         test_metal_depth_blend_and_double_buffer();
         test_metal_texture_upload_and_sampling();
         test_metal_rect_clip_scissor_and_dirty_present();

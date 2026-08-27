@@ -3489,7 +3489,13 @@ static TQAError GXMetalATIPrivateMethod1(uint32_t arg0, uint32_t arg1,
  * invalidate bindings retained by the game and GLD. Flags-zero updates are
  * deliberately not snapshotted, matching ordinary immutable QATextureNew
  * storage and avoiding a second copy of Myth's level textures. */
-static TQAError GXMetalFinishATIPrivateTextureUpdate(TQAError result)
+/* Keep the two rare Myth II texture-update helpers compact. With both this
+ * callback and private slot 4 built at the file-wide -O2 setting, the classic
+ * CFM image grows into a layout where Mac OS 9 stops engine discovery after
+ * the VendorID/EngineID/Revision Gestalts. Size-optimizing only this cold path
+ * preserves the callbacks while keeping the rest of the renderer at -O2. */
+static TQAError __attribute__((optimize("Os"), noinline))
+GXMetalFinishATIPrivateTextureUpdate(TQAError result)
 {
     gDiagnostics.ati_private_texture_update_result = result;
     if (gDiagnostics.ati_private_method_call_count[2] == 1) {
@@ -3499,7 +3505,8 @@ static TQAError GXMetalFinishATIPrivateTextureUpdate(TQAError result)
     return result;
 }
 
-static TQAError GXMetalATIPrivateMethod2(uint32_t arg0, uint32_t arg1,
+static TQAError __attribute__((optimize("Os"), noinline))
+GXMetalATIPrivateMethod2(uint32_t arg0, uint32_t arg1,
                                          uint32_t arg2, uint32_t arg3,
                                          uint32_t arg4, uint32_t arg5,
                                          uint32_t arg6, uint32_t arg7)

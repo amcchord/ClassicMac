@@ -196,6 +196,14 @@ class RFBClient:
         self.move_to(x, y)
         self.click_buttons(x, y, 1)
 
+    def hold_click(self, x, y, hold_seconds):
+        self.move_to(x, y)
+        self.pointer_event(x, y, 1)
+        try:
+            time.sleep(hold_seconds)
+        finally:
+            self.pointer_event(x, y)
+
     def double_click(self, x, y):
         self.move_to(x, y)
         self.click_buttons(x, y, 2)
@@ -355,6 +363,8 @@ def main():
     parser.add_argument("--chord", action="append", default=[])
     parser.add_argument("--click", action="append", type=parse_click,
                         default=[])
+    parser.add_argument("--hold-click", action="append", type=parse_click,
+                        default=[])
     parser.add_argument("--double-click", action="append", type=parse_click,
                         default=[])
     parser.add_argument("--wait-for-pixel", type=parse_pixel)
@@ -395,6 +405,8 @@ def main():
             client.key(key, args.hold_ms / 1000.0)
         for x, y in args.click:
             client.click(x, y)
+        for x, y in args.hold_click:
+            client.hold_click(x, y, args.hold_ms / 1000.0)
         for x, y in args.double_click:
             client.double_click(x, y)
         if args.delay > 0:

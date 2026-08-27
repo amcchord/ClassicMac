@@ -16,14 +16,14 @@ records sources, hashes, recipes, evidence descriptions, and driver fixes.
 
 | ID | Game | Primary path under test | Minimum qualification route | Media and current state |
 | --- | --- | --- | --- | --- |
-| `bugdom` | Bugdom 1.2.1 | QuickDraw 3D 1.6 / RAVE, ATI behavior | Highest quality; load The Lawn; verify terrain, fog, foliage alpha, and HUD for five minutes; quit and relaunch | Gameplay pass: coherent Lawn rendering, sustained movement/turning, direct presentation, and zero fallback |
+| `bugdom` | Bugdom 1.2.1 | QuickDraw 3D 1.6 / RAVE, ATI behavior | Highest quality; load The Lawn; verify terrain, fog, foliage alpha, and HUD for five minutes; quit and relaunch | Exact signed beta-3 gameplay pass: coherent Lawn rendering, scripted movement/turning, 1,069,012 traced draws, direct presentation, and zero fallback/rejects |
 | `cro-mag-rally` | Cro-Mag Rally Demo | Apple OpenGL 1.1.2 | Confirm hardware/OpenGL; complete a lap with terrain, particles, HUD, transparency, and camera transitions | Gameplay smoke pass at 640x480: Practice/Desert renders coherently, acceleration and steering visibly respond, 24-28 fps, ~204 direct draws/frame, zero fallback, and expected demo exit screen |
-| `weekend-warrior` | Weekend Warrior | QuickDraw 3D / RAVE | Load the first arena; verify camera clipping, textured characters, UI, depth ordering, and transitions for five minutes | Gameplay smoke pass through scripted selection, Center Stage play, movement/turning/action input, and short soak with zero fallback |
-| `future-cop` | Future Cop: LAPD Demo | Selectable QuickDraw 3D RAVE | Select RAVE; enter Crime War; verify weapon blending, transparent HUD, depth, and explosions | Qualified on GXMetal: coherent ATI-private rendering, live gameplay/input, 2,610 direct frames, zero fallback, and clean exit |
+| `weekend-warrior` | Weekend Warrior | QuickDraw 3D / RAVE | Load the first arena; verify camera clipping, textured characters, UI, depth ordering, and transitions for five minutes | Exact signed beta-3 gameplay smoke pass through scripted selection, Center Stage play, strong movement/camera change, 1,585,966 traced draws, and zero fallback/rejects |
+| `future-cop` | Future Cop: LAPD Demo | Selectable QuickDraw 3D RAVE | Select RAVE; enter Crime War; verify weapon blending, transparent HUD, depth, and explosions | Exact signed beta-3 gameplay pass: coherent Crime War rendering, strong live-input camera/position change, 3,958,133 traced draws, and zero fallback/rejects |
 | `dark-vengeance` | Dark Vengeance Demo | Direct RAVE | Reach first combat and scripted sequence; inspect lighting, translucent effects, animated geometry, and camera motion | Demo 1.0.2 fails identically before RAVE in GXMetal/software; official retail 1.2 updater installs but then requires a legitimate game CD in every matched control |
-| `myth-ii` | Myth II: Soulblighter 1.5.1 Demo | RAVE | Select RAVE; load a solo map; pan, zoom, rotate, issue orders, and verify terrain, water, units, decals, projectiles, and explosions | Current-driver battlefield rendering pass: the silent journal-Escape route renders terrain, units, trees, shadows, selection marker, and UI with direct presentation and no transport/resource rejects; representative input and lifecycle remain open |
-| `unreal-tournament` | Unreal Tournament 348m3 Demo | ATI renderer through RAVE | Confirm RAVE; render intro flyby; run a five-minute bot match checking lightmaps, fog, weapon alpha, HUD, and texture cycling | Sound-disabled current driver sustains the correct 640x480 v348 main menu for 26,854 direct frames with zero fallback; Practice configuration and gameplay input remain unqualified |
-| `combat-mission` | Combat Mission: Beyond Overlord 1.02 Demo | RAVE hardware probe | Complete detection; load Chance Encounter; move through the map and execute a turn with terrain, markers, smoke, and animation | Two fresh current-driver clones render Chance Encounter and visibly advance Setup to Orders; 207-265-second soaks, 16.7M combined draws, zero fallback/rejects; later camera/unit/lifecycle probes remained byte-identical |
+| `myth-ii` | Myth II: Soulblighter 1.5.1 Demo | RAVE | Select RAVE; load a solo map; pan, zoom, rotate, issue orders, and verify terrain, water, units, decals, projectiles, and explosions | Exact signed beta-3 battlefield/partial-input pass: coherent rendering plus visibly proven single selection, forward/back and left/right camera motion, rotation, and zoom-in; refreshed replay has 3,589,155 traced draws and zero fallback/rejects; group orders and the remaining controls stay open |
+| `unreal-tournament` | Unreal Tournament 348m3 Demo | ATI renderer through RAVE | Confirm RAVE; render intro flyby; run a five-minute bot match checking lightmaps, fog, weapon alpha, HUD, and texture cycling | Sound-disabled live Practice pass: coherent Tempest world, weapon and HUD; movement, turning, firing, damage, death and respawn visually proven; 9,472 direct frames at 80.36-131.59 fps with zero fallback/rejects |
+| `combat-mission` | Combat Mission: Beyond Overlord 1.02 Demo | RAVE hardware probe | Complete detection; load Chance Encounter; move through the map and execute a turn with terrain, markers, smoke, and animation | Exact signed beta-3 Orders/input/action-transition pass: held unit selection opens Orders, plots a visible Move/Disembark command, three held controls drive distinct camera changes, and GO reaches computer-player computation/playback; 6,410,321 traced draws, zero fallback/rejects |
 | `oni` | Oni Demo | Classic Apple OpenGL | Reach training and first fight; verify animation, lightmaps, transparency, HUD, and an indoor/outdoor transition | Gameplay smoke pass through Combat Training and the formerly corrupt +45-second transition; corrected ATI fan topology, coherent rendering, and zero rejected geometry/fallback |
 | `havoc` | Havoc Demo | First shipping QuickDraw 3D RAVE game | Select accelerated rendering; enter the demo arena; verify terrain, fog, textured objects, transparency, HUD, and camera motion for five minutes | Blocked before 3D by identical game resource-allocation error across clean controls |
 
@@ -386,11 +386,17 @@ VMs, each with an independent clone and unique local VNC and monitor sockets.
   fallback or guest rejects. Camera, unit-order execution, clean quit, and
   relaunch remain open because strengthened post-transition input frames were
   byte-identical.
-- Replayed Unreal Tournament on a current-driver derivative of the immutable
-  configured base. With audio disabled it sustains the coherent 640x480 v348
-  main menu for 26,854 direct frames, zero fallback, 185-312 fps after warmup,
-  and exactly 250 draws/frame. Practice configuration and match gameplay were
-  not reached; mislabeled menu screenshots are explicitly excluded.
+- Replayed Unreal Tournament on the final homogeneous-clipping host from an
+  immutable configured base. With audio disabled it advances through the
+  Tempest ready state into live Practice gameplay. Scripted forward, left,
+  right, and fire input produces distinct coherent world, combat, damage,
+  death, and respawn frames. Forty profiles contain 9,472 direct frames, zero
+  fallback, 80.36-131.59 fps, and no queue fault, reject, or texture error.
+  The required host fix accepts finite ATI-private reciprocal-W and eye-space Z
+  outside the normalized clip volume and lets Metal clip reconstructed signed
+  homogeneous coordinates; public RAVE remains strict and zero/nonfinite W is
+  still rejected. Evidence is under
+  `context/gxmetal-games/evidence/gxmetal-ut-beta3-homogeneous-clip-live-gameplay-20260827/`.
 - Exhausted the available Dark Vengeance retail-1.2-updater route. The updater
   installs in a disposable clone, but GXMetal, Apple Software, a reconstructed
   read-only data disc, and explicit SOFT8 controls all stop at the same retail

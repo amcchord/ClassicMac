@@ -7,6 +7,7 @@ from pathlib import Path
 import struct
 import sys
 import unittest
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -41,6 +42,41 @@ def framebuffer_update(x, y, width, height, encoding, payload=b""):
 
 
 class RFBClientTests(unittest.TestCase):
+    def test_hold_click_sends_down_then_up_after_requested_interval(self):
+        connection = FakeSocket()
+        client = VNC.RFBClient(connection)
+        client.width = 640
+        client.height = 480
+        client.pointer_x = 320
+        client.pointer_y = 240
+
+        with mock.patch.object(VNC.time, "sleep") as sleep:
+            client.hold_click(320, 240, 0.75)
+
+        self.assertEqual(
+            bytes(connection.sent),
+            struct.pack(">BBHH", 5, 1, 320, 240) +
+            struct.pack(">BBHH", 5, 0, 320, 240))
+        sleep.assert_called_once_with(0.75)
+
+    def test_hold_click_releases_button_when_wait_is_interrupted(self):
+        connection = FakeSocket()
+        client = VNC.RFBClient(connection)
+        client.width = 640
+        client.height = 480
+        client.pointer_x = 320
+        client.pointer_y = 240
+
+        with mock.patch.object(
+                VNC.time, "sleep", side_effect=RuntimeError("interrupted")):
+            with self.assertRaisesRegex(RuntimeError, "interrupted"):
+                client.hold_click(320, 240, 0.75)
+
+        self.assertEqual(
+            bytes(connection.sent),
+            struct.pack(">BBHH", 5, 1, 320, 240) +
+            struct.pack(">BBHH", 5, 0, 320, 240))
+
     def test_parse_pixel_accepts_optional_tolerance_and_rejects_channels(self):
         self.assertEqual(
             VNC.parse_pixel("128,84,248,248,0"),
@@ -159,6 +195,8 @@ class ManifestValidationTests(unittest.TestCase):
             command[audio_option + 1],
             "coreaudio,id=snd0,out.buffer-length=50000")
         self.assertEqual(command.count("-audiodev"), 1)
+        log_option = command.index("-d")
+        self.assertEqual(command[log_option + 1], "guest_errors")
 
     def test_named_keys_are_case_sensitive_and_checked_before_runtime(self):
         self.assertEqual(
@@ -179,6 +217,16 @@ class ManifestValidationTests(unittest.TestCase):
         self.assertEqual(SWEEP.validate_step(step, "steps[0]"), step)
         with self.assertRaisesRegex(ValueError, "start_x"):
             SWEEP.validate_step({"drag": [250, -1, 250, 20]}, "steps[0]")
+
+    def test_hold_click_coordinates_and_duration_are_validated(self):
+        step = {"hold_click": [595, 418], "hold_ms": 750}
+        self.assertEqual(SWEEP.validate_step(step, "steps[0]"), step)
+        with self.assertRaisesRegex(ValueError, "nonnegative"):
+            SWEEP.validate_step(
+                {"hold_click": [-1, 418], "hold_ms": 750}, "steps[0]")
+        with self.assertRaisesRegex(ValueError, "positive"):
+            SWEEP.validate_step(
+                {"hold_click": [595, 418], "hold_ms": 0}, "steps[0]")
 
     def test_frame_change_wait_is_validated(self):
         step = {

@@ -40,7 +40,8 @@ AUDIO_DEVICE_SPECS = {
 ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
 STEP_ACTIONS = (
     "wait", "wait_for_frame_change", "wait_for_pixel", "click",
-    "double_click", "drag", "key", "chord", "text", "screenshot",
+    "hold_click", "double_click", "drag", "key", "chord", "text",
+    "screenshot",
     "assert_dominant_color_fraction_below",
     "assert_color_range_fraction_below", "note",
 )
@@ -306,7 +307,7 @@ def validate_step(step: Any, field: str) -> dict[str, Any]:
                 f"{field}.assert_color_range_fraction_below.region must be "
                 "[x, y, width, height] with nonnegative coordinates and "
                 "positive dimensions")
-    elif action in ("click", "double_click"):
+    elif action in ("click", "hold_click", "double_click"):
         if (not isinstance(value, list) or len(value) != 2 or
                 any(isinstance(item, bool) or not isinstance(item, int)
                     or item < 0 for item in value)):
@@ -514,6 +515,7 @@ def qemu_command(
         "-L", str(firmware),
         "-display", "none",
         "-vnc", f"unix:{socket_dir / 'vnc.sock'}",
+        "-d", "guest_errors",
         "-vga", "std",
         "-global", "VGA.host-resize=on",
         "-global", "VGA.vgamem_mb=64",
@@ -959,6 +961,10 @@ def execute_run(
                 wait_for_pixel(value, f"step-{index:02d}-pixel")
             elif action == "click":
                 client.click(value[0], value[1])
+            elif action == "hold_click":
+                client.hold_click(
+                    value[0], value[1],
+                    float(step.get("hold_ms", 500)) / 1000.0)
             elif action == "double_click":
                 client.double_click(value[0], value[1])
             elif action == "drag":
@@ -984,8 +990,8 @@ def execute_run(
             if step.get("capture_after", False):
                 capture(f"step-{index:02d}-{action}")
             delay_after = float(step.get("delay_after", 0.25 if action in
-                                        ("click", "double_click", "drag",
-                                         "key", "chord", "text") else 0))
+                                        ("click", "hold_click", "double_click",
+                                         "drag", "key", "chord", "text") else 0))
             if delay_after:
                 wait_and_capture(delay_after, f"step-{index:02d}-delay")
 

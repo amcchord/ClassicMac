@@ -11,18 +11,21 @@ are tracked separately.
 GXMetal is now likely to work with more RAVE games than the original test set,
 but the evidence still does not support a universal-compatibility claim.
 
-- Bugdom and Future Cop have coherent representative gameplay with verified
-  input on the 2.1.4 qualification rc23 candidate.
-- Weekend Warrior has a fully scripted route through menus, selection,
-  textured 3D play, input, and a short soak.
+- Bugdom, Future Cop, and Weekend Warrior all pass exact signed beta-3
+  candidate routes through menus and coherent representative 3D gameplay with
+  verified input. Their extracted final guest traces total more than 6.6
+  million draws with zero rejected textured draws, invalid resources, texture
+  rejects, geometry anomalies, or context fallbacks.
 - Cro-Mag Rally now has a fully scripted 640x480 Practice/Desert route with
   acceleration and steering input, a gameplay soak, and a clean in-game exit.
   The current Q3-fixed driver sustained roughly 24-28 fps and about 204 direct
   draws per frame with zero fallback.
-- Combat Mission reaches and sustains its complete accelerated 3D scenario
-  setup on that same candidate. Two fresh current-driver clones also advance
-  visibly from Setup to Orders and sustain the battle scene for 207-265
-  seconds; camera, unit-order execution, and lifecycle input remain open.
+- Combat Mission passes an exact signed beta-3 semantic route from Setup to
+  Orders. Sustained mouse input selects a unit, opens its Orders UI, plots a
+  visible cyan `Move / Disembark` command, drives three distinct camera
+  changes, and presses GO through the visible computer-player computation
+  transition. The trace records 6,410,321 draws, balanced 7,424/7,424 frames,
+  and zero fallback or draw/resource rejects.
 - All four reviewed runs end with direct GXMetal presentation and zero
   fallback frames. The rc23 semantic routes ran concurrently from four
   independent clones and completed in 166 seconds wall-clock time.
@@ -48,6 +51,9 @@ but the evidence still does not support a universal-compatibility claim.
   control. Controlled GXMetal runs isolate `UseSound=True` as the blocker:
   sound-disabled starts render the same correct main menu in windowed and
   fullscreen modes, while a sound-enabled/windowed start submits no RAVE work.
+  The final sound-disabled route now advances through the Tempest ready state
+  into live Practice gameplay with working movement, turning, firing, damage,
+  death, and respawn rendering.
   Myth II now reaches its fully rendered “Into the Breach” battlefield after
   the animated map and journal. GXMetal implements the proven flags-zero,
   single-level ATI private slot-2 base-image replacement and slot 4's
@@ -56,27 +62,51 @@ but the evidence still does not support a universal-compatibility claim.
   final-candidate silent run records 775,456 draws, balanced 896/896 frames,
   28,247 private slot-2 calls and 496 slot-4 calls with successful final
   observed results, direct presentation, and zero transport or resource
-  rejects. Representative battlefield input and lifecycle remain open.
+  rejects. A second exact-candidate route visibly proves single-unit selection,
+  camera forward/back and left/right motion, left/right rotation, and zoom-in.
+  A refreshed signed-candidate replay records 3,589,155 draws, balanced
+  3,584/3,584 frames, 120,923 slot-2 calls, 668 slot-4 calls, and zero
+  fallback, rejects, or geometry anomalies. Band/Select All, group orders,
+  Stop, zoom-out, and orbit remain unproven; its final 38.37 seconds were
+  byte-identical despite live direct presentation and therefore are not
+  counted as input evidence.
 - Quake III's 2.2 beta visual regression was localized to valid ATI-private
   slot-60 triangle fans whose fourth argument is zero. Rendering those calls
   again restores the missing world surfaces. A silent six-view Q3DM1 route now
   retains the spawn courtyard, large carved arch, small side arch, under-arch
   angle, lit passage, and side approach as a permanent visual regression gate.
+  The final homogeneous-clipping host repeats that gate with 2,766,059 private
+  calls over 4,352 frame sequences, 317/317 successful texture creations,
+  zero rejected geometry, zero anomalies, and direct-only presentation across
+  all 34 profiles. All six current-host views were manually reviewed.
+- Unreal Tournament v348 exposed a guest CFM code-layout regression in the
+  first combined Myth slot-2/slot-4 build: engine discovery stopped after the
+  VendorID, EngineID, and Revision Gestalts even though neither private method
+  had executed. Builds with either method alone passed. Size-optimizing only
+  the cold slot-2 update path retains both implementations and restores the
+  complete accelerated menu with 21,367 direct frames and zero presentation
+  fallback. The guest build now rejects later, unqualified CFM layouts before
+  they can silently reintroduce the game-only failure. Live gameplay then
+  exposed finite ATI-private fans outside the normalized clip volume. GXMetal
+  now reconstructs their signed homogeneous coordinates for Metal clipping
+  while keeping public RAVE validation strict. The retained Tempest route has
+  9,472 direct frames, zero fallback or rejects, 80.36-131.59 fps, and distinct
+  movement, turn, combat, damage, death, and respawn frames.
 
 ## Current candidate matrix
 
 | Game | Classification | Furthest qualified state | Important open item |
 |---|---|---|---|
-| Bugdom | Gameplay pass | Correct full-color Lawn rendering; sustained movement/turning; short automated soak; direct frames with zero fallback | Retain the separately proven long soak and quit/relaunch gate; audio |
-| Future Cop: LAPD | Gameplay pass | Coherent Crime War world, vehicles, HUD, effects, and live input; direct frames with zero fallback | Clean quit/relaunch and audio |
-| Combat Mission | Rendering and phase-transition pass | Two fresh current-driver runs reach complete Chance Encounter 3D, visibly advance Setup to Orders, and sustain it for 207-265 seconds at 48.32/51.19 mean fps; 16.7M combined draws, zero fallback/rejects | Camera, unit-order execution, lifecycle, and audio; strengthened post-transition input probes remained byte-identical |
-| Weekend Warrior | Gameplay smoke pass | Fully scripted selection, Center Stage 3D play, movement/turning/action input, and short soak; zero fallback | Longer arena/lifecycle soak and audio |
+| Bugdom | Gameplay pass on exact beta-3 | Correct full-color Lawn rendering, fog, foliage, HUD, and scripted movement/turning; 67-69 fps, 1,069,012 traced draws, direct frames with zero fallback/rejects | Retain the separately proven long soak and quit/relaunch gate; audio |
+| Future Cop: LAPD | Gameplay pass on exact beta-3 | Coherent Crime War world, vehicles, HUD, effects, and strong live-input camera/position change; 36.6-36.9 fps, 3,958,133 traced draws, direct frames with zero fallback/rejects | Clean quit/relaunch and audio |
+| Combat Mission | Orders/input/action-transition pass on exact beta-3 | Chance Encounter advances Setup→Orders; held selection opens unit orders, plots a visible Move/Disembark path, drives three distinct camera changes, and GO reaches Computer Player Thinking/action playback; 6,410,321 traced draws, zero fallback/rejects | Observe the ordered unit's displacement and complete-turn playback; clean relaunch and audio |
+| Weekend Warrior | Gameplay smoke pass on exact beta-3 | Fully scripted selection, Center Stage 3D play, strong movement/camera change, and short soak; 231-236 fps, 1,585,966 traced draws, zero fallback/rejects | Longer arena/lifecycle soak and audio |
 | Cro-Mag Rally | Gameplay smoke pass on current Q3 fix | Correct accelerated title/menu/loading and Practice/Desert gameplay at 640x480; acceleration and steering visibly alter position/heading; 24-28 fps, ~204 direct draws/frame, zero fallback; expected demo exit screen | Complete-lap/longer lifecycle soak and audio |
 | Dark Vengeance | Matched app/runtime blocker | Demo 1.0.2 deterministically fails before RAVE in accelerated/software modes; the official retail 1.2 updater installs but all matched controls then require the legitimate game CD before renderer creation | Source the separate 1.2 demo or a legitimate retail Mac CD/install |
 | HAVOC | Matched app/runtime blocker | Deterministic resource-allocation failure in accelerated and software modes, including memory controls | Test alternate media/build or application-memory patch |
-| Myth II | Battlefield rendering pass on current driver | Correct main UI, New Game flow, animated campaign map, complete journal, and coherent 640x480 battlefield with terrain, units, trees, shadows, selection marker, and UI; 21-26.5 fps during the retained gameplay segment, direct frames, zero transport/resource rejects | Script pan, zoom, rotate, unit selection/orders, effects, longer soak, and clean relaunch; audio |
+| Myth II | Battlefield rendering and partial-input pass on exact beta-3 | Correct main UI, campaign map, journal, and coherent battlefield; visibly proven single selection, forward/back and left/right camera motion, rotation, and zoom-in; refreshed replay at 25.4-26.6 fps, 3,589,155 traced draws, zero fallback/rejects | Prove group selection/orders, Stop, zoom-out/orbit, effects-heavy combat, and clean relaunch; audio |
 | Oni | Gameplay smoke pass on rc23 | Correct ATI/OpenGL main menu, new-game confirmation, loading, and coherent Combat Training through the formerly corrupt +45-second transition; method-50 fan topology corrected with zero rejected geometry or fallback | Longer gameplay/input soak, clean lifecycle, and audio |
-| Unreal Tournament | Accelerated menu-rendering pass with startup workaround | Sound-disabled current driver reaches a coherent 640x480 v348 main menu; 26,854 direct frames, zero fallback, 185-312 fps after warmup, exactly 250 draws/frame | Practice configuration/gameplay input remains unqualified; keep sound disabled under the current VM audio path |
+| Unreal Tournament | Live Practice gameplay pass with startup workaround | Sound-disabled current driver reaches Tempest gameplay with coherent world, weapon and HUD; movement, turning, firing, damage, death and respawn are visually proven; 9,472 direct frames, zero fallback/rejects, 80.36-131.59 fps | Longer bot-match and clean relaunch soak; keep sound disabled under the current VM audio path |
 
 ## Driver gates on the exact candidate
 
@@ -107,11 +137,19 @@ Accepted evidence:
 - `context/gxmetal-games/evidence/gxmetal-oni-fan-topology-rc23-20260826`
 - `context/gxmetal-games/evidence/gxmetal-quake3-multiview-current2-20260826`
 - `context/gxmetal-games/evidence/gxmetal-quake3-final-upload-order-20260827`
+- `context/gxmetal-games/evidence/gxmetal-quake3-ut-layout-fixed-candidate-20260827`
+- `context/gxmetal-games/evidence/gxmetal-quake3-homogeneous-clip-regression-20260827`
+- `context/gxmetal-games/evidence/gxmetal-ut-beta3-combinedreal-slot2compact-menu-control-20260827`
+- `context/gxmetal-games/evidence/gxmetal-ut-beta3-homogeneous-clip-live-gameplay-20260827`
 - `context/gxmetal-games/evidence/gxmetal-slot4-noz-conformance-20260827`
 - `context/gxmetal-games/evidence/gxmetal-mythii-final-upload-order-20260827`
+- `context/gxmetal-games/evidence/gxmetal-mythii-beta3-input-lifecycle-retry2-20260827`
+- `context/gxmetal-games/evidence/gxmetal-mythii-ut-layout-fixed-candidate-20260827`
+- `context/gxmetal-games/evidence/gxmetal-three-game-beta3-final-20260827`
 - `context/gxmetal-games/evidence/cromag-current-q3fix-20260826-route1`
 - `context/gxmetal-games/evidence/combat-mission-current-q3fix-20260826-battle-v3`
 - `context/gxmetal-games/evidence/combat-mission-current-q3fix-20260826-input-v4`
+- `context/gxmetal-games/evidence/combat-mission-beta3-held-input-v3-20260827`
 - `context/gxmetal-games/evidence/ut-current-q3fix-20260826-exact-rc6`
 - `context/gxmetal-games/evidence/dark-vengeance12-current-q3fix-20260826-qualification`
 - `context/gxmetal-games/evidence/software-mythii-prologue-early-escape-current-20260827`
@@ -141,6 +179,31 @@ its clone byte-identical to the base. A fresh isolated retry booted normally
 and passed the complete corrected recipe. That retained failure is classified
 as a VM-start transient, not a game or GXMetal failure, because no guest or
 driver work occurred.
+
+## Final signed beta-3 candidate identity
+
+- Immutable four-game evidence base with the UT layout fix SHA-256:
+  `61541dac3a483cd7ce71edf6a820649fe9ea5651465f5b338765859d6f716cfe`
+- Immutable dedicated Quake III evidence base SHA-256:
+  `35c1b3d34b6dc74830548259d3f94535ec4bbf303466fb6395f252c41890083b`
+- Immutable dedicated Myth II evidence base SHA-256:
+  `48efe79ecca390bda19fe52e06c9664216401406c015da184fd2df3f6f1c2ac9`
+- Signed Power Mac QEMU SHA-256:
+  `c3c1d251f0cb6f6145214c0607d9236583a8af5d512801645a55341ef390513f`
+- Packaged Tools CD SHA-256:
+  `c0ff7946d3b2596cca4d1b02e7f3c2928ac08a763d37b8b762d1750ed87eb6e9`
+- Packaged Power Mac video NDRV SHA-256:
+  `c5e63db45de7b58ea286f785e56811209b090673635da81fea07f9871312b27d`
+- NDRV loader SHA-256:
+  `a5b441048916fdb58291e34ab029cfd06d7e6da9380b6035bd4d8740f040f27d`
+- Packaged GXMetal PEF data-fork SHA-256:
+  `4de51e0ae2179fefdc50b442d262e8e132ce51b9809e33455375da3a7d0e828c`
+
+The final candidate defaults to the native Cocoa VM window; VNC remains an
+optional display/automation mode. Every retained qualification run in this
+snapshot explicitly used the `none` audio backend. The prepared evidence bases
+also have Mac OS 9's improper-shutdown disk check disabled and were verified
+unchanged after each sweep.
 
 ## 2.1.4 qualification rc23 identity
 
@@ -265,16 +328,17 @@ signed candidate:
 - Oni:
   `context/gxmetal-games/evidence/oni-gxmetal-fatal-relaunch-20260825`
 - Unreal Tournament:
-  `context/gxmetal-games/evidence/unreal-tournament-rave-gameplay-20260825`
+  `context/gxmetal-games/evidence/gxmetal-ut-beta3-homogeneous-clip-live-gameplay-20260827`
 
 ## Next compatibility gates
 
 1. Extend the now-passing shortened Oni route into a longer gameplay/input and
    clean-lifecycle soak. Keep the pale RGB-range oracle and method-50 fan
    counters as the fast regression gate.
-2. Script Unreal Tournament match gameplay with sound disabled. Extend Myth
-   II through camera movement, unit selection/orders, effects, a longer soak,
-   and clean quit/relaunch while retaining the short transition regression.
+2. Extend Unreal Tournament's passing sound-disabled live route into a longer
+   bot match and clean relaunch. Extend Myth II through group selection/orders,
+   effects, a longer soak, and clean quit/relaunch while retaining the short
+   transition regression.
 3. Try alternate builds/media for Dark Vengeance and HAVOC rather than
    weakening driver or VM memory safety around deterministic app failures.
 4. Require reviewed screenshots, direct presentation profiles with zero

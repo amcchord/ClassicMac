@@ -50,8 +50,8 @@ Each game supports these fields:
 - `boot_wait_seconds`, `observation_seconds`, `capture_interval_seconds`, and
   `resolution`: per-game timing/display overrides.
 - `steps`: ordered VNC actions. Supported actions are `wait`,
-  `wait_for_frame_change`, `wait_for_pixel`, `click`, `double_click`, `key`,
-  `drag`, `chord`, `text`, `screenshot`,
+  `wait_for_frame_change`, `wait_for_pixel`, `click`, `hold_click`,
+  `double_click`, `key`, `drag`, `chord`, `text`, `screenshot`,
   `assert_dominant_color_fraction_below`,
   `assert_color_range_fraction_below`, and `note`. A step can also set
   `delay_after`, `hold_ms`, or `capture_after`.
@@ -64,10 +64,16 @@ A step contains exactly one action. For example:
   {"key": "Return", "delay_after": 1},
   {"note": "Accepted the game's license dialog with the user's authorization."},
   {"click": [520, 430], "capture_after": true},
+  {"hold_click": [595, 418], "hold_ms": 750, "capture_after": true},
   {"wait": 30},
   {"screenshot": "first-live-gameplay"}
 ]
 ```
+
+`hold_click` keeps the primary mouse button down for `hold_ms` before it is
+released. This is required by games such as Combat Mission that map classic
+Mac click-and-hold to an order menu or use graphical controls that must be held
+for camera movement. The release is sent even if the wait is interrupted.
 
 For slow or variable launch paths, synchronize on visible guest progress
 instead of relying only on a long fixed delay:
@@ -390,7 +396,9 @@ base-image integrity result. `manifest.json` is the exact archived input, and
 `summary.json` contains one automation result per variant.
 Each run directory contains:
 
-- `qemu-command.json`, `qemu.log`, and `serial.log`;
+- `qemu-command.json`, `qemu.log`, and `serial.log`; the runner enables QEMU's
+  `guest_errors` log class so a permanent GXMetal queue fault retains its
+  exact error, opcode, context, sequence, and leading payload words;
 - `run.json` and the timestamped `events.jsonl` automation trace;
 - lossless PNG frames in `screenshots/`;
 - `result.json`, which reports automation completion but deliberately does

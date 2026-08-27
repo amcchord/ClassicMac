@@ -8,8 +8,8 @@
   },
   "games": [
     {
-      "id": "unreal-tournament-replay",
-      "name": "Unreal Tournament configured-install replay",
+      "id": "unreal-tournament-live-gameplay",
+      "name": "Unreal Tournament ATI homogeneous-clipping live gameplay gate",
       "modes": ["gxmetal"],
       "steps": [
         {"wait_for_pixel": {"x": 22, "y": 11, "red": 221, "green": 0, "blue": 0, "tolerance": 8, "timeout_seconds": 180, "poll_interval_seconds": 1}},
@@ -21,10 +21,24 @@
         {"text": "Unreal Tournament", "delay_after": 1},
         {"chord": "Super_L+o", "delay_after": 3},
         {"text": "Unreal Tournament", "delay_after": 1},
-        {"chord": "Super_L+o", "delay_after": 120},
-        {"screenshot": "configured-launch"},
-        {"key": "Escape", "delay_after": 30},
-        {"screenshot": "after-escape"}
+        {"chord": "Super_L+o", "delay_after": 45},
+        {"screenshot": "rave-selection"},
+        {"key": "Return", "delay_after": 15},
+        {"screenshot": "startup-settings"},
+        {"key": "Return", "delay_after": 55},
+        {"screenshot": "tempest-pre-ready"},
+        {"key": "Control_L", "delay_after": 12},
+        {"screenshot": "tempest-live-initial"},
+        {"key": "Up", "hold_ms": 1500, "delay_after": 3},
+        {"screenshot": "tempest-forward"},
+        {"key": "Left", "hold_ms": 1200, "delay_after": 3},
+        {"screenshot": "tempest-turn-left"},
+        {"key": "Right", "hold_ms": 2400, "delay_after": 3},
+        {"screenshot": "tempest-turn-right"},
+        {"key": "Control_L", "hold_ms": 500, "delay_after": 3},
+        {"screenshot": "tempest-fire"},
+        {"wait": 30},
+        {"screenshot": "tempest-live-final"}
       ]
     }
   ]

@@ -11,7 +11,8 @@ ICON_MASTER_SHA256="e0cca2302487408cb78d5963354ecf14f1f7ccd903250be33d15a85535b1
 
 die() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 
-for tool in m68k-apple-macos-gcc powerpc-apple-macos-gcc MakePEF Rez; do
+for tool in m68k-apple-macos-gcc powerpc-apple-macos-gcc \
+            powerpc-apple-macos-nm MakePEF Rez; do
     [ -x "$TOOLCHAIN/bin/$tool" ] || \
         die "$tool is missing; run scripts/build-ppcvid-ndrv.sh first"
 done
@@ -56,6 +57,26 @@ python3 "$ROOT_DIR/gxmetal/tools/pef_set_init.py" \
     --verify "$GUEST_DIR/bin/GXMetal.pef"
 python3 "$ROOT_DIR/gxmetal/tools/pef_set_init.py" \
     --verify "$GUEST_DIR/bin/GXMetalInput.pef"
+
+# Unreal Tournament v348 exposed a classic CFM layout cliff: a valid driver
+# whose final QARegisterEngine import stub started at 0x148c4 stopped engine
+# discovery after the three identity Gestalts, while the otherwise identical
+# compact build at 0x14804 completed accelerated startup. Keep the last proven
+# passing layout as a build gate until a later address is explicitly qualified
+# in the Mac OS 9 VM; this turns future driver growth into a clear build error
+# instead of another game-only regression.
+GXMETAL_NM="$TOOLCHAIN/bin/powerpc-apple-macos-nm"
+GXMETAL_UT_LAYOUT_MAX_HEX="00014804"
+GXMETAL_QA_REGISTER_HEX="$($GXMETAL_NM -n \
+    "$GUEST_DIR/bin/GXMetal.xcoff" | \
+    awk '$2 == "T" && $3 == ".QARegisterEngine" { print $1; exit }')"
+[ -n "$GXMETAL_QA_REGISTER_HEX" ] || \
+    die "GXMetal XCOFF is missing the QARegisterEngine import stub"
+if (( 16#$GXMETAL_QA_REGISTER_HEX > 16#$GXMETAL_UT_LAYOUT_MAX_HEX )); then
+    die "GXMetal CFM layout regressed: QARegisterEngine is at 0x$GXMETAL_QA_REGISTER_HEX (last UT-qualified maximum 0x$GXMETAL_UT_LAYOUT_MAX_HEX)"
+fi
+printf 'GXMetal XCOFF: UT-qualified CFM layout, QARegisterEngine at 0x%s\n' \
+    "$GXMETAL_QA_REGISTER_HEX"
 DeRez -only tnsl "$GUEST_DIR/bin/GXMetal" | \
     grep -F "data 'tnsl' (0)" >/dev/null || \
     die "GXMetal resource fork is missing the RAVE tnsl discovery marker"

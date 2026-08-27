@@ -27,7 +27,11 @@ world textures and overlapping interface sprites. Metal
 provides perspective-correct sampling, repeat/clamp addressing, nearest,
 bilinear, and trilinear mip filtering, with independent OpenGL MIN, MAG, and
 mip selection on both texture units, plus RAVE decal, modulation, and
-highlight texture operations. Linear, exponential, and squared-exponential
+highlight texture operations. ATI-private OpenGL draws retain finite signed
+reciprocal-W and out-of-range Z so Metal can homogeneously clip eye-plane,
+near-plane, and far-plane crossings; public RAVE packets continue to require
+their documented normalized depth and valid reciprocal-W inputs. Linear,
+exponential, and squared-exponential
 RAVE depth fog is applied in both the Gouraud and textured fragment paths. Fog
 distance follows the RAVE contract and is reconstructed from `1 / invW`; the
 normalized Z-buffer coordinate remains independent for hidden-surface removal.
@@ -262,12 +266,14 @@ temporary directory and final screenshot as auditable evidence.
 For interactive debugging without a Cocoa window, start the bundled QEMU with
 `-display none`, a local `-vnc unix:/path/to/vnc.sock` endpoint, and a local
 monitor socket. The dependency-free helper can capture the raw framebuffer and
-send keys, Mac Command-key chords, or pointer clicks:
+send keys, Mac Command-key chords, pointer clicks, or sustained pointer holds:
 
 ```sh
 python3 scripts/gxmetal-vnc.py \
   --unix-socket /path/to/vnc.sock \
   --chord Super_L+o \
+  --hold-click 595,418 \
+  --hold-ms 750 \
   --screenshot /tmp/gxmetal.png
 ```
 

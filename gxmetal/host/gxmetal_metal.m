@@ -680,13 +680,18 @@ static NSString *const kGXMetalTextureShaderSource = @
     "    constant GXViewport &viewport [[buffer(1)]],\n"
     "    uint index [[vertex_id]]) {\n"
     "  GXTextureVertex v = vertices[index];\n"
-    "  float safeInvW = max(v.invW, 0.000001);\n"
+    /* ATI's OpenGL bridge can submit already-transformed primitives that
+     * cross the eye plane.  Preserve a finite negative reciprocal-W so Metal
+     * performs homogeneous clipping instead of pulling the vertex in front
+     * of the camera.  Public RAVE draws remain positive by host validation. */
+    "  float safeInvW = copysign(max(abs(v.invW), 0.000001), v.invW);\n"
     "  float safeSecondaryQ = max(v.secondaryInvW, 0.000001);\n"
     "  float clipW = 1.0 / safeInvW;\n"
     "  float ndcX = v.x / viewport.width * 2.0 - 1.0;\n"
     "  float ndcY = 1.0 - v.y / viewport.height * 2.0;\n"
     "  GXTextureOut out;\n"
-    "  float depth = min(v.z, 0.99999994);\n"
+    "  float depth = (v.z >= 0.0 && v.z <= 1.0) "
+    "? min(v.z, 0.99999994) : v.z;\n"
     "  out.position = float4(ndcX * clipW, ndcY * clipW,\n"
     "                        depth * clipW, clipW);\n"
     "  out.color = float4(v.r, v.g, v.b, v.a);\n"
@@ -2048,6 +2053,7 @@ static int gxmetal_metal_read_texture_vertex(
     int host_ati_uv_transform)
 {
     uint32_t texture_op = context->texture_op;
+    int ati_homogeneous_coordinates;
     int secondary_active = context->secondary_texture_id != 0 &&
         context->secondary_texture_id != context->texture_id &&
         context->secondary_texture_enable != 0;
@@ -2071,6 +2077,12 @@ static int gxmetal_metal_read_texture_vertex(
         !(vertex->a >= 0.0f && vertex->a <= 1.0f)) {
         vertex->a = 1.0f;
     }
+    /* OpenGLRendererATI submits finite transformed vertices before clipping.
+     * Signed reciprocal-W and Z outside Metal's normalized range identify
+     * eye-plane, near-plane, and far-plane crossings; preserve them only on
+     * that private path so the GPU can perform homogeneous clipping. */
+    ati_homogeneous_coordinates = context->ati_private != 0 &&
+        context->perspective_z == 0;
 
     if (!isfinite(vertex->x) || !isfinite(vertex->y) ||
         !isfinite(vertex->z) || !isfinite(vertex->inv_w) ||
@@ -2079,8 +2091,10 @@ static int gxmetal_metal_read_texture_vertex(
         (context->perspective_z == 0 &&
          (vertex->z < 0.0f || vertex->z > 1.0f) &&
          (context->z_function != GXMETAL_Z_NONE ||
-          context->fog.mode_and_padding[0] != GXMETAL_FOG_NONE)) ||
-        vertex->inv_w <= 0.0f) {
+          context->fog.mode_and_padding[0] != GXMETAL_FOG_NONE) &&
+         !ati_homogeneous_coordinates) ||
+        vertex->inv_w == 0.0f ||
+        (vertex->inv_w < 0.0f && !ati_homogeneous_coordinates)) {
         return 0;
     }
     if (context->perspective_z != 0) {
@@ -2089,7 +2103,8 @@ static int gxmetal_metal_read_texture_vertex(
          * normalized-Z slot; validate finiteness above, but do not reject
          * its range before replacing it here. */
         vertex->z = gxmetal_metal_perspective_depth(vertex->inv_w);
-    } else if (context->z_function == GXMETAL_Z_NONE &&
+    } else if (!ati_homogeneous_coordinates &&
+               context->z_function == GXMETAL_Z_NONE &&
                context->fog.mode_and_padding[0] == GXMETAL_FOG_NONE &&
                (vertex->z < 0.0f || vertex->z > 1.0f)) {
         /* Myth II disables its Z buffer and fog, then leaves signed eye depth
