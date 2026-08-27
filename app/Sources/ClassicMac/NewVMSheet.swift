@@ -18,6 +18,7 @@ struct NewVMSheet: View {
     @State private var customResolution = false
     @State private var customWidth = ResolutionPreset.recommended.width
     @State private var customHeight = ResolutionPreset.recommended.height
+    @State private var useBrowserDisplay = false
     @State private var sound = true
     @State private var useG4CPU = true
 
@@ -170,6 +171,15 @@ struct NewVMSheet: View {
             }
 
             Section {
+                Toggle(isOn: $useBrowserDisplay) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("View in browser (VNC)")
+                        Text("Off opens the virtual Mac in its own window")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
                 if family.supportsEnhancedFramebuffer {
                     Toggle(isOn: $useEnhancedFramebuffer) {
                         VStack(alignment: .leading, spacing: 2) {
@@ -334,6 +344,9 @@ struct NewVMSheet: View {
                 LabeledContent("Display") {
                     Text(displaySummary)
                 }
+                LabeledContent("Viewer") {
+                    Text(useBrowserDisplay ? "Browser (VNC)" : "Native window")
+                }
             } header: {
                 Label("Ready to Create", systemImage: "checkmark.circle")
             }
@@ -418,9 +431,14 @@ struct NewVMSheet: View {
 
     private var displayFooter: String {
         if family == .powerMacG4 {
-            return "Thousands reduces framebuffer bandwidth and is usually faster. The browser display scales the Mac to fit its tab."
+            return useBrowserDisplay
+                ? "Thousands reduces framebuffer bandwidth and is usually faster. The browser scales the Mac to fit its tab."
+                : "Thousands reduces framebuffer bandwidth and is usually faster. Resize or use full screen from the virtual Mac's window."
         }
-        return "This is the startup size and deepest available color mode. Lower modes remain available in the Monitors control panel."
+        if useBrowserDisplay {
+            return "This is the startup size and deepest available color mode. The browser scales the Mac to fit its tab."
+        }
+        return "This is the startup size and deepest available color mode. Resize or use full screen from the virtual Mac's window."
     }
 
     private var displaySummary: String {
@@ -539,6 +557,7 @@ struct NewVMSheet: View {
             depth: depth.rawValue,
             useEnhancedFramebuffer: useEnhancedFramebuffer,
             customResolution: customResolution,
+            useBrowserDisplay: useBrowserDisplay,
             cdImagePath: isoURL?.path,
             bootFromCD: isoURL != nil,
             networking: true,

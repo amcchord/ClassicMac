@@ -14,13 +14,16 @@ final class QEMURunnerArgumentTests: XCTestCase {
         useG4CPU: Bool = true,
         tabletInput: Bool = true,
         depth: Int = ColorDepth.thousands.rawValue,
-        sharedFolderPath: String? = nil
+        sharedFolderPath: String? = nil,
+        useBrowserDisplay: Bool = false,
+        classicInputHelpers: Bool = true
     ) -> VMConfig {
         VMConfig(
             name: "Argument Test",
             machineFamily: family,
             ramMB: family.defaultRAMMB,
             depth: depth,
+            useBrowserDisplay: useBrowserDisplay,
             cdImagePath: cdImagePath,
             bootFromCD: bootFromCD,
             floppyImagePath: floppyImagePath,
@@ -29,6 +32,7 @@ final class QEMURunnerArgumentTests: XCTestCase {
             sound: false,
             useG4CPU: useG4CPU,
             tabletInput: tabletInput,
+            classicInputHelpers: classicInputHelpers,
             sharedFolderPath: sharedFolderPath,
             bundleURL: URL(fileURLWithPath: "/tmp/argument-test.classic")
         )
@@ -49,10 +53,25 @@ final class QEMURunnerArgumentTests: XCTestCase {
         XCTAssertEqual(optionValues("-g", in: millions), ["1024x768x32"])
     }
 
-    func testBothMachinesUseLoopbackBrowserDisplayWithoutCocoaWindow() {
-        let port: UInt16 = 61_234
+    func testBothMachinesDefaultToNativeCocoaWindow() {
         let powerMac = config()
         let quadra = config(family: .quadra800)
+
+        for vm in [powerMac, quadra] {
+            let arguments = QEMUManager.buildArguments(for: vm)
+            let display = try! XCTUnwrap(optionValues("-display", in: arguments).first)
+
+            XCTAssertTrue(display.hasPrefix("cocoa,swap-opt-cmd=off"))
+            XCTAssertTrue(display.contains("right-click-ctrl=on"))
+            XCTAssertTrue(display.contains("scroll-keys=on"))
+            XCTAssertFalse(display.contains("vnc="))
+        }
+    }
+
+    func testBothMachinesCanOptIntoLoopbackBrowserVNCDisplay() {
+        let port: UInt16 = 61_234
+        let powerMac = config(useBrowserDisplay: true)
+        let quadra = config(family: .quadra800, useBrowserDisplay: true)
 
         for vm in [powerMac, quadra] {
             let arguments = QEMUManager.buildArguments(
@@ -66,6 +85,17 @@ final class QEMURunnerArgumentTests: XCTestCase {
             XCTAssertTrue(display.contains("websocket=127.0.0.1:\(port)"))
             XCTAssertTrue(display.hasSuffix("share=force-shared"))
         }
+    }
+
+    func testNativeWindowCanDisableClassicInputHelpers() {
+        let arguments = QEMUManager.buildArguments(
+            for: config(classicInputHelpers: false)
+        )
+        let display = try! XCTUnwrap(
+            optionValues("-display", in: arguments).first
+        )
+
+        XCTAssertEqual(display, "cocoa,swap-opt-cmd=off")
     }
 
     func testPowerMacIDECompletionDelayOnlyProtectsInstallerBoots() {

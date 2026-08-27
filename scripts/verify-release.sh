@@ -33,7 +33,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-for tool in cmp codesign file plutil shasum spctl xcrun; do
+for tool in cmp codesign file plutil shasum spctl strings xcrun; do
   command -v "$tool" >/dev/null 2>&1 || die "Required tool not found: $tool"
 done
 [ -e "$TARGET" ] || die "Release target not found: $TARGET"
@@ -67,6 +67,8 @@ esac
 PLIST="$APP/Contents/Info.plist"
 PPC_HELPER="$APP/Contents/Helpers/Power Mac G4.app"
 PPC_QEMU="$PPC_HELPER/Contents/MacOS/qemu-system-ppc"
+QUADRA_HELPER="$APP/Contents/Helpers/Quadra 800.app"
+QUADRA_QEMU="$QUADRA_HELPER/Contents/MacOS/qemu-system-m68k"
 PPC_NDRV="$APP/Contents/Resources/qemu/pc-bios/qemu_vga.ndrv"
 TOOLS_CD="$APP/Contents/Resources/ClassicMacTools.iso"
 VNC_KEYMAP="$APP/Contents/Resources/qemu/pc-bios/keymaps/en-us"
@@ -77,7 +79,8 @@ BROWSER_LICENSE="$APP/Contents/Resources/Licenses/noVNC-MPL-2.0.txt"
 PAKO_LICENSE="$APP/Contents/Resources/Licenses/pako-MIT.txt"
 
 for required in "$PLIST" "$PPC_HELPER/Contents/Info.plist" \
-  "$PPC_QEMU" "$PPC_NDRV" "$TOOLS_CD" "$VNC_KEYMAP" "$BROWSER_INDEX" "$BROWSER_SCALE" \
+  "$QUADRA_HELPER/Contents/Info.plist" "$PPC_QEMU" "$QUADRA_QEMU" \
+  "$PPC_NDRV" "$TOOLS_CD" "$VNC_KEYMAP" "$BROWSER_INDEX" "$BROWSER_SCALE" \
   "$BROWSER_RFB" "$BROWSER_LICENSE" "$PAKO_LICENSE"; do
   [ -e "$required" ] || die "Required release component is missing: $required"
 done
@@ -136,16 +139,29 @@ fi
 
 log "Verifying the bundled GXMetal-capable Power Mac executable"
 file "$PPC_QEMU" | grep -q 'arm64' || die "Power Mac QEMU is not arm64"
+file "$QUADRA_QEMU" | grep -q 'arm64' || die "Quadra QEMU is not arm64"
 DEVICE_HELP="$("$PPC_QEMU" -device VGA,help 2>&1)"
 for property in gxmetal untracked-vram packed-lowbpp hardware-cursor host-resize; do
   printf '%s\n' "$DEVICE_HELP" | grep -q "$property" || \
     die "Bundled Power Mac QEMU lacks VGA.$property"
 done
-VNC_HELP="$("$PPC_QEMU" -vnc help 2>&1 || true)"
-printf '%s\n' "$VNC_HELP" | grep -q 'vnc options' || \
-  die "Bundled Power Mac QEMU lacks the headless VNC display"
-printf '%s\n' "$VNC_HELP" | grep -q 'websocket=' || \
-  die "Bundled Power Mac QEMU lacks VNC-over-WebSocket support"
+for qemu in "$PPC_QEMU" "$QUADRA_QEMU"; do
+  DISPLAY_HELP="$("$qemu" -display help 2>&1 || true)"
+  printf '%s\n' "$DISPLAY_HELP" | grep -qx 'cocoa' || \
+    die "Bundled $(basename "$qemu") lacks the native Cocoa display"
+
+  VNC_HELP="$("$qemu" -vnc help 2>&1 || true)"
+  printf '%s\n' "$VNC_HELP" | grep -q 'vnc options' || \
+    die "Bundled $(basename "$qemu") lacks the optional VNC display"
+  printf '%s\n' "$VNC_HELP" | grep -q 'websocket=' || \
+    die "Bundled $(basename "$qemu") lacks VNC-over-WebSocket support"
+
+  QEMU_STRINGS="$(strings "$qemu")"
+  for option in swap-opt-cmd right-click-ctrl scroll-keys; do
+    grep -Fq "$option" <<< "$QEMU_STRINGS" || \
+      die "Bundled $(basename "$qemu") lacks Cocoa option $option"
+  done
+done
 grep -q 'pseudoEncodingQEMUPointerTypeChange' "$BROWSER_RFB" || \
   die "Bundled browser client lacks QEMU relative-pointer support"
 grep -q 'Math.floor(fit)' "$BROWSER_SCALE" || \

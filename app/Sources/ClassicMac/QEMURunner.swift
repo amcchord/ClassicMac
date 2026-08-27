@@ -118,13 +118,13 @@ final class QEMUManager: ObservableObject {
     private static let relaunchReasons: Set<String> = ["guest-reset", "host-qmp-system-reset"]
 
     func start(_ config: VMConfig) {
-        start(config, reusing: nil, openBrowser: true)
+        start(config, reusing: nil, openDisplay: true)
     }
 
     private func start(
         _ config: VMConfig,
         reusing browserServer: BrowserDisplayServer?,
-        openBrowser: Bool
+        openDisplay: Bool
     ) {
         if runningIDs.contains(config.id) {
             return
@@ -141,27 +141,33 @@ final class QEMUManager: ObservableObject {
             return
         }
 
-        let displayServer: BrowserDisplayServer
-        do {
-            displayServer = try browserServer ?? BrowserDisplayServer.start(for: config)
-        } catch {
-            lastError = AppError(
-                "Couldn't Start \u{201C}\(config.name)\u{201D}",
-                "The local browser display could not be started. \(error.localizedDescription)"
-            )
-            return
+        let displayServer: BrowserDisplayServer?
+        if config.useBrowserDisplay {
+            do {
+                displayServer = try browserServer ?? BrowserDisplayServer.start(for: config)
+            } catch {
+                lastError = AppError(
+                    "Couldn't Start \u{201C}\(config.name)\u{201D}",
+                    "The local browser display could not be started. \(error.localizedDescription)"
+                )
+                return
+            }
+        } else {
+            displayServer = nil
         }
 
         // Remove any stale sockets so QEMU can bind fresh ones.
         try? FileManager.default.removeItem(at: QEMUManager.monitorSocketURL(for: config.id))
         try? FileManager.default.removeItem(at: QEMUManager.qmpSocketURL(for: config.id))
-        try? FileManager.default.removeItem(at: displayServer.endpoint.vncSocketURL)
+        if let displayServer {
+            try? FileManager.default.removeItem(at: displayServer.endpoint.vncSocketURL)
+        }
 
         let process = Process()
         process.executableURL = AppPaths.qemuBinary(for: config.machineFamily)
         process.arguments = QEMUManager.buildArguments(
             for: config,
-            browserWebSocketPort: displayServer.endpoint.webSocketPort
+            browserWebSocketPort: displayServer?.endpoint.webSocketPort ?? 60_800
         )
         process.currentDirectoryURL = config.folder
 
@@ -204,9 +210,11 @@ final class QEMUManager: ObservableObject {
                 self.forcedStopWorkItems.removeValue(forKey: config.id)?.cancel()
                 self.stopBootClockHandoff(for: config.id)
                 self.stopPreviewUpdates(for: config.id)
-                try? FileManager.default.removeItem(
-                    at: BrowserDisplayEndpoint.vncSocketURL(for: config.id)
-                )
+                if displayServer != nil {
+                    try? FileManager.default.removeItem(
+                        at: BrowserDisplayEndpoint.vncSocketURL(for: config.id)
+                    )
+                }
                 self.persistPreview(config)
                 if proc.terminationStatus != 0 && proc.terminationReason == .exit {
                     monitor?.cancel()
@@ -228,7 +236,11 @@ final class QEMUManager: ObservableObject {
                 let reason = await monitor.shutdownReasonAfterExit(timeout: 2)
                 monitor.cancel()
                 if let reason = reason, QEMUManager.relaunchReasons.contains(reason) {
-                    self.start(config, reusing: displayServer, openBrowser: false)
+                    self.start(
+                        config,
+                        reusing: displayServer,
+                        openDisplay: !config.useBrowserDisplay
+                    )
                 } else {
                     self.stopBrowserDisplay(for: config.id)
                 }
@@ -238,10 +250,12 @@ final class QEMUManager: ObservableObject {
         do {
             try process.run()
         } catch {
-            if browserServers[config.id] === displayServer {
-                stopBrowserDisplay(for: config.id)
-            } else {
-                displayServer.stop()
+            if let displayServer {
+                if browserServers[config.id] === displayServer {
+                    stopBrowserDisplay(for: config.id)
+                } else {
+                    displayServer.stop()
+                }
             }
             lastError = AppError(
                 "Couldn't Start \u{201C}\(config.name)\u{201D}",
@@ -251,8 +265,10 @@ final class QEMUManager: ObservableObject {
         }
 
         processes[config.id] = process
-        browserServers[config.id] = displayServer
-        browserURLs[config.id] = displayServer.url
+        if let displayServer {
+            browserServers[config.id] = displayServer
+            browserURLs[config.id] = displayServer.url
+        }
         runningIDs.insert(config.id)
 
         // Power Mac VMs report shutdown/restart intent over QMP (see
@@ -278,22 +294,42 @@ final class QEMUManager: ObservableObject {
             firstCaptureAfter: acceleratedHardDiskBoot ? 12.0 : 3.0
         )
 
-        if openBrowser {
-            activate(config.id)
+        if openDisplay {
+            if config.useBrowserDisplay {
+                activate(config.id)
+            } else {
+                // The native QEMU Cocoa window appears shortly after the
+                // process spawns, so bring it forward twice as it settles.
+                activate(config.id, afterDelay: 0.7)
+                activate(config.id, afterDelay: 2.0)
+            }
         }
     }
 
-    // MARK: Browser display
+    // MARK: Machine display
 
-    // Opens the machine in the user's preferred web browser. Keeping this as
-    // `activate` preserves the existing UI call sites and their intent.
+    // Opens the optional VNC viewer or brings the native Cocoa window forward.
     func activate(_ id: UUID) {
-        guard let url = browserURLs[id] else { return }
-        if !NSWorkspace.shared.open(url) {
-            lastError = AppError(
-                "Couldn't Open the Mac's Screen",
-                "Open \(url.absoluteString) in a web browser on this Mac."
-            )
+        if let url = browserURLs[id] {
+            if !NSWorkspace.shared.open(url) {
+                lastError = AppError(
+                    "Couldn't Open the Mac's Screen",
+                    "Open \(url.absoluteString) in a web browser on this Mac."
+                )
+            }
+            return
+        }
+
+        guard let process = processes[id],
+              let app = NSRunningApplication(
+                processIdentifier: process.processIdentifier
+              ) else { return }
+        app.activate(from: .current, options: [])
+    }
+
+    private func activate(_ id: UUID, afterDelay delay: TimeInterval) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+            self?.activate(id)
         }
     }
 
@@ -562,10 +598,26 @@ final class QEMUManager: ObservableObject {
         }
     }
 
-    private static func browserDisplayArguments(
-        _ display: BrowserDisplayEndpoint
+    private static func displayArguments(
+        for config: VMConfig,
+        browser display: BrowserDisplayEndpoint
     ) -> [String] {
-        ["-display", display.qemuDisplay]
+        if config.useBrowserDisplay {
+            return ["-display", display.qemuDisplay]
+        }
+        return [
+            "-display",
+            "cocoa,swap-opt-cmd=off\(inputHelperOptions(for: config))"
+        ]
+    }
+
+    // Extra Cocoa options for the classic input helpers (right-click as
+    // Control+click, scroll wheel as arrow keys). Browser viewing implements
+    // the same behavior in its local noVNC client.
+    private static func inputHelperOptions(for config: VMConfig) -> String {
+        config.classicInputHelpers
+            ? ",right-click-ctrl=on,scroll-keys=on"
+            : ""
     }
 
     // The dedicated Tools CD drive (id=tools0). It starts loaded when the
@@ -649,13 +701,12 @@ final class QEMUManager: ObservableObject {
         args += ["-cpu", config.useG4CPU ? "7400" : "g3"]
         args += ["-m", String(config.ramMB)]
         args += ["-L", AppPaths.pcBiosDir.path]
-        // The VM has no native QEMU window. QEMU's VNC server exposes both a
-        // private Unix socket and an unencrypted WebSocket bound exclusively
-        // to loopback; ClassicMac serves the browser client on loopback too.
-        args += browserDisplayArguments(display)
-        // Keep the host-resize registers available for compatibility with the
-        // bundled qemu_vga.ndrv. The browser normally scales the configured
-        // framebuffer without changing the guest's display mode.
+        // Native Cocoa is the default. The opt-in browser viewer instead uses
+        // a private Unix VNC socket and a loopback-only WebSocket/noVNC page.
+        args += displayArguments(for: config, browser: display)
+        // Keep the host-resize registers available for the native window and
+        // compatibility with the bundled qemu_vga.ndrv. Browser viewing
+        // normally scales the configured framebuffer without changing it.
         // "-vga std" must be explicit: QEMU treats a -global for the VGA
         // driver as a user-configured display and would otherwise skip
         // creating the default one. 64 MB of VRAM covers 3840x2160 at 32-bit
@@ -858,7 +909,7 @@ final class QEMUManager: ObservableObject {
         args += ["-m", String(config.ramMB)]
         args += ["-bios", AppPaths.quadraROM.path]
         args += ["-L", AppPaths.pcBiosDir.path]
-        args += browserDisplayArguments(display)
+        args += displayArguments(for: config, browser: display)
         // -g only applies to machine-created framebuffers; when the qfb is added as
         // a device its size is set via device options instead.
         if !qfbAsDevice {

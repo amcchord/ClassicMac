@@ -51,7 +51,7 @@ struct VMDetailView: View {
                 .padding(.top, 20)
                 .padding(.bottom, 12)
             Form {
-                if running {
+                if running && vm.wrappedValue.useBrowserDisplay {
                     browserAccessSection
                 }
                 if previewImage != nil {
@@ -62,6 +62,7 @@ struct VMDetailView: View {
                    vm.wrappedValue.cdImagePath?.isEmpty == false {
                     installationGuideSection
                 }
+                viewingSection(vm)
                 displaySection(vm)
                 hardwareSection(vm)
                 mediaSection(vm)
@@ -198,7 +199,7 @@ struct VMDetailView: View {
                 ProgressView("Preparing the browser display…")
             }
         } header: {
-            Label("Browser Display", systemImage: "globe")
+            Label("Browser Display (VNC)", systemImage: "globe")
         } footer: {
             Text("This private address works only on this Mac and disappears when the virtual Mac shuts down.")
         }
@@ -211,6 +212,19 @@ struct VMDetailView: View {
             return live
         }
         return savedPreview
+    }
+
+    private var browserDisplaySelected: Bool {
+        config?.useBrowserDisplay == true
+    }
+
+    private var screenPreviewHelp: String {
+        guard running else {
+            return "The Mac's screen when it last shut down"
+        }
+        return browserDisplaySelected
+            ? "Click to open the Mac in your web browser"
+            : "Click to bring the virtual Mac window to the front"
     }
 
     @ViewBuilder
@@ -236,7 +250,10 @@ struct VMDetailView: View {
                         )
                         .overlay(alignment: .bottomTrailing) {
                             if running {
-                                Label("Open Screen", systemImage: "arrow.up.forward.app")
+                                Label(
+                                    browserDisplaySelected ? "Open in Browser" : "Show Window",
+                                    systemImage: "arrow.up.forward.app"
+                                )
                                     .font(.caption.weight(.semibold))
                                     .padding(.horizontal, 9)
                                     .padding(.vertical, 6)
@@ -247,7 +264,7 @@ struct VMDetailView: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(!running)
-                .help(running ? "Click to open the Mac in your web browser" : "The Mac's screen when it last shut down")
+                .help(screenPreviewHelp)
                 .listRowBackground(Color.clear)
                 .listRowInsets(EdgeInsets())
             } footer: {
@@ -259,6 +276,28 @@ struct VMDetailView: View {
     }
 
     // MARK: Display
+
+    private func viewingSection(_ vm: Binding<VMConfig>) -> some View {
+        Section {
+            Toggle(isOn: vm.useBrowserDisplay) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("View in browser (VNC)")
+                    Text("Off opens the virtual Mac in its own window")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .disabled(running)
+        } header: {
+            Label("Viewer", systemImage: "macwindow")
+        } footer: {
+            if vm.wrappedValue.useBrowserDisplay {
+                Text("Starts a private VNC display available only on this Mac and opens it in your web browser.")
+            } else {
+                Text("Starts the virtual Mac in a native window with resize, full-screen, input, and removable-media controls.")
+            }
+        }
+    }
 
     @ViewBuilder
     private func displaySection(_ vm: Binding<VMConfig>) -> some View {
@@ -295,7 +334,7 @@ struct VMDetailView: View {
         } header: {
             Label("Display", systemImage: "display")
         } footer: {
-            Text("Thousands reduces framebuffer bandwidth and is usually faster. The browser scales the Mac to fit its tab; other depths remain available in the Monitors control panel.")
+            Text("Thousands reduces framebuffer bandwidth and is usually faster. Other depths remain available in the Monitors control panel.")
         }
     }
 
@@ -443,7 +482,7 @@ struct VMDetailView: View {
             Toggle(isOn: vm.tabletInput) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Seamless mouse")
-                    Text("Move the pointer freely in and out of the browser display. Games can request captured relative motion.")
+                    Text("Move the pointer freely in and out of the virtual Mac. Games can request captured relative motion.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -625,9 +664,16 @@ struct VMDetailView: View {
                 Button {
                     manager.activate(vmID)
                 } label: {
-                    Label("Open Screen", systemImage: "safari")
+                    Label(
+                        vm.wrappedValue.useBrowserDisplay ? "Open in Browser" : "Show Window",
+                        systemImage: vm.wrappedValue.useBrowserDisplay ? "safari" : "macwindow"
+                    )
                 }
-                .help("Open the Mac in your preferred web browser")
+                .help(
+                    vm.wrappedValue.useBrowserDisplay
+                        ? "Open the Mac in your preferred web browser"
+                        : "Bring the virtual Mac window to the front"
+                )
 
                 if paused {
                     Button {

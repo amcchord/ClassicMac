@@ -113,6 +113,12 @@ struct VMConfig: Codable, Identifiable, Hashable {
     var useEnhancedFramebuffer: Bool
     var customResolution: Bool
 
+    // The normal viewer is QEMU's native Cocoa window. Browser viewing starts
+    // a private loopback-only VNC/WebSocket endpoint and opens the bundled
+    // noVNC client instead. Keep this opt-in so existing and newly created
+    // machines retain the ordinary Mac app-window experience.
+    var useBrowserDisplay: Bool
+
     // Media + boot
     var cdImagePath: String?
     var bootFromCD: Bool
@@ -167,6 +173,7 @@ struct VMConfig: Codable, Identifiable, Hashable {
     private enum CodingKeys: String, CodingKey {
         case id, name, machineFamily, ramMB, diskImageName, pramImageName, diskSizeGB
         case width, height, depth, useEnhancedFramebuffer, customResolution
+        case useBrowserDisplay
         case cdImagePath, bootFromCD, floppyImagePath
         case networking, sound, useG4CPU, sharedFolderPath
         case classicInputHelpers, tabletInput, toolsCDInserted
@@ -183,6 +190,7 @@ struct VMConfig: Codable, Identifiable, Hashable {
          depth: Int = 16,
          useEnhancedFramebuffer: Bool = true,
          customResolution: Bool = false,
+         useBrowserDisplay: Bool = false,
          cdImagePath: String? = nil,
          bootFromCD: Bool = true,
          floppyImagePath: String? = nil,
@@ -206,6 +214,7 @@ struct VMConfig: Codable, Identifiable, Hashable {
         self.depth = depth
         self.useEnhancedFramebuffer = useEnhancedFramebuffer
         self.customResolution = customResolution
+        self.useBrowserDisplay = useBrowserDisplay
         self.cdImagePath = cdImagePath
         self.bootFromCD = bootFromCD
         self.floppyImagePath = machineFamily.supportsFloppyDisk ? floppyImagePath : nil
@@ -252,6 +261,7 @@ struct VMConfig: Codable, Identifiable, Hashable {
         depth = try c.decodeIfPresent(Int.self, forKey: .depth) ?? 16
         useEnhancedFramebuffer = try c.decodeIfPresent(Bool.self, forKey: .useEnhancedFramebuffer) ?? true
         customResolution = try c.decodeIfPresent(Bool.self, forKey: .customResolution) ?? false
+        useBrowserDisplay = try c.decodeIfPresent(Bool.self, forKey: .useBrowserDisplay) ?? false
         cdImagePath = try c.decodeIfPresent(String.self, forKey: .cdImagePath)
         bootFromCD = try c.decodeIfPresent(Bool.self, forKey: .bootFromCD) ?? false
         floppyImagePath = try c.decodeIfPresent(String.self, forKey: .floppyImagePath)

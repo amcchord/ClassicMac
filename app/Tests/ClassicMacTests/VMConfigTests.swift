@@ -42,6 +42,35 @@ final class VMConfigTests: XCTestCase {
         XCTAssertEqual(config.name, MachineFamily.powerMacG4.defaultName)
     }
 
+    func testNativeWindowIsDefaultAndBrowserDisplayRoundTrips() throws {
+        let native = VMConfig(name: "Native Window")
+        XCTAssertFalse(native.useBrowserDisplay)
+
+        let browser = VMConfig(
+            name: "Browser Viewer",
+            useBrowserDisplay: true
+        )
+        let decoded = try JSONDecoder().decode(
+            VMConfig.self,
+            from: JSONEncoder().encode(browser)
+        )
+        XCTAssertTrue(decoded.useBrowserDisplay)
+    }
+
+    func testConfigWithoutViewerSettingMigratesToNativeWindow() throws {
+        let encoded = try JSONEncoder().encode(
+            VMConfig(name: "Legacy", useBrowserDisplay: true)
+        )
+        var object = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: encoded) as? [String: Any]
+        )
+        object.removeValue(forKey: "useBrowserDisplay")
+        let legacyData = try JSONSerialization.data(withJSONObject: object)
+
+        let decoded = try JSONDecoder().decode(VMConfig.self, from: legacyData)
+        XCTAssertFalse(decoded.useBrowserDisplay)
+    }
+
     func testPowerMacRestrictsStartupDepthToDirectColorModes() {
         let config = VMConfig(
             name: "Power Mac",
