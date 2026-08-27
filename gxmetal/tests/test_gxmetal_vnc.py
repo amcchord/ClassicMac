@@ -6,6 +6,7 @@ import importlib.util
 from pathlib import Path
 import struct
 import sys
+import tempfile
 import unittest
 from unittest import mock
 
@@ -42,6 +43,12 @@ def framebuffer_update(x, y, width, height, encoding, payload=b""):
 
 
 class RFBClientTests(unittest.TestCase):
+    def test_function_keysyms_cover_classic_game_controls(self):
+        client = VNC.RFBClient(FakeSocket())
+        self.assertEqual(client.keysym("F1"), 0xFFBE)
+        self.assertEqual(client.keysym("F12"), 0xFFC9)
+        self.assertEqual(set(VNC.KEYSYMS), set(SWEEP.VALID_NAMED_KEYS))
+
     def test_hold_click_sends_down_then_up_after_requested_interval(self):
         connection = FakeSocket()
         client = VNC.RFBClient(connection)
@@ -202,6 +209,9 @@ class ManifestValidationTests(unittest.TestCase):
         self.assertEqual(
             SWEEP.validate_step({"key": "Space"}, "steps[0]"),
             {"key": "Space"})
+        self.assertEqual(
+            SWEEP.validate_step({"key": "F1"}, "steps[0]"),
+            {"key": "F1"})
         with self.assertRaisesRegex(ValueError, "unknown VNC key: space"):
             SWEEP.validate_step({"key": "space"}, "steps[0]")
 
@@ -246,6 +256,53 @@ class ManifestValidationTests(unittest.TestCase):
                     "minimum_changed_fraction": 1.1,
                 }
             }, "steps[0]")
+
+    def test_named_frame_change_assertion_is_validated(self):
+        step = {
+            "assert_frame_changed_since": {
+                "screenshot": "before-input",
+                "minimum_changed_fraction": 0.1,
+                "channel_tolerance": 4,
+                "region": [100, 120, 320, 180],
+            }
+        }
+        self.assertEqual(SWEEP.validate_step(step, "steps[0]"), step)
+        with self.assertRaisesRegex(ValueError, "must not exceed 1"):
+            SWEEP.validate_step({
+                "assert_frame_changed_since": {
+                    "screenshot": "before-input",
+                    "minimum_changed_fraction": 1.1,
+                }
+            }, "steps[0]")
+        with self.assertRaisesRegex(ValueError, "region must be"):
+            SWEEP.validate_step({
+                "assert_frame_changed_since": {
+                    "screenshot": "before-input",
+                    "region": [10, 20, 0, 30],
+                }
+            }, "steps[0]")
+
+    def test_named_frame_change_must_reference_earlier_screenshot(self):
+        manifest = {
+            "schema": 1,
+            "games": [{
+                "id": "input-gate",
+                "name": "Input gate",
+                "modes": ["gxmetal"],
+                "steps": [
+                    {"assert_frame_changed_since": {
+                        "screenshot": "before-input",
+                    }},
+                    {"screenshot": "before-input"},
+                ],
+            }],
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "manifest.json"
+            path.write_text(__import__("json").dumps(manifest),
+                            encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "unknown or later"):
+                SWEEP.load_manifest(path, ("gxmetal",))
 
     def test_pixel_wait_is_validated(self):
         step = {
@@ -365,6 +422,28 @@ class ManifestValidationTests(unittest.TestCase):
             rgb[15:21] + rgb[27:33])
         with self.assertRaisesRegex(ValueError, "outside 4x3 frame"):
             SWEEP.crop_rgb_region(rgb, 4, 3, (3, 2, 2, 1))
+
+    def test_frame_changed_fraction_supports_crop_and_resize(self):
+        baseline = bytes((
+            0, 0, 0, 10, 10, 10,
+            20, 20, 20, 30, 30, 30,
+        ))
+        current = bytes((
+            100, 100, 100, 10, 10, 10,
+            20, 20, 20, 40, 40, 40,
+        ))
+        self.assertEqual(
+            SWEEP.frame_changed_fraction(
+                baseline, 2, 2, current, 2, 2, 8),
+            0.5)
+        self.assertEqual(
+            SWEEP.frame_changed_fraction(
+                baseline, 2, 2, current, 2, 2, 8, (0, 1, 2, 1)),
+            0.5)
+        self.assertEqual(
+            SWEEP.frame_changed_fraction(
+                baseline, 2, 2, b"", 3, 2, 8),
+            1.0)
 
     def test_rgb_pixel_match_uses_tolerance_and_checks_bounds(self):
         rgb = bytes((10, 20, 30, 40, 50, 60))

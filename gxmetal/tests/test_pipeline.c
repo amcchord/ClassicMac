@@ -75,6 +75,7 @@ static void set_vertex(uint8_t *bytes, float x, float y,
 static void test_first_triangle_pipeline(void)
 {
     GXMetalGuestTransport guest;
+    GXMetalGuestTransport auxiliary;
     GXMetalGuestPacket packet;
     GXMetalRenderer renderer;
     GXMetalQueue queue;
@@ -92,10 +93,13 @@ static void test_first_triangle_pipeline(void)
     CHECK(gxmetal_guest_transport_connect(
         &guest, registers, sizeof(registers), shared, sizeof(shared),
         GXMETAL_FEATURE_GOURAUD | GXMETAL_FEATURE_FENCE));
-
     CHECK(gxmetal_guest_packet_begin(&guest, GXMETAL_OP_CONTEXT_CREATE,
                                      GXMETAL_CONTEXT_CREATE_PACKET_BYTES,
                                      1, &packet));
+    /* Reproduce the real two-process race: an auxiliary client connects
+     * after the render owner reserves a packet but before it publishes. */
+    CHECK(gxmetal_guest_transport_connect(
+        &auxiliary, registers, sizeof(registers), shared, sizeof(shared), 0));
     payload = packet.bytes + GXMETAL_PACKET_HEADER_BYTES;
     gxmetal_store_le32(payload + GXMETAL_CONTEXT_WIDTH_OFFSET, 64);
     gxmetal_store_le32(payload + GXMETAL_CONTEXT_HEIGHT_OFFSET, 64);

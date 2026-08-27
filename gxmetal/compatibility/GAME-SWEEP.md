@@ -18,14 +18,14 @@ records sources, hashes, recipes, evidence descriptions, and driver fixes.
 | --- | --- | --- | --- | --- |
 | `bugdom` | Bugdom 1.2.1 | QuickDraw 3D 1.6 / RAVE, ATI behavior | Highest quality; load The Lawn; verify terrain, fog, foliage alpha, and HUD for five minutes; quit and relaunch | Exact signed beta-3 gameplay pass: coherent Lawn rendering, scripted movement/turning, 1,069,012 traced draws, direct presentation, and zero fallback/rejects |
 | `cro-mag-rally` | Cro-Mag Rally Demo | Apple OpenGL 1.1.2 | Confirm hardware/OpenGL; complete a lap with terrain, particles, HUD, transparency, and camera transitions | Gameplay smoke pass at 640x480: Practice/Desert renders coherently, acceleration and steering visibly respond, 24-28 fps, ~204 direct draws/frame, zero fallback, and expected demo exit screen |
-| `weekend-warrior` | Weekend Warrior | QuickDraw 3D / RAVE | Load the first arena; verify camera clipping, textured characters, UI, depth ordering, and transitions for five minutes | Exact signed beta-3 gameplay smoke pass through scripted selection, Center Stage play, strong movement/camera change, 1,585,966 traced draws, and zero fallback/rejects |
-| `future-cop` | Future Cop: LAPD Demo | Selectable QuickDraw 3D RAVE | Select RAVE; enter Crime War; verify weapon blending, transparent HUD, depth, and explosions | Exact signed beta-3 gameplay pass: coherent Crime War rendering, strong live-input camera/position change, 3,958,133 traced draws, and zero fallback/rejects |
-| `dark-vengeance` | Dark Vengeance Demo | Direct RAVE | Reach first combat and scripted sequence; inspect lighting, translucent effects, animated geometry, and camera motion | Demo 1.0.2 fails identically before RAVE in GXMetal/software; official retail 1.2 updater installs but then requires a legitimate game CD in every matched control |
+| `weekend-warrior` | Weekend Warrior | QuickDraw 3D / RAVE | Load the first arena; verify camera clipping, textured characters, UI, depth ordering, and transitions for five minutes | Exact signed beta-3 gameplay smoke plus recovery-lifecycle pass: Center Stage play has strong movement/camera change, 1,585,966 traced draws, and zero fallback/rejects; title → OS Force Quit → Finder → same-boot relaunch and second-title soak also pass |
+| `future-cop` | Future Cop: LAPD Demo | Selectable QuickDraw 3D RAVE | Select RAVE; enter Crime War; verify weapon blending, transparent HUD, depth, and explosions | Exact signed beta-3 gameplay/lifecycle-soak pass: movement and turning reposition the mech/camera, fire shows impact sparks and ammo consumption, ~87 seconds live plus 65-second soak remain coherent, and 8,772,136 draws have zero fallback/rejects; scripted relaunch remains open |
+| `dark-vengeance` | Dark Vengeance Demo | Direct RAVE | Reach first combat and scripted sequence; inspect lighting, translucent effects, animated geometry, and camera motion | Demo 1.0.2 fails identically before RAVE in GXMetal/software; the retail updater requires its legitimate CD; the genuine 1.2 demo installs but stops at memory allocation size -49 with zero contexts/draws |
 | `myth-ii` | Myth II: Soulblighter 1.5.1 Demo | RAVE | Select RAVE; load a solo map; pan, zoom, rotate, issue orders, and verify terrain, water, units, decals, projectiles, and explosions | Exact signed beta-3 battlefield/partial-input pass: coherent rendering plus visibly proven single selection, forward/back and left/right camera motion, rotation, and zoom-in; refreshed replay has 3,589,155 traced draws and zero fallback/rejects; group orders and the remaining controls stay open |
 | `unreal-tournament` | Unreal Tournament 348m3 Demo | ATI renderer through RAVE | Confirm RAVE; render intro flyby; run a five-minute bot match checking lightmaps, fog, weapon alpha, HUD, and texture cycling | Sound-disabled live Practice pass: coherent Tempest world, weapon and HUD; movement, turning, firing, damage, death and respawn visually proven; 9,472 direct frames at 80.36-131.59 fps with zero fallback/rejects |
-| `combat-mission` | Combat Mission: Beyond Overlord 1.02 Demo | RAVE hardware probe | Complete detection; load Chance Encounter; move through the map and execute a turn with terrain, markers, smoke, and animation | Exact signed beta-3 Orders/input/action-transition pass: held unit selection opens Orders, plots a visible Move/Disembark command, three held controls drive distinct camera changes, and GO reaches computer-player computation/playback; 6,410,321 traced draws, zero fallback/rejects |
-| `oni` | Oni Demo | Classic Apple OpenGL | Reach training and first fight; verify animation, lightmaps, transparency, HUD, and an indoor/outdoor transition | Gameplay smoke pass through Combat Training and the formerly corrupt +45-second transition; corrected ATI fan topology, coherent rendering, and zero rejected geometry/fallback |
-| `havoc` | Havoc Demo | First shipping QuickDraw 3D RAVE game | Select accelerated rendering; enter the demo arena; verify terrain, fog, textured objects, transparency, HUD, and camera motion for five minutes | Blocked before 3D by identical game resource-allocation error across clean controls |
+| `combat-mission` | Combat Mission: Beyond Overlord 1.02 Demo | RAVE hardware probe | Complete detection; load Chance Encounter; move through the map and execute a turn with terrain, markers, smoke, and animation | Exact signed beta-3 full-turn pass: Rifle 45 Sqd visibly disembarks, crosses open ground, reaches the plotted endpoint with DONE, and remains stable through +145 seconds; 10,357,060 traced draws, zero fallback/rejects; scripted relaunch remains open |
+| `oni` | Oni Demo | Classic Apple OpenGL | Reach training and first fight; verify animation, lightmaps, transparency, HUD, and an indoor/outdoor transition | Exact signed beta-3 long-rendering/menu-lifecycle partial pass through Combat Training, the formerly corrupt +45-second transition, and ~176 seconds live; 11,238,479 queued triangles and 7,475 direct frames with zero rejects/fallback; explicit menu quit and relaunch plus saved-checkpoint load pass, while gameplay input and in-game F1 lifecycle stay open |
+| `havoc` | Havoc Demo | First shipping QuickDraw 3D RAVE game | Select accelerated rendering; enter the demo arena; verify terrain, fog, textured objects, transparency, HUD, and camera motion for five minutes | Two independently preserved demos stop at the same resource-allocation dialog before renderer creation; the alternate Tucows build produces no RAVE/profile traffic on exact beta-3, and raising its classic Mac partition from 5.76 to 32 MB does not alter the failure |
 
 OpenGL titles only count as GXMetal tests when the host log contains GXMetal
 presentation traffic. If a game cannot launch or render, run the matched
@@ -46,6 +46,14 @@ OS, or installer faults.
 | Combat Mission | [Macintosh Repository 24664](https://www.macintoshrepository.org/24664-combat-mission-beyond-overlord) | `cm-bo-demo102.sit.bin`, download id 24627 | SHA-1 `eab48f4a228bc151eef7629c6b3576cd6930deea` | `56f46fae2993fbce317f33a71411f959525de5c3481fdca7a6cb6f3750b19967` |
 | Oni | [Macintosh Repository 3445](https://www.macintoshrepository.org/3445-oni) | `OniDemo.sit`, download id 60155 | SHA-1 `0433e60b5987a144e57ccec154f003c710c04a81` | `295f8b2ba3b84bb601194f73fbc026265a2b287b09761453c7134200faf31739` |
 | Havoc | [Macintosh Repository 4456](https://www.macintoshrepository.org/4456-havoc) | `HAVOC_Demo.sit`, download id 59775 | SHA-1 `8e4e2e8d300c9441d03eedb3954f3ba657f6bd28` | `4cf7f7d8d49fa46b54abf7f6977d20bed856cbd236d6d2c95b952f57183956d8` |
+
+Alternate-media controls also retain Dark Vengeance Demo 1.2 from
+`MacintoshSharewareGamesD` (SHA-256
+`44ccadc23f344f4e0b388598f516d6f32f495906069aa6ccae6e97b8da5eccf1`)
+and the Tucows HAVOC demo (SHA-256
+`27957a5ea672ecdb746dfcd499376812a407d4881f8f75f37e81a5e3e9d4fa21`).
+The latter differs in application and resource data from the original tested
+package but still fails before RAVE.
 
 The classic Bugdom and Weekend Warrior releases are freeware according to
 Pangea's official pages. Pangea also publishes the classic Bugdom serial. The
@@ -386,6 +394,13 @@ VMs, each with an independent clone and unique local VNC and monitor sockets.
   fallback or guest rejects. Camera, unit-order execution, clean quit, and
   relaunch remain open because strengthened post-transition input frames were
   byte-identical.
+- A later fixed-camera exact-beta-3 route completes the semantic proof that the
+  ordered unit moves: Rifle 45 Sqd is mounted before GO, disembarks by +40,
+  moves farther into open ground by +65, and reaches its plotted endpoint with
+  DONE by +100. The +100 and +145 frames are byte-identical. Its trace records
+  10,357,060 draws, balanced 5,312/5,312 render calls, and zero fallback,
+  resource rejects, or render aborts. Command-Q did not visibly exit, so
+  relaunch remains an app-control gap rather than a driver pass.
 - Replayed Unreal Tournament on the final homogeneous-clipping host from an
   immutable configured base. With audio disabled it advances through the
   Tempest ready state into live Practice gameplay. Scripted forward, left,
@@ -397,11 +412,49 @@ VMs, each with an independent clone and unique local VNC and monitor sockets.
   homogeneous coordinates; public RAVE remains strict and zero/nonfinite W is
   still rejected. Evidence is under
   `context/gxmetal-games/evidence/gxmetal-ut-beta3-homogeneous-clip-live-gameplay-20260827/`.
+- Replayed Future Cop on exact beta-3 through a longer semantic lifecycle.
+  Forward and turn controls visibly reposition the mech/camera, fire produces
+  impact sparks while ammunition falls from 7500 to 7481 and then 7463, and
+  the scene remains coherent for about 87 seconds of live play plus a
+  65-second post-input soak. The trace records 8,772,136 draws, 72/72 private
+  texture creations, 3,735 direct frames, and zero resource/draw rejects or
+  fallback. The promotional exit page ignored Command-Q, so relaunch remains
+  an application-control gap.
 - Exhausted the available Dark Vengeance retail-1.2-updater route. The updater
   installs in a disposable clone, but GXMetal, Apple Software, a reconstructed
   read-only data disc, and explicit SOFT8 controls all stop at the same retail
   game-CD validation before creating RAVE. The separate 1.2 demo or a
   legitimate retail Mac CD/install is still required.
+- Retrieved and fork-preserved a genuine, separate Dark Vengeance Demo 1.2
+  installer plus an independently archived Tucows HAVOC demo. The HAVOC build
+  differs from the first package but reproduces the same resource-allocation
+  dialog on exact beta-3 before any RAVE context/profile traffic, strengthening
+  its classification as a pre-driver application/runtime blocker.
+- The unchanged Dark Vengeance 1.2 VISE installer accepted the preauthorized
+  EULA and completed its default install. The installed demo then reproducibly
+  displayed `FATAL ERROR: Memory allocation failed (size = -49)`. Its decoded
+  trace has NDRV discovery but zero game contexts, draws, textures, flushes, or
+  ATI-private calls. The next bounded investigation is its supported setup/
+  engine path and blank default `HARDWARE` field, not a GXMetal workaround.
+- A controlled HAVOC application-memory route changed only its `SIZE` resource:
+  the preferred classic Mac partition rose from 5,760,000 bytes to 32 MiB and
+  the minimum from 3,760,000 bytes to 8 MiB, while its data fork stayed
+  byte-identical. It reproduced the exact same resource-allocation dialog with
+  no RAVE/profile traffic. The generic Finder partition size is therefore not
+  the missing resource.
+- Replayed Oni on an immutable exact-final beta-3 disk. It remains coherent
+  through the former +45 corruption boundary and roughly 176 seconds of live
+  rendering. The trace records 10,126,893 ATI-private calls, 11,238,479 queued
+  triangles, 7,475 direct frames, and zero rejects, anomalies, context
+  fallbacks, or host fallbacks. Delivered movement/combat keys and Command-Q
+  did not create defensible visual changes, so input and in-game relaunch
+  remain open.
+- A follow-up exact-final route proves the explicit main-menu Quit→Yes path,
+  Finder return, and immediate clean relaunch. Load Game also reaches the
+  stored warehouse checkpoint. Its early visual-change gate correctly caught
+  that portrait dialogue was still advancing while movement input arrived;
+  those changing portraits are not counted as player control, and the F1
+  in-game lifecycle remains to be reached after the dialogue settles.
 - Corrected Myth II's driver-specific transition failure. Proven ATI private
   slot-2 calls now replace flags-zero, single-level base images with the
   existing texture's exact format and dimensions without changing its resource

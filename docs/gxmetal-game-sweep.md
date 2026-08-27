@@ -52,6 +52,7 @@ Each game supports these fields:
 - `steps`: ordered VNC actions. Supported actions are `wait`,
   `wait_for_frame_change`, `wait_for_pixel`, `click`, `hold_click`,
   `double_click`, `key`, `drag`, `chord`, `text`, `screenshot`,
+  `assert_frame_changed_since`,
   `assert_dominant_color_fraction_below`,
   `assert_color_range_fraction_below`, and `note`. A step can also set
   `delay_after`, `hold_ms`, or `capture_after`.
@@ -74,6 +75,31 @@ A step contains exactly one action. For example:
 released. This is required by games such as Combat Mission that map classic
 Mac click-and-hold to an order menu or use graphical controls that must be held
 for camera movement. The release is sent even if the wait is interrupted.
+
+Named screenshots can also be used as unattended input and lifecycle oracles:
+
+```json
+[
+  {"screenshot": "before-input"},
+  {"key": "Up", "hold_ms": 1500, "delay_after": 2},
+  {
+    "assert_frame_changed_since": {
+      "screenshot": "before-input",
+      "minimum_changed_fraction": 0.05,
+      "channel_tolerance": 8,
+      "region": [0, 0, 640, 400]
+    }
+  }
+]
+```
+
+The referenced screenshot must appear earlier in the same route. The optional
+region excludes animated HUD or letterbox areas; the assertion records the
+measured changed-pixel fraction and fails when the expected visible transition
+does not occur. Ambient animation can also change pixels, so this is a
+transition/freeze oracle rather than proof of input causality by itself. Use a
+game-specific region and threshold, and retain reviewed before/after captures
+for claims that a particular control worked.
 
 For slow or variable launch paths, synchronize on visible guest progress
 instead of relying only on a long fixed delay:
@@ -131,8 +157,10 @@ license dialog: use a `note` immediately before the action and preserve a
 screenshot showing what was accepted.
 
 Named keys are case-sensitive and validated before a VM is created. Use names
-such as `Space`, `Return`, `Escape`, `Left`, and `Super_L`; ordinary printable
-characters such as `o` are written as a single character.
+such as `Space`, `Return`, `Escape`, `Left`, `F1` through `F12`, and
+`Super_L`; ordinary printable characters such as `o` are written as a single
+character. Function-key coverage is important for games such as Oni that bind
+their in-game pause/menu action to `F1`.
 
 Use `{"drag":[start_x,start_y,end_x,end_y]}` to reposition windows or operate
 classic sliders. The VNC client holds the primary button while sending paced

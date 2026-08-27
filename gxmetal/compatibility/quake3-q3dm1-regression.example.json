@@ -27,15 +27,19 @@
         {"key": "Left", "hold_ms": 500, "delay_after": 1},
         {"key": "Up", "hold_ms": 1000, "delay_after": 2},
         {"screenshot": "q3dm1-courtyard-left"},
-        {"key": "Right", "hold_ms": 350, "delay_after": 1},
-        {"screenshot": "q3dm1-carved-arch-close"},
+        {"assert_color_range_fraction_below": {"minimum_rgb": [0, 0, 0], "maximum_rgb": [12, 12, 12], "maximum_fraction": 0.05, "region": [350, 300, 270, 120]}},
+        {"assert_frame_changed_since": {"screenshot": "q3dm1-spawn-arches", "minimum_changed_fraction": 0.05, "channel_tolerance": 8, "region": [0, 0, 640, 400]}},
+        {"key": "Right", "hold_ms": 175, "delay_after": 1},
+        {"note": "The intermediate wall close-up is navigation only; the regression report keeps the four useful geometry views."},
+        {"key": "Right", "hold_ms": 175, "delay_after": 1},
         {"key": "Up", "hold_ms": 1000, "delay_after": 2},
-        {"screenshot": "q3dm1-under-arch"},
         {"key": "Down", "hold_ms": 900, "delay_after": 1},
         {"key": "Right", "hold_ms": 750, "delay_after": 1},
-        {"screenshot": "q3dm1-side-arch"},
+        {"screenshot": "q3dm1-side-pedestal"},
+        {"assert_color_range_fraction_below": {"minimum_rgb": [0, 0, 0], "maximum_rgb": [12, 12, 12], "maximum_fraction": 0.05, "region": [0, 250, 540, 150]}},
         {"key": "Up", "hold_ms": 800, "delay_after": 2},
-        {"screenshot": "q3dm1-side-passage"}
+        {"screenshot": "q3dm1-side-passage"},
+        {"assert_color_range_fraction_below": {"minimum_rgb": [0, 0, 0], "maximum_rgb": [12, 12, 12], "maximum_fraction": 0.05, "region": [0, 220, 520, 180]}}
       ]
     }
   ]

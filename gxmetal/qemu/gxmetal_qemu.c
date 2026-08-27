@@ -18,6 +18,8 @@
 
 #define GXMETAL_CONSOLE_REFRESH_NS (NANOSECONDS_PER_SECOND / 60)
 
+static void gxmetal_qemu_render_reset(GXMetalQemuState *state);
+
 static void gxmetal_update_relative_input(GXMetalQemuState *state)
 {
     bool relative = state->relative_input ||
@@ -221,7 +223,7 @@ static void gxmetal_register_write(void *opaque, hwaddr address,
         break;
     case GXMETAL_REG_RESET:
         if (value == GXMETAL_RESET_KEY) {
-            gxmetal_qemu_reset(state);
+            gxmetal_qemu_render_reset(state);
         }
         break;
     case GXMETAL_REG_RELATIVE_INPUT:
@@ -336,8 +338,17 @@ void gxmetal_qemu_set_guest_cursor_visible(GXMetalQemuState *state,
 void gxmetal_qemu_reset(GXMetalQemuState *state)
 {
     state->relative_input = false;
-    state->active_contexts = 0;
     state->guest_cursor_visible = true;
+    gxmetal_update_relative_input(state);
+    gxmetal_qemu_render_reset(state);
+}
+
+static void gxmetal_qemu_render_reset(GXMetalQemuState *state)
+{
+    /* A guest reconnect starts a fresh rendering ID generation.  Keep the
+     * cursor visibility and InputSprocket capture request which the new
+     * application may already have established before RAVE connects. */
+    state->active_contexts = 0;
     gxmetal_update_relative_input(state);
     timer_del(state->console_refresh_timer);
     state->last_console_refresh_ns = 0;

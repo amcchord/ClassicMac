@@ -31,6 +31,7 @@
         {"screenshot": "tempest-live-initial"},
         {"key": "Up", "hold_ms": 1500, "delay_after": 3},
         {"screenshot": "tempest-forward"},
+        {"assert_frame_changed_since": {"screenshot": "tempest-live-initial", "minimum_changed_fraction": 0.02, "channel_tolerance": 8}},
         {"key": "Left", "hold_ms": 1200, "delay_after": 3},
         {"screenshot": "tempest-turn-left"},
         {"key": "Right", "hold_ms": 2400, "delay_after": 3},

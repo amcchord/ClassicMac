@@ -13,12 +13,15 @@ import time
 
 VNC_ENCODING_POINTER_TYPE_CHANGE = -257
 GXMETAL_BAR2_REGISTER_OFFSET = 0x0B00
+GXMETAL_RESET_KEY = 0x47584D54
 GXMETAL_RING_OFFSET = 0x1000
 GXMETAL_PRODUCER_REGISTER = 0x20
 GXMETAL_CONSUMER_REGISTER = 0x24
 GXMETAL_DOORBELL_REGISTER = 0x28
 GXMETAL_STATUS_REGISTER = 0x2C
 GXMETAL_ERROR_REGISTER = 0x30
+GXMETAL_COMPLETED_SEQUENCE_REGISTER = 0x34
+GXMETAL_RESET_REGISTER = 0x38
 GXMETAL_RELATIVE_INPUT_REGISTER = 0x40
 GXMETAL_INPUT_BUTTONS_REGISTER = 0x44
 GXMETAL_INPUT_RELATIVE_X_REGISTER = 0x48
@@ -375,8 +378,10 @@ def test_relative_input_handoff(qemu):
             assert receive_vnc_pointer_mode(vnc) is True
             assert current_mouse(qmp_stream)["absolute"] is True
 
-            # Context teardown must restore absolute input even when an
-            # exiting or crashing game leaves the cursor hidden.
+            # A fresh CFM fragment resets its rendering generation before
+            # reconnecting.  This must reclaim the live context and allow the
+            # same guest-local ID after Force Quit without losing the cursor
+            # visibility/capture state established by the new application.
             qtest_writel_le(qtest,
                             register_address + QEXT_BAR2_OFFSET +
                             QEXT_CURSOR_VISIBLE_REGISTER, 0)
@@ -386,14 +391,79 @@ def test_relative_input_handoff(qemu):
                             QEXT_CURSOR_MOVE)
             assert receive_vnc_pointer_mode(vnc) is False
             assert current_mouse(qmp_stream)["absolute"] is True
-            destroy = context_packet(GXMETAL_OP_CONTEXT_DESTROY, 1, 2)
-            qtest_write(qtest, shared_address + GXMETAL_RING_OFFSET +
-                        len(create), destroy)
+            qtest_writel_le(qtest,
+                            gxmetal_registers + GXMETAL_RESET_REGISTER,
+                            GXMETAL_RESET_KEY)
+            producer = qtest_readl_le(qtest, gxmetal_registers +
+                                      GXMETAL_PRODUCER_REGISTER)
+            consumer = qtest_readl_le(qtest, gxmetal_registers +
+                                      GXMETAL_CONSUMER_REGISTER)
+            completed = qtest_readl_le(
+                qtest, gxmetal_registers +
+                GXMETAL_COMPLETED_SEQUENCE_REGISTER)
+            status = qtest_readl_le(qtest, gxmetal_registers +
+                                    GXMETAL_STATUS_REGISTER)
+            error = qtest_readl_le(qtest, gxmetal_registers +
+                                   GXMETAL_ERROR_REGISTER)
+            assert (producer, consumer, completed, status, error) == (
+                0, 0, 0, 1, 0)
+            # With no live context, the reset temporarily releases capture.
+            assert receive_vnc_pointer_mode(vnc) is True
+            assert current_mouse(qmp_stream)["absolute"] is True
+
+            create_again = context_packet(GXMETAL_OP_CONTEXT_CREATE, 1, 3)
+            create_again_end = len(create_again)
+            qtest_write(qtest, shared_address + GXMETAL_RING_OFFSET,
+                        create_again)
             qtest_writel_le(qtest,
                             gxmetal_registers + GXMETAL_PRODUCER_REGISTER,
-                            len(create) + len(destroy))
+                            create_again_end)
             qtest_writel_le(qtest,
-                            gxmetal_registers + GXMETAL_DOORBELL_REGISTER, 1)
+                            gxmetal_registers + GXMETAL_DOORBELL_REGISTER, 3)
+            consumer = qtest_readl_le(qtest, gxmetal_registers +
+                                      GXMETAL_CONSUMER_REGISTER)
+            status = qtest_readl_le(qtest, gxmetal_registers +
+                                    GXMETAL_STATUS_REGISTER)
+            error = qtest_readl_le(qtest, gxmetal_registers +
+                                   GXMETAL_ERROR_REGISTER)
+            assert (consumer, status, error) == (create_again_end, 1, 0), (
+                consumer, status, error)
+            # Recreating a context proves that the hidden guest cursor state
+            # survived the rendering reset: capture returns without another
+            # cursor command.
+            assert receive_vnc_pointer_mode(vnc) is False
+            assert current_mouse(qmp_stream)["absolute"] is True
+
+            # Making the cursor visible must transition out of that retained
+            # relative mode.
+            qtest_writel_le(qtest,
+                            register_address + QEXT_BAR2_OFFSET +
+                            QEXT_CURSOR_VISIBLE_REGISTER, 1)
+            qtest_writel_le(qtest,
+                            register_address + QEXT_BAR2_OFFSET +
+                            QEXT_CURSOR_COMMAND_REGISTER,
+                            QEXT_CURSOR_MOVE)
+            assert receive_vnc_pointer_mode(vnc) is True
+            assert current_mouse(qmp_stream)["absolute"] is True
+
+            # Normal context teardown must likewise restore absolute input
+            # even when an exiting game leaves the guest cursor hidden.
+            qtest_writel_le(qtest,
+                            register_address + QEXT_BAR2_OFFSET +
+                            QEXT_CURSOR_VISIBLE_REGISTER, 0)
+            qtest_writel_le(qtest,
+                            register_address + QEXT_BAR2_OFFSET +
+                            QEXT_CURSOR_COMMAND_REGISTER,
+                            QEXT_CURSOR_MOVE)
+            assert receive_vnc_pointer_mode(vnc) is False
+            destroy = context_packet(GXMETAL_OP_CONTEXT_DESTROY, 1, 4)
+            qtest_write(qtest, shared_address + GXMETAL_RING_OFFSET +
+                        create_again_end, destroy)
+            qtest_writel_le(qtest,
+                            gxmetal_registers + GXMETAL_PRODUCER_REGISTER,
+                            create_again_end + len(destroy))
+            qtest_writel_le(qtest,
+                            gxmetal_registers + GXMETAL_DOORBELL_REGISTER, 4)
             assert receive_vnc_pointer_mode(vnc) is True
             assert current_mouse(qmp_stream)["absolute"] is True
 

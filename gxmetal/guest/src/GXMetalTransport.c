@@ -54,6 +54,9 @@ void gxmetal_guest_register_write(const GXMetalGuestTransport *transport,
     gxmetal_guest_barrier();
 }
 
+#if defined(__GNUC__) && !defined(__clang__)
+__attribute__((optimize("Os")))
+#endif
 int gxmetal_guest_transport_connect(GXMetalGuestTransport *transport,
                                     volatile void *registers,
                                     uint32_t register_bytes,

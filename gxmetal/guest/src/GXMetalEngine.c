@@ -149,6 +149,7 @@ static const char kGXMetalName[] = "GXMetal";
 static GXMetalGuestTransport gTransport;
 static GXMetalRegistryInfo gRegistry;
 static TQABoolean gTransportConnected;
+static TQABoolean gRenderGenerationReset;
 static uint32_t gNextContextID = 1;
 static uint32_t gNextResourceID = 1;
 static uint32_t gRenderEpoch = 1;
@@ -305,6 +306,9 @@ static void GXMetalPublishDiagnostics(void)
     }
 }
 
+#if defined(__GNUC__) && !defined(__clang__)
+__attribute__((optimize("Os")))
+#endif
 static TQABoolean GXMetalTransportAvailable(void)
 {
     uint32_t status;
@@ -317,6 +321,7 @@ static TQABoolean GXMetalTransportAvailable(void)
             return 1;
         }
         gTransportConnected = 0;
+        gRenderGenerationReset = 0;
     }
     if (!GXMetalFindRegistryInfo(&gRegistry, NULL)) {
         gDiagnosticStatus = kGXMetalDiagnosticRegistryUnavailable;
@@ -6278,6 +6283,9 @@ static TQAError GXMetalRegisterMethods(TQADrawContext *drawContext)
     return kQANoErr;
 }
 
+#if defined(__GNUC__) && !defined(__clang__)
+__attribute__((optimize("Os")))
+#endif
 static TQAError GXMetalDrawPrivateNew(TQADrawContext *newDrawContext,
                                       const TQADevice *device,
                                       const TQARect *rect,
@@ -6315,6 +6323,35 @@ static TQAError GXMetalDrawPrivateNew(TQADrawContext *newDrawContext,
         GXMetalPublishDiagnostics();
         GXMetalPersistDiagnostics();
         return kQANotSupported;
+    }
+    if (!gRenderGenerationReset) {
+        /* Force Quit can unload this rendering fragment without destroying
+         * its host objects.  Start a new ID generation only when the first
+         * draw context is actually requested; input/probe-only CFM clients
+         * must never reset an in-flight rendering packet. */
+        gxmetal_guest_register_write(&gTransport, GXMETAL_REG_RESET,
+                                     GXMETAL_RESET_KEY);
+        gTransport.producer = gxmetal_guest_register_read(
+            &gTransport, GXMETAL_REG_PRODUCER);
+        gTransport.consumer = gxmetal_guest_register_read(
+            &gTransport, GXMETAL_REG_CONSUMER);
+        gTransport.published_producer = gTransport.producer;
+        gTransport.pending_bytes = 0;
+        gTransport.pending_packets = 0;
+        gTransport.next_sequence = 1;
+        gTransport.last_sequence = 0;
+        gTransport.status = gxmetal_guest_register_read(
+            &gTransport, GXMETAL_REG_STATUS);
+        if (gTransport.status != GXMETAL_STATUS_READY ||
+            gTransport.producer != 0 || gTransport.consumer != 0) {
+            gTransportConnected = 0;
+            gDiagnosticStatus = kGXMetalDiagnosticContextTransportFault;
+            gDiagnostics.context_error = kQANotSupported;
+            GXMetalPublishDiagnostics();
+            GXMetalPersistDiagnostics();
+            return kQANotSupported;
+        }
+        gRenderGenerationReset = 1;
     }
     if ((flags & (kQAContext_Cache | kQAContext_Scale)) != 0 ||
         ((flags & kQAContext_DeepZ) != 0 &&

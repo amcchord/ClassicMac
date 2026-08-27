@@ -95,7 +95,9 @@ ClassicMac exists because of years of brilliant work by other engineers. The pat
 2. Click **+** to create a machine — pick the Quadra 800 (System 7.1–8.1) or Power Mac G4 (Mac OS 8.5–9.2.2), choose disk size, RAM, and resolution.
 3. Attach a Mac OS install CD image and boot from it. Installation media is not bundled — download the classic Mac OS version you want from the [WinWorld operating system library](https://winworldpc.com/library/operating-systems).
 4. Optional: pick a shared folder, or attach a raw floppy image to a Quadra. Both appear on the emulated desktop as writable disks.
-5. Click **Start**. ClassicMac opens the private display URL in your preferred browser; the same URL remains visible in the machine details if you close the tab.
+5. Click **Start**. ClassicMac opens the VM in a native window by default. If
+   **View in browser (VNC)** is enabled for that machine, it opens the private
+   loopback display URL instead; the URL remains visible in machine details.
 6. To test GXMetal on Mac OS 9, open the automatically mounted **ClassicMac Tools** disk, then open **GXMetal**,
    run **Install GXMetal**, restart, and run **GXMetal Test**. Proceed to a RAVE
    game only after the test reports a pass; moving both GXMetal and GXMetal

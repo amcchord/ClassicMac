@@ -51,6 +51,8 @@ static void test_probe(void)
     CHECK(gxmetal_guest_transport_connect(
         &transport, registers, sizeof(registers), shared, sizeof(shared),
         GXMETAL_FEATURE_GOURAUD | GXMETAL_FEATURE_FENCE));
+    CHECK(registers[GXMETAL_REG_RESET / 4] == 0);
+    CHECK(registers[GXMETAL_REG_PRODUCER / 4] == 0);
     CHECK(transport.ring_offset == GXMETAL_RING_OFFSET);
     CHECK(transport.ring_bytes == GXMETAL_RING_BYTES);
     CHECK(transport.features & GXMETAL_FEATURE_GOURAUD);
@@ -90,8 +92,7 @@ static void test_packet_and_wrap(void)
     CHECK(gxmetal_load_le32(packet.bytes + GXMETAL_PACKET_CONTEXT_OFFSET) ==
           7);
     gxmetal_guest_packet_commit(&transport, &packet);
-    CHECK(registers[GXMETAL_REG_PRODUCER / 4] ==
-          GXMETAL_CONTEXT_CREATE_PACKET_BYTES);
+    CHECK(registers[GXMETAL_REG_PRODUCER / 4] == packet.next_producer);
     CHECK(registers[GXMETAL_REG_DOORBELL / 4] == packet.sequence);
 
     published_producer = registers[GXMETAL_REG_PRODUCER / 4];
@@ -177,12 +178,43 @@ static void test_draw_packet_skips_redundant_clear(void)
         7, &packet));
 }
 
+static void test_auxiliary_connect_preserves_in_flight_packet(void)
+{
+    GXMetalGuestTransport engine;
+    GXMetalGuestTransport auxiliary;
+    GXMetalGuestPacket packet;
+    uint8_t header[GXMETAL_PACKET_HEADER_BYTES];
+
+    initialize_device(GXMETAL_FEATURE_FENCE | GXMETAL_FEATURE_GOURAUD |
+                      GXMETAL_FEATURE_RELATIVE_INPUT);
+    CHECK(gxmetal_guest_transport_connect(
+        &engine, registers, sizeof(registers), shared, sizeof(shared),
+        GXMETAL_FEATURE_GOURAUD | GXMETAL_FEATURE_FENCE));
+    CHECK(gxmetal_guest_packet_begin(&engine, GXMETAL_OP_CONTEXT_CREATE,
+                                     GXMETAL_CONTEXT_CREATE_PACKET_BYTES,
+                                     1, &packet));
+    memcpy(header, packet.bytes, sizeof(header));
+
+    /* GXMetalInput connects independently while the RAVE packet is not yet
+     * published.  A generic connect must neither reset the device nor reuse
+     * and overwrite the engine's unpublished ring slot. */
+    set_register(GXMETAL_REG_RESET, 0);
+    CHECK(gxmetal_guest_transport_connect(
+        &auxiliary, registers, sizeof(registers), shared, sizeof(shared),
+        GXMETAL_FEATURE_RELATIVE_INPUT));
+    CHECK(registers[GXMETAL_REG_RESET / 4] == 0);
+    CHECK(memcmp(header, packet.bytes, sizeof(header)) == 0);
+    CHECK(gxmetal_load_le16(packet.bytes + GXMETAL_PACKET_OPCODE_OFFSET) ==
+          GXMETAL_OP_CONTEXT_CREATE);
+}
+
 int main(void)
 {
     test_probe();
     test_packet_and_wrap();
     test_full_ring_and_fence();
     test_draw_packet_skips_redundant_clear();
+    test_auxiliary_connect_preserves_in_flight_packet();
 
     if (failures != 0) {
         fprintf(stderr, "GXMetal guest transport: %u failure(s)\n", failures);

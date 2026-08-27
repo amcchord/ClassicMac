@@ -39,6 +39,7 @@
         {"key": "Up", "hold_ms": 2000, "delay_after": 1},
         {"key": "Right", "hold_ms": 1000, "delay_after": 1},
         {"screenshot": "after-input"},
+        {"assert_frame_changed_since": {"screenshot": "before-input", "minimum_changed_fraction": 0.15, "channel_tolerance": 16}},
         {"wait": 15},
         {"screenshot": "short-soak"}
       ]
@@ -69,6 +70,7 @@
         {"key": "Left", "hold_ms": 1000, "delay_after": 1},
         {"key": "Space", "hold_ms": 500, "delay_after": 3},
         {"screenshot": "after-input"},
+        {"assert_frame_changed_since": {"screenshot": "before-input", "minimum_changed_fraction": 0.5, "channel_tolerance": 16}},
         {"wait": 15},
         {"screenshot": "short-soak"}
       ]
@@ -131,6 +133,7 @@
         {"key": "Up", "hold_ms": 1200, "delay_after": 1},
         {"key": "Space", "delay_after": 3},
         {"screenshot": "after-input"},
+        {"assert_frame_changed_since": {"screenshot": "before-input", "minimum_changed_fraction": 0.5, "channel_tolerance": 16}},
         {"wait": 15},
         {"screenshot": "short-soak"}
       ]

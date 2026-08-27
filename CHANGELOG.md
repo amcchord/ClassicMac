@@ -1,9 +1,14 @@
 # Changelog
 
-## 2.2.0 beta 3 — 2026-08-26
+## 2.2.0 beta 3 — 2026-08-27
 
 ### Fixed
 
+- Force Quit and same-boot relaunch now start a fresh GXMetal context/resource
+  generation from the rendering owner's first context. The host atomically
+  clears rendering and queue state while preserving cursor and InputSprocket
+  state; generic input/probe connections remain read-only so they cannot
+  overwrite an unpublished RAVE packet.
 - Restored valid ATI OpenGL pointer-fan draws whose clip marker is zero. Quake
   III uses that form for ordinary world geometry; treating the marker as an
   enable bit caused missing floors, walls, pedestals, and other polygon-shaped
@@ -11,12 +16,21 @@
 
 ### Changed
 
-- Added a silent, deterministic Q3DM1 regression route with six gameplay
-  viewpoints covering the courtyard, ornate and side arches, pedestals,
-  passage geometry, portal effects, and HUD. A region-scoped near-black pixel
-  oracle is derived from reviewed broken and corrected frames. The game-sweep
-  harness can now apply inclusive RGB-range assertions to a stable subregion
-  while excluding skies, HUDs, and animated scene content.
+- The muted game-sweep harness can now compare a current frame with any earlier
+  named screenshot, optionally inside a crop, and fail when a game misses an
+  expected visible transition. Built-in Bugdom, Future Cop, Weekend Warrior,
+  Cro-Mag Rally, Quake III, and Unreal Tournament routes retain calibrated
+  before/after gates.
+- VNC automation now supports `F1` through `F12`, enabling game-native pause
+  and menu controls such as Oni's F1 binding.
+- Exact-beta-3 qualification now includes Combat Mission's visibly completed
+  unit move, longer Future Cop gameplay/action and soak evidence, Oni's
+  176-second coherent rendering route, and distinct Dark Vengeance/HAVOC media
+  and application-memory controls that stop before creating a RAVE context.
+- The Quake III gate keeps four human-reviewed Q3DM1 geometry views and adds
+  named-frame transition plus cropped missing-surface assertions. Weekend
+  Warrior now passes title → OS Force Quit → Finder → same-boot relaunch and a
+  second-title soak on the exact signed candidate.
 - Added reusable silent Cro-Mag Rally gameplay and Myth II transition routes.
   The current ten-game ledger now records Cro-Mag's accelerated race/input
   pass, Combat Mission's independently repeated Setup-to-Orders rendering

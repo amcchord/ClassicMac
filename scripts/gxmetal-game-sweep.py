@@ -41,7 +41,7 @@ ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
 STEP_ACTIONS = (
     "wait", "wait_for_frame_change", "wait_for_pixel", "click",
     "hold_click", "double_click", "drag", "key", "chord", "text",
-    "screenshot",
+    "screenshot", "assert_frame_changed_since",
     "assert_dominant_color_fraction_below",
     "assert_color_range_fraction_below", "note",
 )
@@ -50,8 +50,9 @@ STEP_ACTIONS = (
 VALID_NAMED_KEYS = frozenset({
     "BackSpace", "Tab", "Return", "Escape", "Home", "Left", "Up",
     "Right", "Down", "PageUp", "PageDown", "End", "Insert", "Delete",
-    "KP_Enter", "Shift_L", "Control_L", "Meta_L", "Alt_L", "Super_L",
-    "Space",
+    "KP_Enter", "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8",
+    "F9", "F10", "F11", "F12", "Shift_L", "Control_L", "Meta_L",
+    "Alt_L", "Super_L", "Space",
 })
 
 
@@ -232,6 +233,48 @@ def validate_step(step: Any, field: str) -> dict[str, Any]:
             raise ValueError(
                 f"{field}.wait_for_pixel timeout must be at least the "
                 "poll interval")
+    elif action == "assert_frame_changed_since":
+        if not isinstance(value, dict):
+            raise ValueError(
+                f"{field}.assert_frame_changed_since must be an object")
+        unknown_assertion_fields = set(value) - {
+            "screenshot", "minimum_changed_fraction", "channel_tolerance",
+            "region",
+        }
+        if unknown_assertion_fields:
+            raise ValueError(
+                f"{field}.assert_frame_changed_since has unknown fields: "
+                f"{sorted(unknown_assertion_fields)}")
+        screenshot = value.get("screenshot")
+        if not isinstance(screenshot, str) or not screenshot:
+            raise ValueError(
+                f"{field}.assert_frame_changed_since.screenshot must be "
+                "a nonempty string")
+        minimum_fraction = number(
+            value.get("minimum_changed_fraction", 0.02),
+            f"{field}.assert_frame_changed_since.minimum_changed_fraction",
+            positive=True)
+        if minimum_fraction > 1:
+            raise ValueError(
+                f"{field}.assert_frame_changed_since."
+                "minimum_changed_fraction must not exceed 1")
+        tolerance = value.get("channel_tolerance", 8)
+        if (isinstance(tolerance, bool) or not isinstance(tolerance, int) or
+                tolerance < 0 or tolerance > 255):
+            raise ValueError(
+                f"{field}.assert_frame_changed_since.channel_tolerance must "
+                "be an integer from 0 through 255")
+        region = value.get("region")
+        if (region is not None and
+                (not isinstance(region, list) or len(region) != 4 or
+                 any(isinstance(item, bool) or not isinstance(item, int)
+                     for item in region) or
+                 region[0] < 0 or region[1] < 0 or
+                 region[2] <= 0 or region[3] <= 0)):
+            raise ValueError(
+                f"{field}.assert_frame_changed_since.region must be "
+                "[x, y, width, height] with nonnegative coordinates and "
+                "positive dimensions")
     elif action == "assert_dominant_color_fraction_below":
         if not isinstance(value, dict):
             raise ValueError(
@@ -427,6 +470,17 @@ def load_manifest(path: Path, selected_modes: tuple[str, ...]) -> list[RunSpec]:
             raise ValueError(f"{field}.steps must be an array")
         steps = tuple(validate_step(step, f"{field}.steps[{step_index}]")
                       for step_index, step in enumerate(step_values))
+        named_screenshots: set[str] = set()
+        for step_index, step in enumerate(steps):
+            if "screenshot" in step:
+                named_screenshots.add(step["screenshot"])
+            elif "assert_frame_changed_since" in step:
+                referenced = step["assert_frame_changed_since"]["screenshot"]
+                if referenced not in named_screenshots:
+                    raise ValueError(
+                        f"{field}.steps[{step_index}]."
+                        "assert_frame_changed_since references unknown or "
+                        f"later screenshot: {referenced}")
         boot_wait = number(game.get("boot_wait_seconds", boot_default),
                            f"{field}.boot_wait_seconds")
         observation = number(game.get("observation_seconds", observation_default),
@@ -697,6 +751,24 @@ def crop_rgb_region(rgb: bytes, width: int, height: int,
     return bytes(cropped)
 
 
+def frame_changed_fraction(
+    baseline: bytes, baseline_width: int, baseline_height: int,
+    current: bytes, width: int, height: int, channel_tolerance: int,
+    region: tuple[int, int, int, int] | None = None,
+) -> float:
+    """Compare two complete VNC frames, optionally inside one crop."""
+    if width != baseline_width or height != baseline_height:
+        return 1.0
+    measured_baseline = (
+        crop_rgb_region(baseline, width, height, region)
+        if region is not None else baseline)
+    measured_current = (
+        crop_rgb_region(current, width, height, region)
+        if region is not None else current)
+    return changed_pixel_fraction(
+        measured_baseline, measured_current, channel_tolerance)
+
+
 def captured_command(command: list[str], cwd: Path) -> dict[str, Any]:
     result = subprocess.run(command, cwd=cwd, text=True,
                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
@@ -739,6 +811,7 @@ def execute_run(
     error_text: str | None = None
     capture_count = 0
     clone_method: str | None = None
+    named_frames: dict[str, tuple[bytes, int, int]] = {}
 
     def capture_frame(label: str, rgb: bytes, width: int, height: int) -> None:
         nonlocal capture_count
@@ -750,11 +823,12 @@ def execute_run(
         events.write("screenshot", file=str(path.relative_to(run_dir)),
                      width=width, height=height)
 
-    def capture(label: str) -> None:
+    def capture(label: str) -> tuple[bytes, int, int] | None:
         if client is None:
-            return
+            return None
         rgb = client.capture()
         capture_frame(label, rgb, client.width, client.height)
+        return rgb, client.width, client.height
 
     def wait_and_capture(seconds: float, label: str) -> None:
         deadline = time.monotonic() + seconds
@@ -883,6 +957,43 @@ def execute_run(
                 "dominant exact color fraction "
                 f"{fraction:.6f} for {color} is not below {maximum:.6f}")
 
+    def assert_frame_changed_since(
+            settings: dict[str, Any], label: str) -> None:
+        if client is None:
+            return
+        reference = settings["screenshot"]
+        baseline_record = named_frames.get(reference)
+        if baseline_record is None:
+            raise RuntimeError(
+                f"named screenshot was not captured before assertion: "
+                f"{reference}")
+        baseline, baseline_width, baseline_height = baseline_record
+        current = client.capture()
+        width = client.width
+        height = client.height
+        tolerance = int(settings.get("channel_tolerance", 8))
+        minimum_fraction = float(
+            settings.get("minimum_changed_fraction", 0.02))
+        region_value = settings.get("region")
+        region = (tuple(int(item) for item in region_value)
+                  if region_value is not None else None)
+        fraction = frame_changed_fraction(
+            baseline, baseline_width, baseline_height,
+            current, width, height, tolerance, region)
+        capture_frame(label, current, width, height)
+        events.write(
+            "named_frame_change_assertion", label=label,
+            screenshot=reference, changed_fraction=round(fraction, 6),
+            minimum_changed_fraction=minimum_fraction,
+            channel_tolerance=tolerance, region=region,
+            baseline_width=baseline_width,
+            baseline_height=baseline_height, width=width, height=height,
+            passed=fraction >= minimum_fraction)
+        if fraction < minimum_fraction:
+            raise RuntimeError(
+                f"frame changed by {fraction:.6f} since screenshot "
+                f"{reference}, below required {minimum_fraction:.6f}")
+
     def assert_color_range_fraction_below(
             settings: dict[str, Any], label: str) -> None:
         if client is None:
@@ -978,7 +1089,12 @@ def execute_run(
                 for character in value:
                     client.key(character, hold)
             elif action == "screenshot":
-                capture(value)
+                frame = capture(value)
+                if frame is not None:
+                    named_frames[value] = frame
+            elif action == "assert_frame_changed_since":
+                assert_frame_changed_since(
+                    value, f"step-{index:02d}-frame-changed-since")
             elif action == "assert_dominant_color_fraction_below":
                 assert_dominant_color_fraction_below(
                     value, f"step-{index:02d}-dominant-color")
