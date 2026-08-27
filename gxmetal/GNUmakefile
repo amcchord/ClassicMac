@@ -127,6 +127,8 @@ test: $(PROTOCOL_TEST) $(QUEUE_TEST) $(GUEST_TRANSPORT_TEST) \
 	$(AGL_PROBE_TEST)
 	$(if $(METAL_TEST),$(METAL_TEST),@true)
 	python3 tests/test_gxmetal_vnc.py
+	python3 tests/test_gxmetal_ut_checkbuttonkeys.py
+	python3 tests/test_prepare_reality_bytes_runtime_trace.py
 	python3 tests/test_decode_diagnostics.py
 	python3 tests/test_pef_set_init.py
 

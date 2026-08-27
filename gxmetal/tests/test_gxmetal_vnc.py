@@ -84,6 +84,108 @@ class RFBClientTests(unittest.TestCase):
             struct.pack(">BBHH", 5, 1, 320, 240) +
             struct.pack(">BBHH", 5, 0, 320, 240))
 
+    def test_rehome_pointer_forces_both_clipping_corners(self):
+        connection = FakeSocket()
+        client = VNC.RFBClient(connection)
+        client.width = 640
+        client.height = 480
+        client.pointer_x = 590
+        client.pointer_y = 52
+
+        with mock.patch.object(VNC.time, "sleep") as sleep:
+            client.rehome_pointer()
+
+        self.assertEqual(
+            bytes(connection.sent),
+            struct.pack(">BBHH", 5, 0, 0, 0) +
+            struct.pack(">BBHH", 5, 0, 639, 479) +
+            struct.pack(">BBHH", 5, 0, 0, 0))
+        self.assertEqual((client.pointer_x, client.pointer_y), (0, 0))
+        self.assertEqual(sleep.call_args_list, [mock.call(0.05)] * 3)
+
+    def test_click_releases_button_when_hold_is_interrupted(self):
+        connection = FakeSocket()
+        client = VNC.RFBClient(connection)
+
+        with mock.patch.object(
+                VNC.time, "sleep", side_effect=RuntimeError("interrupted")):
+            with self.assertRaisesRegex(RuntimeError, "interrupted"):
+                client.click_buttons(320, 240, 1)
+
+        self.assertEqual(
+            bytes(connection.sent),
+            struct.pack(">BBHH", 5, 1, 320, 240) +
+            struct.pack(">BBHH", 5, 0, 320, 240))
+        self.assertEqual(client.pressed_buttons, 0)
+
+    def test_drag_releases_button_when_motion_is_interrupted(self):
+        connection = FakeSocket()
+        client = VNC.RFBClient(connection)
+        client.width = 640
+        client.height = 480
+        client.pointer_x = 10
+        client.pointer_y = 10
+
+        with mock.patch.object(
+                VNC.time, "sleep", side_effect=RuntimeError("interrupted")):
+            with self.assertRaisesRegex(RuntimeError, "interrupted"):
+                client.drag(10, 10, 12, 10)
+
+        self.assertEqual(
+            bytes(connection.sent),
+            struct.pack(">BBHH", 5, 1, 10, 10) +
+            struct.pack(">BBHH", 5, 1, 11, 10) +
+            struct.pack(">BBHH", 5, 0, 11, 10))
+        self.assertEqual(client.pressed_buttons, 0)
+
+    def test_key_releases_when_hold_is_interrupted(self):
+        connection = FakeSocket()
+        client = VNC.RFBClient(connection)
+
+        with mock.patch.object(
+                VNC.time, "sleep", side_effect=RuntimeError("interrupted")):
+            with self.assertRaisesRegex(RuntimeError, "interrupted"):
+                client.key("Control_L", 0.75)
+
+        self.assertEqual(
+            bytes(connection.sent),
+            struct.pack(">BBHI", 4, 1, 0, VNC.KEYSYMS["Control_L"]) +
+            struct.pack(">BBHI", 4, 0, 0, VNC.KEYSYMS["Control_L"]))
+        self.assertEqual(client.pressed_keysyms, [])
+
+    def test_release_all_keys_uses_reverse_press_order(self):
+        connection = FakeSocket()
+        client = VNC.RFBClient(connection)
+
+        client.key_down("Control_L")
+        client.key_down("Escape")
+        client.release_all_keys()
+
+        self.assertEqual(
+            bytes(connection.sent),
+            struct.pack(">BBHI", 4, 1, 0, VNC.KEYSYMS["Control_L"]) +
+            struct.pack(">BBHI", 4, 1, 0, VNC.KEYSYMS["Escape"]) +
+            struct.pack(">BBHI", 4, 0, 0, VNC.KEYSYMS["Escape"]) +
+            struct.pack(">BBHI", 4, 0, 0, VNC.KEYSYMS["Control_L"]))
+        self.assertEqual(client.pressed_keysyms, [])
+
+    def test_chord_releases_every_key_when_hold_is_interrupted(self):
+        connection = FakeSocket()
+        client = VNC.RFBClient(connection)
+
+        with mock.patch.object(
+                VNC.time, "sleep", side_effect=RuntimeError("interrupted")):
+            with self.assertRaisesRegex(RuntimeError, "interrupted"):
+                client.chord("Control_L+Escape", 0.75)
+
+        self.assertEqual(
+            bytes(connection.sent),
+            struct.pack(">BBHI", 4, 1, 0, VNC.KEYSYMS["Control_L"]) +
+            struct.pack(">BBHI", 4, 1, 0, VNC.KEYSYMS["Escape"]) +
+            struct.pack(">BBHI", 4, 0, 0, VNC.KEYSYMS["Escape"]) +
+            struct.pack(">BBHI", 4, 0, 0, VNC.KEYSYMS["Control_L"]))
+        self.assertEqual(client.pressed_keysyms, [])
+
     def test_parse_pixel_accepts_optional_tolerance_and_rejects_channels(self):
         self.assertEqual(
             VNC.parse_pixel("128,84,248,248,0"),
@@ -228,6 +330,101 @@ class ManifestValidationTests(unittest.TestCase):
         with self.assertRaises(argparse.ArgumentTypeError):
             SWEEP.parse_trace_event("input_event_key_qcode,file=/tmp/trace")
 
+    def test_ppc_register_dump_parser_handles_qemu_crlf(self):
+        registers = SWEEP.ppc_registers(
+            b"GPR28 0000000000001111 0000000000002222 "
+            b"00000000ffffffcf 0000000000004444\r\n")
+        self.assertEqual(registers, {
+            "r28": 0x1111,
+            "r29": 0x2222,
+            "r30": 0xFFFFFFCF,
+            "r31": 0x4444,
+        })
+
+    def test_monitor_register_snapshot_validation_is_read_only_and_bounded(self):
+        step = {
+            "monitor_register_snapshot": {
+                "name": "havoc-alert",
+                "memory_registers": ["r29"],
+                "memory_bytes": 64,
+            }
+        }
+        self.assertEqual(SWEEP.validate_step(step, "steps[0]"), step)
+        with self.assertRaisesRegex(ValueError, "r0 through r31"):
+            SWEEP.validate_step({
+                "monitor_register_snapshot": {
+                    "name": "invalid-register",
+                    "memory_registers": ["pc"],
+                }
+            }, "steps[0]")
+        with self.assertRaisesRegex(ValueError, "1 through 4096"):
+            SWEEP.validate_step({
+                "monitor_register_snapshot": {
+                    "name": "too-large",
+                    "memory_bytes": 4097,
+                }
+            }, "steps[0]")
+
+    def test_fixed_memory_snapshot_is_read_only_and_bounded(self):
+        step = {
+            "monitor_memory_snapshot": {
+                "name": "low-memory-keymap",
+                "address": 0x174,
+                "memory_bytes": 16,
+            }
+        }
+        self.assertEqual(SWEEP.validate_step(step, "steps[0]"), step)
+        self.assertEqual(SWEEP.hmp_memory_command(0x174, 16),
+                         "x /16bx 0x174")
+        with self.assertRaisesRegex(ValueError, "32-bit nonnegative"):
+            SWEEP.validate_step({
+                "monitor_memory_snapshot": {
+                    "name": "negative-address",
+                    "address": -1,
+                    "memory_bytes": 16,
+                }
+            }, "steps[0]")
+        with self.assertRaisesRegex(ValueError, "range exceeds"):
+            SWEEP.validate_step({
+                "monitor_memory_snapshot": {
+                    "name": "wrapped-range",
+                    "address": 0xfffffff8,
+                    "memory_bytes": 16,
+                }
+            }, "steps[0]")
+
+    def test_manifest_requires_balanced_held_keys(self):
+        manifest = {
+            "schema": 1,
+            "games": [{
+                "id": "held-key",
+                "name": "Held key",
+                "modes": ["gxmetal"],
+                "steps": [
+                    {"key_down": "Control_L"},
+                    {"monitor_memory_snapshot": {
+                        "name": "keymap",
+                        "address": 0x174,
+                        "memory_bytes": 16,
+                    }},
+                    {"key_up": "Control_L"},
+                ],
+            }],
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "manifest.json"
+            path.write_text(__import__("json").dumps(manifest),
+                            encoding="utf-8")
+            specs = SWEEP.load_manifest(path, ("gxmetal",))
+            self.assertEqual(specs[0].steps[0],
+                             {"key_down": "Control_L"})
+
+            manifest["games"][0]["steps"].pop()
+            path.write_text(__import__("json").dumps(manifest),
+                            encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "leaves keys held"):
+                SWEEP.load_manifest(path, ("gxmetal",))
+
     def test_named_keys_are_case_sensitive_and_checked_before_runtime(self):
         self.assertEqual(
             SWEEP.validate_step({"key": "Space"}, "steps[0]"),
@@ -237,6 +434,13 @@ class ManifestValidationTests(unittest.TestCase):
             {"key": "F1"})
         with self.assertRaisesRegex(ValueError, "unknown VNC key: space"):
             SWEEP.validate_step({"key": "space"}, "steps[0]")
+
+    def test_rehome_pointer_requires_explicit_true(self):
+        step = {"rehome_pointer": True}
+        self.assertEqual(SWEEP.validate_step(step, "steps[0]"), step)
+        with self.assertRaisesRegex(ValueError, "must be true"):
+            SWEEP.validate_step(
+                {"rehome_pointer": False}, "steps[0]")
 
     def test_chord_keys_are_validated(self):
         self.assertEqual(

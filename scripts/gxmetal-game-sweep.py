@@ -40,8 +40,10 @@ AUDIO_DEVICE_SPECS = {
 ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
 STEP_ACTIONS = (
     "wait", "wait_for_frame_change", "wait_for_pixel", "click",
-    "hold_click", "double_click", "drag", "key", "chord", "text",
-    "screenshot", "assert_frame_changed_since",
+    "hold_click", "double_click", "drag", "rehome_pointer", "key",
+    "key_down", "key_up", "chord", "text", "screenshot",
+    "monitor_register_snapshot",
+    "monitor_memory_snapshot", "assert_frame_changed_since",
     "assert_dominant_color_fraction_below",
     "assert_color_range_fraction_below", "note",
 )
@@ -350,6 +352,76 @@ def validate_step(step: Any, field: str) -> dict[str, Any]:
                 f"{field}.assert_color_range_fraction_below.region must be "
                 "[x, y, width, height] with nonnegative coordinates and "
                 "positive dimensions")
+    elif action == "rehome_pointer":
+        if value is not True:
+            raise ValueError(f"{field}.rehome_pointer must be true")
+    elif action == "monitor_register_snapshot":
+        if not isinstance(value, dict):
+            raise ValueError(
+                f"{field}.monitor_register_snapshot must be an object")
+        unknown_snapshot_fields = set(value) - {
+            "name", "memory_registers", "memory_bytes",
+        }
+        if unknown_snapshot_fields:
+            raise ValueError(
+                f"{field}.monitor_register_snapshot has unknown fields: "
+                f"{sorted(unknown_snapshot_fields)}")
+        name = value.get("name")
+        if (not isinstance(name, str) or
+                ID_PATTERN.fullmatch(name) is None):
+            raise ValueError(
+                f"{field}.monitor_register_snapshot.name must match "
+                f"{ID_PATTERN.pattern}")
+        registers = value.get("memory_registers", [])
+        if (not isinstance(registers, list) or len(registers) > 8 or
+                len(set(registers)) != len(registers) or any(
+                    not isinstance(register, str) or
+                    re.fullmatch(r"r(?:[0-9]|[12][0-9]|3[01])", register)
+                    is None for register in registers)):
+            raise ValueError(
+                f"{field}.monitor_register_snapshot.memory_registers must "
+                "contain at most eight unique r0 through r31 names")
+        memory_bytes = value.get("memory_bytes", 64)
+        if (isinstance(memory_bytes, bool) or
+                not isinstance(memory_bytes, int) or
+                memory_bytes <= 0 or memory_bytes > 4096):
+            raise ValueError(
+                f"{field}.monitor_register_snapshot.memory_bytes must be "
+                "an integer from 1 through 4096")
+    elif action == "monitor_memory_snapshot":
+        if not isinstance(value, dict):
+            raise ValueError(
+                f"{field}.monitor_memory_snapshot must be an object")
+        unknown_snapshot_fields = set(value) - {
+            "name", "address", "memory_bytes",
+        }
+        if unknown_snapshot_fields:
+            raise ValueError(
+                f"{field}.monitor_memory_snapshot has unknown fields: "
+                f"{sorted(unknown_snapshot_fields)}")
+        name = value.get("name")
+        if (not isinstance(name, str) or
+                ID_PATTERN.fullmatch(name) is None):
+            raise ValueError(
+                f"{field}.monitor_memory_snapshot.name must match "
+                f"{ID_PATTERN.pattern}")
+        address = value.get("address")
+        if (isinstance(address, bool) or not isinstance(address, int) or
+                address < 0 or address > 0xffffffff):
+            raise ValueError(
+                f"{field}.monitor_memory_snapshot.address must be a "
+                "32-bit nonnegative integer")
+        memory_bytes = value.get("memory_bytes", 64)
+        if (isinstance(memory_bytes, bool) or
+                not isinstance(memory_bytes, int) or
+                memory_bytes <= 0 or memory_bytes > 4096):
+            raise ValueError(
+                f"{field}.monitor_memory_snapshot.memory_bytes must be "
+                "an integer from 1 through 4096")
+        if address + memory_bytes > 0x100000000:
+            raise ValueError(
+                f"{field}.monitor_memory_snapshot range exceeds the "
+                "32-bit address space")
     elif action in ("click", "hold_click", "double_click"):
         if (not isinstance(value, list) or len(value) != 2 or
                 any(isinstance(item, bool) or not isinstance(item, int)
@@ -365,9 +437,9 @@ def validate_step(step: Any, field: str) -> dict[str, Any]:
                 "[start_x, start_y, end_x, end_y] integers")
     elif not isinstance(value, str) or not value:
         raise ValueError(f"{field}.{action} must be a nonempty string")
-    elif action == "key" and not (
+    elif action in ("key", "key_down", "key_up") and not (
             len(value) == 1 or value in VALID_NAMED_KEYS):
-        raise ValueError(f"{field}.key has unknown VNC key: {value}")
+        raise ValueError(f"{field}.{action} has unknown VNC key: {value}")
     elif action == "chord":
         names = value.split("+")
         if (len(names) < 2 or any(
@@ -471,8 +543,23 @@ def load_manifest(path: Path, selected_modes: tuple[str, ...]) -> list[RunSpec]:
         steps = tuple(validate_step(step, f"{field}.steps[{step_index}]")
                       for step_index, step in enumerate(step_values))
         named_screenshots: set[str] = set()
+        held_keys: set[str] = set()
         for step_index, step in enumerate(steps):
-            if "screenshot" in step:
+            if "key_down" in step:
+                key = step["key_down"]
+                if key in held_keys:
+                    raise ValueError(
+                        f"{field}.steps[{step_index}] presses already-held "
+                        f"key: {key}")
+                held_keys.add(key)
+            elif "key_up" in step:
+                key = step["key_up"]
+                if key not in held_keys:
+                    raise ValueError(
+                        f"{field}.steps[{step_index}] releases key that is "
+                        f"not held: {key}")
+                held_keys.remove(key)
+            elif "screenshot" in step:
                 named_screenshots.add(step["screenshot"])
             elif "assert_frame_changed_since" in step:
                 referenced = step["assert_frame_changed_since"]["screenshot"]
@@ -481,6 +568,9 @@ def load_manifest(path: Path, selected_modes: tuple[str, ...]) -> list[RunSpec]:
                         f"{field}.steps[{step_index}]."
                         "assert_frame_changed_since references unknown or "
                         f"later screenshot: {referenced}")
+        if held_keys:
+            raise ValueError(
+                f"{field}.steps leaves keys held: {sorted(held_keys)}")
         boot_wait = number(game.get("boot_wait_seconds", boot_default),
                            f"{field}.boot_wait_seconds")
         observation = number(game.get("observation_seconds", observation_default),
@@ -618,6 +708,76 @@ def wait_for_socket(path: Path, process: subprocess.Popen[bytes], timeout: float
     raise RuntimeError(f"timed out waiting for {path}")
 
 
+def receive_monitor_prompt(connection: socket.socket) -> bytes:
+    response = bytearray()
+    while not response.endswith(b"(qemu) "):
+        chunk = connection.recv(4096)
+        if not chunk:
+            raise RuntimeError("QEMU monitor closed unexpectedly")
+        response.extend(chunk)
+    return bytes(response)
+
+
+def hmp_command(connection: socket.socket, command: str) -> bytes:
+    connection.sendall(f"{command}\n".encode("ascii"))
+    return receive_monitor_prompt(connection)
+
+
+def ppc_registers(response: bytes) -> dict[str, int]:
+    registers: dict[str, int] = {}
+    for match in re.finditer(
+            rb"^GPR([0-9]{2})((?: [0-9a-fA-F]{16}){4})\r?$",
+            response, re.MULTILINE):
+        base = int(match.group(1))
+        values = match.group(2).split()
+        for index, value in enumerate(values):
+            registers[f"r{base + index}"] = int(value, 16)
+    return registers
+
+
+def hmp_memory_command(address: int, memory_bytes: int) -> str:
+    """Return a read-only HMP virtual-memory byte examination command."""
+    return f"x /{memory_bytes}bx 0x{address:x}"
+
+
+def capture_monitor_register_snapshot(
+    path: Path, destination: Path, memory_registers: list[str],
+    memory_bytes: int,
+) -> dict[str, int]:
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as monitor:
+        monitor.settimeout(5)
+        monitor.connect(str(path))
+        response = bytearray(receive_monitor_prompt(monitor))
+        register_response = hmp_command(monitor, "info registers")
+        response.extend(register_response)
+        registers = ppc_registers(register_response)
+        missing = [name for name in memory_registers if name not in registers]
+        if missing:
+            raise RuntimeError(
+                "QEMU register dump omitted: " + ", ".join(missing))
+        for name in memory_registers:
+            address = registers[name]
+            response.extend(hmp_command(
+                monitor, hmp_memory_command(address, memory_bytes)))
+    destination.parent.mkdir(exist_ok=True)
+    destination.write_bytes(response)
+    return registers
+
+
+def capture_monitor_memory_snapshot(
+    path: Path, destination: Path, address: int, memory_bytes: int,
+) -> None:
+    """Capture a bounded fixed-address virtual-memory range through HMP."""
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as monitor:
+        monitor.settimeout(5)
+        monitor.connect(str(path))
+        response = bytearray(receive_monitor_prompt(monitor))
+        response.extend(hmp_command(
+            monitor, hmp_memory_command(address, memory_bytes)))
+    destination.parent.mkdir(exist_ok=True)
+    destination.write_bytes(response)
+
+
 def connect_vnc(module: ModuleType, path: Path, process: subprocess.Popen[bytes],
                 timeout: float) -> Any:
     deadline = time.monotonic() + timeout
@@ -645,12 +805,7 @@ def quit_qemu(path: Path) -> None:
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as monitor:
         monitor.settimeout(2)
         monitor.connect(str(path))
-        response = bytearray()
-        while not response.endswith(b"(qemu) "):
-            chunk = monitor.recv(4096)
-            if not chunk:
-                return
-            response.extend(chunk)
+        receive_monitor_prompt(monitor)
         monitor.sendall(b"quit\n")
 
 
@@ -1088,6 +1243,12 @@ def execute_run(
                 client.drag(value[0], value[1], value[2], value[3])
             elif action == "key":
                 client.key(value, float(step.get("hold_ms", 150)) / 1000.0)
+            elif action == "rehome_pointer":
+                client.rehome_pointer()
+            elif action == "key_down":
+                client.key_down(value)
+            elif action == "key_up":
+                client.key_up(value)
             elif action == "chord":
                 client.chord(value, float(step.get("hold_ms", 150)) / 1000.0)
             elif action == "text":
@@ -1098,6 +1259,34 @@ def execute_run(
                 frame = capture(value)
                 if frame is not None:
                     named_frames[value] = frame
+            elif action == "monitor_register_snapshot":
+                snapshot_path = (
+                    run_dir / "monitor-snapshots" /
+                    f"{safe_label(value['name'])}.txt")
+                registers = capture_monitor_register_snapshot(
+                    monitor_socket, snapshot_path,
+                    value.get("memory_registers", []),
+                    value.get("memory_bytes", 64))
+                events.write(
+                    "monitor_register_snapshot",
+                    file=str(snapshot_path.relative_to(run_dir)),
+                    registers={
+                        name: f"0x{registers[name]:x}"
+                        for name in value.get("memory_registers", [])
+                    },
+                    memory_bytes=value.get("memory_bytes", 64))
+            elif action == "monitor_memory_snapshot":
+                snapshot_path = (
+                    run_dir / "monitor-snapshots" /
+                    f"{safe_label(value['name'])}.txt")
+                address = int(value["address"])
+                memory_bytes = int(value.get("memory_bytes", 64))
+                capture_monitor_memory_snapshot(
+                    monitor_socket, snapshot_path, address, memory_bytes)
+                events.write(
+                    "monitor_memory_snapshot",
+                    file=str(snapshot_path.relative_to(run_dir)),
+                    address=f"0x{address:x}", memory_bytes=memory_bytes)
             elif action == "assert_frame_changed_since":
                 assert_frame_changed_since(
                     value, f"step-{index:02d}-frame-changed-since")
@@ -1113,7 +1302,9 @@ def execute_run(
                 capture(f"step-{index:02d}-{action}")
             delay_after = float(step.get("delay_after", 0.25 if action in
                                         ("click", "hold_click", "double_click",
-                                         "drag", "key", "chord", "text") else 0))
+                                         "drag", "rehome_pointer", "key",
+                                         "key_down", "key_up", "chord",
+                                         "text") else 0))
             if delay_after:
                 wait_and_capture(delay_after, f"step-{index:02d}-delay")
 
@@ -1129,6 +1320,26 @@ def execute_run(
             events.write("capture_failure", error=str(capture_error))
     finally:
         if client is not None:
+            held_button_mask = client.pressed_buttons
+            try:
+                client.release_all_buttons()
+                if held_button_mask:
+                    events.write(
+                        "held_buttons_released", mask=held_button_mask)
+            except Exception as release_error:
+                events.write(
+                    "held_button_release_failure", error=str(release_error),
+                    mask=held_button_mask)
+            held_key_count = len(client.pressed_keysyms)
+            try:
+                client.release_all_keys()
+                if held_key_count:
+                    events.write(
+                        "held_keys_released", count=held_key_count)
+            except Exception as release_error:
+                events.write(
+                    "held_key_release_failure", error=str(release_error),
+                    count=held_key_count)
             client.connection.close()
         if process is not None and process.poll() is None:
             try:

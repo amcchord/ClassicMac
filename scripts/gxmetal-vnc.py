@@ -84,6 +84,10 @@ class RFBClient:
         self.height = 0
         self.pointer_x = None
         self.pointer_y = None
+        self.pointer_event_x = 0
+        self.pointer_event_y = 0
+        self.pressed_buttons = 0
+        self.pressed_keysyms = []
 
     def connect(self):
         version = receive_exact(self.connection, 12)
@@ -144,25 +148,63 @@ class RFBClient:
     def key_event(self, keysym, down):
         self.connection.sendall(struct.pack(">BBHI", 4, down, 0, keysym))
 
-    def key(self, name, hold_seconds):
+    def key_down(self, name):
         keysym = self.keysym(name)
+        if keysym in self.pressed_keysyms:
+            raise ValueError("VNC key is already held: %s" % name)
         self.key_event(keysym, 1)
-        time.sleep(hold_seconds)
+        self.pressed_keysyms.append(keysym)
+
+    def key_up(self, name):
+        keysym = self.keysym(name)
+        if keysym not in self.pressed_keysyms:
+            raise ValueError("VNC key is not held: %s" % name)
         self.key_event(keysym, 0)
+        self.pressed_keysyms.remove(keysym)
+
+    def release_all_keys(self):
+        first_error = None
+        while self.pressed_keysyms:
+            keysym = self.pressed_keysyms.pop()
+            try:
+                self.key_event(keysym, 0)
+            except Exception as error:
+                if first_error is None:
+                    first_error = error
+        if first_error is not None:
+            raise first_error
+
+    def key(self, name, hold_seconds):
+        self.key_down(name)
+        try:
+            time.sleep(hold_seconds)
+        finally:
+            self.key_up(name)
 
     def chord(self, value, hold_seconds):
         names = value.split("+")
         if len(names) < 2 or any(not name for name in names):
             raise ValueError("chord must contain two or more '+'-separated keys")
-        keysyms = [self.keysym(name) for name in names]
-        for keysym in keysyms:
-            self.key_event(keysym, 1)
-        time.sleep(hold_seconds)
-        for keysym in reversed(keysyms):
-            self.key_event(keysym, 0)
+        pressed = []
+        try:
+            for name in names:
+                self.key_down(name)
+                pressed.append(name)
+            time.sleep(hold_seconds)
+        finally:
+            for name in reversed(pressed):
+                self.key_up(name)
 
     def pointer_event(self, x, y, buttons=0):
         self.connection.sendall(struct.pack(">BBHH", 5, buttons, x, y))
+        self.pointer_event_x = x
+        self.pointer_event_y = y
+        self.pressed_buttons = buttons
+
+    def release_all_buttons(self):
+        if self.pressed_buttons:
+            self.pointer_event(
+                self.pointer_event_x, self.pointer_event_y, 0)
 
     def move_to(self, x, y):
         if x < 0 or y < 0 or x >= self.width or y >= self.height:
@@ -196,11 +238,32 @@ class RFBClient:
         self.pointer_x = x
         self.pointer_y = y
 
+    def rehome_pointer(self):
+        """Resynchronize after a guest application warps its own cursor.
+
+        QEMU converts absolute RFB positions to relative guest motion. Sending
+        both full diagonals guarantees clipping at the lower-right and then at
+        the upper-left even when our remembered position no longer matches the
+        cursor visible inside Mac OS.
+        """
+        if self.width < 1 or self.height < 1:
+            raise RuntimeError("cannot rehome before VNC dimensions are known")
+        self.pointer_event(0, 0)
+        time.sleep(0.05)
+        self.pointer_event(self.width - 1, self.height - 1)
+        time.sleep(0.05)
+        self.pointer_event(0, 0)
+        time.sleep(0.05)
+        self.pointer_x = 0
+        self.pointer_y = 0
+
     def click_buttons(self, x, y, count):
         for index in range(count):
             self.pointer_event(x, y, 1)
-            time.sleep(0.05)
-            self.pointer_event(x, y)
+            try:
+                time.sleep(0.05)
+            finally:
+                self.release_all_buttons()
             if index + 1 < count:
                 time.sleep(0.12)
 
@@ -214,7 +277,7 @@ class RFBClient:
         try:
             time.sleep(hold_seconds)
         finally:
-            self.pointer_event(x, y)
+            self.release_all_buttons()
 
     def double_click(self, x, y):
         self.move_to(x, y)
@@ -223,16 +286,18 @@ class RFBClient:
     def drag(self, start_x, start_y, end_x, end_y):
         self.move_to(start_x, start_y)
         self.pointer_event(start_x, start_y, 1)
-        delta_x = end_x - start_x
-        delta_y = end_y - start_y
-        distance = max(abs(delta_x), abs(delta_y))
-        for step in range(1, distance + 1):
-            fraction = step / distance
-            x = round(start_x + delta_x * fraction)
-            y = round(start_y + delta_y * fraction)
-            self.pointer_event(x, y, 1)
-            time.sleep(0.002)
-        self.pointer_event(end_x, end_y)
+        try:
+            delta_x = end_x - start_x
+            delta_y = end_y - start_y
+            distance = max(abs(delta_x), abs(delta_y))
+            for step in range(1, distance + 1):
+                fraction = step / distance
+                x = round(start_x + delta_x * fraction)
+                y = round(start_y + delta_y * fraction)
+                self.pointer_event(x, y, 1)
+                time.sleep(0.002)
+        finally:
+            self.release_all_buttons()
         self.pointer_x = end_x
         self.pointer_y = end_y
 
@@ -402,6 +467,7 @@ def main():
             raise SystemExit("--tcp must be formatted as HOST:PORT") from error
         connection = socket.create_connection(address)
 
+    client = None
     try:
         client = RFBClient(connection)
         client.connect()
@@ -429,7 +495,15 @@ def main():
             print("%s: %dx%d" % (args.screenshot,
                                   client.width, client.height))
     finally:
-        connection.close()
+        try:
+            try:
+                if client is not None:
+                    client.release_all_buttons()
+            finally:
+                if client is not None:
+                    client.release_all_keys()
+        finally:
+            connection.close()
 
 
 if __name__ == "__main__":

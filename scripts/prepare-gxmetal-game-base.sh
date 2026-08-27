@@ -75,6 +75,8 @@ CANDIDATE_NDRV_SHA="$(shasum -a 256 "$PPC_NDRV" | awk '{ print $1 }')"
 SOURCE_DISK="$(cd "$(dirname "$SOURCE_DISK")" && pwd)/$(basename "$SOURCE_DISK")"
 OUTPUT_PARENT="$(cd "$(dirname "$OUTPUT_DISK")" && pwd)"
 OUTPUT_DISK="$OUTPUT_PARENT/$(basename "$OUTPUT_DISK")"
+[ ! -w "$SOURCE_DISK" ] || \
+  die "Source disk must be host-read-only (chmod a-w) before preparation: $SOURCE_DISK"
 SOURCE_SIZE="$(stat -f '%z' "$SOURCE_DISK")"
 SOURCE_MTIME="$(stat -f '%m' "$SOURCE_DISK")"
 
@@ -155,6 +157,18 @@ ditto "$GXMETAL_FILE" "$MOUNT_POINT/System Folder/Extensions/GXMetal"
 ditto "$INPUT_FILE" "$MOUNT_POINT/System Folder/Extensions/GXMetal Input"
 ditto "$STARTUP_FILE" "$MOUNT_POINT/System Folder/Extensions/GXMetal Startup"
 ditto "$TEST_FILE" "$TOOLS_FOLDER/GXMetal Test"
+
+# A promoted game base must not inherit a conformance application as a Startup
+# Item.  Its modal PASS/FAIL dialog can consume the first automated click and
+# block every later semantic gate even though the game and driver are healthy.
+# Preserve any inherited item in the candidate-qualified backup instead of
+# deleting it.
+for startup_test in 'GXMetal Test' 'GXMetal AGL Probe'; do
+  if [ -e "$MOUNT_POINT/System Folder/Startup Items/$startup_test" ]; then
+    mv "$MOUNT_POINT/System Folder/Startup Items/$startup_test" \
+       "$BACKUP/$startup_test Startup Item"
+  fi
+done
 
 # A promoted base starts with no result or trace inherited from earlier runs.
 # Game evidence will contain the first diagnostic snapshot produced by this

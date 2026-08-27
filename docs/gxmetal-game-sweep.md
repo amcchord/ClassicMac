@@ -247,7 +247,8 @@ python3 scripts/gxmetal-game-sweep.py BASE.img MANIFEST.json \
 
 Prepare a new immutable base with the exact guest artifacts extracted from
 that signed app before the release-wide replay. The source image is never
-mounted, and the command refuses to overwrite an existing output:
+mounted, must have all host write bits removed (`chmod a-w`), and the command
+refuses to overwrite an existing output:
 
 ```sh
 scripts/prepare-gxmetal-game-base.sh \
@@ -257,16 +258,47 @@ scripts/prepare-gxmetal-game-base.sh \
 
 The tool verifies the signed app, clones the source, replaces GXMetal,
 GXMetal Input, and GXMetal Startup only in the clone, places GXMetal Test in a
-top-level candidate-tools folder, and clears inherited test/trace files. While
-the clone is already mounted, it reads the exact id-0 `Smrt` General Controls
-resource. If that single resource already records the disabled startup-disk
-check, the preference is preserved without booting the VM. Otherwise the tool
-uses General Controls inside the guest, force-stops and reboots the output,
-requires Finder to appear without Disk First Aid, and verifies the resource.
-It then prints source, output, Tools CD, and bundled Power Mac QEMU hashes. Set
+top-level candidate-tools folder, moves inherited GXMetal conformance apps out
+of Startup Items, and clears inherited test/trace files. This prevents an old
+PASS/FAIL dialog from consuming game-automation input. While the clone is
+already mounted, it reads the exact id-0 `Smrt` General Controls resource. If
+that single resource already records the disabled startup-disk check, the
+preference is preserved without booting the VM. Otherwise the tool uses
+General Controls inside the guest, force-stops and reboots the output, requires
+Finder to appear without Disk First Aid, and verifies the resource. It then
+prints source, output, Tools CD, and bundled Power Mac QEMU hashes. Set
 `GXMETAL_FORCE_DISK_CHECK_VERIFY=1` to force the full UI/reboot verification or
-`GXMETAL_SKIP_DISK_CHECK_DISABLE=1` only when preparing a special control
-image that must retain the warning.
+`GXMETAL_SKIP_DISK_CHECK_DISABLE=1` only when preparing a special control image
+that must retain the warning.
+
+If installed titles are split across validated bases, compose the missing
+application folder before preparing or qualifying the driver. The composition
+tool clones the destination base, mounts the donor read-only, preserves Mac
+resource forks and Finder metadata with `ditto`, refuses replacement, records
+both input hashes and the output hash, verifies both inputs again after detach,
+and makes the result read-only. Both inputs must already be host-read-only:
+
+```sh
+scripts/compose-gxmetal-game-base.sh \
+  /path/to/base.img \
+  /path/to/donor.img \
+  'FutureCop Preview' \
+  /path/to/ten-installed-games.img
+```
+
+The optional fifth argument chooses a different destination-relative path.
+The adjacent `.composition.txt` sidecar is part of the base provenance. A
+folder containing only an installer does not satisfy an installed-game route;
+verify the exact application path from a disposable clone before starting a
+long batch.
+
+Do not use Finder, `hdiutil`, or Disk Arbitration to inspect a retained evidence
+disk that is still host-writable, even with read-only attach and mount flags.
+During the UT investigation macOS changed such an image's SHA-256 and mtime
+without changing its size; the sweep's independent before/after hash caught
+the incident. Lock every golden/input image at the filesystem level, mount
+only disposable clones, and quarantine any source immediately if its digest
+changes.
 
 The guest-side UI route preserves the rest of General Controls; direct host
 resource-fork rewriting is deliberately avoided. The standalone operation is
@@ -310,6 +342,24 @@ from the guest Preferences folder. It records process/CFM identity and
 InputSprocket lifecycle, bridge, timer, polling, and push counters separately
 from the rendering-driver trace.
 
+For boundaries that cannot be inferred from screenshots, manifests may pair
+`key_down`/`key_up` around a bounded `monitor_memory_snapshot`, or use
+`monitor_register_snapshot` to dump selected PPC registers and the memory they
+reference. Held keys must be balanced when the manifest is loaded. Interrupted
+runs release every tracked key and mouse button during cleanup. Fixed memory
+reads are limited to 4,096 bytes in the 32-bit virtual address space. These
+actions use
+QEMU's read-only `x`/`info registers` monitor commands; they do not patch the
+guest or weaken its memory protections.
+
+Games that switch into relative mouse mode may warp the guest cursor without
+changing the VNC client's remembered absolute position. Before clicking a
+Finder dialog after such gameplay, use `{"rehome_pointer": true}`. It sends a
+bounded corner-to-corner sequence that resynchronizes QEMU's relative pointer
+conversion and leaves the cursor at the upper-left; the next normal click can
+then move from a known position. This is deliberately explicit because doing
+it during live gameplay would create unwanted camera motion.
+
 The AGL probe rejects software pixel formats, verifies the renderer identity,
 draws and clears through Apple's OpenGL stack, and checks all six common
 filled primitive modes: triangles, triangle strips, triangle fans, quads,
@@ -332,7 +382,10 @@ Finder windows before navigating, so a base's last interactive window cannot
 redirect coordinate-driven input. The base must contain the
 installed top-level `FutureCop Preview` folder; media-only bases that contain
 just its installer are intentionally rejected by the launch recipe's semantic
-gate. On a sufficiently large development host, run all four at once:
+gate. Future Cop explicitly clicks the root-window contents before selecting
+by initial so an offscreen Finder selection from base preparation cannot
+redirect Command-O to the candidate-tools folder. On a sufficiently large
+development host, run all four at once:
 
 ```sh
 python3 scripts/gxmetal-game-sweep.py BASE.img \
