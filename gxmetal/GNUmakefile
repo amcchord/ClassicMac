@@ -3,9 +3,12 @@ HOST_CFLAGS ?= -std=c11 -O2 -g -Wall -Wextra -Werror -pedantic \
                -Iprotocol -Ihost
 
 BUILD_DIR := build
+INPUT_TEST_STUBS := $(wildcard tests/gxmetal_input_stubs/*.h)
 PROTOCOL_TEST := $(BUILD_DIR)/test_protocol
 QUEUE_TEST := $(BUILD_DIR)/test_queue
 GUEST_TRANSPORT_TEST := $(BUILD_DIR)/test_guest_transport
+INPUT_LIFECYCLE_TEST := $(BUILD_DIR)/test_input_lifecycle
+GENERATION_LIFECYCLE_TEST := $(BUILD_DIR)/test_generation_lifecycle
 RENDERER_TEST := $(BUILD_DIR)/test_renderer
 DIRTY_TEST := $(BUILD_DIR)/test_dirty
 PIPELINE_TEST := $(BUILD_DIR)/test_pipeline
@@ -39,6 +42,22 @@ $(GUEST_TRANSPORT_TEST): tests/test_guest_transport.c \
 	@mkdir -p $(BUILD_DIR)
 	$(HOST_CC) $(HOST_CFLAGS) -Iguest/src -Iguest/include -o $@ \
 		tests/test_guest_transport.c guest/src/GXMetalTransport.c
+
+$(INPUT_LIFECYCLE_TEST): tests/test_input_lifecycle.c \
+                        guest/src/GXMetalInput.c \
+                        guest/include/GXMetalInputDiagnostics.h \
+                        $(INPUT_TEST_STUBS) \
+                        protocol/gxmetal_protocol.h
+	@mkdir -p $(BUILD_DIR)
+	$(HOST_CC) $(HOST_CFLAGS) -Itests/gxmetal_input_stubs \
+		-Iguest/include -Iprotocol -o $@ \
+		tests/test_input_lifecycle.c
+
+$(GENERATION_LIFECYCLE_TEST): tests/test_generation_lifecycle.c \
+                             guest/src/GXMetalGenerationPolicy.h
+	@mkdir -p $(BUILD_DIR)
+	$(HOST_CC) $(HOST_CFLAGS) -Iguest/src -o $@ \
+		tests/test_generation_lifecycle.c
 
 $(RENDERER_TEST): tests/test_renderer.c host/gxmetal_renderer.c \
                   host/gxmetal_renderer.h host/gxmetal_decode.c \
@@ -90,12 +109,16 @@ $(BUILD_DIR)/test_metal: tests/test_metal.m host/gxmetal_metal.m \
 		-framework Foundation -framework Metal
 
 test: $(PROTOCOL_TEST) $(QUEUE_TEST) $(GUEST_TRANSPORT_TEST) \
+      $(INPUT_LIFECYCLE_TEST) \
+      $(GENERATION_LIFECYCLE_TEST) \
       $(RENDERER_TEST) $(DIRTY_TEST) $(PIPELINE_TEST) \
       $(ATI_COMPATIBILITY_TEST) $(RAVE_COMPATIBILITY_TEST) \
       $(AGL_PROBE_TEST) $(METAL_TEST)
 	$(PROTOCOL_TEST)
 	$(QUEUE_TEST)
 	$(GUEST_TRANSPORT_TEST)
+	$(INPUT_LIFECYCLE_TEST)
+	$(GENERATION_LIFECYCLE_TEST)
 	$(RENDERER_TEST)
 	$(DIRTY_TEST)
 	$(PIPELINE_TEST)

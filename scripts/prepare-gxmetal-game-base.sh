@@ -1,14 +1,17 @@
 #!/usr/bin/env bash
 #
-# Prepare an immutable Mac OS 9 game-sweep base from the exact GXMetal guest
-# artifacts bundled in a signed ClassicMac candidate. The source image is
-# never mounted or written; only a newly created clone is modified.
+# Prepare an immutable Mac OS 9 game-sweep base from GXMetal guest artifacts
+# bundled in a signed ClassicMac candidate, or from an explicitly supplied
+# source-built Tools CD. The source image is never mounted or written; only a
+# newly created clone is modified. QEMU and the Power Mac NDRV always come
+# from the verified signed application.
 #
 # Usage:
 #   scripts/prepare-gxmetal-game-base.sh SOURCE.img OUTPUT.img
 #
 # Optional environment:
 #   GXMETAL_APP=/path/to/ClassicMac.app
+#   GXMETAL_TOOLS_CD=/path/to/source-built/ClassicMacTools.iso
 #   GXMETAL_SKIP_DISK_CHECK_DISABLE=1
 #   GXMETAL_FORCE_DISK_CHECK_VERIFY=1
 
@@ -18,7 +21,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SOURCE_DISK="${1:-}"
 OUTPUT_DISK="${2:-}"
 APP="${GXMETAL_APP:-$ROOT_DIR/dist/ClassicMac.app}"
-TOOLS_CD="$APP/Contents/Resources/ClassicMacTools.iso"
+TOOLS_CD="${GXMETAL_TOOLS_CD:-$APP/Contents/Resources/ClassicMacTools.iso}"
 PPC_QEMU="$APP/Contents/Helpers/Power Mac G4.app/Contents/MacOS/qemu-system-ppc"
 PPC_NDRV="$APP/Contents/Resources/qemu/pc-bios/qemu_vga.ndrv"
 
@@ -81,7 +84,11 @@ log "Verifying the signed application candidate"
 SCRATCH="$(mktemp -d "${TMPDIR:-/tmp}/gxmetal-game-base.XXXXXX")"
 mkdir -p "$SCRATCH/macbinary" "$SCRATCH/guest"
 
-log "Extracting the packaged GXMetal artifacts"
+if [ -n "${GXMETAL_TOOLS_CD:-}" ]; then
+  log "Extracting GXMetal artifacts from the explicit Tools CD candidate"
+else
+  log "Extracting the packaged GXMetal artifacts"
+fi
 hmount "$TOOLS_CD" >/dev/null
 HFSUTILS_MOUNTED=1
 hcopy -m ':GXMetal:GXMetal' "$SCRATCH/macbinary/GXMetal.bin"
@@ -132,7 +139,7 @@ MOUNT_POINT="$(diskutil info -plist "$HFS_PARTITION" | \
 [ -d "$MOUNT_POINT/System Folder/Extensions" ] || \
   die "The output image does not contain a Mac OS System Folder."
 
-BACKUP="$MOUNT_POINT/GXMetal Sweep Backups/Before $CANDIDATE_GXMETAL_VERSION"
+BACKUP="$MOUNT_POINT/GXMetal Sweep Backups/Before $CANDIDATE_GXMETAL_VERSION-${CANDIDATE_TOOLS_SHA:0:12}"
 TOOLS_FOLDER="$MOUNT_POINT/GXMetal Candidate Tools"
 mkdir -p "$BACKUP" "$TOOLS_FOLDER"
 for name in 'GXMetal' 'GXMetal Input' 'GXMetal Startup'; do
@@ -153,7 +160,7 @@ ditto "$TEST_FILE" "$TOOLS_FOLDER/GXMetal Test"
 # Game evidence will contain the first diagnostic snapshot produced by this
 # exact candidate rather than counters from the image used as its source.
 for stale in 'GXMetal Test Results' 'GXMetal AGL Probe Results' \
-             'GXMetal Driver Trace'; do
+             'GXMetal Driver Trace' 'GXMetal Input Trace'; do
   if [ -e "$MOUNT_POINT/System Folder/Preferences/$stale" ]; then
     mv "$MOUNT_POINT/System Folder/Preferences/$stale" "$BACKUP/$stale"
   fi

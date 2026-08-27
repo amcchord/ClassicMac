@@ -10,6 +10,10 @@ RETRO68_RINCLUDES ?= $(RINCLUDES)/../../RIncludes
 CFLAGS := -std=gnu99 -O2 -fPIC -Wall -Wextra -Werror \
           -Wno-multichar -ffunction-sections -fdata-sections \
           -Isrc -Iinclude -I../protocol
+GXMETAL_INPUT_CFLAGS :=
+ifeq ($(GXMETAL_INPUT_TICKLE_ONLY_DIAGNOSTIC),1)
+GXMETAL_INPUT_CFLAGS += -DGXMETAL_INPUT_TICKLE_ONLY_DIAGNOSTIC=1
+endif
 LDFLAGS := -shared -Wl,-e,GXMetalCFMInitialize \
            -Wl,-bE:src/GXMetal.exp -Wl,--gc-sections \
            -Wl,--gc-keep-exported
@@ -31,6 +35,7 @@ all: bin/GXMetal.bin bin/GXMetalInput.bin bin/GXMetalStartup.bin bin/GXMetalInst
 bin/GXMetal.xcoff: src/GXMetalEngine.c src/GXMetalTransport.c \
                    src/GXMetalTransport.h src/GXMetalATICompatibility.h \
                    src/GXMetalDrawPolicy.h \
+                   src/GXMetalGenerationPolicy.h \
                    src/GXMetalRAVECompatibility.h \
                    include/GXMetalDiagnostics.h \
                    include/GXMetalRegistry.h include/GXMetalVersion.h \
@@ -56,9 +61,11 @@ bin/GXMetal.bin: bin/GXMetal.pef src/GXMetal.r src/GXMetalIcon.r
 	python3 ../tools/set_macbinary_flags.py $@ --set 0x0400 --clear 0x0180
 
 bin/GXMetalInput.xcoff: src/GXMetalInput.c src/GXMetalInput.exp \
+                        include/GXMetalInputDiagnostics.h \
                         ../protocol/gxmetal_protocol.h GNUmakefile
 	@mkdir -p bin
-	$(CC) $(CFLAGS) -shared -Wl,-e,GXMetalInputCFMInitialize \
+	$(CC) $(CFLAGS) $(GXMETAL_INPUT_CFLAGS) \
+		-shared -Wl,-e,GXMetalInputCFMInitialize \
 		-Wl,-bE:src/GXMetalInput.exp -Wl,--gc-sections \
 		-Wl,--gc-keep-exported -o $@ $< \
 		-lInputSprocketLib -lInterfaceLib

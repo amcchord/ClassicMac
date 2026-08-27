@@ -301,7 +301,14 @@ scripts/extract-gxmetal-guest-results.sh test \
   /path/to/evidence/driver-smoke-YYYYMMDD/gxmetal-conformance__gxmetal
 scripts/extract-gxmetal-guest-results.sh agl \
   /path/to/evidence/driver-smoke-YYYYMMDD/gxmetal-agl-probe__gxmetal
+scripts/extract-gxmetal-guest-results.sh input \
+  /path/to/evidence/lifecycle-YYYYMMDD/game__gxmetal
 ```
+
+The `input` mode copies and decodes the fixed-format `GXMetal Input Trace`
+from the guest Preferences folder. It records process/CFM identity and
+InputSprocket lifecycle, bridge, timer, polling, and push counters separately
+from the rendering-driver trace.
 
 The AGL probe rejects software pixel formats, verifies the renderer identity,
 draws and clears through Apple's OpenGL stack, and checks all six common
@@ -400,6 +407,24 @@ recorded in the top-level `session.json`, each run's `run.json` and
 CoreAudio run can mix sound from parallel guests, so use a small `--jobs` value
 when listening to and reviewing individual games.
 
+For transport diagnosis, enable one or more built-in QEMU trace events without
+rebuilding the host. The option is repeatable, accepts an event name or glob,
+and rejects comma-separated trace-output options so every run keeps its output
+inside the archived `qemu.log`:
+
+```sh
+python3 scripts/gxmetal-game-sweep.py BASE.img MANIFEST.json \
+  --audio-backend none \
+  --trace-event input_event_key_qcode \
+  --trace-event input_event_btn \
+  --output /path/to/evidence/input-transport-YYYYMMDD
+```
+
+The selected events are recorded in `session.json`, `run.json`, the
+`qemu_started` event, and `qemu-command.json`. This distinguishes VNC/QEMU
+delivery from guest InputSprocket behavior while retaining the exact signed
+QEMU executable under test.
+
 The classic Unreal Tournament port currently stops before its first RAVE
 submission when `UseSound=True` under the test VM's audio path. Fullscreen is
 not causal: sound-disabled windowed and fullscreen controls render the same
@@ -418,10 +443,10 @@ to overwrite its output.
 ## Evidence and review
 
 The top-level `session.json` contains hashes for the manifest, executable,
-loader, base disk, Tools CD, and game media, plus the selected audio backend,
-host/Python identity, QEMU version, repository commit/status, and before/after
-base-image integrity result. `manifest.json` is the exact archived input, and
-`summary.json` contains one automation result per variant.
+loader, base disk, Tools CD, and game media, plus the selected audio backend
+and trace events, host/Python identity, QEMU version, repository commit/status,
+and before/after base-image integrity result. `manifest.json` is the exact
+archived input, and `summary.json` contains one automation result per variant.
 Each run directory contains:
 
 - `qemu-command.json`, `qemu.log`, and `serial.log`; the runner enables QEMU's
@@ -456,12 +481,15 @@ snapshot layout in an analysis script:
 ```sh
 python3 scripts/decode-gxmetal-diagnostics.py \
   path/to/GXMetal-Driver-Trace.bin > driver-trace.json
+python3 scripts/decode-gxmetal-input-trace.py \
+  path/to/GXMetal-Input-Trace.bin > input-trace.json
 ```
 
 The decoder derives field order, signedness, and array extents from the current
 `GXMetalDiagnostics.h`. It also recognizes supported append-only historical
 snapshots from v1.12 through v1.27 while the current schema is v1.28; other
-size mismatches are rejected.
+size mismatches are rejected. The input decoder validates its own fixed
+big-endian snapshot size, magic, version, and event ring before emitting JSON.
 
 ## Ten-game sweep discipline
 

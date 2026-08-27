@@ -12,14 +12,22 @@
  */
 
 #include <CodeFragments.h>
+#include <Files.h>
+#include <Folders.h>
 #include <InputSprocket.h>
 #include <LowMem.h>
+#include <MacErrors.h>
 #include <MacTypes.h>
 #include <Processes.h>
 #include <Timer.h>
 #include <string.h>
 
+#include "GXMetalInputDiagnostics.h"
 #include "gxmetal_protocol.h"
+
+#ifndef GXMETAL_INPUT_TICKLE_ONLY_DIAGNOSTIC
+#define GXMETAL_INPUT_TICKLE_ONLY_DIAGNOSTIC 0
+#endif
 
 static ISpDeviceReference gDevice;
 static ISpDeviceReference gQuakeMotionDevice;
@@ -35,6 +43,8 @@ static Boolean gActive;
 static Boolean gHostRelativeInput;
 static Boolean gDirectHostInput;
 static UInt32 gActiveDeviceMask;
+static ProcessSerialNumber gDeviceOwner;
+static Boolean gDeviceOwnerValid;
 static Point gRelativeAnchor;
 static TMTask gPollTimer;
 static Boolean gPollTimerInstalled;
@@ -51,6 +61,15 @@ static GXMetalInputModeProc gSetRelativeInputMode;
 static GXMetalInputButtonsProc gGetInputButtonState;
 static GXMetalInputStateProc gGetInputState;
 static GXMetalInputEventsProc gGetInputEvents;
+static GXMetalInputTraceSnapshot gInputTrace = {
+    .magic = GXMETAL_INPUT_TRACE_MAGIC,
+    .version = GXMETAL_INPUT_TRACE_VERSION,
+    .snapshot_bytes = sizeof(GXMetalInputTraceSnapshot),
+    .event_capacity = GXMETAL_INPUT_TRACE_EVENT_CAPACITY,
+    .last_current_process_result = noErr,
+    .last_owner_process_result = noErr,
+    .tickle_only_diagnostic = GXMETAL_INPUT_TICKLE_ONLY_DIAGNOSTIC
+};
 
 static const unsigned char kGXMetalLibraryName[] = {
     7, 'G', 'X', 'M', 'e', 't', 'a', 'l'
@@ -71,6 +90,10 @@ static const unsigned char kGXMetalInputEventsSymbol[] = {
     21, 'G', 'X', 'M', 'e', 't', 'a', 'l', 'G', 'e', 't', 'I', 'n', 'p',
     'u', 't', 'E', 'v', 'e', 'n', 't', 's'
 };
+static const unsigned char kGXMetalInputTraceName[] = {
+    19, 'G', 'X', 'M', 'e', 't', 'a', 'l', ' ', 'I', 'n', 'p', 'u', 't',
+    ' ', 'T', 'r', 'a', 'c', 'e'
+};
 
 enum {
     kGXMetalInputPollIntervalMilliseconds = 8,
@@ -82,6 +105,178 @@ enum {
 };
 
 void ISpDriver_Tickle(void);
+static void GXMetalInputPoll(void);
+static OSStatus GXMetalInputCreate(void);
+static void GXMetalInputResetDevices(Boolean disposeObjects);
+
+static void GXMetalInputTraceInitialize(void)
+{
+    memset(&gInputTrace, 0, sizeof(gInputTrace));
+    gInputTrace.magic = GXMETAL_INPUT_TRACE_MAGIC;
+    gInputTrace.version = GXMETAL_INPUT_TRACE_VERSION;
+    gInputTrace.snapshot_bytes = sizeof(gInputTrace);
+    gInputTrace.event_capacity = GXMETAL_INPUT_TRACE_EVENT_CAPACITY;
+    gInputTrace.last_current_process_result = noErr;
+    gInputTrace.last_owner_process_result = noErr;
+    gInputTrace.tickle_only_diagnostic =
+        GXMETAL_INPUT_TICKLE_ONLY_DIAGNOSTIC;
+}
+
+static OSErr GXMetalInputTraceFile(FSSpec *trace)
+{
+    short volume = 0;
+    long directory = 0;
+    OSErr error;
+
+    error = FindFolder(kOnSystemDisk, kPreferencesFolderType, false,
+                       &volume, &directory);
+    if (error != noErr) {
+        return error;
+    }
+    error = FSMakeFSSpec(volume, directory, kGXMetalInputTraceName, trace);
+    return error == fnfErr ? noErr : error;
+}
+
+static void GXMetalInputTraceLoad(void)
+{
+    GXMetalInputTraceSnapshot loaded;
+    FSSpec trace;
+    short refNum = -1;
+    long length = (long)sizeof(loaded);
+    OSErr error;
+
+    GXMetalInputTraceInitialize();
+    gInputTrace.trace_load_count++;
+    error = GXMetalInputTraceFile(&trace);
+    if (error == noErr) {
+        error = FSpOpenDF(&trace, fsRdPerm, &refNum);
+    }
+    if (error == noErr) {
+        error = FSRead(refNum, &length, &loaded);
+        (void)FSClose(refNum);
+    }
+    if ((error == noErr || error == eofErr) &&
+        length == (long)sizeof(loaded) &&
+        loaded.magic == GXMETAL_INPUT_TRACE_MAGIC &&
+        loaded.version == GXMETAL_INPUT_TRACE_VERSION &&
+        loaded.snapshot_bytes == sizeof(loaded) &&
+        loaded.event_capacity == GXMETAL_INPUT_TRACE_EVENT_CAPACITY) {
+        gInputTrace = loaded;
+        gInputTrace.trace_load_count++;
+        gInputTrace.trace_load_valid_count++;
+    }
+    gInputTrace.tickle_only_diagnostic =
+        GXMETAL_INPUT_TICKLE_ONLY_DIAGNOSTIC;
+}
+
+static void GXMetalInputTracePersist(void)
+{
+    FSSpec trace;
+    short refNum = -1;
+    long length = (long)sizeof(gInputTrace);
+    OSErr error;
+
+    gInputTrace.trace_persist_attempt_count++;
+    gInputTrace.trace_persist_success_count++;
+    error = GXMetalInputTraceFile(&trace);
+    if (error == noErr) {
+        error = FSpOpenDF(&trace, fsWrPerm, &refNum);
+        if (error != noErr) {
+            error = FSpCreate(&trace, 'GXMT', 'GXIT', smSystemScript);
+            if (error == noErr) {
+                error = FSpOpenDF(&trace, fsWrPerm, &refNum);
+            }
+        }
+    }
+    if (error == noErr) {
+        error = SetFPos(refNum, fsFromStart, 0);
+    }
+    if (error == noErr) {
+        error = FSWrite(refNum, &length, &gInputTrace);
+        if (error == noErr && length != (long)sizeof(gInputTrace)) {
+            error = ioErr;
+        }
+    }
+    if (error == noErr) {
+        error = SetEOF(refNum, (long)sizeof(gInputTrace));
+    }
+    if (refNum >= 0) {
+        OSErr closeError = FSClose(refNum);
+        if (error == noErr) {
+            error = closeError;
+        }
+    }
+    if (error != noErr) {
+        gInputTrace.trace_persist_success_count--;
+        gInputTrace.trace_persist_failure_count++;
+    }
+}
+
+static OSErr GXMetalInputTraceCurrentProcess(ProcessSerialNumber *process)
+{
+    OSErr error = GetCurrentProcess(process);
+
+    gInputTrace.current_process_query_count++;
+    gInputTrace.last_current_process_result = error;
+    if (error == noErr) {
+        gInputTrace.current_process_success_count++;
+        gInputTrace.last_current_process_high = process->highLongOfPSN;
+        gInputTrace.last_current_process_low = process->lowLongOfPSN;
+    } else {
+        gInputTrace.current_process_failure_count++;
+    }
+    return error;
+}
+
+static void GXMetalInputTraceRecordEvent(UInt32 kind, UInt32 refCon,
+                                         UInt32 argument, OSStatus result)
+{
+    ProcessSerialNumber process;
+    OSErr processError = GXMetalInputTraceCurrentProcess(&process);
+    UInt32 sequence = ++gInputTrace.event_sequence;
+    GXMetalInputTraceEvent *event = &gInputTrace.events[
+        (sequence - 1u) % GXMETAL_INPUT_TRACE_EVENT_CAPACITY];
+
+    memset(event, 0, sizeof(*event));
+    event->sequence = sequence;
+    event->kind = kind;
+    event->ref_con = refCon;
+    event->argument = argument;
+    event->result = result;
+    event->current_process_result = processError;
+    if (processError == noErr) {
+        event->current_process_high = process.highLongOfPSN;
+        event->current_process_low = process.lowLongOfPSN;
+    }
+    event->owner_valid = gDeviceOwnerValid;
+    event->owner_process_result = gInputTrace.last_owner_process_result;
+    if (gDeviceOwnerValid) {
+        event->owner_process_high = gDeviceOwner.highLongOfPSN;
+        event->owner_process_low = gDeviceOwner.lowLongOfPSN;
+    }
+    event->find_count = gInputTrace.find_count;
+    event->set_active_count = gInputTrace.set_active_count;
+    event->device_tickle_count = gInputTrace.device_tickle_count;
+    event->poll_count = gInputTrace.poll_count;
+    event->push_count = gInputTrace.delta_x_push_count +
+        gInputTrace.delta_y_push_count + gInputTrace.button_1_push_count +
+        gInputTrace.button_2_push_count + gInputTrace.button_3_push_count;
+}
+
+static void GXMetalInputCloseHostBridge(void)
+{
+    /* kReferenceCFrag owns a connection reference.  Do not let an inactive
+     * InputSprocket driver pin GXMetal's fragment incarnation after its
+     * rendering client exits. */
+    gSetRelativeInputMode = NULL;
+    gGetInputButtonState = NULL;
+    gGetInputState = NULL;
+    gGetInputEvents = NULL;
+    if (gGXMetalConnection != NULL) {
+        gInputTrace.bridge_close_count++;
+        (void)CloseConnection(&gGXMetalConnection);
+    }
+}
 
 static void GXMetalInputResolveHostBridge(void)
 {
@@ -96,17 +291,18 @@ static void GXMetalInputResolveHostBridge(void)
     if (gGXMetalConnection != NULL) {
         return;
     }
+    gInputTrace.bridge_resolve_attempt_count++;
     if (GetSharedLibrary(kGXMetalLibraryName, kPowerPCCFragArch,
                          kReferenceCFrag, &gGXMetalConnection,
                          &mainAddress, errorName) != noErr ||
         FindSymbol(gGXMetalConnection, kGXMetalInputModeSymbol, &modeSymbol,
                    &symbolClass) != noErr || modeSymbol == NULL ||
         symbolClass != kTVectorCFragSymbol) {
-        if (gGXMetalConnection != NULL) {
-            (void)CloseConnection(&gGXMetalConnection);
-        }
+        GXMetalInputCloseHostBridge();
+        gInputTrace.bridge_resolve_failure_count++;
         return;
     }
+    gInputTrace.bridge_resolve_success_count++;
     gSetRelativeInputMode = (GXMetalInputModeProc)modeSymbol;
     if (FindSymbol(gGXMetalConnection, kGXMetalInputButtonsSymbol,
                    &buttonsSymbol, &symbolClass) == noErr &&
@@ -129,11 +325,22 @@ static Boolean GXMetalInputSetHostMode(Boolean relative)
 {
     OSErr error;
 
+    if (relative) {
+        gInputTrace.host_mode_enable_attempt_count++;
+    } else {
+        gInputTrace.host_mode_disable_attempt_count++;
+    }
     GXMetalInputResolveHostBridge();
     if (gSetRelativeInputMode == NULL) {
+        gInputTrace.host_mode_failure_count++;
         return false;
     }
     error = gSetRelativeInputMode(relative);
+    if (error == noErr) {
+        gInputTrace.host_mode_success_count++;
+    } else {
+        gInputTrace.host_mode_failure_count++;
+    }
     return error == noErr;
 }
 
@@ -150,6 +357,7 @@ static UInt32 GXMetalInputReadButtons(void)
     }
 
     /* Classic low memory stores the primary button active-low in bit 7. */
+    gInputTrace.fallback_button_read_count++;
     return (LMGetMouseButtonState() & 0x80u) == 0 ?
         GXMETAL_INPUT_BUTTON_ONE : 0;
 }
@@ -185,7 +393,10 @@ static void GXMetalInputBeginRelativeTracking(void)
 static pascal void GXMetalInputPollTimer(TMTaskPtr task)
 {
     (void)task;
-    ISpDriver_Tickle();
+    gInputTrace.timer_poll_count++;
+    /* Time Manager callbacks must not call Process Manager. Ownership is
+     * reconciled by the task-level driver entry points before polling starts. */
+    GXMetalInputPoll();
     if (gPollTimerInstalled && gActive) {
         PrimeTime((QElemPtr)&gPollTimer,
                   kGXMetalInputPollIntervalMilliseconds);
@@ -202,16 +413,90 @@ static void GXMetalInputStopPolling(void)
     if (gPollTimerInstalled) {
         RmvTime((QElemPtr)&gPollTimer);
         gPollTimerInstalled = false;
+        gInputTrace.timer_stop_count++;
     }
+}
+
+static Boolean GXMetalInputGetCurrentProcess(ProcessSerialNumber *process)
+{
+    return process != NULL &&
+           GXMetalInputTraceCurrentProcess(process) == noErr;
+}
+
+static Boolean GXMetalInputSameProcess(
+    const ProcessSerialNumber *left, const ProcessSerialNumber *right)
+{
+    return left->highLongOfPSN == right->highLongOfPSN &&
+           left->lowLongOfPSN == right->lowLongOfPSN;
+}
+
+static OSErr GXMetalInputOwnerStatus(void)
+{
+    ProcessInfoRec information;
+    OSErr error;
+
+    if (!gDeviceOwnerValid) {
+        return noErr;
+    }
+    memset(&information, 0, sizeof(information));
+    information.processInfoLength = sizeof(information);
+    error = GetProcessInformation(&gDeviceOwner, &information);
+    gInputTrace.owner_process_query_count++;
+    gInputTrace.last_owner_process_result = error;
+    if (error == procNotFound) {
+        gInputTrace.owner_process_not_found_count++;
+    } else if (error != noErr) {
+        gInputTrace.owner_process_other_failure_count++;
+    }
+    return error;
+}
+
+static Boolean GXMetalInputCurrentProcessOwnsDevices(void)
+{
+    ProcessSerialNumber process;
+
+    return !gDeviceOwnerValid ||
+           !GXMetalInputGetCurrentProcess(&process) ||
+           GXMetalInputSameProcess(&process, &gDeviceOwner);
+}
+
+static void GXMetalInputRememberOwner(const ProcessSerialNumber *process)
+{
+    if (process == NULL) {
+        gDeviceOwnerValid = false;
+        memset(&gDeviceOwner, 0, sizeof(gDeviceOwner));
+        return;
+    }
+    gDeviceOwner = *process;
+    gDeviceOwnerValid = true;
+}
+
+static void GXMetalInputDeactivate(void)
+{
+    GXMetalInputStopPolling();
+    if (gSetRelativeInputMode != NULL) {
+        (void)gSetRelativeInputMode(false);
+    }
+    gHostRelativeInput = false;
+    gDirectHostInput = false;
+    gActiveDeviceMask = 0;
+    gActive = false;
+    gHavePosition = false;
+    GXMetalInputCloseHostBridge();
 }
 
 static void GXMetalInputStartPolling(void)
 {
+#if GXMETAL_INPUT_TICKLE_ONLY_DIAGNOSTIC
+    gInputTrace.timer_start_suppressed_count++;
+    return;
+#endif
     if (!gPollTimerInstalled) {
         memset(&gPollTimer, 0, sizeof(gPollTimer));
         gPollTimer.tmAddr = gPollTimerProc;
         InsXTime((QElemPtr)&gPollTimer);
         gPollTimerInstalled = true;
+        gInputTrace.timer_start_count++;
     }
     PrimeTime((QElemPtr)&gPollTimer,
               kGXMetalInputPollIntervalMilliseconds);
@@ -229,14 +514,72 @@ static void GXMetalInputSetPascalString(Str63 destination,
     memcpy(destination + 1, source, length);
 }
 
+static OSStatus GXMetalInputFinishSetActive(UInt32 refCon, Boolean active,
+                                             OSStatus result)
+{
+    GXMetalInputTraceRecordEvent(kGXMetalInputTraceSetActiveExit, refCon,
+                           active, result);
+    GXMetalInputTracePersist();
+    return result;
+}
+
 static OSStatus GXMetalInputSetActive(UInt32 refCon, Boolean active)
 {
+    ProcessSerialNumber process;
     SInt32 deltaX = 0;
     SInt32 deltaY = 0;
     UInt32 buttons;
     UInt32 buttonDownEdges = 0;
     UInt32 buttonUpEdges = 0;
-    Boolean wasActive = gActiveDeviceMask != 0;
+    Boolean wasActive;
+    Boolean processKnown = GXMetalInputGetCurrentProcess(&process);
+    OSStatus error;
+
+    gInputTrace.set_active_count++;
+    if (active) {
+        gInputTrace.set_active_true_count++;
+    } else {
+        gInputTrace.set_active_false_count++;
+    }
+    GXMetalInputTraceRecordEvent(kGXMetalInputTraceSetActiveEnter, refCon,
+                           active, noErr);
+    if (!active && processKnown && gDeviceOwnerValid &&
+        !GXMetalInputSameProcess(&process, &gDeviceOwner)) {
+        /* A delayed Stop/SetActive(false) from an older InputSprocket client
+         * must not tear down devices already rebound to a newer process. */
+        gInputTrace.stale_callback_count++;
+        GXMetalInputTraceRecordEvent(kGXMetalInputTraceStaleCallback, refCon,
+                               active, noErr);
+        return GXMetalInputFinishSetActive(refCon, active, noErr);
+    }
+    if (active && processKnown &&
+        (!gDeviceOwnerValid ||
+         !GXMetalInputSameProcess(&process, &gDeviceOwner))) {
+        OSErr ownerStatus = GXMetalInputOwnerStatus();
+        Boolean disposeObjects =
+            gDeviceOwnerValid && ownerStatus != procNotFound;
+
+        /* InputSprocket can omit both Stop and DisposeDevices when an
+         * application exits. Its keep-loaded driver fragment then retains
+         * device references, an active mask, timer state, and a CFM bridge
+         * owned by the dead process. An activation by a new process is an
+         * authoritative handoff. Never call InputSprocket disposal routines
+         * for references whose owning process has already vanished. */
+        gInputTrace.owner_handoff_count++;
+        if (gDeviceOwnerValid && ownerStatus == procNotFound) {
+            gInputTrace.dead_owner_forget_count++;
+        } else if (disposeObjects) {
+            gInputTrace.live_owner_dispose_count++;
+        }
+        GXMetalInputResetDevices(disposeObjects);
+        error = GXMetalInputCreate();
+        if (error != noErr) {
+            return GXMetalInputFinishSetActive(refCon, active, error);
+        }
+        GXMetalInputRememberOwner(&process);
+    }
+
+    wasActive = gActiveDeviceMask != 0;
 
     if (active) {
         gActiveDeviceMask |= refCon;
@@ -245,46 +588,70 @@ static OSStatus GXMetalInputSetActive(UInt32 refCon, Boolean active)
     }
     gActive = gActiveDeviceMask != 0;
     if (wasActive == gActive) {
-        return noErr;
+        return GXMetalInputFinishSetActive(refCon, active, noErr);
     }
     if (!gActive) {
-        GXMetalInputStopPolling();
+        GXMetalInputDeactivate();
+        return GXMetalInputFinishSetActive(refCon, active, noErr);
     }
-    gHostRelativeInput = GXMetalInputSetHostMode(gActive) && gActive;
+    gHostRelativeInput = GXMetalInputSetHostMode(true);
     gDirectHostInput = gHostRelativeInput &&
         (gGetInputEvents != NULL || gGetInputState != NULL);
     gHavePosition = false;
     gLastButtons = GXMetalInputReadButtons();
     if (gActive) {
         if (gDirectHostInput) {
+            gInputTrace.host_event_read_attempt_count++;
             OSErr error = gGetInputEvents != NULL ?
                 gGetInputEvents(&deltaX, &deltaY, &buttons,
                                 &buttonDownEdges, &buttonUpEdges) :
                 gGetInputState(&deltaX, &deltaY, &buttons);
             if (error == noErr) {
+                gInputTrace.host_event_read_success_count++;
                 /* Activating relative mode clears old host deltas.  Establish
                  * the exact current button baseline before the first poll. */
                 gLastButtons = buttons;
                 gHavePosition = true;
+            } else {
+                gInputTrace.host_event_read_failure_count++;
             }
         } else if (gHostRelativeInput) {
             GXMetalInputBeginRelativeTracking();
         }
         GXMetalInputStartPolling();
     }
-    return noErr;
+    return GXMetalInputFinishSetActive(refCon, active, noErr);
 }
 
 static OSStatus GXMetalInputDeviceTickle(UInt32 refCon)
 {
-    (void)refCon;
-    ISpDriver_Tickle();
+    ProcessSerialNumber process;
+
+    gInputTrace.device_tickle_count++;
+
+    if (GXMetalInputGetCurrentProcess(&process) &&
+        (!gDeviceOwnerValid ||
+         !GXMetalInputSameProcess(&process, &gDeviceOwner))) {
+        if (gDeviceOwnerValid && GXMetalInputOwnerStatus() != procNotFound) {
+            /* Do not let a background client's tickle steal live devices. */
+            return noErr;
+        }
+        if (GXMetalInputSetActive(refCon, true) != noErr) {
+            return noErr;
+        }
+    }
+    GXMetalInputPoll();
     return noErr;
 }
 
 static OSStatus GXMetalInputStopDevice(UInt32 refCon)
 {
-    return GXMetalInputSetActive(refCon, false);
+    OSStatus error;
+
+    gInputTrace.stop_count++;
+    GXMetalInputTraceRecordEvent(kGXMetalInputTraceStop, refCon, 0, noErr);
+    error = GXMetalInputSetActive(refCon, false);
+    return error;
 }
 
 static ISpDriverFunctionPtr_Generic GXMetalInputMetaHandler(
@@ -319,53 +686,63 @@ static OSStatus GXMetalInputCreateElement(
     definition.configInfo = configuration;
     definition.configInfoLength = configurationSize;
     definition.dataSize = sizeof(UInt32);
-    return ISpElement_New(&definition, element);
+    gInputTrace.element_new_attempt_count++;
+    {
+        OSStatus error = ISpElement_New(&definition, element);
+        if (error == noErr) {
+            gInputTrace.element_new_success_count++;
+        }
+        return error;
+    }
+}
+
+static void GXMetalInputResetDevices(Boolean disposeObjects)
+{
+    gInputTrace.reset_count++;
+    GXMetalInputTraceRecordEvent(
+        kGXMetalInputTraceReset, 0, disposeObjects, noErr);
+    GXMetalInputDeactivate();
+    if (disposeObjects && gButton3 != NULL) {
+        (void)ISpElement_Dispose(gButton3);
+        gInputTrace.element_dispose_count++;
+    }
+    gButton3 = NULL;
+    if (disposeObjects && gButton2 != NULL) {
+        (void)ISpElement_Dispose(gButton2);
+        gInputTrace.element_dispose_count++;
+    }
+    gButton2 = NULL;
+    if (disposeObjects && gButton1 != NULL) {
+        (void)ISpElement_Dispose(gButton1);
+        gInputTrace.element_dispose_count++;
+    }
+    gButton1 = NULL;
+    if (disposeObjects && gDeltaY != NULL) {
+        (void)ISpElement_Dispose(gDeltaY);
+        gInputTrace.element_dispose_count++;
+    }
+    gDeltaY = NULL;
+    if (disposeObjects && gDeltaX != NULL) {
+        (void)ISpElement_Dispose(gDeltaX);
+        gInputTrace.element_dispose_count++;
+    }
+    gDeltaX = NULL;
+    if (disposeObjects && gDevice != NULL) {
+        (void)ISpDevice_Dispose(gDevice);
+        gInputTrace.device_dispose_count++;
+    }
+    gDevice = NULL;
+    if (disposeObjects && gQuakeMotionDevice != NULL) {
+        (void)ISpDevice_Dispose(gQuakeMotionDevice);
+        gInputTrace.device_dispose_count++;
+    }
+    gQuakeMotionDevice = NULL;
+    GXMetalInputRememberOwner(NULL);
 }
 
 static void GXMetalInputDispose(void)
 {
-    GXMetalInputStopPolling();
-    (void)GXMetalInputSetHostMode(false);
-    gHostRelativeInput = false;
-    gDirectHostInput = false;
-    gActiveDeviceMask = 0;
-    if (gButton3 != NULL) {
-        (void)ISpElement_Dispose(gButton3);
-        gButton3 = NULL;
-    }
-    if (gButton2 != NULL) {
-        (void)ISpElement_Dispose(gButton2);
-        gButton2 = NULL;
-    }
-    if (gButton1 != NULL) {
-        (void)ISpElement_Dispose(gButton1);
-        gButton1 = NULL;
-    }
-    if (gDeltaY != NULL) {
-        (void)ISpElement_Dispose(gDeltaY);
-        gDeltaY = NULL;
-    }
-    if (gDeltaX != NULL) {
-        (void)ISpElement_Dispose(gDeltaX);
-        gDeltaX = NULL;
-    }
-    if (gDevice != NULL) {
-        (void)ISpDevice_Dispose(gDevice);
-        gDevice = NULL;
-    }
-    if (gQuakeMotionDevice != NULL) {
-        (void)ISpDevice_Dispose(gQuakeMotionDevice);
-        gQuakeMotionDevice = NULL;
-    }
-    gSetRelativeInputMode = NULL;
-    gGetInputButtonState = NULL;
-    gGetInputState = NULL;
-    gGetInputEvents = NULL;
-    if (gGXMetalConnection != NULL) {
-        (void)CloseConnection(&gGXMetalConnection);
-    }
-    gActive = false;
-    gHavePosition = false;
+    GXMetalInputResetDevices(true);
 }
 
 static Boolean GXMetalInputUseQuakeLayout(void)
@@ -395,7 +772,21 @@ static OSStatus GXMetalInputCreateDevice(const char *name, OSType identifier,
     definition.theDeviceClass = kISpDeviceClass_Mouse;
     definition.theDeviceIdentifier = identifier;
     definition.permanentID = identifier;
-    return ISpDevice_New(&definition, GXMetalInputMetaHandler, refCon, device);
+    gInputTrace.device_new_attempt_count++;
+    {
+        OSStatus error = ISpDevice_New(
+            &definition, GXMetalInputMetaHandler, refCon, device);
+        if (error == noErr) {
+            gInputTrace.device_new_success_count++;
+        }
+        return error;
+    }
+}
+
+static OSStatus GXMetalInputFinishCreate(OSStatus error)
+{
+    GXMetalInputTraceRecordEvent(kGXMetalInputTraceCreate, 0, 0, error);
+    return error;
 }
 
 static OSStatus GXMetalInputCreate(void)
@@ -406,6 +797,7 @@ static OSStatus GXMetalInputCreate(void)
     OSStatus error;
 
     if (gDevice != NULL) {
+        GXMetalInputTraceRecordEvent(kGXMetalInputTraceCreate, 0, 1, noErr);
         return noErr;
     }
 
@@ -414,7 +806,7 @@ static OSStatus GXMetalInputCreate(void)
                                      kGXMetalInputMainDevice, &gDevice);
     if (error != noErr) {
         GXMetalInputDispose();
-        return error;
+        return GXMetalInputFinishCreate(error);
     }
 
     if (quakeLayout) {
@@ -471,47 +863,126 @@ static OSStatus GXMetalInputCreate(void)
     if (error != noErr) {
         GXMetalInputDispose();
     }
-    return error;
+    return GXMetalInputFinishCreate(error);
 }
 
 OSErr GXMetalInputCFMInitialize(const CFragInitBlock *initBlock)
 {
-    (void)initBlock;
+    GXMetalInputTraceLoad();
+    gInputTrace.cfm_initialize_count++;
+    if (initBlock != NULL) {
+        gInputTrace.cfrag_context_id =
+            (UInt32)(uintptr_t)initBlock->contextID;
+        gInputTrace.cfrag_closure_id =
+            (UInt32)(uintptr_t)initBlock->closureID;
+        gInputTrace.cfrag_connection_id =
+            (UInt32)(uintptr_t)initBlock->connectionID;
+    }
+    GXMetalInputTraceRecordEvent(
+        kGXMetalInputTraceCFMInitialize, 0, 0, noErr);
+    GXMetalInputTracePersist();
     return noErr;
 }
 
 OSStatus ISpDriver_CheckConfiguration(Boolean *validConfiguration)
 {
+    gInputTrace.check_configuration_count++;
     if (validConfiguration == NULL) {
+        GXMetalInputTraceRecordEvent(kGXMetalInputTraceCheckConfiguration,
+                               0, 0, paramErr);
+        GXMetalInputTracePersist();
         return paramErr;
     }
     *validConfiguration = true;
+    GXMetalInputTraceRecordEvent(kGXMetalInputTraceCheckConfiguration,
+                           0, 1, noErr);
+    GXMetalInputTracePersist();
     return noErr;
 }
 
 OSStatus ISpDriver_FindAndLoadDevices(Boolean *keepDriverLoaded)
 {
+    ProcessSerialNumber process;
+    Boolean processKnown;
     OSStatus error;
 
+    gInputTrace.find_count++;
+    GXMetalInputTraceRecordEvent(kGXMetalInputTraceFindEnter, 0, 0, noErr);
     if (keepDriverLoaded == NULL) {
+        GXMetalInputTraceRecordEvent(kGXMetalInputTraceFindExit,
+                               0, 0, paramErr);
+        GXMetalInputTracePersist();
         return paramErr;
     }
-    GXMetalInputResolveHostBridge();
+    processKnown = GXMetalInputGetCurrentProcess(&process);
+    if (processKnown && gDevice != NULL &&
+        (!gDeviceOwnerValid ||
+         !GXMetalInputSameProcess(&process, &gDeviceOwner))) {
+        OSErr ownerStatus = GXMetalInputOwnerStatus();
+        Boolean disposeObjects =
+            gDeviceOwnerValid && ownerStatus != procNotFound;
+
+        /* Device and element references are scoped to the InputSprocket
+         * client that created them even though the driver fragment itself is
+         * kept loaded. A process which exits without DisposeDevices leaves
+         * stale non-NULL references behind. Forget dead-client references and
+         * enumerate fresh objects for the new process. */
+        gInputTrace.owner_handoff_count++;
+        if (gDeviceOwnerValid && ownerStatus == procNotFound) {
+            gInputTrace.dead_owner_forget_count++;
+        } else if (disposeObjects) {
+            gInputTrace.live_owner_dispose_count++;
+        }
+        GXMetalInputResetDevices(disposeObjects);
+    }
     error = GXMetalInputCreate();
+    if (error == noErr && processKnown) {
+        GXMetalInputRememberOwner(&process);
+    }
     *keepDriverLoaded = error == noErr;
+    GXMetalInputTraceRecordEvent(kGXMetalInputTraceFindExit, 0,
+                           *keepDriverLoaded, error);
+    GXMetalInputTracePersist();
     return error;
 }
 
 OSStatus ISpDriver_DisposeDevices(void)
 {
+    gInputTrace.dispose_count++;
+    GXMetalInputTraceRecordEvent(kGXMetalInputTraceDisposeEnter, 0, 0, noErr);
+    if (!GXMetalInputCurrentProcessOwnsDevices()) {
+        /* A late callback from the old client must not dispose the current
+         * process's replacement devices. */
+        gInputTrace.stale_callback_count++;
+        GXMetalInputTraceRecordEvent(
+            kGXMetalInputTraceStaleCallback, 0, 0, noErr);
+        GXMetalInputTraceRecordEvent(
+            kGXMetalInputTraceDisposeExit, 0, 0, noErr);
+        GXMetalInputTracePersist();
+        return noErr;
+    }
     GXMetalInputDispose();
+    GXMetalInputTraceRecordEvent(kGXMetalInputTraceDisposeExit, 0, 0, noErr);
+    GXMetalInputTracePersist();
     return noErr;
+}
+
+static void GXMetalInputPushSimple(ISpElementReference element, UInt32 data,
+                                   const AbsoluteTime *now, UInt32 *counter)
+{
+    OSStatus error;
+
+    (*counter)++;
+    error = ISpElement_PushSimpleData(element, data, now);
+    if (error != noErr) {
+        gInputTrace.push_failure_count++;
+    }
 }
 
 static void GXMetalInputPushButton(ISpElementReference element, UInt32 mask,
                                    UInt32 buttons, UInt32 buttonDownEdges,
                                    UInt32 buttonUpEdges,
-                                   const AbsoluteTime *now)
+                                   const AbsoluteTime *now, UInt32 *counter)
 {
     Boolean down = (buttons & mask) != 0;
     Boolean reportedDown = (gLastButtons & mask) != 0;
@@ -521,27 +992,27 @@ static void GXMetalInputPushButton(ISpElementReference element, UInt32 mask,
     if (downEdge && upEdge) {
         /* Two transitions occurred between polls. The final held state tells
          * us which ordering preserves both the click and the current state. */
-        (void)ISpElement_PushSimpleData(
-            element, down ? kISpButtonUp : kISpButtonDown, now);
-        (void)ISpElement_PushSimpleData(
-            element, down ? kISpButtonDown : kISpButtonUp, now);
+        GXMetalInputPushSimple(
+            element, down ? kISpButtonUp : kISpButtonDown, now, counter);
+        GXMetalInputPushSimple(
+            element, down ? kISpButtonDown : kISpButtonUp, now, counter);
         return;
     }
     if (downEdge && !reportedDown) {
-        (void)ISpElement_PushSimpleData(element, kISpButtonDown, now);
+        GXMetalInputPushSimple(element, kISpButtonDown, now, counter);
         reportedDown = true;
     }
     if (upEdge && reportedDown) {
-        (void)ISpElement_PushSimpleData(element, kISpButtonUp, now);
+        GXMetalInputPushSimple(element, kISpButtonUp, now, counter);
         reportedDown = false;
     }
     if (reportedDown != down) {
-        (void)ISpElement_PushSimpleData(
-            element, down ? kISpButtonDown : kISpButtonUp, now);
+        GXMetalInputPushSimple(
+            element, down ? kISpButtonDown : kISpButtonUp, now, counter);
     }
 }
 
-void ISpDriver_Tickle(void)
+static void GXMetalInputPoll(void)
 {
     Point position;
     UInt32 buttons;
@@ -551,19 +1022,25 @@ void ISpDriver_Tickle(void)
     SInt32 deltaX;
     SInt32 deltaY;
 
+    gInputTrace.poll_count++;
     if (!gActive || gDevice == NULL) {
+        gInputTrace.inactive_poll_count++;
         return;
     }
+    gInputTrace.active_poll_count++;
     deltaX = 0;
     deltaY = 0;
     if (gDirectHostInput) {
+        gInputTrace.host_event_read_attempt_count++;
         OSErr error = gGetInputEvents != NULL ?
             gGetInputEvents(&deltaX, &deltaY, &buttons,
                             &buttonDownEdges, &buttonUpEdges) :
             gGetInputState(&deltaX, &deltaY, &buttons);
         if (error != noErr) {
+            gInputTrace.host_event_read_failure_count++;
             return;
         }
+        gInputTrace.host_event_read_success_count++;
         position = gLastPosition;
     } else {
         position = LMGetMouseLocation();
@@ -588,24 +1065,28 @@ void ISpDriver_Tickle(void)
         }
     }
     if (deltaX != 0) {
-        (void)ISpElement_PushSimpleData(
-            gDeltaX, (UInt32)(deltaX * kGXMetalInputDeltaScale), &now);
+        GXMetalInputPushSimple(
+            gDeltaX, (UInt32)(deltaX * kGXMetalInputDeltaScale), &now,
+            &gInputTrace.delta_x_push_count);
     }
     if (deltaY != 0) {
         /* QEMU relative motion and QuickDraw positions increase toward the
          * bottom. Convert once to InputSprocket's positive-up delta here. */
-        (void)ISpElement_PushSimpleData(
+        GXMetalInputPushSimple(
             gDeltaY, (UInt32)(
                 GXMETAL_INPUT_CURSOR_DELTA_Y(deltaY) *
                 kGXMetalInputDeltaScale),
-            &now);
+            &now, &gInputTrace.delta_y_push_count);
     }
     GXMetalInputPushButton(gButton1, GXMETAL_INPUT_BUTTON_ONE, buttons,
-                           buttonDownEdges, buttonUpEdges, &now);
+                           buttonDownEdges, buttonUpEdges, &now,
+                           &gInputTrace.button_1_push_count);
     GXMetalInputPushButton(gButton2, GXMETAL_INPUT_BUTTON_TWO, buttons,
-                           buttonDownEdges, buttonUpEdges, &now);
+                           buttonDownEdges, buttonUpEdges, &now,
+                           &gInputTrace.button_2_push_count);
     GXMetalInputPushButton(gButton3, GXMETAL_INPUT_BUTTON_THREE, buttons,
-                           buttonDownEdges, buttonUpEdges, &now);
+                           buttonDownEdges, buttonUpEdges, &now,
+                           &gInputTrace.button_3_push_count);
 
     if (gHostRelativeInput && !gDirectHostInput) {
         GXMetalInputMoveCursor(gRelativeAnchor);
@@ -613,4 +1094,23 @@ void ISpDriver_Tickle(void)
     }
     gLastPosition = position;
     gLastButtons = buttons;
+}
+
+void ISpDriver_Tickle(void)
+{
+    ProcessSerialNumber process;
+
+    gInputTrace.driver_tickle_count++;
+
+    if (GXMetalInputGetCurrentProcess(&process) &&
+        (!gDeviceOwnerValid ||
+         !GXMetalInputSameProcess(&process, &gDeviceOwner))) {
+        if (gDeviceOwnerValid && GXMetalInputOwnerStatus() != procNotFound) {
+            return;
+        }
+        if (GXMetalInputSetActive(kGXMetalInputMainDevice, true) != noErr) {
+            return;
+        }
+    }
+    GXMetalInputPoll();
 }

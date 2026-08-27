@@ -16,15 +16,15 @@ records sources, hashes, recipes, evidence descriptions, and driver fixes.
 
 | ID | Game | Primary path under test | Minimum qualification route | Media and current state |
 | --- | --- | --- | --- | --- |
-| `bugdom` | Bugdom 1.2.1 | QuickDraw 3D 1.6 / RAVE, ATI behavior | Highest quality; load The Lawn; verify terrain, fog, foliage alpha, and HUD for five minutes; quit and relaunch | Exact signed beta-3 gameplay pass: coherent Lawn rendering, scripted movement/turning, 1,069,012 traced draws, direct presentation, and zero fallback/rejects |
+| `bugdom` | Bugdom 1.2.1 | QuickDraw 3D 1.6 / RAVE, ATI behavior | Highest quality; load The Lawn; verify terrain, fog, foliage alpha, and HUD for five minutes; quit and relaunch | Exact published 2.2.1 short smoke: coherent Lawn, movement delta 0.653301, 5,723 direct/0 fallback frames, 1,040,070 draws; longer exact-release lifecycle remains open |
 | `cro-mag-rally` | Cro-Mag Rally Demo | Apple OpenGL 1.1.2 | Confirm hardware/OpenGL; complete a lap with terrain, particles, HUD, transparency, and camera transitions | Gameplay smoke pass at 640x480: Practice/Desert renders coherently, acceleration and steering visibly respond, 24-28 fps, ~204 direct draws/frame, zero fallback, and expected demo exit screen |
-| `weekend-warrior` | Weekend Warrior | QuickDraw 3D / RAVE | Load the first arena; verify camera clipping, textured characters, UI, depth ordering, and transitions for five minutes | Exact signed beta-3 gameplay smoke plus recovery-lifecycle pass: Center Stage play has strong movement/camera change, 1,585,966 traced draws, and zero fallback/rejects; title → OS Force Quit → Finder → same-boot relaunch and second-title soak also pass |
-| `future-cop` | Future Cop: LAPD Demo | Selectable QuickDraw 3D RAVE | Select RAVE; enter Crime War; verify weapon blending, transparent HUD, depth, and explosions | Exact signed beta-3 gameplay/lifecycle-soak pass: movement and turning reposition the mech/camera, fire shows impact sparks and ammo consumption, ~87 seconds live plus 65-second soak remain coherent, and 8,772,136 draws have zero fallback/rejects; scripted relaunch remains open |
+| `weekend-warrior` | Weekend Warrior | QuickDraw 3D / RAVE | Load the first arena; verify camera clipping, textured characters, UI, depth ordering, and transitions for five minutes | Exact published 2.2.1 short smoke: coherent Center Stage, movement/action delta 0.798568, 24,707 direct/0 fallback frames, 1,517,694 draws; beta-3 separately proves recovery relaunch |
+| `future-cop` | Future Cop: LAPD Demo | Selectable QuickDraw 3D RAVE | Select RAVE; enter Crime War; verify weapon blending, transparent HUD, depth, and explosions | Exact published 2.2.1 short smoke: coherent Crime War, movement/fire delta 0.725452, ammo 7500→7482, 1,784 direct/0 fallback frames, 3,976,505 draws |
 | `dark-vengeance` | Dark Vengeance Demo | Direct RAVE | Reach first combat and scripted sequence; inspect lighting, translucent effects, animated geometry, and camera motion | Demo 1.0.2 fails identically before RAVE in GXMetal/software; the retail updater requires its legitimate CD; the genuine 1.2 demo installs but stops at memory allocation size -49 with zero contexts/draws |
 | `myth-ii` | Myth II: Soulblighter 1.5.1 Demo | RAVE | Select RAVE; load a solo map; pan, zoom, rotate, issue orders, and verify terrain, water, units, decals, projectiles, and explosions | Exact signed beta-3 battlefield/partial-input pass: coherent rendering plus visibly proven single selection, forward/back and left/right camera motion, rotation, and zoom-in; refreshed replay has 3,589,155 traced draws and zero fallback/rejects; group orders and the remaining controls stay open |
-| `unreal-tournament` | Unreal Tournament 348m3 Demo | ATI renderer through RAVE | Confirm RAVE; render intro flyby; run a five-minute bot match checking lightmaps, fog, weapon alpha, HUD, and texture cycling | Sound-disabled live Practice pass: coherent Tempest world, weapon and HUD; movement, turning, firing, damage, death and respawn visually proven; 9,472 direct frames at 80.36-131.59 fps with zero fallback/rejects |
-| `combat-mission` | Combat Mission: Beyond Overlord 1.02 Demo | RAVE hardware probe | Complete detection; load Chance Encounter; move through the map and execute a turn with terrain, markers, smoke, and animation | Exact signed beta-3 full-turn pass: Rifle 45 Sqd visibly disembarks, crosses open ground, reaches the plotted endpoint with DONE, and remains stable through +145 seconds; 10,357,060 traced draws, zero fallback/rejects; scripted relaunch remains open |
-| `oni` | Oni Demo | Classic Apple OpenGL | Reach training and first fight; verify animation, lightmaps, transparency, HUD, and an indoor/outdoor transition | Exact signed beta-3 long-rendering/menu-lifecycle partial pass through Combat Training, the formerly corrupt +45-second transition, and ~176 seconds live; 11,238,479 queued triangles and 7,475 direct frames with zero rejects/fallback; explicit menu quit and relaunch plus saved-checkpoint load pass, while gameplay input and in-game F1 lifecycle stay open |
+| `unreal-tournament` | Unreal Tournament 348m3 Demo | ATI renderer through RAVE | Confirm RAVE; render intro flyby; run a five-minute bot match checking lightmaps, fog, weapon alpha, HUD, and texture cycling | Exact published 2.2.1 first process reaches coherent Tempest and cleanly exits; same-boot process two accepts a render-generation reset and reaches a live HUD/weapon. Lifecycle tracing proves fresh process/CFM/custom-device creation and QEMU receives the keys, but focused gameplay input remains inert |
+| `combat-mission` | Combat Mission: Beyond Overlord 1.02 Demo | RAVE hardware probe | Complete detection; load Chance Encounter; move through the map and execute a turn with terrain, markers, smoke, and animation | Exact published 2.2.1 setup-rendering smoke: 1,168 direct/0 fallback frames and 2,175,685 draws; no battle input in this short recipe. Beta-3 separately proves the full turn |
+| `oni` | Oni Demo | Classic Apple OpenGL | Reach training and first fight; verify animation, lightmaps, transparency, HUD, and an indoor/outdoor transition | First-process warehouse input/F1/clean quit pass; combined InputSprocket/renderer process-owner hardening preserves it, but process two still stops at Bungie before focus or graphics-driver re-entry. Tickle-only control proves the normal input timer is required for relative look |
 | `havoc` | Havoc Demo | First shipping QuickDraw 3D RAVE game | Select accelerated rendering; enter the demo arena; verify terrain, fog, textured objects, transparency, HUD, and camera motion for five minutes | Two independently preserved demos stop at the same resource-allocation dialog before renderer creation; the alternate Tucows build produces no RAVE/profile traffic on exact beta-3, and raising its classic Mac partition from 5.76 to 32 MB does not alter the failure |
 
 OpenGL titles only count as GXMetal tests when the host log contains GXMetal
@@ -186,10 +186,11 @@ VMs, each with an independent clone and unique local VNC and monitor sockets.
   at 512 MB and 128 MB, with GXMetal and software RAVE, and after applying the
   vendor-documented `DISABLE_DRAWSPROCKET=TRUE` workaround. The workaround took
   effect but did not change the error, and no rolling GXMetal profile appeared.
-  Because classic Mac OS error -49 is `opWrErr` (file already open for writing),
-  the observed failure is classified as a media/runtime compatibility problem,
-  not a GXMetal rendering failure. Evidence and the completed review record are
-  under
+  Later static PEF analysis proves that `-49` is the literal allocation input
+  printed by `RBNewPtr`, not a returned OS error. The earliest concrete callers
+  allocate `cached_file_size + 1` for three preference INI files, which makes a
+  bad file-position output or corruption the leading pre-RAVE hypothesis.
+  Evidence and the completed review record are under
   `context/gxmetal-games/evidence/dark-vengeance-live-final-drawsprocket-off-2/`.
 - Cro-Mag Rally's clean Option-launch retained its default 800x600, 16-bit
   selection and reached the Pangea logo, title, and animated main menu through
@@ -412,6 +413,72 @@ VMs, each with an independent clone and unique local VNC and monitor sockets.
   homogeneous coordinates; public RAVE remains strict and zero/nonfinite W is
   still rejected. Evidence is under
   `context/gxmetal-games/evidence/gxmetal-ut-beta3-homogeneous-clip-live-gameplay-20260827/`.
+- A later protocol-1.25 discriminator corrects two UT lifecycle
+  interpretations. The viewport remains live through movement and firing until
+  the visible `You are dead. Hit [Fire] to respawn` state; only that death-wait
+  frame then becomes byte-identical. Its 61 profiles contain 14,591/14,591
+  direct frames with zero fallback, rejects, out-of-range draws, queue faults,
+  or Metal errors. Post-death fire/refocus remains an input-capture gap, not
+  evidence of a GXMetal freeze. For clean exit, the earlier Game-menu route
+  used Down five, which selects `Return to Current Game`; deterministic `Quit`
+  is Down six. A corrected quit/relaunch replay remains required. Evidence is
+  under `context/gxmetal-games/evidence/gxmetal-ut-protocol125-freeze-discriminator-20260827/`.
+- Replayed Bugdom, Future Cop, Combat Mission, and Weekend Warrior using the
+  exact published 2.2.1 QEMU, loader, Tools CD, and immutable installed guest
+  base. Human review passes all four within their short-smoke scope. The 110
+  profiles total 33,382 direct frames, zero fallback frames, and 8,709,954
+  draws. Bugdom, Future Cop, and Weekend Warrior pass semantic input gates;
+  Combat Mission's retained recipe reaches coherent Chance Encounter setup but
+  sends no battle input. Evidence is under
+  `context/gxmetal-games/evidence/gxmetal-2.2.1-four-game-smoke-20260827/`.
+- A fork-level audit disproved the older configured UT image as an exact stable
+  guest, so a new immutable image was prepared from the published 2.2.1 Tools
+  CD (`da6d81f5…451ad`). On that exact stack, the first process reaches live
+  Tempest and Command-Q returns to Finder. A same-boot relaunch restarts texture
+  upload IDs and reaches a coherent second live HUD/weapon. The focused second
+  process does not visibly react to Up or Control, isolating the remaining gap
+  to InputSprocket/gameplay input rather than renderer generation or quit-menu
+  automation. Evidence is under
+  `context/gxmetal-games/evidence/gxmetal-ut-2.2.1-cleanquit-relaunch-corrected-20260827/`.
+- An input-CFM reference-release candidate preserves Oni's first-process
+  warehouse look, movement, action, F1/resume, Quit/Yes, and Finder-return
+  gates. It is not sufficient: process two stops changing before the focus
+  click, and first-upload IDs remain one uninterrupted 1…213 sequence. The
+  next discriminator must cover the full process/InputSprocket startup boundary
+  as well as input bridge lifetime. Evidence is under
+  `context/gxmetal-games/evidence/gxmetal-oni-input-lifecycle-candidate-20260827/`.
+- A combined lifecycle candidate tracks InputSprocket device ownership by
+  Process Serial Number, clears stale active/timer/CFM state, re-enumerates
+  after a confirmed dead owner, and safely retires System-heap renderer context
+  records only after their owning process is `procNotFound`. Native lifecycle
+  tests and the PowerPC build pass, but two parallel, audio-disabled VM gates
+  remain negative. Oni's first process again passes warehouse input/F1/clean
+  quit, while process two becomes byte-identical at Bungie before focus or
+  GXMetal re-entry (66 direct profiles, zero fallback, upload IDs 1…210). UT
+  cleanly relaunches and resets uploads 244→1, but its five second-process
+  live/action/final captures remain byte-identical after Up and Control. The UT
+  keyboard failure cannot be attributed only to GXMetalInput's mouse elements;
+  the next candidate requires direct InputSprocket system-device lifecycle
+  instrumentation. Evidence is under
+  `context/gxmetal-games/evidence/gxmetal-oni-process-owner-v2-candidate-20260827/`
+  and
+  `context/gxmetal-games/evidence/gxmetal-ut-process-owner-v2-candidate-20260827/`.
+- A tickle-only diagnostic candidate decisively tests the stale self-rearming
+  timer hypothesis without adding per-tickle disk I/O. Oni reaches coherent
+  first-process warehouse gameplay, but InputSprocket invokes neither tickle
+  callback and relative look fails at 0.008250 changed fraction; the timer is
+  necessary for normal mouse delivery and cannot simply be removed. UT still
+  reaches coherent first and second Tempest generations. Its persisted trace
+  shows the first process calls Stop and Dispose, then the second process uses
+  a different PSN/CFM connection and creates a fresh custom device plus five
+  elements. Signed QEMU independently records every second-process Control and
+  Up transition, while four reviewed live/action frames remain byte-identical.
+  This rules out the stale custom timer and VNC/QEMU key transport; the next UT
+  discriminator is the built-in keyboard/UT reacquisition layer. Evidence is
+  under
+  `context/gxmetal-games/evidence/gxmetal-oni-input-tickle-diagnostic-20260827/`
+  and
+  `context/gxmetal-games/evidence/gxmetal-ut-input-tickle-diagnostic-20260827/`.
 - Replayed Future Cop on exact beta-3 through a longer semantic lifecycle.
   Forward and turn controls visibly reposition the mech/camera, fire produces
   impact sparks while ammunition falls from 7500 to 7481 and then 7463, and
@@ -434,14 +501,26 @@ VMs, each with an independent clone and unique local VNC and monitor sockets.
   EULA and completed its default install. The installed demo then reproducibly
   displayed `FATAL ERROR: Memory allocation failed (size = -49)`. Its decoded
   trace has NDRV discovery but zero game contexts, draws, textures, flushes, or
-  ATI-private calls. The next bounded investigation is its supported setup/
-  engine path and blank default `HARDWARE` field, not a GXMetal workaround.
+  ATI-private calls. Static inspection of the failure wrapper and startup
+  callers proves that the displayed `-49` is allocation bits `0xffffffcf`, most
+  likely produced when `ReadPrefs` adds one to a cached size of `-50` for
+  `DARKVENG.INI`, `CUSTOM.INI`, or `NETLAUNCH.INI`. The next bounded experiment
+  is a conditional `RBNewPtr` return-PC/cached-size capture during one silent
+  launch—not a GXMetal workaround.
 - A controlled HAVOC application-memory route changed only its `SIZE` resource:
   the preferred classic Mac partition rose from 5,760,000 bytes to 32 MiB and
   the minimum from 3,760,000 bytes to 8 MiB, while its data fork stayed
   byte-identical. It reproduced the exact same resource-allocation dialog with
   no RAVE/profile traffic. The generic Finder partition size is therefore not
-  the missing resource.
+  the missing resource. The separately installed full retail application's
+  460,600-byte resource fork and its external `RB Geometry`, `RB Objects`, and
+  `RB Sounds` forks (1,027,602, 1,442,614, and 1,261,043 bytes) are also intact.
+  HAVOC exposes only the generic resource-memory message, not Dark Vengeance's
+  `-49`. Static analysis narrows that alert to exactly five failed `NewHandle`
+  sites: two dynamic signed-16-bit screen/resource sizes and fixed requests of
+  7,562, 4,096, or 131,072 bytes. The external resource opens occur later and
+  use different alerts. The two shared-engine failures must not be collapsed
+  into one exact cause without the one-launch return-PC traces.
 - Replayed Oni on an immutable exact-final beta-3 disk. It remains coherent
   through the former +45 corruption boundary and roughly 176 seconds of live
   rendering. The trace records 10,126,893 ATI-private calls, 11,238,479 queued

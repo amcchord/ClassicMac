@@ -7,6 +7,7 @@
 #   scripts/extract-gxmetal-guest-results.sh agl RUN_DIRECTORY
 #   scripts/extract-gxmetal-guest-results.sh test RUN_DIRECTORY
 #   scripts/extract-gxmetal-guest-results.sh trace RUN_DIRECTORY
+#   scripts/extract-gxmetal-guest-results.sh input RUN_DIRECTORY
 
 set -euo pipefail
 
@@ -29,8 +30,8 @@ cleanup() {
 trap cleanup EXIT
 
 case "$KIND" in
-  agl|test|trace) ;;
-  *) die "First argument must be 'agl', 'test', or 'trace'." ;;
+  agl|test|trace|input) ;;
+  *) die "First argument must be 'agl', 'test', 'trace', or 'input'." ;;
 esac
 [ -n "$RUN_DIR" ] || die "Pass a retained game-sweep run directory."
 [ -d "$RUN_DIR" ] || die "Run directory not found: $RUN_DIR"
@@ -67,22 +68,37 @@ else
   RESULT_FILE=""
 fi
 TRACE_SOURCE="$PREFERENCES/GXMetal Driver Trace"
+INPUT_TRACE_SOURCE="$PREFERENCES/GXMetal Input Trace"
 if [ -n "$SOURCE_RESULT" ]; then
   [ -f "$SOURCE_RESULT" ] || die "Expected $KIND result was not written."
 fi
-[ -f "$TRACE_SOURCE" ] || die "GXMetal did not write a driver trace."
+if [ "$KIND" = "input" ]; then
+  [ -f "$INPUT_TRACE_SOURCE" ] || die "GXMetal Input did not write a trace."
+else
+  [ -f "$TRACE_SOURCE" ] || die "GXMetal did not write a driver trace."
+fi
 
 if [ -n "$SOURCE_RESULT" ]; then
   cp "$SOURCE_RESULT" "$RESULT_FILE"
 fi
-cp "$TRACE_SOURCE" "$RUN_DIR/driver-trace.bin"
-python3 "$ROOT_DIR/scripts/decode-gxmetal-diagnostics.py" \
-  "$RUN_DIR/driver-trace.bin" > "$RUN_DIR/driver-trace.json"
+if [ "$KIND" = "input" ]; then
+  cp "$INPUT_TRACE_SOURCE" "$RUN_DIR/input-trace.bin"
+  python3 "$ROOT_DIR/scripts/decode-gxmetal-input-trace.py" \
+    "$RUN_DIR/input-trace.bin" > "$RUN_DIR/input-trace.json"
+else
+  cp "$TRACE_SOURCE" "$RUN_DIR/driver-trace.bin"
+  python3 "$ROOT_DIR/scripts/decode-gxmetal-diagnostics.py" \
+    "$RUN_DIR/driver-trace.bin" > "$RUN_DIR/driver-trace.json"
+fi
 
 printf 'Extracted %s evidence from %s\n' "$KIND" "$DISK_IMAGE"
 if [ -n "$RESULT_FILE" ]; then
   printf '    Result: %s\n' "$RESULT_FILE"
 fi
-printf '    Trace:  %s\n' "$RUN_DIR/driver-trace.json"
+if [ "$KIND" = "input" ]; then
+  printf '    Trace:  %s\n' "$RUN_DIR/input-trace.json"
+else
+  printf '    Trace:  %s\n' "$RUN_DIR/driver-trace.json"
+fi
 printf '    Disk SHA-256: %s\n' \
   "$(shasum -a 256 "$DISK_IMAGE" | awk '{ print $1 }')"

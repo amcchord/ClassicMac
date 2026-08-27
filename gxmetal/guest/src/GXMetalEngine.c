@@ -9,8 +9,10 @@
 #include <CodeFragments.h>
 #include <Files.h>
 #include <Folders.h>
+#include <MacErrors.h>
 #include <Memory.h>
 #include <NameRegistry.h>
+#include <Processes.h>
 #include <Quickdraw.h>
 #include <stdint.h>
 #include <string.h>
@@ -19,6 +21,7 @@
 #include "GXMetalDiagnostics.h"
 #include "GXMetalATICompatibility.h"
 #include "GXMetalDrawPolicy.h"
+#include "GXMetalGenerationPolicy.h"
 #include "GXMetalRAVECompatibility.h"
 #include "GXMetalTransport.h"
 #include "GXMetalVersion.h"
@@ -59,6 +62,7 @@ typedef struct GXMetalDrawState {
     struct GXMetalDrawState *next_state;
     const TQADrawContext *draw_context;
     GXMetalGuestTransport *transport;
+    GXMetalGenerationOwner process_owner;
     uint32_t context_id;
     uint32_t width;
     uint32_t height;
@@ -148,6 +152,8 @@ static GXMetalGuestTransport gTransport;
 static GXMetalRegistryInfo gRegistry;
 static TQABoolean gTransportConnected;
 static TQABoolean gRenderGenerationReset;
+static GXMetalGenerationOwner gRenderGenerationOwner;
+static GXMetalGenerationOwner gRenderGenerationCaller;
 static uint32_t gNextContextID = 1;
 static uint32_t gNextResourceID = 1;
 static uint32_t gRenderEpoch = 1;
@@ -199,11 +205,17 @@ static void GXMetalPersistDiagnostics(void)
     (void)FSClose(refNum);
 }
 
+#if defined(__GNUC__) && !defined(__clang__)
+__attribute__((optimize("Os")))
+#endif
 int32_t GXMetalGetDiagnosticStatus(void)
 {
     return gDiagnosticStatus;
 }
 
+#if defined(__GNUC__) && !defined(__clang__)
+__attribute__((optimize("Os")))
+#endif
 int32_t GXMetalCopyDiagnostics(GXMetalDiagnosticSnapshot *snapshot,
                                uint32_t snapshotBytes)
 {
@@ -343,6 +355,115 @@ static TQABoolean GXMetalTransportAvailable(void)
     gDiagnostics.transport_status = gxmetal_guest_register_read(
         &gTransport, GXMETAL_REG_STATUS);
     return gTransportConnected;
+}
+
+#if defined(__GNUC__) && !defined(__clang__)
+__attribute__((optimize("Os"), noinline))
+#endif
+static TQABoolean GXMetalGenerationOwnerExited(
+    const GXMetalGenerationOwner *owner)
+{
+    ProcessSerialNumber process;
+    ProcessInfoRec information;
+
+    if (!owner->valid) {
+        return 0;
+    }
+    process.highLongOfPSN = owner->high;
+    process.lowLongOfPSN = owner->low;
+    memset(&information, 0, sizeof(information));
+    information.processInfoLength = sizeof(information);
+    return GetProcessInformation(&process, &information) == procNotFound;
+}
+
+#if defined(__GNUC__) && !defined(__clang__)
+__attribute__((optimize("Os"), noinline))
+#endif
+static TQABoolean GXMetalRetireExitedDrawStates(void)
+{
+    GXMetalDrawState **link = &gDrawStates;
+    TQABoolean retired = 0;
+
+    while (*link != NULL) {
+        GXMetalDrawState *state = *link;
+
+        if (!GXMetalGenerationOwnerExited(&state->process_owner)) {
+            link = &state->next_state;
+            continue;
+        }
+        *link = state->next_state;
+        if (gLastDrawContext == state->draw_context) {
+            gLastDrawContext = NULL;
+        }
+        /* The application heap already vanished with its process.  The
+         * draw-state node itself lives in the System heap specifically so
+         * its linkage and owner remain safe to inspect and release here. */
+        DisposePtr((Ptr)state);
+        retired = 1;
+    }
+    return retired;
+}
+
+static void GXMetalCaptureRenderCaller(void)
+{
+    ProcessSerialNumber process;
+    TQABoolean known = GetCurrentProcess(&process) == noErr;
+
+    gxmetal_generation_note_owner(
+        &gRenderGenerationCaller, known,
+        known ? (uint32_t)process.highLongOfPSN : 0,
+        known ? (uint32_t)process.lowLongOfPSN : 0);
+}
+
+#if defined(__GNUC__) && !defined(__clang__)
+__attribute__((optimize("Os"), noinline))
+#endif
+static TQABoolean GXMetalRenderGenerationMustReset(void)
+{
+    TQABoolean reset = gxmetal_generation_should_reset(
+        gRenderGenerationReset, gDrawStates != NULL,
+        &gRenderGenerationOwner, gRenderGenerationCaller.valid,
+        gRenderGenerationCaller.high, gRenderGenerationCaller.low);
+
+    if (reset || (gDrawStates == NULL && gRenderGenerationCaller.valid &&
+                  !gRenderGenerationOwner.valid)) {
+        gRenderGenerationOwner = gRenderGenerationCaller;
+    }
+    return reset;
+}
+
+#if defined(__GNUC__) && !defined(__clang__)
+__attribute__((optimize("Os"), noinline))
+#endif
+static TQABoolean GXMetalResetHostGeneration(void)
+{
+    if (!GXMetalTransportAvailable()) {
+        return 0;
+    }
+    gxmetal_guest_register_write(&gTransport, GXMETAL_REG_RESET,
+                                 GXMETAL_RESET_KEY);
+    gTransport.producer = gxmetal_guest_register_read(
+        &gTransport, GXMETAL_REG_PRODUCER);
+    gTransport.consumer = gxmetal_guest_register_read(
+        &gTransport, GXMETAL_REG_CONSUMER);
+    gTransport.published_producer = gTransport.producer;
+    gTransport.pending_bytes = 0;
+    gTransport.pending_packets = 0;
+    gTransport.next_sequence = 1;
+    gTransport.last_sequence = 0;
+    gTransport.status = gxmetal_guest_register_read(
+        &gTransport, GXMETAL_REG_STATUS);
+    if (gTransport.status != GXMETAL_STATUS_READY ||
+        gTransport.producer != 0 || gTransport.consumer != 0) {
+        gTransportConnected = 0;
+        gRenderGenerationReset = 0;
+        return 0;
+    }
+    gRenderGenerationReset = 1;
+    if (gRenderGenerationCaller.valid) {
+        gRenderGenerationOwner = gRenderGenerationCaller;
+    }
+    return 1;
 }
 
 int32_t GXMetalProbeTransport(void)
@@ -3475,8 +3596,16 @@ static TQAError GXMetalATIPrivateMethod1(uint32_t arg0, uint32_t arg1,
  * hook never walks into unrelated data. Unidentified entries intentionally
  * report success without touching guest or host state; known OpenGL geometry
  * callbacks are implemented separately below. */
+/* Keep these cold trace-only placeholders compact so lifecycle checks do not
+ * push the PEF across the Mac OS 9 engine-discovery layout boundary. */
+#if defined(__GNUC__) && !defined(__clang__)
+#define GXMETAL_ATI_PRIVATE_NOOP_COMPACT __attribute__((optimize("Os")))
+#else
+#define GXMETAL_ATI_PRIVATE_NOOP_COMPACT
+#endif
 #define GXMETAL_ATI_PRIVATE_NOOP_WRAPPER(index)                             \
-    static TQAError GXMetalATIPrivateMethod##index(                         \
+    static TQAError GXMETAL_ATI_PRIVATE_NOOP_COMPACT                        \
+    GXMetalATIPrivateMethod##index(                                         \
         uint32_t arg0, uint32_t arg1, uint32_t arg2, uint32_t arg3,         \
         uint32_t arg4, uint32_t arg5, uint32_t arg6, uint32_t arg7)         \
     {                                                                       \
@@ -6327,34 +6456,20 @@ static TQAError GXMetalDrawPrivateNew(TQADrawContext *newDrawContext,
         GXMetalPersistDiagnostics();
         return kQANotSupported;
     }
-    if (!gRenderGenerationReset) {
-        /* Force Quit can unload this rendering fragment without destroying
-         * its host objects.  Start a new ID generation only when the first
-         * draw context is actually requested; input/probe-only CFM clients
-         * must never reset an in-flight rendering packet. */
-        gxmetal_guest_register_write(&gTransport, GXMETAL_REG_RESET,
-                                     GXMETAL_RESET_KEY);
-        gTransport.producer = gxmetal_guest_register_read(
-            &gTransport, GXMETAL_REG_PRODUCER);
-        gTransport.consumer = gxmetal_guest_register_read(
-            &gTransport, GXMETAL_REG_CONSUMER);
-        gTransport.published_producer = gTransport.producer;
-        gTransport.pending_bytes = 0;
-        gTransport.pending_packets = 0;
-        gTransport.next_sequence = 1;
-        gTransport.last_sequence = 0;
-        gTransport.status = gxmetal_guest_register_read(
-            &gTransport, GXMETAL_REG_STATUS);
-        if (gTransport.status != GXMETAL_STATUS_READY ||
-            gTransport.producer != 0 || gTransport.consumer != 0) {
-            gTransportConnected = 0;
-            gDiagnosticStatus = kGXMetalDiagnosticContextTransportFault;
-            gDiagnostics.context_error = kQANotSupported;
-            GXMetalPublishDiagnostics();
-            GXMetalPersistDiagnostics();
-            return kQANotSupported;
-        }
-        gRenderGenerationReset = 1;
+    GXMetalCaptureRenderCaller();
+    (void)GXMetalRetireExitedDrawStates();
+    /* Force Quit can unload a rendering client without destroying its host
+     * objects, while another CFM client can keep this fragment's globals
+     * alive.  Start a new host resource generation only when a renderer first
+     * needs it or a different process arrives after an idle boundary.
+     * Concurrent rendering contexts never reset an in-flight generation. */
+    if (GXMetalRenderGenerationMustReset() &&
+        !GXMetalResetHostGeneration()) {
+        gDiagnosticStatus = kGXMetalDiagnosticContextTransportFault;
+        gDiagnostics.context_error = kQANotSupported;
+        GXMetalPublishDiagnostics();
+        GXMetalPersistDiagnostics();
+        return kQANotSupported;
     }
     if ((flags & (kQAContext_Cache | kQAContext_Scale)) != 0 ||
         ((flags & kQAContext_DeepZ) != 0 &&
@@ -6369,7 +6484,9 @@ static TQAError GXMetalDrawPrivateNew(TQADrawContext *newDrawContext,
         GXMetalPersistDiagnostics();
         return kQANotSupported;
     }
-    state = (GXMetalDrawState *)NewPtrClear(sizeof(*state));
+    /* Draw-state linkage must survive an application heap disappearing so a
+     * later CFM client can safely identify and retire abandoned contexts. */
+    state = (GXMetalDrawState *)NewPtrSysClear(sizeof(*state));
     if (state == NULL) {
         gDiagnosticStatus = kGXMetalDiagnosticContextOutOfMemory;
         gDiagnostics.context_error = kQAOutOfMemory;
@@ -6407,6 +6524,7 @@ static TQAError GXMetalDrawPrivateNew(TQADrawContext *newDrawContext,
     gDiagnostics.context_clip_right = clipRight;
     gDiagnostics.context_clip_bottom = clipBottom;
     state->transport = &gTransport;
+    state->process_owner = gRenderGenerationCaller;
     state->context_id = gNextContextID++;
     if (gNextContextID == 0) {
         gNextContextID = 1;
@@ -6595,11 +6713,21 @@ static void GXMetalDrawPrivateDelete(TQADrawPrivate *drawPrivate)
             break;
         }
     }
+    if (gDrawStates == NULL && state->process_owner.valid) {
+        /* The process that releases the final live context owns this idle
+         * generation.  This preserves its detached textures across a later
+         * same-process context recreation, including after it overlapped
+         * another process's live context. */
+        gRenderGenerationOwner = state->process_owner;
+    }
     DisposePtr((Ptr)state);
     GXMetalPublishDiagnostics();
     GXMetalPersistDiagnostics();
 }
 
+#if defined(__GNUC__) && !defined(__clang__)
+__attribute__((optimize("Os")))
+#endif
 static TQAError GXMetalEngineCheckDevice(const TQADevice *device)
 {
     TQARect rect;
@@ -6661,6 +6789,9 @@ static TQAError GXMetalEngineCheckDevice(const TQADevice *device)
     return kQANoErr;
 }
 
+#if defined(__GNUC__) && !defined(__clang__)
+__attribute__((optimize("Os")))
+#endif
 static TQAError GXMetalEngineGestalt(TQAGestaltSelector selector,
                                      void *response)
 {
@@ -6852,6 +6983,9 @@ static TQAError GXMetalEngineGestalt(TQAGestaltSelector selector,
     return kQANoErr;
 }
 
+#if defined(__GNUC__) && !defined(__clang__)
+__attribute__((optimize("Os")))
+#endif
 TQAError GXMetalEngineGetMethod(TQAEngineMethodTag methodTag,
                                 TQAEngineMethod *method)
 {
@@ -6947,11 +7081,23 @@ TQAError GXMetalEngineGetMethod(TQAEngineMethodTag methodTag,
     return kQANoErr;
 }
 
+#if defined(__GNUC__) && !defined(__clang__)
+__attribute__((optimize("Os")))
+#endif
 OSErr GXMetalCFMInitialize(const CFragInitBlock *initBlock)
 {
     TQAError error;
 
     (void)initBlock;
+    GXMetalCaptureRenderCaller();
+    (void)GXMetalRetireExitedDrawStates();
+    /* A shared fragment can outlive the application that registered it.
+     * Reclaim an abandoned/idle generation before registering this process;
+     * an initial probe remains lazy, and a live concurrent context suppresses
+     * the reset through GXMetalRenderGenerationMustReset. */
+    if (gRenderGenerationReset && GXMetalRenderGenerationMustReset()) {
+        (void)GXMetalResetHostGeneration();
+    }
     memset(&gDiagnostics, 0, sizeof(gDiagnostics));
     gDiagnostics.magic = GXMETAL_DIAGNOSTIC_MAGIC;
     gDiagnostics.version = GXMETAL_DIAGNOSTIC_VERSION;
