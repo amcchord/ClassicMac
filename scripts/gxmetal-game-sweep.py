@@ -552,6 +552,7 @@ def qemu_command(
     cpu: str,
     accel: str,
     audio_backend: str,
+    trace_events: tuple[str, ...] = (),
 ) -> list[str]:
     paths = [base_clone, loader, firmware]
     if spec.cdrom is not None:
@@ -591,6 +592,8 @@ def qemu_command(
         "-drive", f"file={base_clone},format=raw,media=disk,index=0",
         "-nic", "none",
     ]
+    for trace_event in trace_events:
+        command += ["-trace", f"enable={trace_event}"]
     if spec.cdrom is not None:
         command += [
             "-drive",
@@ -1029,7 +1032,8 @@ def execute_run(
         events.write("clone_completed", method=clone_method, size=clone.stat().st_size)
         command = qemu_command(root, qemu, clone, run_dir, socket_dir, spec,
                                loader, firmware, tools_cd, args.ram_mb,
-                               args.cpu, args.accel, args.audio_backend)
+                               args.cpu, args.accel, args.audio_backend,
+                               tuple(args.trace_event))
         write_json(run_dir / "qemu-command.json", command)
         write_json(run_dir / "run.json", {
             "game_id": spec.game_id,
@@ -1041,13 +1045,15 @@ def execute_run(
             "started_at": wall_started,
             "resolution": spec.resolution,
             "audio_backend": args.audio_backend,
+            "trace_events": args.trace_event,
             "steps": spec.steps,
         })
         qemu_log = (run_dir / "qemu.log").open("wb")
         environment = os.environ.copy()
         if spec.mode == "gxmetal":
             environment["GXMETAL_PROFILE"] = "1"
-        events.write("qemu_started", audio_backend=args.audio_backend)
+        events.write("qemu_started", audio_backend=args.audio_backend,
+                     trace_events=args.trace_event)
         process = subprocess.Popen(command, cwd=root, env=environment,
                                    stdout=qemu_log, stderr=subprocess.STDOUT)
         wait_for_socket(monitor_socket, process, args.start_timeout)
@@ -1206,6 +1212,13 @@ def parse_game_ids(value: str) -> tuple[str, ...]:
     return tuple(dict.fromkeys(game_ids))
 
 
+def parse_trace_event(value: str) -> str:
+    if not value or re.fullmatch(r"[A-Za-z0-9_.?*+-]+", value) is None:
+        raise argparse.ArgumentTypeError(
+            "trace event must be a QEMU event name or glob without options")
+    return value
+
+
 def select_game_specs(specs: list[RunSpec],
                       game_ids: tuple[str, ...] | None) -> list[RunSpec]:
     if game_ids is None:
@@ -1246,6 +1259,10 @@ def main() -> int:
     parser.add_argument("--ram-mb", type=int, default=512)
     parser.add_argument("--cpu", default="7400")
     parser.add_argument("--accel", default="tcg,tb-size=512")
+    parser.add_argument(
+        "--trace-event", action="append", type=parse_trace_event, default=[],
+        help=("enable one QEMU trace event or glob; repeat for multiple "
+              "events"))
     parser.add_argument(
         "--audio-backend", choices=tuple(AUDIO_DEVICE_SPECS),
         default=DEFAULT_AUDIO_BACKEND,
@@ -1304,6 +1321,7 @@ def main() -> int:
             "manifest": str(manifest),
             "jobs": args.jobs,
             "audio_backend": args.audio_backend,
+            "trace_events": args.trace_event,
             "games": args.games,
             "runs": [
                 {
@@ -1356,6 +1374,7 @@ def main() -> int:
         "media": media_records,
         "jobs": args.jobs,
         "audio_backend": args.audio_backend,
+        "trace_events": args.trace_event,
         "games": args.games,
         "modes": args.modes,
         "runs": [spec.run_id for spec in specs],

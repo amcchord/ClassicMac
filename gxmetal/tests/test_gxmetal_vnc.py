@@ -205,6 +205,29 @@ class ManifestValidationTests(unittest.TestCase):
         log_option = command.index("-d")
         self.assertEqual(command[log_option + 1], "guest_errors")
 
+    def test_qemu_command_enables_requested_trace_events(self):
+        spec = SWEEP.RunSpec(
+            game_id="trace-probe", name="Trace Probe", mode="gxmetal",
+            cdrom=None, source_url=None, source_sha256=None,
+            boot_wait_seconds=0, observation_seconds=0,
+            capture_interval_seconds=1, resolution="640x480x15", steps=())
+        command = SWEEP.qemu_command(
+            ROOT, Path("/qemu"), Path("/disk.img"), Path("/evidence"),
+            Path("/sockets"), spec, Path("/ndrvloader"), Path("/pc-bios"),
+            None, 512, "7400", "tcg,tb-size=512", "none",
+            ("input_event_key_qcode", "input_event_btn"))
+
+        self.assertEqual(command.count("-trace"), 2)
+        self.assertIn("enable=input_event_key_qcode", command)
+        self.assertIn("enable=input_event_btn", command)
+
+    def test_trace_event_validation_accepts_globs_but_not_options(self):
+        self.assertEqual(
+            SWEEP.parse_trace_event("input_event_key_*"),
+            "input_event_key_*")
+        with self.assertRaises(argparse.ArgumentTypeError):
+            SWEEP.parse_trace_event("input_event_key_qcode,file=/tmp/trace")
+
     def test_named_keys_are_case_sensitive_and_checked_before_runtime(self):
         self.assertEqual(
             SWEEP.validate_step({"key": "Space"}, "steps[0]"),
