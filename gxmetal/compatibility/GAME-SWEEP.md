@@ -20,12 +20,12 @@ records sources, hashes, recipes, evidence descriptions, and driver fixes.
 | `cro-mag-rally` | Cro-Mag Rally Demo | Apple OpenGL 1.1.2 | Confirm hardware/OpenGL; complete a lap with terrain, particles, HUD, transparency, and camera transitions | Gameplay smoke pass at 640x480: Practice/Desert renders coherently, acceleration and steering visibly respond, 24-28 fps, ~204 direct draws/frame, zero fallback, and expected demo exit screen |
 | `weekend-warrior` | Weekend Warrior | QuickDraw 3D / RAVE | Load the first arena; verify camera clipping, textured characters, UI, depth ordering, and transitions for five minutes | Exact published 2.2.1 short smoke: coherent Center Stage, movement/action delta 0.798568, 24,707 direct/0 fallback frames, 1,517,694 draws; beta-3 separately proves recovery relaunch |
 | `future-cop` | Future Cop: LAPD Demo | Selectable QuickDraw 3D RAVE | Select RAVE; enter Crime War; verify weapon blending, transparent HUD, depth, and explosions | Exact published 2.2.1 short smoke: coherent Crime War, movement/fire delta 0.725452, ammo 7500→7482, 1,784 direct/0 fallback frames, 3,976,505 draws |
-| `dark-vengeance` | Dark Vengeance Demo | Direct RAVE | Reach first combat and scripted sequence; inspect lighting, translucent effects, animated geometry, and camera motion | Demo 1.0.2 fails identically before RAVE in GXMetal/software; the retail updater requires its legitimate CD; the genuine 1.2 demo installs but stops at memory allocation size -49 with zero contexts/draws |
+| `dark-vengeance` | Dark Vengeance Demo | Direct RAVE | Reach first combat and scripted sequence; inspect lighting, translucent effects, animated geometry, and camera motion | The gamma-table and optional-output notice fixes reach textured gameplay with a player, enemy, portal, and environment; `w` changes the frame and a 15-second soak remains animated. The mostly-black selection/loading transition remains open |
 | `myth-ii` | Myth II: Soulblighter 1.5.1 Demo | RAVE | Select RAVE; load a solo map; pan, zoom, rotate, issue orders, and verify terrain, water, units, decals, projectiles, and explosions | Exact signed beta-3 battlefield/partial-input pass: coherent rendering plus visibly proven single selection, forward/back and left/right camera motion, rotation, and zoom-in; refreshed replay has 3,589,155 traced draws and zero fallback/rejects; group orders and the remaining controls stay open |
-| `unreal-tournament` | Unreal Tournament 348m3 Demo | ATI renderer through RAVE | Confirm RAVE; render intro flyby; run a five-minute bot match checking lightmaps, fog, weapon alpha, HUD, and texture cycling | Exact published 2.2.1 first process reaches coherent Tempest and cleanly exits; same-boot process two accepts a render-generation reset and reaches a live HUD/weapon. Lifecycle tracing proves fresh process/CFM/custom-device creation and QEMU receives the keys, but focused gameplay input remains inert |
+| `unreal-tournament` | Unreal Tournament 348m3 Demo | ATI renderer through RAVE | Confirm RAVE; render intro flyby; run a five-minute bot match checking lightmaps, fog, weapon alpha, HUD, and texture cycling | Exact published 2.2.1 first process reaches coherent Tempest and cleanly exits; process two reaches a live HUD/weapon. Fresh process/CFM/custom-device creation is proven, and QEMU, ADB, and low-memory `LMKeyMap` all deliver Control correctly, but UT's focused gameplay remains inert |
 | `combat-mission` | Combat Mission: Beyond Overlord 1.02 Demo | RAVE hardware probe | Complete detection; load Chance Encounter; move through the map and execute a turn with terrain, markers, smoke, and animation | Exact published 2.2.1 setup-rendering smoke: 1,168 direct/0 fallback frames and 2,175,685 draws; no battle input in this short recipe. Beta-3 separately proves the full turn |
-| `oni` | Oni Demo | Classic Apple OpenGL | Reach training and first fight; verify animation, lightmaps, transparency, HUD, and an indoor/outdoor transition | First-process warehouse input/F1/clean quit pass; combined InputSprocket/renderer process-owner hardening preserves it, but process two still stops at Bungie before focus or graphics-driver re-entry. Tickle-only control proves the normal input timer is required for relative look |
-| `havoc` | Havoc Demo | First shipping QuickDraw 3D RAVE game | Select accelerated rendering; enter the demo arena; verify terrain, fog, textured objects, transparency, HUD, and camera motion for five minutes | Two independently preserved demos stop at the same resource-allocation dialog before renderer creation; the alternate Tucows build produces no RAVE/profile traffic on exact beta-3, and raising its classic Mac partition from 5.76 to 32 MB does not alter the failure |
+| `oni` | Oni Demo | Classic Apple OpenGL | Reach training and first fight; verify animation, lightmaps, transparency, HUD, and an indoor/outdoor transition | First-process warehouse input/F1/clean quit passes. A menu-only first process plus early second-process Escape recreates InputSprocket/GXMetal and reaches the menu; the full warehouse route stalls in Bink/level-0 before renderer re-entry. A matched full-route `-nosound` test remains open |
+| `havoc` | Havoc Demo | First shipping QuickDraw 3D RAVE game | Select accelerated rendering; enter the demo arena; verify terrain, fog, textured objects, transparency, HUD, and camera motion for five minutes | The same gamma-contract candidate clears the misleading resource dialog and reaches coherent full-retail cockpit gameplay. A generic input sequence changes 0.603298 of the frame with no texture/palette corruption or crash |
 
 OpenGL titles only count as GXMetal tests when the host log contains GXMetal
 presentation traffic. If a game cannot launch or render, run the matched
@@ -479,6 +479,22 @@ VMs, each with an independent clone and unique local VNC and monitor sockets.
   `context/gxmetal-games/evidence/gxmetal-oni-input-tickle-diagnostic-20260827/`
   and
   `context/gxmetal-games/evidence/gxmetal-ut-input-tickle-diagnostic-20260827/`.
+- A fixed-address read-only discriminator closes the next UT boundary. In both
+  first and second processes, the 16-byte low-memory `LMKeyMap` at `0x0174` is
+  zero at rest and byte 7 becomes `0x08` while Control is held; QEMU qcode and
+  ADB traffic are identically `0x36`/`0xb6`. Mac OS `GetKeys` backing state is
+  therefore healthy in process two. A reproducible GDB helper now relocates the
+  exact immutable UT PEF (`51cc73dc…ae28d`) and targets current Control at
+  `r1+57`, prior Control at `r2-11987`, and the transition call at code offset
+  `0x14fbf0`; no valid live breakpoint sample was captured yet. During PEF
+  extraction, macOS changed a writable retained run image despite read-only
+  attach/mount flags. The harness caught its digest change, the disk was
+  quarantined, and the unchanged upstream preparation base remains available.
+  Future extraction must use a host-read-only disposable clone. Evidence is
+  under
+  `context/gxmetal-games/evidence/gxmetal-ut-first-second-keymap-20260827/`
+  and
+  `context/gxmetal-games/evidence/gxmetal-ut-second-process-keyboard-discriminator-20260827/`.
 - Replayed Future Cop on exact beta-3 through a longer semantic lifecycle.
   Forward and turn controls visibly reposition the mech/camera, fire produces
   impact sparks while ammunition falls from 7500 to 7481 and then 7463, and
@@ -521,6 +537,34 @@ VMs, each with an independent clone and unique local VNC and monitor sockets.
   7,562, 4,096, or 131,072 bytes. The external resource opens occur later and
   use different alerts. The two shared-engine failures must not be collapsed
   into one exact cause without the one-launch return-PC traces.
+- The return-PC traces overturn that provisional classification and identify a
+  shared, exact driver cause. The old PPC video NDRV returned `noErr` for
+  synchronous `cscGetGamma` while setting no table pointer. Dark Vengeance's
+  `SetupGammaAdjustment__14GGraphicDeviceFv` and HAVOC both dereference that
+  null result, interpret low memory as `GammaTbl` fields, and issue a signed
+  `-49` allocation. Dark's independent file trace records a successful
+  `DARKVENG.INI` open with refnum `0x0552`, cached size 2,807, and position
+  zero, so preference-file sizing was not responsible. The rebuilt NDRV returns
+  a persistent normalized 3-channel, 256-entry, 8-bit gamma table initialized
+  to identity and refreshed by `SetGamma`; native layout/identity tests pass.
+  Candidate SHA-256 is
+  `3b687b15b4ed321eaee6822438be5bba55a5ab1d8a3ef948fe8f63996a7c5722`.
+  HAVOC then reaches coherent cockpit gameplay and passes a 0.603298 named
+  frame-change gate. Dark clears the allocation alert and exposes a narrower
+  period-RAVE ABI mismatch: it calls `QAGetNoticeMethod` with a callback output
+  but a null refCon output. GXMetal now permits either output independently and
+  invokes the registered selector-4 buffer notice synchronously from
+  `RenderEnd` using a readback memory device. The broad
+  `kQAOptional_BufferComposite` bit remains unadvertised. The final route
+  reaches the Reality Bytes splash, animated title, and coherent textured
+  player/enemy/portal gameplay; `w` changes the frame and a 15-second soak
+  remains animated. Its intermediate selection/loading capture is mostly black,
+  so a fully drawn interactive menu is not claimed. Evidence is retained under
+  `context/gxmetal-games/evidence/reality-bytes-runtime-trace-20260827/`,
+  `context/gxmetal-games/evidence/gxmetal-havoc-getgamma-gameplay-input-v3-20260827/`,
+  `context/gxmetal-games/evidence/gxmetal-dark-buffer-notice-callback-hit-final-20260827/`,
+  and
+  `context/gxmetal-games/evidence/gxmetal-dark-title-menu-gameplay-final-20260827/`.
 - Replayed Oni on an immutable exact-final beta-3 disk. It remains coherent
   through the former +45 corruption boundary and roughly 176 seconds of live
   rendering. The trace records 10,126,893 ATI-private calls, 11,238,479 queued
@@ -534,6 +578,17 @@ VMs, each with an independent clone and unique local VNC and monitor sockets.
   that portrait dialogue was still advancing while movement input arrived;
   those changing portraits are not counted as player control, and the F1
   in-game lifecycle remains to be reached after the dialogue settles.
+- The later matched lifecycle discriminator narrows process two to Oni's movie
+  path. A menu-only first process followed by early Escape in process two
+  recreates InputSprocket, resets GXMetal upload IDs, creates a second context,
+  and reaches the menu. The full warehouse→clean-quit route instead remains
+  static in Bink/level-0 startup with upload IDs ending at the first process's
+  1…210 sequence. A short launch-arguments qualifier visibly proves literal
+  `-nosound`; the full-route discriminator remains open because relative
+  gameplay desynchronized the VNC pointer model. The harness now provides an
+  explicit corner-to-corner motion-only rehome action for a direct-frame-gated
+  replay. Evidence is retained under
+  `context/gxmetal-games/evidence/gxmetal-oni-fullgame-first-second-nosound-rehomed-20260827/`.
 - Corrected Myth II's driver-specific transition failure. Proven ATI private
   slot-2 calls now replace flags-zero, single-level base images with the
   existing texture's exact format and dimensions without changing its resource

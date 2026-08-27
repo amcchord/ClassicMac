@@ -78,42 +78,44 @@ but the evidence still does not support a universal-compatibility claim.
   invoked either tickle callback and relative-look changed only 0.008250 of
   the qualified region, below the accepted 0.05 gate. The timer is therefore
   required for normal relative-mouse delivery and cannot simply be removed as
-  the process-lifecycle fix.
-- Dark Vengeance and HAVOC reproduce deterministic failures before either app
-  submits accelerated work. The genuine Dark Vengeance Demo 1.2 VISE install
-  completes, but its unchanged application stops at `Memory allocation failed
-  (size = -49)` with zero contexts, draws, textures, or private calls. Static
-  PEF analysis proves that `-49` is the literal signed allocation argument
-  (`0xffffffcf`) printed by `RBNewPtr`, not an OS error returned by the Memory
-  or File Manager. The earliest concrete startup callers allocate
-  `cached_file_size + 1` for `DARKVENG.INI`, `CUSTOM.INI`, and
-  `NETLAUNCH.INI`; the displayed value therefore implies that a cached size of
-  `-50` reached that boundary. The leading hypothesis is now a bad file-position
-  output or corruption while reading the preference files, before RAVE/GXMetal
-  initialization. A one-launch conditional breakpoint at `RBNewPtr`, using the
-  three documented return PCs, can identify the exact file without weakening
-  the VM or driver. A
-  second, independently preserved Tucows HAVOC demo (`27957a5e…dfa21`) also
-  stops at the same resource-allocation dialog on exact beta-3; the log
-  contains no RAVE context or GXMetal profile traffic. Raising that
-  application's classic Mac preferred partition from 5.76 MB to 32 MB still
-  produces the identical dialog before RAVE. A separately preserved full
-  retail DiskDup image (`ba90fbd9…adebd`) mounts correctly, its installer
-  completes, and its CD-backed application is distinct from both demos, but
-  both its original 5.64 MB partition and a data-fork-identical 32 MiB
-  partition reproduce the same dialog before any GXMetal profile. The
-  installed retail application's 460,600-byte resource fork and the three
-  external `RB Geometry`, `RB Objects`, and `RB Sounds` resource forks
-  (1,027,602, 1,442,614, and 1,261,043 bytes) are present, so this is not a
-  fork-stripping result. HAVOC's dialog is the engine's generic resource-memory
-  message and does not expose Dark Vengeance's `-49` value. Static analysis
-  narrows it to exactly five failed `NewHandle` sites: two dynamic signed-16-bit
-  screen/resource allocations and fixed requests of 7,562, 4,096, or 131,072
-  bytes. Those sites run before the external resource-file opens, so missing
-  `RB Graphics`, `RB Interface`, or `RB Music` cannot explain this retained
-  alert. The original builds' Apple Software controls match the pre-RAVE
-  classification.
-  Unreal Tournament's default startup also remains black on its software
+  the process-lifecycle fix. The latest matched evidence narrows the stall to
+  Oni's movie path: a menu-only first process followed by early second-process
+  Escape recreates InputSprocket, resets GXMetal upload IDs, creates a second
+  context, and reaches the menu; the full warehouse→clean-quit route instead
+  remains static in Bink/level-0 startup with uploads ending at the first
+  process's IDs 1…210. Universal InputSprocket construction and renderer
+  restart are therefore ruled out. A short launch-arguments qualifier visibly
+  proves that Oni accepts literal `-nosound`, but every full-route attempt was
+  rejected because relative gameplay warped the guest cursor away from the
+  long-lived VNC client's model. The matched `-nosound` discriminator remains
+  open; the harness now has an explicit motion-only pointer-rehome action for
+  a future direct-frame-gated replay.
+- Dark Vengeance and HAVOC exposed the same PPC video-driver gamma-contract
+  defect. The old NDRV returned `noErr` from `cscGetGamma` while leaving
+  `csGTable` null. Both games dereference the returned `GammaTbl`, read low
+  memory as its header, derive the signed allocation size `-49`, and report a
+  misleading resource/memory failure. Dark's exact live trace reaches
+  `SetupGammaAdjustment__14GGraphicDeviceFv` and its `RBNewHandle` wrapper;
+  an independent file trace proves `DARKVENG.INI` opened successfully with its
+  correct 2,807-byte cached size, disproving the earlier INI hypothesis.
+  HAVOC's exact dynamic `NewHandle` request is likewise `-49` immediately after
+  its synchronous `cscGetGamma` query. The rebuilt NDRV now returns a valid,
+  persistent, normalized 3x256x8 table, initializes it to the identity ramp,
+  and updates it whenever the guest sets gamma. HAVOC consequently reaches a
+  coherent first-person cockpit, terrain, pyramid, HUD, and radar; its input
+  probe changes 0.603298 of the frame and remains visually intact. Dark also
+  clears the `-49` boundary. Its next failure was an exact period-RAVE ABI
+  mismatch: Dark asks `QAGetNoticeMethod` for the selector-4 callback while
+  passing a null refCon output, but GXMetal incorrectly required both outputs.
+  GXMetal now treats those outputs independently and synchronously invokes the
+  registered buffer notice from `RenderEnd` with a readback memory device. The
+  broader `kQAOptional_BufferComposite` bit remains unadvertised. The final
+  silent route renders the Reality Bytes splash, animated Dark title, and
+  textured first-person gameplay with a player, enemy, portal, and environment;
+  `w` changes the frame and all frames in a 15-second soak differ. The
+  intermediate selection/loading capture is mostly black, so this does not yet
+  claim a fully drawn interactive menu.
+- Unreal Tournament's default startup also remains black on its software
   control. Controlled GXMetal runs isolate `UseSound=True` as the blocker:
   sound-disabled starts render the same correct main menu in windowed and
   fullscreen modes, while a sound-enabled/windowed start submits no RAVE work.
@@ -152,7 +154,15 @@ but the evidence still does not support a universal-compatibility claim.
   the four reviewed live/action frames are byte-identical. Suppressing the
   custom driver's timer does not restore the keyboard path, so neither a
   stale GXMetalInput timer nor lost VNC/QEMU key transport explains this UT
-  failure.
+  failure. A fixed-address low-memory discriminator now proves more: the
+  16-byte `LMKeyMap` at `0x0174` is all zero at rest in both generations and
+  byte 7 becomes `0x08` while Control is held in both, with identical QEMU
+  qcode and ADB `0x36`/`0xb6` transitions. Mac OS `GetKeys` backing state is
+  therefore correct. The next read-only probe is scripted against the exact UT
+  PEF (`51cc73dc…ae28d`) at `CheckButtonKeys`: current Control at `r1+57`,
+  prior Control at `r2-11987`, and the transition call at code offset
+  `0x14fbf0`. No valid live breakpoint sample was obtained yet, so the defect
+  remains inside UT's current/prior-key comparison or its downstream handling.
   Myth II now reaches its fully rendered “Into the Breach” battlefield after
   the animated map and journal. GXMetal implements the proven flags-zero,
   single-level ATI private slot-2 base-image replacement and slot 4's
@@ -230,11 +240,11 @@ but the evidence still does not support a universal-compatibility claim.
 | Combat Mission | Exact-2.2.1 setup-rendering pass; beta-3 full-turn pass | Published build reaches coherent Chance Encounter setup with 1,168 direct/0 fallback frames and 2,175,685 draws, but its short recipe sends no battle input. Beta-3 separately proves the complete mounted/disembark/GO turn | Replay the full-turn route and clean quit/relaunch on exact 2.2.1; audio |
 | Weekend Warrior | Exact-2.2.1 short gameplay pass; beta-3 recovery pass | Published build renders Center Stage coherently and passes movement/fire at 0.798568; 24,707 direct/0 fallback frames and 1,517,694 draws | Exact-release five-minute arena soak and clean quit/relaunch; audio |
 | Cro-Mag Rally | Gameplay smoke pass on current Q3 fix | Correct accelerated title/menu/loading and Practice/Desert gameplay at 640x480; acceleration and steering visibly alter position/heading; 24-28 fps, ~204 direct draws/frame, zero fallback; expected demo exit screen | Complete-lap/longer lifecycle soak and audio |
-| Dark Vengeance | Pre-RAVE app/runtime blocker across three routes | Demo 1.0.2 fails identically in accelerated/software modes; the retail updater requires its legitimate CD; the genuine 1.2 demo installs but passes literal allocation size `0xffffffcf` (-49) to `RBNewPtr`, most likely from `cached_file_size + 1` for one of three INI files, with zero contexts/draws | Capture the conditional `RBNewPtr` return PC and cached size during one silent launch, then correct the identified preference-file position path and rerun software/GXMetal A/B |
-| HAVOC | Matched pre-RAVE app/runtime blocker | Two independently preserved demos and a separately installed full retail/CD build stop at the generic resource-allocation dialog before renderer creation; static analysis narrows the alert to five failed `NewHandle` sites, and the external resource opens occur later | Capture the alert selector return PC and preceding allocation size during one silent launch; test display/preferences state if it is one of the two dynamic sites, otherwise inspect the active Memory Manager zone |
+| Dark Vengeance | Gameplay rendering/input/short-soak pass on gamma + notice candidate | Exact tracing proves `cscGetGamma` success-with-null caused `-49`; `DARKVENG.INI` opens correctly. Accepting independently optional `QAGetNoticeMethod` outputs and invoking selector 4 synchronously reaches a textured player/enemy/portal scene, responds to `w`, and remains animated for 15 seconds without advertising `kQAOptional_BufferComposite` | Qualify the mostly-black selection/menu transition, longer gameplay/lifecycle, and audio |
+| HAVOC | Gameplay rendering pass on gamma candidate | The same `cscGetGamma` contract fix clears all prior memory dialogs. Full retail reaches coherent first-person cockpit gameplay; generic input changes 0.603298 of the frame, QEMU exits 0, and the immutable source remains unchanged | Add game-specific movement/fire assertions, five-minute gameplay/lifecycle soak, and audio |
 | Myth II | Battlefield/effects rendering and partial-input pass on rebuilt beta-3 | Correct main UI, campaign map, journal, coherent battlefield, and an effects-heavy film with intact terrain through +25; visibly proven single selection, camera movement/rotation, and zoom-in; fixed effects replay has 2,882 direct frames and zero fallback/rejects/out-of-range-Z draws | Prove group selection/orders, Stop, zoom-out/orbit, and clean film exit/relaunch; audio |
-| Oni | Gameplay/input + first-process lifecycle pass; candidate second-process failure | Warehouse relative look, movement, action, F1/resume, Escape, Quit/Yes, and Finder return pass. CFM-reference, InputSprocket-owner, and stale-renderer-context hardening preserve those gates, but process two still stops at the Bungie logo before focus or renderer re-entry; a tickle-only diagnostic also proves the 8 ms timer is required for first-process relative input | Instrument the Bungie/pre-renderer startup boundary while retaining timer polling, then prove second-process menu/input/quit; audio |
-| Unreal Tournament | Exact-2.2.1 first-process gameplay/clean-exit pass; partial second lifecycle | Sound-disabled published build reaches coherent Tempest, cleanly Command-Q exits, relaunches, restarts host upload IDs, and reaches a second coherent live HUD/weapon. Lifecycle tracing proves clean first-process custom-device disposal and fresh second-process PSN/CFM/device creation; QEMU receives the second Up/Control transitions, but four live/action frames remain byte-identical | Trace InputSprocket's built-in keyboard activation/mapping or UT's keyboard reacquisition above the custom mouse driver, then prove a dynamic longer match; keep sound disabled under the current VM audio path |
+| Oni | Gameplay/input + first-process lifecycle pass; movie-path second-process stall | Warehouse look/movement/action/F1/quit pass. A menu-only first process plus early second-process Escape recreates InputSprocket and GXMetal and reaches the menu; the full warehouse route stalls in Bink/level-0 before renderer re-entry | Use the tested pointer-rehome action to qualify a matched full-route `-nosound` launch, then trace Bink entry/return calls if it still stalls; audio |
+| Unreal Tournament | Exact-2.2.1 first-process gameplay/clean-exit pass; partial second lifecycle | Sound-disabled published build reaches coherent Tempest, cleanly exits, relaunches, and reaches a second live HUD/weapon. Fresh process/CFM/custom-device creation is proven; QEMU, ADB, and `LMKeyMap` all deliver second-process Control correctly, but UT's live framebuffer remains inert | Run the scripted read-only `CheckButtonKeys` current/prior-state probe from a newly verified immutable source, then prove a dynamic longer match; keep sound disabled under the current VM audio path |
 
 ## Driver gates on the exact 2.2.1 release
 
@@ -564,45 +574,44 @@ signed candidate:
 - Cro-Mag Rally:
   `context/gxmetal-games/evidence/cromag-manual-drag-640-gameplay-20260825`
 - Dark Vengeance:
-  `context/gxmetal-games/evidence/dark-vengeance-live-final-drawsprocket-off-2`
+  `context/gxmetal-games/evidence/gxmetal-dark-title-menu-gameplay-final-20260827`
 - HAVOC:
-  `context/gxmetal-games/evidence/havoc-launch-128mb-20260825`
+  `context/gxmetal-games/evidence/gxmetal-havoc-getgamma-gameplay-input-v3-20260827`
 - Reality Bytes static startup trace:
   `context/gxmetal-games/evidence/reality-bytes-static-trace-20260827`
 - Myth II:
   `context/gxmetal-games/evidence/gxmetal-mythii-final-upload-order-20260827`
 - Oni:
-  `context/gxmetal-games/evidence/oni-gxmetal-fatal-relaunch-20260825`
+  `context/gxmetal-games/evidence/gxmetal-oni-fullgame-first-second-nosound-rehomed-20260827`
 - Unreal Tournament:
-  `context/gxmetal-games/evidence/gxmetal-ut-beta3-homogeneous-clip-live-gameplay-20260827`
+  `context/gxmetal-games/evidence/gxmetal-ut-first-second-keymap-20260827`
 
 ## Next compatibility gates
 
 1. Preserve Oni's now-passing warehouse input, F1, in-game quit, pale-range,
-   and method-50 fan gates. The CFM-reference, InputSprocket-owner, and safe
-   stale-renderer-context changes are insufficient in the live guest because
-   process two stops before graphics-driver re-entry. The tickle-only control
-   also proves that the normal 8 ms polling source is necessary for relative
-   mouse input. Retain that polling while instrumenting the Bungie startup
-   boundary, then prove second-process input and second quit.
+   and method-50 fan gates. The normal 8 ms polling source remains necessary
+   for relative mouse input. A menu-only first process proves that process-two
+   InputSprocket and GXMetal recreation work; the full gameplay route instead
+   stalls in Bink/level-0 startup. Use the explicit pointer-rehome action to
+   qualify the same route with literal `-nosound`, then instrument Bink entry
+   and return if the stall remains.
 2. Preserve Unreal Tournament's exact-release first-process gameplay,
    Command-Q/Finder return, and accepted second rendering reset. Instrument
-   InputSprocket's built-in keyboard activation/mapping or UT's reacquisition
-   above GXMetalInput: the custom device has already proved clean disposal and
-   fresh second-process creation, and QEMU records the keys. Then prove focused
-   second-process movement/fire and a dynamic longer bot match.
+   the scripted read-only `CheckButtonKeys` probe from a newly verified
+   immutable source: QEMU, ADB, and `LMKeyMap` already prove that Control reaches
+   Mac OS in both processes. Capture UT's current/prior Control comparison and
+   transition call, then prove focused second-process movement/fire and a
+   dynamic longer bot match.
    Do not classify either the visible death-wait state or an unready match as a
    renderer freeze.
    Extend Myth II through group selection/orders and clean film quit/relaunch
    while retaining the now-passing effects/terrain regression.
-3. For Dark Vengeance 1.2, capture the conditional `RBNewPtr` return PC for
-   input `0xffffffcf` and the `GDataFile + 296` cached size during one silent
-   launch. The three bounded callers correspond to `DARKVENG.INI`,
-   `CUSTOM.INI`, and `NETLAUNCH.INI`; this supersedes the earlier `opWrErr`
-   interpretation. For HAVOC, capture which of the five exact alert-selector
-   return PCs fires and record the preceding `NewHandle` input, `MemError`,
-   `FreeMem`, and `MaxBlock`. Do not weaken driver or VM memory safety around
-   failures that occur before RAVE.
+3. Preserve the shared Dark Vengeance/HAVOC gamma contract and its native table
+   tests. Extend Dark beyond the mostly-black selection/loading transition,
+   then run a longer gameplay and clean-relaunch gate while retaining the
+   selector-4 callback trace and leaving `kQAOptional_BufferComposite`
+   unadvertised. Add game-specific HAVOC movement/fire assertions and a longer
+   cockpit/lifecycle soak.
 4. Require reviewed screenshots, direct presentation profiles with zero
    unexpected fallback, representative input, a longer soak, and clean
    lifecycle for every title advertised as supported.
