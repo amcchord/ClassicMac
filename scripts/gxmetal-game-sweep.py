@@ -39,7 +39,8 @@ AUDIO_DEVICE_SPECS = {
 }
 ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
 STEP_ACTIONS = (
-    "wait", "wait_for_frame_change", "wait_for_pixel", "click",
+    "wait", "wait_for_frame_change", "wait_for_pixel", "wait_for_pixels",
+    "click",
     "hold_click", "double_click", "drag", "rehome_pointer", "key",
     "key_down", "key_up", "chord", "text", "screenshot",
     "monitor_register_snapshot",
@@ -234,6 +235,64 @@ def validate_step(step: Any, field: str) -> dict[str, Any]:
         if timeout < poll_interval:
             raise ValueError(
                 f"{field}.wait_for_pixel timeout must be at least the "
+                "poll interval")
+    elif action == "wait_for_pixels":
+        if not isinstance(value, dict):
+            raise ValueError(f"{field}.wait_for_pixels must be an object")
+        unknown_wait_fields = set(value) - {
+            "pixels", "tolerance", "timeout_seconds",
+            "poll_interval_seconds",
+        }
+        if unknown_wait_fields:
+            raise ValueError(
+                f"{field}.wait_for_pixels has unknown fields: "
+                f"{sorted(unknown_wait_fields)}")
+        pixels = value.get("pixels")
+        if not isinstance(pixels, list) or not pixels:
+            raise ValueError(
+                f"{field}.wait_for_pixels.pixels must be a nonempty list")
+        for index, pixel in enumerate(pixels):
+            pixel_field = f"{field}.wait_for_pixels.pixels[{index}]"
+            if not isinstance(pixel, dict):
+                raise ValueError(f"{pixel_field} must be an object")
+            unknown_pixel_fields = set(pixel) - {
+                "x", "y", "red", "green", "blue",
+            }
+            if unknown_pixel_fields:
+                raise ValueError(
+                    f"{pixel_field} has unknown fields: "
+                    f"{sorted(unknown_pixel_fields)}")
+            for coordinate in ("x", "y"):
+                coordinate_value = pixel.get(coordinate)
+                if (isinstance(coordinate_value, bool) or
+                        not isinstance(coordinate_value, int) or
+                        coordinate_value < 0):
+                    raise ValueError(
+                        f"{pixel_field}.{coordinate} must be a "
+                        "nonnegative integer")
+            for channel in ("red", "green", "blue"):
+                channel_value = pixel.get(channel)
+                if (isinstance(channel_value, bool) or
+                        not isinstance(channel_value, int) or
+                        channel_value < 0 or channel_value > 255):
+                    raise ValueError(
+                        f"{pixel_field}.{channel} must be an integer "
+                        "from 0 through 255")
+        tolerance = value.get("tolerance", 8)
+        if (isinstance(tolerance, bool) or not isinstance(tolerance, int) or
+                tolerance < 0 or tolerance > 255):
+            raise ValueError(
+                f"{field}.wait_for_pixels.tolerance must be an integer "
+                "from 0 through 255")
+        timeout = number(
+            value.get("timeout_seconds"),
+            f"{field}.wait_for_pixels.timeout_seconds", positive=True)
+        poll_interval = number(
+            value.get("poll_interval_seconds", 1),
+            f"{field}.wait_for_pixels.poll_interval_seconds", positive=True)
+        if timeout < poll_interval:
+            raise ValueError(
+                f"{field}.wait_for_pixels timeout must be at least the "
                 "poll interval")
     elif action == "assert_frame_changed_since":
         if not isinstance(value, dict):
@@ -1093,6 +1152,63 @@ def execute_run(
             f"timed out waiting {timeout:g}s for pixel ({x}, {y}) to "
             f"match {target} within tolerance {tolerance}")
 
+    def wait_for_pixels(settings: dict[str, Any], label: str) -> None:
+        if client is None:
+            return
+        targets = [
+            {
+                "x": int(pixel["x"]),
+                "y": int(pixel["y"]),
+                "target": (
+                    int(pixel["red"]), int(pixel["green"]),
+                    int(pixel["blue"])),
+            }
+            for pixel in settings["pixels"]
+        ]
+        tolerance = int(settings.get("tolerance", 8))
+        timeout = float(settings["timeout_seconds"])
+        poll_interval = float(settings.get("poll_interval_seconds", 1))
+        deadline = time.monotonic() + timeout
+        next_evidence = min(
+            deadline, time.monotonic() + spec.capture_interval_seconds)
+        while time.monotonic() < deadline:
+            if process is not None and process.poll() is not None:
+                raise RuntimeError(
+                    f"QEMU exited during {label} ({process.returncode})")
+            current = client.capture()
+            width = client.width
+            height = client.height
+            if all(rgb_pixel_matches(
+                    current, width, height, pixel["x"], pixel["y"],
+                    pixel["target"], tolerance) for pixel in targets):
+                actual = []
+                for pixel in targets:
+                    offset = (pixel["y"] * width + pixel["x"]) * 3
+                    actual.append({
+                        "x": pixel["x"],
+                        "y": pixel["y"],
+                        "target": pixel["target"],
+                        "actual": tuple(current[offset:offset + 3]),
+                    })
+                capture_frame(f"{label}-detected", current, width, height)
+                events.write(
+                    "pixels_detected", label=label, pixels=actual,
+                    tolerance=tolerance, width=width, height=height)
+                return
+            if time.monotonic() >= next_evidence:
+                capture_frame(label, current, width, height)
+                next_evidence += spec.capture_interval_seconds
+            time.sleep(min(poll_interval,
+                           max(0, deadline - time.monotonic())))
+        events.write(
+            "pixels_timeout", label=label, pixels=targets,
+            tolerance=tolerance)
+        coordinates = ", ".join(
+            f"({pixel['x']}, {pixel['y']})" for pixel in targets)
+        raise RuntimeError(
+            f"timed out waiting {timeout:g}s for pixels {coordinates} to "
+            f"match within tolerance {tolerance}")
+
     def assert_dominant_color_fraction_below(
             settings: dict[str, Any], label: str) -> None:
         if client is None:
@@ -1231,6 +1347,8 @@ def execute_run(
                     value, f"step-{index:02d}-frame-change")
             elif action == "wait_for_pixel":
                 wait_for_pixel(value, f"step-{index:02d}-pixel")
+            elif action == "wait_for_pixels":
+                wait_for_pixels(value, f"step-{index:02d}-pixels")
             elif action == "click":
                 client.click(value[0], value[1])
             elif action == "hold_click":

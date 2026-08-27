@@ -6,8 +6,8 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TOOLCHAIN="$ROOT_DIR/vendor/Retro68-build/toolchain"
 GUEST_DIR="$ROOT_DIR/gxmetal/guest"
-ICON_MASTER="$GUEST_DIR/art/GXMetalIcon-master.gif"
-ICON_MASTER_SHA256="e0cca2302487408cb78d5963354ecf14f1f7ccd903250be33d15a85535b17bf3"
+ICON_MASTER="$GUEST_DIR/art/GXMetalIcon-master.png"
+ICON_MASTER_SHA256="cb47f919bdcc6b93ce7fa0114e82601db816f1c81e63ef18125f315b560273db"
 
 die() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 
@@ -168,6 +168,6 @@ done
 for artifact in GXMetal.bin GXMetalInput.bin GXMetalStartup.bin \
                 GXMetalInstaller.bin GXMetalTest.bin GXMetalAGLProbe.bin; do
     file "$GUEST_DIR/bin/$artifact"
-    strings "$GUEST_DIR/bin/$artifact" | grep -F "2.2.1" >/dev/null || \
-        die "$artifact does not report GXMetal version 2.2.1"
+    strings "$GUEST_DIR/bin/$artifact" | grep -F "2.2.2" >/dev/null || \
+        die "$artifact does not report GXMetal version 2.2.2"
 done

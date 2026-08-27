@@ -16,14 +16,14 @@ records sources, hashes, recipes, evidence descriptions, and driver fixes.
 
 | ID | Game | Primary path under test | Minimum qualification route | Media and current state |
 | --- | --- | --- | --- | --- |
-| `bugdom` | Bugdom 1.2.1 | QuickDraw 3D 1.6 / RAVE, ATI behavior | Highest quality; load The Lawn; verify terrain, fog, foliage alpha, and HUD for five minutes; quit and relaunch | Post-2.2.1 current-driver smoke: coherent Lawn gameplay and a 0.690459 movement delta; longer exact-release lifecycle remains open |
+| `bugdom` | Bugdom 1.2.1 | QuickDraw 3D 1.6 / RAVE, ATI behavior | Highest quality; load The Lawn; verify terrain, fog, foliage alpha, and HUD for five minutes; quit and relaunch | Post-2.2.1 current-driver smoke: coherent Lawn gameplay and a 0.690459 movement delta; a separate 185-second route cleanly quits from the main menu and relaunches |
 | `cro-mag-rally` | Cro-Mag Rally Demo | Apple OpenGL 1.1.2 | Confirm hardware/OpenGL; complete a lap with terrain, particles, HUD, transparency, and camera transitions | Post-2.2.1 640x480 Practice/Desert race pass: coherent terrain/vehicle/HUD, steering deltas 0.857201 and 0.780189, 35-second soak, and clean demo exit |
-| `weekend-warrior` | Weekend Warrior | QuickDraw 3D / RAVE | Load the first arena; verify camera clipping, textured characters, UI, depth ordering, and transitions for five minutes | Post-2.2.1 current-driver smoke: coherent Center Stage character, arena, UI, and a 0.819740 action delta; beta-3 separately proves recovery relaunch |
-| `future-cop` | Future Cop: LAPD Demo | Selectable QuickDraw 3D RAVE | Select RAVE; enter Crime War; verify weapon blending, transparent HUD, depth, and explosions | Post-2.2.1 current-driver smoke: coherent Crime War mech, vehicles, buildings, radar/HUD, and a 0.672201 movement/fire delta |
+| `weekend-warrior` | Weekend Warrior | QuickDraw 3D / RAVE | Load the first arena; verify camera clipping, textured characters, UI, depth ordering, and transitions for five minutes | Post-2.2.1 current-driver smoke: coherent Center Stage character, arena, UI, and a 0.819740 action delta; a separate title-state recovery returns to Finder and reaches a second launch |
+| `future-cop` | Future Cop: LAPD Demo | Selectable QuickDraw 3D RAVE | Select RAVE; enter Crime War; verify weapon blending, transparent HUD, depth, and explosions | Post-2.2.1 current-driver smoke: coherent Crime War mech, vehicles, buildings, radar/HUD, and a 0.672201 movement/fire delta; a separate gameplay recovery reaches Finder and a second rendered launch |
 | `dark-vengeance` | Dark Vengeance Demo | Direct RAVE | Reach first combat and scripted sequence; inspect lighting, translucent effects, animated geometry, and camera motion | Post-2.2.1 gamma/notice candidate passes an in-game semantic pixel, renders coherent textured player/enemy/room geometry, changes 0.418249 after `w`, and survives a 15-second animated soak. The mostly-black selection/loading transition is not claimed as a drawn menu |
 | `myth-ii` | Myth II: Soulblighter 1.5.1 Demo | RAVE | Select RAVE; load a solo map; pan, zoom, rotate, issue orders, and verify terrain, water, units, decals, projectiles, and explosions | Post-2.2.1 60-step route reaches a coherent Into the Breach battlefield, selects/orders units, exercises stop and ten paired camera directions/zoom/orbit actions, and completes a 30-second gameplay soak |
 | `unreal-tournament` | Unreal Tournament 348m3 Demo | ATI renderer through RAVE | Confirm RAVE; render intro flyby; run a five-minute bot match checking lightmaps, fog, weapon alpha, HUD, and texture cycling | Post-2.2.1 exact-base process one reaches coherent Tempest and cleanly exits; process two renders a different map and accepts held Control. The exact read-only `CheckButtonKeys` probe observes Control in both `LMKeyMap` and UT's stack-local modifier field, hits UT's transition-emission instruction, and the reviewed final frame shows weapon fire, lower ammunition, and shell casings. A five-minute bot match remains the longer release gate |
-| `combat-mission` | Combat Mission: Beyond Overlord 1.02 Demo | RAVE hardware probe | Complete detection; load Chance Encounter; move through the map and execute a turn with terrain, markers, smoke, and animation | Post-2.2.1 setup smoke renders coherent Chance Encounter terrain, tanks, soldiers, and UI. This short recipe sends no battle input; beta-3 separately proves the full turn |
+| `combat-mission` | Combat Mission: Beyond Overlord 1.02 Demo | RAVE hardware probe | Complete detection; load Chance Encounter; move through the map and execute a turn with terrain, markers, smoke, and animation | Post-2.2.1 full-turn route selects Rifle 45 Sqd, plots Move/Disembark, executes GO, and reaches DONE after visible movement. A separate Force Quit recovery returns to Finder and reaches a second coherent scenario selector |
 | `oni` | Oni Demo | Classic Apple OpenGL | Reach training and first fight; verify animation, lightmaps, transparency, HUD, and an indoor/outdoor transition | Post-2.2.1 full lifecycle passes warehouse gameplay/input/F1, clean Quit/Yes, exact `-nosound` second launch, renderer upload reset, active Bink frame change, Escape, and a stable four-pixel second-menu signature |
 | `havoc` | Havoc Demo | First shipping QuickDraw 3D RAVE game | Select accelerated rendering; enter the demo arena; verify terrain, fog, textured objects, transparency, HUD, and camera motion for five minutes | Post-2.2.1 gamma candidate passes first-run help, main-screen, and cockpit semantic gates; steering changes 0.171768 of the frame and the coherent terrain/HUD soak contains only 0.000221 of the rejected solid-red range |
 
@@ -608,7 +608,10 @@ VMs, each with an independent clone and unique local VNC and monitor sockets.
   Weekend Warrior, Cro-Mag's full race, Dark Vengeance, Myth II, Oni's full
   quit/relaunch lifecycle, and HAVOC's first-run-to-cockpit route pass semantic
   gameplay gates and visual review. Combat Mission passes its coherent setup
-  scope; its full-turn route remains a separate release gate. UT renders both
+  scope. A later 409.892-second route also completes the full
+  mounted/disembark/GO turn, and a separate recovery route reaches the real
+  Force Quit confirmation, Finder, and a coherent second scenario selector.
+  UT renders both
   processes, cleanly quits the first, and accepts held Control in the second.
   The exact read-only `CheckButtonKeys` probe relocates the live PEF from an
   invariant instruction window, observes Control value `0x08` in `LMKeyMap`
@@ -624,3 +627,12 @@ VMs, each with an independent clone and unique local VNC and monitor sockets.
   Evidence is retained under the `gxmetal-post221-wave1-*`,
   `gxmetal-post221-wave2-*`, `gxmetal-post221-wave3-*`, and
   `gxmetal-post221-quake3-five-view-20260827` directories.
+- Added independent post-release lifecycle routes rather than extending every
+  game serially in one VM. Bugdom cleanly quits from its main menu and
+  relaunches. Future Cop and Weekend Warrior each prove Finder recovery and a
+  second rendered launch, while remaining explicitly classified as recovery
+  rather than clean application exits. A matched Bugdom run with GXMetal
+  Input enabled and disabled reaches the same late collision, still opens the
+  pause menu in both configurations, and records 20,399 successful host reads
+  out of 20,399 with no stale callback or handoff faults. This rules out the
+  custom input extension as the cause of the collision-static frames.

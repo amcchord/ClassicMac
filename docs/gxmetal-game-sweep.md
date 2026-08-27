@@ -167,6 +167,29 @@ classic sliders. The VNC client holds the primary button while sending paced
 motion events, making the action deterministic with ClassicMac's normal
 Virtio tablet.
 
+Use `wait_for_pixels` when a state transition matters enough that one pixel is
+not a unique signature. Every listed point must match in the same captured
+frame before the route advances:
+
+```json
+{
+  "wait_for_pixels": {
+    "pixels": [
+      {"x": 22, "y": 11, "red": 216, "green": 0, "blue": 0},
+      {"x": 520, "y": 400, "red": 16, "green": 144, "blue": 168}
+    ],
+    "tolerance": 12,
+    "timeout_seconds": 60,
+    "poll_interval_seconds": 1
+  }
+}
+```
+
+The timeout captures periodic evidence and records all targets and observed
+colors. Prefer points in independent UI regions: for example, a Finder menu
+marker plus exposed desktop wallpaper. A single Apple-menu pixel also appears
+in fullscreen applications and is not a sufficient Finder-return oracle.
+
 For a scene with a known large-area corruption signature, add a visual reject
 oracle after the semantic navigation steps:
 
@@ -455,6 +478,24 @@ failures that timing-only recipes missed:
 - `quake3-five-view-regression.example.json` retains five Q3DM1 courtyard,
   arch, statue, and passage views, four motion assertions, and two dark-world
   rejection regions.
+
+The post-2.2.1 lifecycle campaign also retains deeper silent evidence. Combat
+Mission completes the full mounted/disembark/GO turn in 409.892 seconds; a
+separate 242.448-second route reaches the real Mac OS Force Quit confirmation,
+Finder, and a coherent second scenario selector. Bugdom cleanly quits from its
+main menu and relaunches. Future Cop and Weekend Warrior each prove Finder
+recovery and a second rendered launch, but those remain recovery routes rather
+than clean application exits.
+
+A matched Bugdom A/B with GXMetal Input enabled and disabled disproved the
+apparent late-input regression: both routes reached the same collision and
+both still opened the pause menu. The enabled trace records 20,397 active
+polls, 20,399 successful host reads out of 20,399, balanced timer lifecycle,
+and no stale-callback or handoff faults. A final three-game long batch kept
+coherent late Bugdom, Future Cop, and Weekend Warrior frames but failed its
+deliberately strict movement assertions after the scripted avatars reached
+collision/static states. Those automation failures are retained and are not
+reported as renderer failures or compatibility passes.
 
 Run independent game routes in parallel from immutable bases, but keep each
 game's quit/relaunch steps sequential inside its own VM. All five recipes are

@@ -1,4 +1,4 @@
-GXMetal 2.2.1 for Mac OS 9
+GXMetal 2.2.2 for Mac OS 9
 ==========================
 
 GXMetal is ClassicMac's host-accelerated QuickDraw 3D RAVE engine. It lets
@@ -23,7 +23,7 @@ INSTALL OR UPDATE
 7. Run GXMetal Test. Do not rely on the startup icon alone: the test confirms
    the installed GXMetal version, RAVE discovery, the host transport,
    rendering correctness, presentation, and software fallback. GXMetal Test
-   2.2.1 rejects a mismatched driver and tells you to reinstall and
+   2.2.2 rejects a mismatched driver and tells you to reinstall and
    restart.
 
 Keep the complete GXMetal folder together while the installer runs. GXMetal is
@@ -64,23 +64,20 @@ disk image and game files are not changed by the host accelerator.
 TESTED GAMES AND OPENGL
 -----------------------
 
-Nanosaur, Carmageddon II, Quake III Arena Demo, Bugdom, and Future Cop are the
-primary real-game tests. GXMetal 2.2.1 has been exercised through title
-screens and extended gameplay with multitexturing, lightmaps, textures,
-depth, clipping, fog, water, alpha effects, camera movement, HUDs, and dynamic
-textures. The signed-candidate smoke set also reaches Combat Mission's complete
-3D setup scene and drives Weekend Warrior through scripted selection, textured
-3D play, movement, and a short soak with no fallback frames.
-Cro-Mag Rally's textured title/loading path and Oni's Apple OpenGL main menu,
-new-game UI, and shortened Combat Training transition also render correctly
-on the release candidate. These routes exercise the ATI renderer's
-multitexture binding, effective depth-comparison state, and center-plus-rim
-triangle-fan callbacks in addition to the small AGL probe. Longer Oni
-gameplay, audio, and repeated launch/quit lifecycle combinations still need
-coverage.
-Unreal Tournament's RAVE main menu is also accelerated when the demo is
-started windowed with in-game sound disabled; its default fullscreen/sound
-startup can remain black even with Apple Software and is still being isolated.
+Nanosaur, Carmageddon II, Quake III Arena Demo, and the repository's ten-game
+campaign exercise public RAVE, ATI-private RAVE/OpenGL, and Apple OpenGL paths.
+GXMetal 2.2.2 has reviewed gameplay evidence for Bugdom, Future Cop, Combat
+Mission, Weekend Warrior, Cro-Mag Rally, Dark Vengeance, Myth II, Oni, HAVOC,
+and sound-disabled Unreal Tournament. Those routes cover multitexturing,
+lightmaps, dynamic textures, depth, clipping, fog, water, alpha effects,
+camera movement, HUDs, process restart, and recovery. Quake III additionally
+retains five reviewed Q3DM1 views covering its arches and other world geometry.
+
+This evidence is not a guarantee that every RAVE or OpenGL title works. Audio,
+long soaks, and clean quit/relaunch are tracked separately per game. Unreal
+Tournament currently requires in-game sound to be disabled under the test
+VM's audio path; sound-enabled startup also fails with Apple Software RAVE and
+is not classified as a GXMetal rendering defect.
 
 GXMetal AGL Probe is included beside GXMetal Test. It requires an accelerated
 Apple OpenGL pixel format, renders known geometry, verifies independent MIN,

@@ -551,6 +551,34 @@ class ManifestValidationTests(unittest.TestCase):
             SWEEP.validate_step(
                 {"wait_for_pixel": invalid}, "steps[0]")
 
+    def test_multi_pixel_wait_is_validated(self):
+        step = {
+            "wait_for_pixels": {
+                "pixels": [
+                    {"x": 22, "y": 11, "red": 221,
+                     "green": 0, "blue": 0},
+                    {"x": 520, "y": 400, "red": 22,
+                     "green": 148, "blue": 175},
+                ],
+                "tolerance": 12,
+                "timeout_seconds": 60,
+                "poll_interval_seconds": 1,
+            }
+        }
+        self.assertEqual(SWEEP.validate_step(step, "steps[0]"), step)
+        with self.assertRaisesRegex(ValueError, "must be a nonempty list"):
+            SWEEP.validate_step({
+                "wait_for_pixels": {
+                    "pixels": [],
+                    "timeout_seconds": 60,
+                }
+            }, "steps[0]")
+        invalid = dict(step["wait_for_pixels"])
+        invalid["pixels"] = [dict(invalid["pixels"][0], x=-1)]
+        with self.assertRaisesRegex(ValueError, "x must be a nonnegative"):
+            SWEEP.validate_step(
+                {"wait_for_pixels": invalid}, "steps[0]")
+
     def test_changed_pixel_fraction_uses_channel_tolerance(self):
         previous = bytes((10, 20, 30, 40, 50, 60))
         current = bytes((11, 21, 31, 40, 50, 70))

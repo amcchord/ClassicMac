@@ -16,8 +16,8 @@ but the evidence still does not support a universal-compatibility claim.
   host audio disabled, and guest networking disabled. Bugdom, Future Cop,
   Weekend Warrior, Cro-Mag Rally, Dark Vengeance, Myth II, Oni, HAVOC, and
   Unreal Tournament pass reviewed gameplay or lifecycle scopes. Combat Mission
-  passes its deliberately input-free Chance Encounter setup scope; its full
-  turn remains a separate gate. The candidate uses NDRV SHA-256
+  now also passes its full mounted/disembark/GO turn and a separate
+  gameplay-to-Force-Quit recovery/relaunch route. The candidate uses NDRV SHA-256
   `3b687b15…c5722` and Tools CD SHA-256 `ed6ba9cf…d1d`; the signed v2.2.1 QEMU
   and loader remain exact. A separate current-driver Quake III route passes
   five reviewed Q3DM1 arch/statue/passage views, four motion gates, and both
@@ -253,14 +253,14 @@ but the evidence still does not support a universal-compatibility claim.
   Both cropped missing-surface thresholds pass, every camera transition is
   distinct, presentation stays direct, and fallback remains zero.
 
-## Current 2.2.1 and post-release matrix
+## Current 2.2.1 and 2.2.2 candidate matrix
 
 | Game | Classification | Furthest qualified state | Important open item |
 |---|---|---|---|
-| Bugdom | Exact-2.2.1 short gameplay pass; deeper beta-3 pass | Published build renders the Lawn coherently and passes movement at 0.653301; 5,723 direct/0 fallback frames and 1,040,070 draws. Its 1,046 ignored legacy state writes are nonfatal and explicitly retained in review | Exact-release long soak and quit/relaunch; audio |
-| Future Cop: LAPD | Exact-2.2.1 short gameplay pass; deeper beta-3 soak | Published build renders Crime War coherently, passes movement/fire at 0.725452, and changes ammo 7500→7482; 1,784 direct/0 fallback frames and 3,976,505 draws | Exact-release effects-heavy soak and clean quit/relaunch; audio |
-| Combat Mission | Exact-2.2.1 setup-rendering pass; beta-3 full-turn pass | Published build reaches coherent Chance Encounter setup with 1,168 direct/0 fallback frames and 2,175,685 draws, but its short recipe sends no battle input. Beta-3 separately proves the complete mounted/disembark/GO turn | Replay the full-turn route and clean quit/relaunch on exact 2.2.1; audio |
-| Weekend Warrior | Exact-2.2.1 short gameplay pass; beta-3 recovery pass | Published build renders Center Stage coherently and passes movement/fire at 0.798568; 24,707 direct/0 fallback frames and 1,517,694 draws | Exact-release five-minute arena soak and clean quit/relaunch; audio |
+| Bugdom | Exact-2.2.1 short gameplay pass; post-release clean lifecycle pass | Published build renders the Lawn coherently and passes movement at 0.653301; 5,723 direct/0 fallback frames and 1,040,070 draws. A 185-second post-release route cleanly quits from the main menu and relaunches to the menu | A collision-aware five-minute movement route and audio |
+| Future Cop: LAPD | Exact-2.2.1 short gameplay pass; post-release recovery pass | Published build renders Crime War coherently, passes movement/fire at 0.725452, and changes ammo 7500→7482; 1,784 direct/0 fallback frames and 3,976,505 draws. A 258-second post-release route proves Finder recovery and a second rendered launch | Clean application quit after the promo page; audio |
+| Combat Mission | Exact-2.2.1 setup pass; post-release full-turn and recovery passes | The 410-second current-driver route selects Rifle 45 Sqd, plots Move/Disembark, executes GO, and reaches DONE after the visible movement. A separate 242-second route proves the real Mac OS Force Quit dialog, Finder recovery, and a coherent second scenario selector | Clean application quit/relaunch and audio |
+| Weekend Warrior | Exact-2.2.1 short gameplay pass; post-release recovery pass | Published build renders Center Stage coherently and passes movement/fire at 0.798568; 24,707 direct/0 fallback frames and 1,517,694 draws. A 131-second post-release title-state recovery returns to Finder and reaches the second launch | Clean in-game quit/relaunch, collision-aware five-minute route, and audio |
 | Cro-Mag Rally | Gameplay smoke pass on current Q3 fix | Correct accelerated title/menu/loading and Practice/Desert gameplay at 640x480; acceleration and steering visibly alter position/heading; 24-28 fps, ~204 direct draws/frame, zero fallback; expected demo exit screen | Complete-lap/longer lifecycle soak and audio |
 | Dark Vengeance | Gameplay rendering/input/short-soak pass on gamma + notice candidate | Exact tracing proves `cscGetGamma` success-with-null caused `-49`; `DARKVENG.INI` opens correctly. Accepting independently optional `QAGetNoticeMethod` outputs and invoking selector 4 synchronously reaches a textured player/enemy/portal scene, responds to `w`, and remains animated for 15 seconds without advertising `kQAOptional_BufferComposite` | Qualify the mostly-black selection/menu transition, longer gameplay/lifecycle, and audio |
 | HAVOC | Gameplay rendering/input pass on gamma candidate | The `cscGetGamma` contract fix clears all prior memory dialogs. The reusable route separately gates first-run help, main screen, and cockpit; steering changes 0.171768, and the coherent terrain/HUD soak has only 0.000221 of the rejected solid-red range | Five-minute gameplay/lifecycle soak and audio |
@@ -309,6 +309,11 @@ Accepted evidence:
 - `context/gxmetal-games/evidence/gxmetal-post221-wave2-oni-relaunch-final-20260827`
 - `context/gxmetal-games/evidence/gxmetal-post221-wave3-ut-checkbuttonkeys-retry-20260827`
 - `context/gxmetal-games/evidence/gxmetal-post221-quake3-five-view-20260827`
+- `context/gxmetal-games/evidence/gxmetal-post221-long-combat-mission-20260827`
+- `context/gxmetal-games/evidence/gxmetal-post221-combat-recovery-final-20260827`
+- `context/gxmetal-games/evidence/gxmetal-post221-lifecycle-bugdom-20260827`
+- `context/gxmetal-games/evidence/gxmetal-post221-lifecycle-future-cop-20260827`
+- `context/gxmetal-games/evidence/gxmetal-post221-lifecycle-weekend-warrior-20260827`
 - `context/gxmetal-games/evidence/gxmetal-ut-guest-identity-20260827`
 - `context/gxmetal-games/evidence/gxmetal-ut-2.2.1-cleanquit-relaunch-corrected-20260827`
 - `context/gxmetal-games/evidence/gxmetal-oni-input-lifecycle-candidate-20260827`

@@ -27,9 +27,9 @@ resource 'BNDL' (128, purgeable) {
 };
 
 resource 'vers' (1) {
-    2, 2, release, 1, verUS,
-    "2.2.1",
-    "Install GXMetal 2.2.1"
+    2, 2, release, 2, verUS,
+    "2.2.2",
+    "Install GXMetal 2.2.2"
 };
 
 resource 'cfrg' (0) {

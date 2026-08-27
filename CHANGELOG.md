@@ -1,5 +1,50 @@
 # Changelog
 
+## 2.2.2 — 2026-08-27
+
+### Fixed
+
+- Implemented the classic video-driver gamma contract used by Dark Vengeance
+  and HAVOC. `cscGetGamma` now returns a persistent normalized 3×256×8 table,
+  initialized to identity and refreshed by `SetGamma`, instead of reporting
+  success with a null table that both games misread as a signed `-49`
+  allocation.
+- Corrected the period-RAVE notice contract exposed by Dark Vengeance.
+  `QAGetNoticeMethod` accepts its callback and refCon outputs independently,
+  and the selector-4 buffer notice is delivered synchronously from
+  `RenderEnd` without advertising the broader unsupported composite feature.
+- Hardened renderer and InputSprocket process ownership across clean exits,
+  Force Quit, and same-boot relaunch. Retired CFM connections, timers,
+  elements, and devices are released safely while non-rendering clients remain
+  unable to reset an unpublished rendering packet.
+
+### Changed
+
+- Replaced the GXMetal artwork with the supplied cleaned 32×32 RGBA master.
+  The deterministic resource generator applies the same complete 32/16-pixel,
+  color/monochrome icon family to GXMetal, GXMetal Input, GXMetal Startup, the
+  installer, GXMetal Test, and the AGL probe, with byte-for-byte build checks.
+- Expanded the silent parallel game harness with persistent host/QEMU/input
+  traces, read-only UT live-code probes, reusable Reality Bytes runtime
+  tracing, pointer rehoming, and same-frame multi-pixel semantic waits.
+- Added focused, reusable Dark Vengeance, HAVOC, Oni, Unreal Tournament, and
+  five-view Quake III regressions plus a disk-composition helper for parallel
+  immutable game bases.
+
+### Validation
+
+- Replayed the ten installed games on one immutable post-2.2.1 candidate and
+  repeated five human-reviewed Q3DM1 views covering the arches, courtyards,
+  statue, floor, walls, passage, lighting, and HUD.
+- Dark Vengeance and HAVOC now reach coherent accelerated gameplay. Combat
+  Mission completes a full mounted/disembark/GO turn and a separate
+  recovery/relaunch route. Bugdom cleanly quits and relaunches; Future Cop and
+  Weekend Warrior have separate recovery/relaunch evidence.
+- The complete GXMetal native suite, 42 game-harness tests, 6 UT-probe tests,
+  4 Reality Bytes trace tests, 22 diagnostic decoder tests, 3 PEF tests, both
+  PPC video-driver contract tests, the warning-as-error guest build, and all
+  39 Swift app tests pass.
+
 ## 2.2.1 — 2026-08-27
 
 ### Changed
