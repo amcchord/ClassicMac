@@ -34,6 +34,7 @@ $(QUEUE_TEST): tests/test_queue.c host/gxmetal_queue.c host/gxmetal_queue.h \
 $(GUEST_TRANSPORT_TEST): tests/test_guest_transport.c \
                          guest/src/GXMetalTransport.c \
                          guest/src/GXMetalTransport.h \
+                         guest/src/GXMetalDrawPolicy.h \
                          protocol/gxmetal_protocol.h
 	@mkdir -p $(BUILD_DIR)
 	$(HOST_CC) $(HOST_CFLAGS) -Iguest/src -Iguest/include -o $@ \

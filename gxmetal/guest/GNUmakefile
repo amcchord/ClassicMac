@@ -30,6 +30,7 @@ all: bin/GXMetal.bin bin/GXMetalInput.bin bin/GXMetalStartup.bin bin/GXMetalInst
 
 bin/GXMetal.xcoff: src/GXMetalEngine.c src/GXMetalTransport.c \
                    src/GXMetalTransport.h src/GXMetalATICompatibility.h \
+                   src/GXMetalDrawPolicy.h \
                    src/GXMetalRAVECompatibility.h \
                    include/GXMetalDiagnostics.h \
                    include/GXMetalRegistry.h include/GXMetalVersion.h \

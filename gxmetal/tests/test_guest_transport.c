@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "GXMetalRegistry.h"
+#include "GXMetalDrawPolicy.h"
 #include "GXMetalTransport.h"
 
 static unsigned failures;
@@ -208,6 +209,133 @@ static void test_auxiliary_connect_preserves_in_flight_packet(void)
           GXMETAL_OP_CONTEXT_CREATE);
 }
 
+typedef struct TestGuestDrawBatch {
+    GXMetalGuestTransport *transport;
+    uint32_t pending_kind;
+    uint32_t pending_count;
+    uint32_t pending_flags;
+} TestGuestDrawBatch;
+
+static int flush_test_gouraud_batch(TestGuestDrawBatch *batch)
+{
+    GXMetalGuestPacket packet;
+    uint32_t packet_bytes;
+    uint8_t *payload;
+    uint32_t i;
+
+    if (batch->pending_count == 0) {
+        return 1;
+    }
+    packet_bytes = GXMETAL_PACKET_HEADER_BYTES + GXMETAL_DRAW_HEADER_BYTES +
+        batch->pending_count * GXMETAL_GOURAUD_VERTEX_BYTES;
+    if (!gxmetal_guest_draw_packet_begin(
+            batch->transport, GXMETAL_OP_DRAW_GOURAUD, packet_bytes, 9,
+            &packet)) {
+        return 0;
+    }
+    payload = packet.bytes + GXMETAL_PACKET_HEADER_BYTES;
+    gxmetal_store_le32(payload + GXMETAL_DRAW_PRIMITIVE_OFFSET,
+                       GXMETAL_PRIMITIVE_TRIANGLE);
+    gxmetal_store_le32(payload + GXMETAL_DRAW_VERTEX_COUNT_OFFSET,
+                       batch->pending_count);
+    gxmetal_store_le32(payload + GXMETAL_DRAW_VERTEX_STRIDE_OFFSET,
+                       GXMETAL_GOURAUD_VERTEX_BYTES);
+    gxmetal_store_le32(payload + GXMETAL_DRAW_FLAGS_OFFSET,
+                       batch->pending_flags);
+    memset(payload + GXMETAL_DRAW_VERTICES_OFFSET, 0,
+           batch->pending_count * GXMETAL_GOURAUD_VERTEX_BYTES);
+    for (i = 0; i < batch->pending_count; i++) {
+        gxmetal_store_le32(payload + GXMETAL_DRAW_VERTICES_OFFSET +
+                           i * GXMETAL_GOURAUD_VERTEX_BYTES +
+                           GXMETAL_VERTEX_INV_W_OFFSET,
+                           UINT32_C(0x3f800000));
+    }
+    gxmetal_guest_packet_commit(batch->transport, &packet);
+    batch->pending_kind = GXMETAL_DRAW_BATCH_NONE;
+    batch->pending_count = 0;
+    return 1;
+}
+
+static int queue_test_gouraud_triangle(TestGuestDrawBatch *batch,
+                                       uint32_t flags)
+{
+    if (!gxmetal_guest_draw_batch_can_append(
+            batch->pending_count, batch->pending_kind,
+            batch->pending_flags, 0,
+            GXMETAL_DRAW_BATCH_GOURAUD, flags, 0) &&
+        !flush_test_gouraud_batch(batch)) {
+        return 0;
+    }
+    if (batch->pending_count == 0) {
+        batch->pending_kind = GXMETAL_DRAW_BATCH_GOURAUD;
+        batch->pending_flags = flags;
+    }
+    batch->pending_count += 3;
+    return 1;
+}
+
+static void run_homogeneous_emission_case(uint64_t features,
+                                          uint32_t expected_packets)
+{
+    GXMetalGuestTransport transport;
+    TestGuestDrawBatch batch;
+    uint32_t private_flags;
+    uint32_t offset = 0;
+    uint32_t packet_index = 0;
+
+    initialize_device(GXMETAL_FEATURE_GOURAUD | features);
+    CHECK(gxmetal_guest_transport_connect(
+        &transport, registers, sizeof(registers), shared, sizeof(shared),
+        GXMETAL_FEATURE_GOURAUD));
+    memset(&batch, 0, sizeof(batch));
+    batch.transport = &transport;
+    private_flags = gxmetal_guest_ati_private_draw_flags(
+        transport.features);
+    CHECK(private_flags ==
+          ((features & GXMETAL_FEATURE_HOMOGENEOUS_DRAW) != 0 ?
+               GXMETAL_DRAW_HOMOGENEOUS : GXMETAL_DRAW_NONE));
+
+    /* A public RAVE triangle followed by private ATI/OpenGL geometry may
+     * coalesce only for an old host that did not negotiate provenance. */
+    CHECK(queue_test_gouraud_triangle(&batch, GXMETAL_DRAW_NONE));
+    CHECK(queue_test_gouraud_triangle(&batch, private_flags));
+    CHECK(flush_test_gouraud_batch(&batch));
+    CHECK(gxmetal_guest_flush(&transport));
+
+    while (offset < transport.producer) {
+        const uint8_t *bytes = shared + GXMETAL_RING_OFFSET + offset;
+        const uint8_t *payload = bytes + GXMETAL_PACKET_HEADER_BYTES;
+        uint32_t packet_bytes = gxmetal_load_le32(
+            bytes + GXMETAL_PACKET_BYTES_OFFSET);
+        uint32_t expected_flags = packet_index == 0 ?
+            GXMETAL_DRAW_NONE : GXMETAL_DRAW_HOMOGENEOUS;
+        uint32_t expected_vertices = expected_packets == 1 ? 6 : 3;
+
+        CHECK(packet_bytes >= GXMETAL_PACKET_HEADER_BYTES +
+                              GXMETAL_DRAW_HEADER_BYTES);
+        CHECK(gxmetal_load_le16(bytes + GXMETAL_PACKET_OPCODE_OFFSET) ==
+              GXMETAL_OP_DRAW_GOURAUD);
+        CHECK(gxmetal_load_le32(payload + GXMETAL_DRAW_FLAGS_OFFSET) ==
+              expected_flags);
+        CHECK(gxmetal_load_le32(payload +
+                               GXMETAL_DRAW_VERTEX_COUNT_OFFSET) ==
+              expected_vertices);
+        packet_index++;
+        if (packet_bytes == 0) {
+            break;
+        }
+        offset += packet_bytes;
+    }
+    CHECK(packet_index == expected_packets);
+    CHECK(registers[GXMETAL_REG_PRODUCER / 4] == transport.producer);
+}
+
+static void test_homogeneous_feature_gated_batch_emission(void)
+{
+    run_homogeneous_emission_case(0, 1);
+    run_homogeneous_emission_case(GXMETAL_FEATURE_HOMOGENEOUS_DRAW, 2);
+}
+
 int main(void)
 {
     test_probe();
@@ -215,6 +343,7 @@ int main(void)
     test_full_ring_and_fence();
     test_draw_packet_skips_redundant_clear();
     test_auxiliary_connect_preserves_in_flight_packet();
+    test_homogeneous_feature_gated_batch_emission();
 
     if (failures != 0) {
         fprintf(stderr, "GXMetal guest transport: %u failure(s)\n", failures);

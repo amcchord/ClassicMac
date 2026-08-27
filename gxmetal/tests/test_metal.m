@@ -59,6 +59,26 @@ static void set_vertex_z_alpha(uint8_t *bytes, float x, float y, float z,
     store_float(bytes + GXMETAL_VERTEX_A_OFFSET, a);
 }
 
+static uint32_t count_rgb555_pixels(const uint8_t *framebuffer,
+                                    uint32_t width, uint32_t height,
+                                    uint32_t row_bytes)
+{
+    uint32_t count = 0;
+    uint32_t x;
+    uint32_t y;
+
+    for (y = 0; y < height; y++) {
+        for (x = 0; x < width; x++) {
+            const uint8_t *pixel = framebuffer + y * row_bytes + x * 2;
+
+            if (pixel[0] != 0 || pixel[1] != 0) {
+                count++;
+            }
+        }
+    }
+    return count;
+}
+
 static uint32_t dispatch(GXMetalMetalRenderer *renderer, uint8_t *bytes,
                          uint32_t length)
 {
@@ -370,6 +390,7 @@ static void test_metal_triangle(void)
 static void test_metal_homogeneous_gouraud_draw(void)
 {
     uint8_t framebuffer[64 * 64 * 2] = {0};
+    uint8_t explicit_mixed_frame[sizeof(framebuffer)];
     uint8_t packet[128];
     uint8_t control[64];
     uint8_t *payload;
@@ -377,7 +398,9 @@ static void test_metal_homogeneous_gouraud_draw(void)
     GXMetalMetalRenderer *renderer = gxmetal_metal_create(
         framebuffer, sizeof(framebuffer), NULL, 0);
     uint32_t i;
-    uint32_t drawn_pixels = 0;
+    uint32_t drawn_pixels;
+    uint32_t explicit_mixed_pixels;
+    uint32_t fallback_mixed_pixels;
 
     if (renderer == NULL) {
         return;
@@ -417,9 +440,9 @@ static void test_metal_homogeneous_gouraud_draw(void)
     set_vertex_z_alpha(vertices, 32.0f, 32.0f, 0.5f,
                        1.0f, 0.0f, 0.0f, 1.0f);
     set_vertex_z_alpha(vertices + GXMETAL_GOURAUD_VERTEX_BYTES,
-                       0.0f, 64.0f, 0.5f, 0.0f, 1.0f, 0.0f, 1.0f);
+                       64.0f, 0.0f, 0.5f, 0.0f, 1.0f, 0.0f, 1.0f);
     set_vertex_z_alpha(vertices + 2 * GXMETAL_GOURAUD_VERTEX_BYTES,
-                       64.0f, 64.0f, 0.5f, 0.0f, 0.0f, 1.0f, 1.0f);
+                       32.0f, 64.0f, 0.5f, 0.0f, 0.0f, 1.0f, 1.0f);
     store_float(vertices + GXMETAL_VERTEX_INV_W_OFFSET, 1.0f);
     store_float(vertices + GXMETAL_GOURAUD_VERTEX_BYTES +
                 GXMETAL_VERTEX_INV_W_OFFSET, 1.0f);
@@ -429,18 +452,13 @@ static void test_metal_homogeneous_gouraud_draw(void)
     make_packet(control, GXMETAL_OP_END_FRAME, 32, 19);
     CHECK(dispatch(renderer, control, 32) == GXMETAL_ERROR_NONE);
     present_rect(renderer, control, 19, 0, 0, 64, 64);
-    for (i = 0; i < 64u * 64u; i++) {
-        uint16_t pixel = (uint16_t)((uint16_t)framebuffer[i * 2] << 8 |
-                                    framebuffer[i * 2 + 1]);
-
-        if (pixel != 0) {
-            drawn_pixels++;
-        }
-    }
+    drawn_pixels = count_rgb555_pixels(framebuffer, 64, 64, 128);
     CHECK(drawn_pixels != 0);
 
     /* Both explicit provenance and the old-guest fallback accept the same
-     * mixed-sign primitive as a complete homogeneous draw. */
+     * mixed-sign primitive as a complete homogeneous draw.  Render them in
+     * separate cleared frames so this verifies eye-plane clipping output,
+     * not just successful command dispatch. */
     set_int_state(renderer, control, 19, GXMETAL_STATE_ATI_PRIVATE, 1);
     make_packet(control, GXMETAL_OP_BEGIN_FRAME, 32, 19);
     CHECK(dispatch(renderer, control, 32) == GXMETAL_ERROR_NONE);
@@ -454,14 +472,42 @@ static void test_metal_homogeneous_gouraud_draw(void)
     gxmetal_store_le32(payload + GXMETAL_CLEAR_RECT_OFFSET +
                        GXMETAL_RECT_BOTTOM_OFFSET, 64);
     CHECK(dispatch(renderer, control, 64) == GXMETAL_ERROR_NONE);
-    store_float(vertices + GXMETAL_VERTEX_INV_W_OFFSET, -1.0f);
+    store_float(vertices + GXMETAL_VERTEX_Z_OFFSET, 1.05521989f);
+    store_float(vertices + GXMETAL_VERTEX_INV_W_OFFSET, -0.0551876426f);
     CHECK(dispatch(renderer, packet, 128) == GXMETAL_ERROR_NONE);
+    make_packet(control, GXMETAL_OP_END_FRAME, 32, 19);
+    CHECK(dispatch(renderer, control, 32) == GXMETAL_ERROR_NONE);
+    present_rect(renderer, control, 19, 0, 0, 64, 64);
+    explicit_mixed_pixels = count_rgb555_pixels(
+        framebuffer, 64, 64, 128);
+    memcpy(explicit_mixed_frame, framebuffer, sizeof(framebuffer));
+    CHECK(explicit_mixed_pixels != 0);
+    CHECK(explicit_mixed_pixels > drawn_pixels);
+    CHECK(explicit_mixed_pixels < 64u * 64u);
+
+    make_packet(control, GXMETAL_OP_BEGIN_FRAME, 32, 19);
+    CHECK(dispatch(renderer, control, 32) == GXMETAL_ERROR_NONE);
+    make_packet(control, GXMETAL_OP_CLEAR, 64, 19);
+    payload = control + GXMETAL_PACKET_HEADER_BYTES;
+    gxmetal_store_le32(payload + GXMETAL_CLEAR_FLAGS_OFFSET,
+                       GXMETAL_CLEAR_COLOR);
+    store_float(payload + GXMETAL_CLEAR_COLOR_A_OFFSET, 1.0f);
+    gxmetal_store_le32(payload + GXMETAL_CLEAR_RECT_OFFSET +
+                       GXMETAL_RECT_RIGHT_OFFSET, 64);
+    gxmetal_store_le32(payload + GXMETAL_CLEAR_RECT_OFFSET +
+                       GXMETAL_RECT_BOTTOM_OFFSET, 64);
+    CHECK(dispatch(renderer, control, 64) == GXMETAL_ERROR_NONE);
     gxmetal_store_le32(packet + GXMETAL_PACKET_HEADER_BYTES +
                        GXMETAL_DRAW_FLAGS_OFFSET, GXMETAL_DRAW_NONE);
     CHECK(dispatch(renderer, packet, 128) == GXMETAL_ERROR_NONE);
     make_packet(control, GXMETAL_OP_END_FRAME, 32, 19);
     CHECK(dispatch(renderer, control, 32) == GXMETAL_ERROR_NONE);
     present_rect(renderer, control, 19, 0, 0, 64, 64);
+    fallback_mixed_pixels = count_rgb555_pixels(
+        framebuffer, 64, 64, 128);
+    CHECK(fallback_mixed_pixels == explicit_mixed_pixels);
+    CHECK(memcmp(framebuffer, explicit_mixed_frame,
+                 sizeof(framebuffer)) == 0);
 
     /* Positive-W private OpenGL geometry still carries clip-space Z when
      * depth and fog are disabled; it must not take Myth's legacy clamp. */
@@ -490,15 +536,7 @@ static void test_metal_homogeneous_gouraud_draw(void)
     make_packet(control, GXMETAL_OP_END_FRAME, 32, 19);
     CHECK(dispatch(renderer, control, 32) == GXMETAL_ERROR_NONE);
     present_rect(renderer, control, 19, 0, 0, 64, 64);
-    drawn_pixels = 0;
-    for (i = 0; i < 64u * 64u; i++) {
-        uint16_t pixel = (uint16_t)((uint16_t)framebuffer[i * 2] << 8 |
-                                    framebuffer[i * 2 + 1]);
-
-        if (pixel != 0) {
-            drawn_pixels++;
-        }
-    }
+    drawn_pixels = count_rgb555_pixels(framebuffer, 64, 64, 128);
     CHECK(drawn_pixels == 0);
 
     store_float(vertices + GXMETAL_VERTEX_INV_W_OFFSET, 0.0f);

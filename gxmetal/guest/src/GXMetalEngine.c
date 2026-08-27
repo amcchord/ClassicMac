@@ -18,6 +18,7 @@
 #include "GXMetalRegistry.h"
 #include "GXMetalDiagnostics.h"
 #include "GXMetalATICompatibility.h"
+#include "GXMetalDrawPolicy.h"
 #include "GXMetalRAVECompatibility.h"
 #include "GXMetalTransport.h"
 #include "GXMetalVersion.h"
@@ -35,9 +36,6 @@
 #define GXMETAL_MESH_BATCH_TRIANGLES UINT32_C(256)
 #define GXMETAL_DRAW_BATCH_TRIANGLES UINT32_C(64)
 #define GXMETAL_DRAW_BATCH_VERTICES (GXMETAL_DRAW_BATCH_TRIANGLES * 3u)
-#define GXMETAL_DRAW_BATCH_NONE UINT32_C(0)
-#define GXMETAL_DRAW_BATCH_GOURAUD UINT32_C(1)
-#define GXMETAL_DRAW_BATCH_TEXTURE UINT32_C(2)
 #define GXMETAL_ATI_PIXEL_RGB16 ((TQAImagePixelType)1001)
 #define GXMETAL_ATI_PIXEL_RGBA32 ((TQAImagePixelType)1006)
 #define GXMETAL_ATI_GESTALT_BOARD_MEMORY ((TQAGestaltSelector)1001)
@@ -2515,9 +2513,10 @@ static TQABoolean GXMetalQueueGouraudTriangle(
         return GXMetalEmitGouraud(state, GXMETAL_PRIMITIVE_TRIANGLE, 3,
                                   vertices, flags);
     }
-    if (state->pending_count != 0 &&
-        (state->pending_kind != GXMETAL_DRAW_BATCH_GOURAUD ||
-         state->pending_flags != flags)) {
+    if (!gxmetal_guest_draw_batch_can_append(
+            state->pending_count, state->pending_kind,
+            state->pending_flags, 0,
+            GXMETAL_DRAW_BATCH_GOURAUD, flags, 0)) {
         if (!GXMetalFlushPendingDraws(state)) {
             return 0;
         }
@@ -2553,10 +2552,11 @@ static TQABoolean GXMetalQueueTextureTriangle(
     atiTexelCoordinates = atiTexelCoordinatesOverride >= 0 ?
         (uint32_t)(atiTexelCoordinatesOverride != 0) :
         GXMetalATIUsesTexelCoordinates(state, vertices, 3);
-    if (state->pending_count != 0 &&
-        (state->pending_kind != GXMETAL_DRAW_BATCH_TEXTURE ||
-         state->pending_flags != flags ||
-         state->pending_ati_texel_coordinates != atiTexelCoordinates)) {
+    if (!gxmetal_guest_draw_batch_can_append(
+            state->pending_count, state->pending_kind,
+            state->pending_flags,
+            state->pending_ati_texel_coordinates,
+            GXMETAL_DRAW_BATCH_TEXTURE, flags, atiTexelCoordinates)) {
         if (!GXMetalFlushPendingDraws(state)) {
             return 0;
         }
@@ -4352,10 +4352,8 @@ static TQABoolean GXMetalATIPrivateQueueTriangle(
     TQAVGouraud gouraud[3];
     TQABoolean queued;
     uint32_t geometryIndex = GXMetalATIPrivateGeometryIndex(sourceMethod);
-    uint32_t drawFlags =
-        (state->transport->features &
-         GXMETAL_FEATURE_HOMOGENEOUS_DRAW) != 0 ?
-            GXMETAL_DRAW_HOMOGENEOUS : GXMETAL_DRAW_NONE;
+    uint32_t drawFlags = gxmetal_guest_ati_private_draw_flags(
+        state->transport->features);
     uint32_t vertexIndex;
 
     if (geometryIndex < GXMETAL_DIAGNOSTIC_ATI_GEOMETRY_METHODS) {

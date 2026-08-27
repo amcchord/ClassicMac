@@ -160,7 +160,7 @@ but the evidence still does not support a universal-compatibility claim.
   Both cropped missing-surface thresholds pass, every camera transition is
   distinct, presentation stays direct, and fallback remains zero.
 
-## Current candidate matrix
+## Current 2.2.1 matrix
 
 | Game | Classification | Furthest qualified state | Important open item |
 |---|---|---|---|
@@ -175,31 +175,37 @@ but the evidence still does not support a universal-compatibility claim.
 | Oni | Gameplay/input + first-process lifecycle pass on rebuilt beta-3 | Correct ATI/OpenGL menus and coherent warehouse gameplay; relative look, forward movement, F1 Comlink/resume, Escape menu, Quit/Yes, and Finder return are visibly proven; 9,186 direct frames with zero fallback/rejects; same-boot second process renders its animated intro | Make VNC input advance/exit the second-process intro, then prove second quit; audio |
 | Unreal Tournament | Live Practice gameplay/rendering pass with startup workaround | Sound-disabled rebuilt driver reaches coherent Tempest; initial transition, forward, and turn/strafe changes are proven; minute one shows ammo 21, while minutes 2–5 retain a coherent but byte-identical frame; 15,084 direct frames, zero fallback/rejects | Diagnose the post-minute-one lack of visible advance and make Game-menu Quit work after viewport capture; keep sound disabled under the current VM audio path |
 
-## Driver gates on the exact candidate
+## Driver gates on the exact 2.2.1 release
 
-The immutable test base was prepared directly from the signed app, with the
-guest artifacts extracted from its Tools CD and General Controls' improper-
-shutdown disk check disabled. The source base was never attached writable.
+The immutable test base was prepared directly from the signed, notarized 2.2.1
+app, with the guest artifacts extracted from its Tools CD and General Controls'
+improper-shutdown disk check disabled. The source base was never attached
+writable.
 
 The two driver gates ran concurrently from clean per-test clones:
 
-- Expanded rc23 `GXMetal AGL Probe` reported `PASS_ACCELERATED`, renderer ID
+- The 2.2.1 `GXMetal AGL Probe` reported `PASS_ACCELERATED`, renderer ID
   `0x00021000`, vendor `ATI Technologies Inc.`, renderer `Rage 128 OpenGL
-  Engine`, OpenGL `1.1.ATI-5.131331`, correct triangle/background, RGBA
-  texture, source-alpha blend, and depth-order readbacks; all six filled-mode
-  samples were `0x0010F51B`, the disjoint-list guard remained background blue
-  at `0x001B2442`, and a textured polygon crossing the viewport produced the
-  expected clipped yellow remnant `0x00FFF417`. Texture deletion, displayed-
-  pixel preservation, and teardown also succeeded with zero GL/AGL errors.
+  Engine`, and OpenGL `1.1.ATI-5.131585`. Primitive, clipped-texture,
+  base/mip/asymmetric sampler, ARB unit-1, alpha-blend, depth, display-readback,
+  resource-deletion, and full-teardown checks matched with zero GL/AGL errors.
+  The extracted diagnostic trace records 34 ATI-private calls, 17 accepted
+  geometry calls, and zero geometry anomalies, input rejects, context
+  fallbacks, or texture/bind errors.
 - `GXMetal Test` passed the full advertised RAVE contract, including discovery,
   capability negotiation, depth, blending, alpha/chromakey, clipping, texture
   formats, public multitexture, dynamic resources, ATI private no-copy data,
   large mesh batches, bitmap/scaling, dirty presentation, double buffering,
-  and framebuffer access. Its comparison workload measured a 10.34× speedup
-  over Apple Software RAVE in this VM run.
+  and framebuffer access. Its extracted trace records 6,000 draws and zero
+  geometry anomalies, rejects, context fallbacks, unbound-texture fallbacks,
+  or texture/bind errors. Its comparison workload measured 52,579 microseconds
+  under GXMetal versus 511,402 under Apple Software RAVE, a 9.72× speedup in
+  this isolated VM run.
 
 Accepted evidence:
 
+- `context/gxmetal-games/evidence/gxmetal-2.2.1-driver-smoke-20260827`
+- `context/gxmetal-games/evidence/gxmetal-2.2.1-in-guest-conformance-20260827`
 - `context/gxmetal-games/evidence/gxmetal-driver-smoke-rc23-20260826`
 - `context/gxmetal-games/evidence/gxmetal-oni-fan-topology-rc23-20260826`
 - `context/gxmetal-games/evidence/gxmetal-quake3-multiview-current2-20260826`
@@ -266,7 +272,42 @@ and passed the complete corrected recipe. That retained failure is classified
 as a VM-start transient, not a game or GXMetal failure, because no guest or
 driver work occurred.
 
-## Final signed beta-3 candidate identity
+## Published 2.2.1 exact-release identity
+
+The immutable exact-release four-game base SHA-256 is
+`a67291f8eff79015aa9e7d845b8f3097423de674c87cb065448f3c319dd6d105`.
+It was prepared from the released app and packaged Tools CD while preserving
+the disabled improper-shutdown disk check. The source remained unchanged after
+the concurrent AGL and RAVE smoke pair.
+
+- Notarized and stapled `ClassicMac.dmg` SHA-256:
+  `3ad3a497aefac40c7976a180c2b5805c532f423a905d46005981adfb57e7b94c`
+- Stapled `ClassicMac.zip` SHA-256:
+  `f36f41ea06549b270184bc76034537b2bde678e58cd1eaf07768c705e864475c`
+- Signed Power Mac QEMU SHA-256:
+  `0a7db4fcf860497bfcfc2011dd5012bae1ba5d935a53cecac156ad0202589aa1`
+- Bundled Tools CD SHA-256:
+  `4f8da127cc2d8418269b85cde0914bed9c0efb98b9b911b11742185219b04eef`
+- Bundled Power Mac video NDRV SHA-256:
+  `c5e63db45de7b58ea286f785e56811209b090673635da81fea07f9871312b27d`
+- Bundled NDRV loader SHA-256:
+  `a5b441048916fdb58291e34ab029cfd06d7e6da9380b6035bd4d8740f040f27d`
+- GXMetal protocol-header SHA-256:
+  `346a0ddb317bd4cadfc268a41bd0988614d41a9767c96c32d24d0355c92f84dc`
+- Guest GXMetal driver MacBinary SHA-256:
+  `53bd3fca2d1a106a42f0cfde887ae1a2f3852935772c7ac2bd674e78cf009327`
+- Guest GXMetal driver data-fork SHA-256:
+  `4861d6bf1b75b84c9e2d20c0ac9893ca93a5d0babb721f60248a87d24bf9cca3`
+
+Apple accepted application submission
+`84d0641c-613e-4e97-826c-baca224bcfeb` and DMG submission
+`34faa462-f961-48bf-a49a-f4840241c673`. Both tickets are stapled, and
+Gatekeeper accepts the app and disk image as Notarized Developer ID software.
+The release defaults to the native Cocoa VM window; VNC remains an optional
+display and automation mode. Every exact-release qualification command in this
+snapshot explicitly used `-audiodev none,id=snd0`.
+
+## Final signed beta-3 qualification identity (historical)
 
 The final release rebuild uses GXMetal protocol 1.25 and the negotiated
 whole-draw coordinate path. Its exact prepared Quake III base SHA-256 is
@@ -481,8 +522,10 @@ signed candidate:
 6. Continue publishing exact hashes and retaining failed evidence; do not
    collapse partial, pre-context, or OpenGL-initialization results into a
    single pass/fail number.
-7. Replace the bounded ATI/OpenGL depth/fog/W heuristic with an additive,
-   feature-gated whole-draw homogeneous-coordinate flag emitted by the guest's
-   private-geometry choke point. Until then, do not claim compatibility for
-   the unobserved case of ATI private OpenGL geometry with depth and fog both
-   disabled, all-positive reciprocal-W, and clip-range Z.
+7. Preserve protocol-1.25's whole-draw provenance with both sides of its
+   compatibility contract under test: an old negotiated host must receive
+   legacy flags and may coalesce public/private triangles, while a supporting
+   host must receive a provenance-flagged private batch separated from public
+   RAVE geometry. Retain a Metal framebuffer assertion for mixed-sign
+   homogeneous clipping, including byte-identical explicit and old-guest
+   fallback output.
