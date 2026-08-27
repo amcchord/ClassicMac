@@ -16,16 +16,16 @@ records sources, hashes, recipes, evidence descriptions, and driver fixes.
 
 | ID | Game | Primary path under test | Minimum qualification route | Media and current state |
 | --- | --- | --- | --- | --- |
-| `bugdom` | Bugdom 1.2.1 | QuickDraw 3D 1.6 / RAVE, ATI behavior | Highest quality; load The Lawn; verify terrain, fog, foliage alpha, and HUD for five minutes; quit and relaunch | Exact published 2.2.1 short smoke: coherent Lawn, movement delta 0.653301, 5,723 direct/0 fallback frames, 1,040,070 draws; longer exact-release lifecycle remains open |
-| `cro-mag-rally` | Cro-Mag Rally Demo | Apple OpenGL 1.1.2 | Confirm hardware/OpenGL; complete a lap with terrain, particles, HUD, transparency, and camera transitions | Gameplay smoke pass at 640x480: Practice/Desert renders coherently, acceleration and steering visibly respond, 24-28 fps, ~204 direct draws/frame, zero fallback, and expected demo exit screen |
-| `weekend-warrior` | Weekend Warrior | QuickDraw 3D / RAVE | Load the first arena; verify camera clipping, textured characters, UI, depth ordering, and transitions for five minutes | Exact published 2.2.1 short smoke: coherent Center Stage, movement/action delta 0.798568, 24,707 direct/0 fallback frames, 1,517,694 draws; beta-3 separately proves recovery relaunch |
-| `future-cop` | Future Cop: LAPD Demo | Selectable QuickDraw 3D RAVE | Select RAVE; enter Crime War; verify weapon blending, transparent HUD, depth, and explosions | Exact published 2.2.1 short smoke: coherent Crime War, movement/fire delta 0.725452, ammo 7500→7482, 1,784 direct/0 fallback frames, 3,976,505 draws |
-| `dark-vengeance` | Dark Vengeance Demo | Direct RAVE | Reach first combat and scripted sequence; inspect lighting, translucent effects, animated geometry, and camera motion | The gamma-table and optional-output notice fixes reach textured gameplay with a player, enemy, portal, and environment; `w` changes the frame and a 15-second soak remains animated. The mostly-black selection/loading transition remains open |
-| `myth-ii` | Myth II: Soulblighter 1.5.1 Demo | RAVE | Select RAVE; load a solo map; pan, zoom, rotate, issue orders, and verify terrain, water, units, decals, projectiles, and explosions | Exact signed beta-3 battlefield/partial-input pass: coherent rendering plus visibly proven single selection, forward/back and left/right camera motion, rotation, and zoom-in; refreshed replay has 3,589,155 traced draws and zero fallback/rejects; group orders and the remaining controls stay open |
-| `unreal-tournament` | Unreal Tournament 348m3 Demo | ATI renderer through RAVE | Confirm RAVE; render intro flyby; run a five-minute bot match checking lightmaps, fog, weapon alpha, HUD, and texture cycling | Exact published 2.2.1 first process reaches coherent Tempest and cleanly exits; process two reaches a live HUD/weapon. Fresh process/CFM/custom-device creation is proven, and QEMU, ADB, and low-memory `LMKeyMap` all deliver Control correctly, but UT's focused gameplay remains inert |
-| `combat-mission` | Combat Mission: Beyond Overlord 1.02 Demo | RAVE hardware probe | Complete detection; load Chance Encounter; move through the map and execute a turn with terrain, markers, smoke, and animation | Exact published 2.2.1 setup-rendering smoke: 1,168 direct/0 fallback frames and 2,175,685 draws; no battle input in this short recipe. Beta-3 separately proves the full turn |
-| `oni` | Oni Demo | Classic Apple OpenGL | Reach training and first fight; verify animation, lightmaps, transparency, HUD, and an indoor/outdoor transition | First-process warehouse input/F1/clean quit passes. A menu-only first process plus early second-process Escape recreates InputSprocket/GXMetal and reaches the menu; the full warehouse route stalls in Bink/level-0 before renderer re-entry. A matched full-route `-nosound` test remains open |
-| `havoc` | Havoc Demo | First shipping QuickDraw 3D RAVE game | Select accelerated rendering; enter the demo arena; verify terrain, fog, textured objects, transparency, HUD, and camera motion for five minutes | The same gamma-contract candidate clears the misleading resource dialog and reaches coherent full-retail cockpit gameplay. A generic input sequence changes 0.603298 of the frame with no texture/palette corruption or crash |
+| `bugdom` | Bugdom 1.2.1 | QuickDraw 3D 1.6 / RAVE, ATI behavior | Highest quality; load The Lawn; verify terrain, fog, foliage alpha, and HUD for five minutes; quit and relaunch | Post-2.2.1 current-driver smoke: coherent Lawn gameplay and a 0.690459 movement delta; longer exact-release lifecycle remains open |
+| `cro-mag-rally` | Cro-Mag Rally Demo | Apple OpenGL 1.1.2 | Confirm hardware/OpenGL; complete a lap with terrain, particles, HUD, transparency, and camera transitions | Post-2.2.1 640x480 Practice/Desert race pass: coherent terrain/vehicle/HUD, steering deltas 0.857201 and 0.780189, 35-second soak, and clean demo exit |
+| `weekend-warrior` | Weekend Warrior | QuickDraw 3D / RAVE | Load the first arena; verify camera clipping, textured characters, UI, depth ordering, and transitions for five minutes | Post-2.2.1 current-driver smoke: coherent Center Stage character, arena, UI, and a 0.819740 action delta; beta-3 separately proves recovery relaunch |
+| `future-cop` | Future Cop: LAPD Demo | Selectable QuickDraw 3D RAVE | Select RAVE; enter Crime War; verify weapon blending, transparent HUD, depth, and explosions | Post-2.2.1 current-driver smoke: coherent Crime War mech, vehicles, buildings, radar/HUD, and a 0.672201 movement/fire delta |
+| `dark-vengeance` | Dark Vengeance Demo | Direct RAVE | Reach first combat and scripted sequence; inspect lighting, translucent effects, animated geometry, and camera motion | Post-2.2.1 gamma/notice candidate passes an in-game semantic pixel, renders coherent textured player/enemy/room geometry, changes 0.418249 after `w`, and survives a 15-second animated soak. The mostly-black selection/loading transition is not claimed as a drawn menu |
+| `myth-ii` | Myth II: Soulblighter 1.5.1 Demo | RAVE | Select RAVE; load a solo map; pan, zoom, rotate, issue orders, and verify terrain, water, units, decals, projectiles, and explosions | Post-2.2.1 60-step route reaches a coherent Into the Breach battlefield, selects/orders units, exercises stop and ten paired camera directions/zoom/orbit actions, and completes a 30-second gameplay soak |
+| `unreal-tournament` | Unreal Tournament 348m3 Demo | ATI renderer through RAVE | Confirm RAVE; render intro flyby; run a five-minute bot match checking lightmaps, fog, weapon alpha, HUD, and texture cycling | Post-2.2.1 exact-base process one reaches coherent Tempest and cleanly exits; process two renders a different map and accepts held Control. The exact read-only `CheckButtonKeys` probe observes Control in both `LMKeyMap` and UT's stack-local modifier field, hits UT's transition-emission instruction, and the reviewed final frame shows weapon fire, lower ammunition, and shell casings. A five-minute bot match remains the longer release gate |
+| `combat-mission` | Combat Mission: Beyond Overlord 1.02 Demo | RAVE hardware probe | Complete detection; load Chance Encounter; move through the map and execute a turn with terrain, markers, smoke, and animation | Post-2.2.1 setup smoke renders coherent Chance Encounter terrain, tanks, soldiers, and UI. This short recipe sends no battle input; beta-3 separately proves the full turn |
+| `oni` | Oni Demo | Classic Apple OpenGL | Reach training and first fight; verify animation, lightmaps, transparency, HUD, and an indoor/outdoor transition | Post-2.2.1 full lifecycle passes warehouse gameplay/input/F1, clean Quit/Yes, exact `-nosound` second launch, renderer upload reset, active Bink frame change, Escape, and a stable four-pixel second-menu signature |
+| `havoc` | Havoc Demo | First shipping QuickDraw 3D RAVE game | Select accelerated rendering; enter the demo arena; verify terrain, fog, textured objects, transparency, HUD, and camera motion for five minutes | Post-2.2.1 gamma candidate passes first-run help, main-screen, and cockpit semantic gates; steering changes 0.171768 of the frame and the coherent terrain/HUD soak contains only 0.000221 of the rejected solid-red range |
 
 OpenGL titles only count as GXMetal tests when the host log contains GXMetal
 presentation traffic. If a game cannot launch or render, run the matched
@@ -602,3 +602,25 @@ VMs, each with an independent clone and unique local VNC and monitor sockets.
   `context/gxmetal-games/evidence/gxmetal-mythii-final-upload-order-20260827`.
   Focused guest and Metal tests retain the exact update, readback, upload
   ordering, and 224-byte textured-fan contracts.
+- Built an immutable unified post-2.2.1 candidate from NDRV
+  `3b687b15…c5722` and Tools CD `ed6ba9cf…d1d`, then replayed all ten installed
+  games with host audio and guest networking disabled. Bugdom, Future Cop,
+  Weekend Warrior, Cro-Mag's full race, Dark Vengeance, Myth II, Oni's full
+  quit/relaunch lifecycle, and HAVOC's first-run-to-cockpit route pass semantic
+  gameplay gates and visual review. Combat Mission passes its coherent setup
+  scope; its full-turn route remains a separate release gate. UT renders both
+  processes, cleanly quits the first, and accepts held Control in the second.
+  The exact read-only `CheckButtonKeys` probe relocates the live PEF from an
+  invariant instruction window, observes Control value `0x08` in `LMKeyMap`
+  and UT's stack-local modifier field, and stops at UT's transition-emission
+  instruction; the reviewed final frame visibly fires the weapon. The earlier
+  static post-death frame was therefore not a GXMetal, QEMU, ADB, or stale-key
+  failure. Timing-only Dark and coordinate-only HAVOC routes
+  produced false automation completions during this replay; both are replaced
+  by reusable path, pixel, frame-change, and color-range oracles in
+  `gxmetal/compatibility/`. A separate current-driver Quake III Q3DM1 run
+  passes five reviewed courtyard/arch/statue/passage views, four motion gates,
+  and dark-world fractions 0.001389 and 0.005012 against the 0.05 limit.
+  Evidence is retained under the `gxmetal-post221-wave1-*`,
+  `gxmetal-post221-wave2-*`, `gxmetal-post221-wave3-*`, and
+  `gxmetal-post221-quake3-five-view-20260827` directories.

@@ -11,6 +11,17 @@ are tracked separately.
 GXMetal is now likely to work with more RAVE games than the original test set,
 but the evidence still does not support a universal-compatibility claim.
 
+- The current post-2.2.1 source candidate was replayed across all ten installed
+  games from one immutable base, with each run using an independent clone,
+  host audio disabled, and guest networking disabled. Bugdom, Future Cop,
+  Weekend Warrior, Cro-Mag Rally, Dark Vengeance, Myth II, Oni, HAVOC, and
+  Unreal Tournament pass reviewed gameplay or lifecycle scopes. Combat Mission
+  passes its deliberately input-free Chance Encounter setup scope; its full
+  turn remains a separate gate. The candidate uses NDRV SHA-256
+  `3b687b15…c5722` and Tools CD SHA-256 `ed6ba9cf…d1d`; the signed v2.2.1 QEMU
+  and loader remain exact. A separate current-driver Quake III route passes
+  five reviewed Q3DM1 arch/statue/passage views, four motion gates, and both
+  missing-world rejection regions.
 - Bugdom, Future Cop, and Weekend Warrior all pass short semantic routes on
   the exact published 2.2.1 QEMU, loader, Tools CD, and installed guest stack.
   Their movement/action frame-change gates pass at 0.653301, 0.725452, and
@@ -42,7 +53,8 @@ but the evidence still does not support a universal-compatibility claim.
   display preservation, and teardown. This is broad core-path qualification,
   not a claim that every OpenGL feature or game is covered.
 - Cro-Mag Rally renders its title/menu/loading path correctly on the signed
-  2.1.3 candidate. Oni's previously black ATI/OpenGL path now renders its
+  2.1.3 candidate. Earlier Oni candidates established how its previously black
+  ATI/OpenGL path renders its
   complete main menu, new-game UI, and coherent Combat Training gameplay on
   the exact signed beta-3 candidate through the formerly corrupt +45-second
   transition and about 176 seconds of designated live rendering. Static GLD audit
@@ -87,9 +99,13 @@ but the evidence still does not support a universal-compatibility claim.
   restart are therefore ruled out. A short launch-arguments qualifier visibly
   proves that Oni accepts literal `-nosound`, but every full-route attempt was
   rejected because relative gameplay warped the guest cursor away from the
-  long-lived VNC client's model. The matched `-nosound` discriminator remains
-  open; the harness now has an explicit motion-only pointer-rehome action for
-  a future direct-frame-gated replay.
+  long-lived VNC client's model. The harness then added an explicit motion-only
+  pointer-rehome action. The current post-2.2.1 replay closes that lifecycle
+  gap: the first process completes warehouse gameplay/input/F1 and clean
+  Quit/Yes, literal `-nosound` is visible on the second launch, GXMetal texture
+  upload IDs reset, Bink frames remain active, Escape reaches a stable
+  four-pixel second-menu signature, and the full 279.334-second route completes
+  without fallback or corruption.
 - Dark Vengeance and HAVOC exposed the same PPC video-driver gamma-contract
   defect. The old NDRV returned `noErr` from `cscGetGamma` while leaving
   `csGTable` null. Both games dereference the returned `GammaTbl`, read low
@@ -158,11 +174,17 @@ but the evidence still does not support a universal-compatibility claim.
   16-byte `LMKeyMap` at `0x0174` is all zero at rest in both generations and
   byte 7 becomes `0x08` while Control is held in both, with identical QEMU
   qcode and ADB `0x36`/`0xb6` transitions. Mac OS `GetKeys` backing state is
-  therefore correct. The next read-only probe is scripted against the exact UT
-  PEF (`51cc73dc…ae28d`) at `CheckButtonKeys`: current Control at `r1+57`,
-  prior Control at `r2-11987`, and the transition call at code offset
-  `0x14fbf0`. No valid live breakpoint sample was obtained yet, so the defect
-  remains inside UT's current/prior-key comparison or its downstream handling.
+  therefore correct. The completed read-only probe uses the exact UT PEF
+  (`51cc73dc…ae28d`) at `CheckButtonKeys`: current Control at `r1+57`, prior
+  Control at `r2-11987`, and the transition call at code offset `0x14fbf0`.
+  It relocates the live PEF on its first PC/LR sample, sees Control value
+  `0x08` in both `LMKeyMap` and UT's stack-local modifier field while the prior
+  value is zero, and stops at the exact transition-emission instruction. After
+  the read-only breakpoint is removed, the reviewed frame visibly shows
+  firing, reduced ammunition, and shell casings. The earlier static death-state
+  frame was therefore not a GXMetal presentation freeze, stale UT
+  prior-modifier state, or failed QEMU/ADB/GetKeys delivery. A five-minute bot
+  match remains the longer gate.
   Myth II now reaches its fully rendered “Into the Breach” battlefield after
   the animated map and journal. GXMetal implements the proven flags-zero,
   single-level ATI private slot-2 base-image replacement and slot 4's
@@ -231,7 +253,7 @@ but the evidence still does not support a universal-compatibility claim.
   Both cropped missing-surface thresholds pass, every camera transition is
   distinct, presentation stays direct, and fallback remains zero.
 
-## Current 2.2.1 matrix
+## Current 2.2.1 and post-release matrix
 
 | Game | Classification | Furthest qualified state | Important open item |
 |---|---|---|---|
@@ -241,10 +263,10 @@ but the evidence still does not support a universal-compatibility claim.
 | Weekend Warrior | Exact-2.2.1 short gameplay pass; beta-3 recovery pass | Published build renders Center Stage coherently and passes movement/fire at 0.798568; 24,707 direct/0 fallback frames and 1,517,694 draws | Exact-release five-minute arena soak and clean quit/relaunch; audio |
 | Cro-Mag Rally | Gameplay smoke pass on current Q3 fix | Correct accelerated title/menu/loading and Practice/Desert gameplay at 640x480; acceleration and steering visibly alter position/heading; 24-28 fps, ~204 direct draws/frame, zero fallback; expected demo exit screen | Complete-lap/longer lifecycle soak and audio |
 | Dark Vengeance | Gameplay rendering/input/short-soak pass on gamma + notice candidate | Exact tracing proves `cscGetGamma` success-with-null caused `-49`; `DARKVENG.INI` opens correctly. Accepting independently optional `QAGetNoticeMethod` outputs and invoking selector 4 synchronously reaches a textured player/enemy/portal scene, responds to `w`, and remains animated for 15 seconds without advertising `kQAOptional_BufferComposite` | Qualify the mostly-black selection/menu transition, longer gameplay/lifecycle, and audio |
-| HAVOC | Gameplay rendering pass on gamma candidate | The same `cscGetGamma` contract fix clears all prior memory dialogs. Full retail reaches coherent first-person cockpit gameplay; generic input changes 0.603298 of the frame, QEMU exits 0, and the immutable source remains unchanged | Add game-specific movement/fire assertions, five-minute gameplay/lifecycle soak, and audio |
-| Myth II | Battlefield/effects rendering and partial-input pass on rebuilt beta-3 | Correct main UI, campaign map, journal, coherent battlefield, and an effects-heavy film with intact terrain through +25; visibly proven single selection, camera movement/rotation, and zoom-in; fixed effects replay has 2,882 direct frames and zero fallback/rejects/out-of-range-Z draws | Prove group selection/orders, Stop, zoom-out/orbit, and clean film exit/relaunch; audio |
-| Oni | Gameplay/input + first-process lifecycle pass; movie-path second-process stall | Warehouse look/movement/action/F1/quit pass. A menu-only first process plus early second-process Escape recreates InputSprocket and GXMetal and reaches the menu; the full warehouse route stalls in Bink/level-0 before renderer re-entry | Use the tested pointer-rehome action to qualify a matched full-route `-nosound` launch, then trace Bink entry/return calls if it still stalls; audio |
-| Unreal Tournament | Exact-2.2.1 first-process gameplay/clean-exit pass; partial second lifecycle | Sound-disabled published build reaches coherent Tempest, cleanly exits, relaunches, and reaches a second live HUD/weapon. Fresh process/CFM/custom-device creation is proven; QEMU, ADB, and `LMKeyMap` all deliver second-process Control correctly, but UT's live framebuffer remains inert | Run the scripted read-only `CheckButtonKeys` current/prior-state probe from a newly verified immutable source, then prove a dynamic longer match; keep sound disabled under the current VM audio path |
+| HAVOC | Gameplay rendering/input pass on gamma candidate | The `cscGetGamma` contract fix clears all prior memory dialogs. The reusable route separately gates first-run help, main screen, and cockpit; steering changes 0.171768, and the coherent terrain/HUD soak has only 0.000221 of the rejected solid-red range | Five-minute gameplay/lifecycle soak and audio |
+| Myth II | Battlefield rendering and broad-input pass on post-2.2.1 candidate | Coherent Into the Breach battlefield; unit selection/orders, Stop, ten paired camera direction/zoom/orbit actions, and 30-second soak | Effects-heavy long film, clean exit/relaunch, and audio |
+| Oni | Full two-process gameplay/input/lifecycle pass on post-2.2.1 candidate | Warehouse gameplay/input/F1, clean Quit/Yes, exact `-nosound` relaunch, upload-ID reset, active second Bink sequence, Escape, and stable four-pixel second-menu signature | Longer second-process gameplay and audio |
+| Unreal Tournament | Two-process rendering/input short-route pass | Process one renders Tempest and cleanly exits; process two renders another map. The exact read-only `CheckButtonKeys` probe observes Control in `LMKeyMap` and UT's stack-local modifier, hits the transition-emission instruction, and the reviewed final frame shows visible fire and lower ammunition | Five-minute bot match and audio; keep sound disabled under the current VM audio path |
 
 ## Driver gates on the exact 2.2.1 release
 
@@ -278,6 +300,15 @@ Accepted evidence:
 - `context/gxmetal-games/evidence/gxmetal-2.2.1-driver-smoke-20260827`
 - `context/gxmetal-games/evidence/gxmetal-2.2.1-in-guest-conformance-20260827`
 - `context/gxmetal-games/evidence/gxmetal-2.2.1-four-game-smoke-20260827`
+- `context/gxmetal-games/evidence/gxmetal-post221-campaign-20260827`
+- `context/gxmetal-games/evidence/gxmetal-post221-wave1-four-game-20260827`
+- `context/gxmetal-games/evidence/gxmetal-post221-wave2-cromag-race-20260827`
+- `context/gxmetal-games/evidence/gxmetal-post221-wave2-mythii-20260827`
+- `context/gxmetal-games/evidence/gxmetal-post221-wave2-dark-retry-20260827`
+- `context/gxmetal-games/evidence/gxmetal-post221-wave2-havoc-final2-20260827`
+- `context/gxmetal-games/evidence/gxmetal-post221-wave2-oni-relaunch-final-20260827`
+- `context/gxmetal-games/evidence/gxmetal-post221-wave3-ut-checkbuttonkeys-retry-20260827`
+- `context/gxmetal-games/evidence/gxmetal-post221-quake3-five-view-20260827`
 - `context/gxmetal-games/evidence/gxmetal-ut-guest-identity-20260827`
 - `context/gxmetal-games/evidence/gxmetal-ut-2.2.1-cleanquit-relaunch-corrected-20260827`
 - `context/gxmetal-games/evidence/gxmetal-oni-input-lifecycle-candidate-20260827`
@@ -589,29 +620,23 @@ signed candidate:
 ## Next compatibility gates
 
 1. Preserve Oni's now-passing warehouse input, F1, in-game quit, pale-range,
-   and method-50 fan gates. The normal 8 ms polling source remains necessary
-   for relative mouse input. A menu-only first process proves that process-two
-   InputSprocket and GXMetal recreation work; the full gameplay route instead
-   stalls in Bink/level-0 startup. Use the explicit pointer-rehome action to
-   qualify the same route with literal `-nosound`, then instrument Bink entry
-   and return if the stall remains.
+   method-50 fan, pointer-rehome, literal `-nosound`, active second-cinematic,
+   upload-reset, and four-pixel second-menu gates. Extend the second process
+   into longer gameplay while retaining the normal 8 ms relative-input polling
+   source.
 2. Preserve Unreal Tournament's exact-release first-process gameplay,
-   Command-Q/Finder return, and accepted second rendering reset. Instrument
-   the scripted read-only `CheckButtonKeys` probe from a newly verified
-   immutable source: QEMU, ADB, and `LMKeyMap` already prove that Control reaches
-   Mac OS in both processes. Capture UT's current/prior Control comparison and
-   transition call, then prove focused second-process movement/fire and a
-   dynamic longer bot match.
-   Do not classify either the visible death-wait state or an unready match as a
-   renderer freeze.
-   Extend Myth II through group selection/orders and clean film quit/relaunch
-   while retaining the now-passing effects/terrain regression.
+   Command-Q/Finder return, second rendering reset, and the exact read-only
+   `CheckButtonKeys` Control-transition result. Extend process two into a
+   dynamic five-minute bot match. Do not classify either a visible death-wait
+   state or an unready match as a renderer freeze. Extend Myth II through clean
+   film quit/relaunch while retaining its now-passing group orders, Stop,
+   camera, zoom/orbit, and effects/terrain regressions.
 3. Preserve the shared Dark Vengeance/HAVOC gamma contract and its native table
    tests. Extend Dark beyond the mostly-black selection/loading transition,
    then run a longer gameplay and clean-relaunch gate while retaining the
    selector-4 callback trace and leaving `kQAOptional_BufferComposite`
-   unadvertised. Add game-specific HAVOC movement/fire assertions and a longer
-   cockpit/lifecycle soak.
+   unadvertised. Preserve HAVOC's first-run/main/cockpit/steering/color-range
+   assertions and add a longer cockpit/lifecycle soak.
 4. Require reviewed screenshots, direct presentation profiles with zero
    unexpected fallback, representative input, a longer soak, and clean
    lifecycle for every title advertised as supported.
