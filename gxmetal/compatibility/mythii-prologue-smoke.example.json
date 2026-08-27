@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "defaults": {
+    "boot_wait_seconds": 5,
+    "observation_seconds": 0,
+    "capture_interval_seconds": 4,
+    "resolution": "1024x768x15"
+  },
+  "games": [
+    {
+      "id": "mythii-prologue-smoke",
+      "name": "Myth II prologue-to-gameplay route probe",
+      "modes": ["gxmetal", "software"],
+      "steps": [
+        {"wait_for_pixel": {"x": 22, "y": 11, "red": 221, "green": 0, "blue": 0, "tolerance": 8, "timeout_seconds": 180, "poll_interval_seconds": 1}},
+        {"screenshot": "finder-ready"},
+        {"chord": "Super_L+Alt_L+w", "delay_after": 2},
+        {"double_click": [590, 52], "delay_after": 3},
+        {"text": "GXMetal Sweep Games", "delay_after": 1},
+        {"chord": "Super_L+o", "delay_after": 3},
+        {"text": "Myth II", "delay_after": 1},
+        {"chord": "Super_L+o", "delay_after": 3},
+        {"text": "Myth II Demo", "delay_after": 1},
+        {"chord": "Super_L+o", "delay_after": 40},
+        {"screenshot": "main-menu"},
+        {"click": [135, 255], "delay_after": 1},
+        {"click": [492, 345], "delay_after": 20},
+        {"click": [250, 235], "delay_after": 15},
+        {"screenshot": "new-game-dialog"},
+        {"click": [245, 256], "delay_after": 2},
+        {"key": "Return", "delay_after": 70},
+        {"screenshot": "into-the-breach-prologue"},
+        {"key": "Escape", "delay_after": 60},
+        {"screenshot": "gameplay-transition-after-escape"}
+      ]
+    }
+  ]
+}

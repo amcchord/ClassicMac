@@ -15,8 +15,14 @@ but the evidence still does not support a universal-compatibility claim.
   input on the 2.1.4 qualification rc23 candidate.
 - Weekend Warrior has a fully scripted route through menus, selection,
   textured 3D play, input, and a short soak.
+- Cro-Mag Rally now has a fully scripted 640x480 Practice/Desert route with
+  acceleration and steering input, a gameplay soak, and a clean in-game exit.
+  The current Q3-fixed driver sustained roughly 24-28 fps and about 204 direct
+  draws per frame with zero fallback.
 - Combat Mission reaches and sustains its complete accelerated 3D scenario
-  setup on that same candidate; representative battle input remains open.
+  setup on that same candidate. Two fresh current-driver clones also advance
+  visibly from Setup to Orders and sustain the battle scene for 207-265
+  seconds; camera, unit-order execution, and lifecycle input remain open.
 - All four reviewed runs end with direct GXMetal presentation and zero
   fallback frames. The rc23 semantic routes ran concurrently from four
   independent clones and completed in 166 seconds wall-clock time.
@@ -43,8 +49,18 @@ but the evidence still does not support a universal-compatibility claim.
   sound-disabled starts render the same correct main menu in windowed and
   fullscreen modes, while a sound-enabled/windowed start submits no RAVE work.
   Myth II's black display transition is avoided by disabling its startup
-  resolution switch, but its demo then remains in the mission briefing without
-  creating a draw context. These are kept separate from driver faults.
+  resolution switch. A corrected route proves that the animated map and
+  complete “Into the Breach” journal advance normally. Pressing Escape during
+  the journal sends the isolated Apple Software control into a fully rendered
+  battlefield and Mission Objectives dialog, while current GXMetal remains
+  black after exactly 43 intentional blank texture preallocations. This is now
+  a confirmed driver-specific gameplay-transition blocker, localized before
+  Myth's first populated replacement texture or draw.
+- Quake III's 2.2 beta visual regression was localized to valid ATI-private
+  slot-60 triangle fans whose fourth argument is zero. Rendering those calls
+  again restores the missing world surfaces. A silent six-view Q3DM1 route now
+  retains the spawn courtyard, large carved arch, small side arch, under-arch
+  angle, lit passage, and side approach as a permanent visual regression gate.
 
 ## Current signed-candidate matrix
 
@@ -52,14 +68,14 @@ but the evidence still does not support a universal-compatibility claim.
 |---|---|---|---|
 | Bugdom | Gameplay pass | Correct full-color Lawn rendering; sustained movement/turning; short automated soak; direct frames with zero fallback | Retain the separately proven long soak and quit/relaunch gate; audio |
 | Future Cop: LAPD | Gameplay pass | Coherent Crime War world, vehicles, HUD, effects, and live input; direct frames with zero fallback | Clean quit/relaunch and audio |
-| Combat Mission | Rendering pass | Complete Chance Encounter 3D setup scene; stable high-draw-count presentation with zero fallback | Camera/GO input, representative battle, lifecycle, and audio |
+| Combat Mission | Rendering and phase-transition pass | Two fresh current-driver runs reach complete Chance Encounter 3D, visibly advance Setup to Orders, and sustain it for 207-265 seconds at 48.32/51.19 mean fps; 16.7M combined draws, zero fallback/rejects | Camera, unit-order execution, lifecycle, and audio; strengthened post-transition input probes remained byte-identical |
 | Weekend Warrior | Gameplay smoke pass | Fully scripted selection, Center Stage 3D play, movement/turning/action input, and short soak; zero fallback | Longer arena/lifecycle soak and audio |
-| Cro-Mag Rally | Signed rendering pass | Correct accelerated title/menu/loading rendering at 640x480; direct frames with zero fallback | Script representative race input and lifecycle |
-| Dark Vengeance | Matched app/runtime blocker | Deterministic `Memory allocation failed (size = -49)` in accelerated and software modes | Test alternate media/build or application-memory patch |
+| Cro-Mag Rally | Gameplay smoke pass on current Q3 fix | Correct accelerated title/menu/loading and Practice/Desert gameplay at 640x480; acceleration and steering visibly alter position/heading; 24-28 fps, ~204 direct draws/frame, zero fallback; expected demo exit screen | Complete-lap/longer lifecycle soak and audio |
+| Dark Vengeance | Matched app/runtime blocker | Demo 1.0.2 deterministically fails before RAVE in accelerated/software modes; the official retail 1.2 updater installs but all matched controls then require the legitimate game CD before renderer creation | Source the separate 1.2 demo or a legitimate retail Mac CD/install |
 | HAVOC | Matched app/runtime blocker | Deterministic resource-allocation failure in accelerated and software modes, including memory controls | Test alternate media/build or application-memory patch |
-| Myth II | Pre-3D game-flow blocker | Correct main UI, new-game dialog, and mission briefing remain at 640x480 with “Switch resolutions” disabled; the unchanged briefing survives Return, Space, and click probes with no GXMetal context or draws | Test alternate demo/media or updated game build before further driver work |
+| Myth II | Confirmed GXMetal gameplay-transition blocker | Correct main UI, New Game flow, animated campaign map, and complete “Into the Breach” journal at 640x480; early Escape reaches the battlefield/objectives in isolated Apple Software but current GXMetal remains black after 43 blank texture preallocations | Instrument texture create/upload/fence completion and the expected first populated replacement texture; add a 43-blank-pool replacement regression |
 | Oni | Gameplay smoke pass on rc23 | Correct ATI/OpenGL main menu, new-game confirmation, loading, and coherent Combat Training through the formerly corrupt +45-second transition; method-50 fan topology corrected with zero rejected geometry or fallback | Longer gameplay/input soak, clean lifecycle, and audio |
-| Unreal Tournament | Signed accelerated rendering pass with startup workaround | Sound-disabled windowed and fullscreen starts reach the same correct main menu; the fullscreen control records 19,174 direct frames, zero fallback, and roughly 429–456 fps during its stable menu phase | Script representative match input and clean quit; keep sound disabled under the current VM audio path |
+| Unreal Tournament | Accelerated menu-rendering pass with startup workaround | Sound-disabled current driver reaches a coherent 640x480 v348 main menu; 26,854 direct frames, zero fallback, 185-312 fps after warmup, exactly 250 draws/frame | Practice configuration/gameplay input remains unqualified; keep sound disabled under the current VM audio path |
 
 ## Driver gates on the exact candidate
 
@@ -88,6 +104,14 @@ Accepted evidence:
 
 - `context/gxmetal-games/evidence/gxmetal-driver-smoke-rc23-20260826`
 - `context/gxmetal-games/evidence/gxmetal-oni-fan-topology-rc23-20260826`
+- `context/gxmetal-games/evidence/gxmetal-quake3-multiview-current2-20260826`
+- `context/gxmetal-games/evidence/cromag-current-q3fix-20260826-route1`
+- `context/gxmetal-games/evidence/combat-mission-current-q3fix-20260826-battle-v3`
+- `context/gxmetal-games/evidence/combat-mission-current-q3fix-20260826-input-v4`
+- `context/gxmetal-games/evidence/ut-current-q3fix-20260826-exact-rc6`
+- `context/gxmetal-games/evidence/dark-vengeance12-current-q3fix-20260826-qualification`
+- `context/gxmetal-games/evidence/software-mythii-prologue-early-escape-current-20260827`
+- `context/gxmetal-games/evidence/gxmetal-mythii-prologue-early-escape-current-20260827`
 - `context/gxmetal-games/evidence/gxmetal-four-game-fan-topology-rc23-20260826`
 - `context/gxmetal-games/evidence/gxmetal-driver-smoke-readback-signed-final-20260826`
 - `context/gxmetal-games/evidence/gxmetal-four-game-readback-signed-final-20260826`
@@ -244,8 +268,9 @@ signed candidate:
 1. Extend the now-passing shortened Oni route into a longer gameplay/input and
    clean-lifecycle soak. Keep the pale RGB-range oracle and method-50 fan
    counters as the fast regression gate.
-2. Script Unreal Tournament match gameplay with sound disabled; try alternate
-   Myth II demo/media or a later game build for its pre-context briefing stall.
+2. Script Unreal Tournament match gameplay with sound disabled. For Myth II,
+   trace completion of the 43 blank preallocations and the first populated
+   replacement texture; reproduce that exact contract in a focused regression.
 3. Try alternate builds/media for Dark Vengeance and HAVOC rather than
    weakening driver or VM memory safety around deterministic app failures.
 4. Require reviewed screenshots, direct presentation profiles with zero

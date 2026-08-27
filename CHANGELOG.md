@@ -17,6 +17,12 @@
   oracle is derived from reviewed broken and corrected frames. The game-sweep
   harness can now apply inclusive RGB-range assertions to a stable subregion
   while excluding skies, HUDs, and animated scene content.
+- Added reusable silent Cro-Mag Rally gameplay and Myth II transition routes.
+  The current ten-game ledger now records Cro-Mag's accelerated race/input
+  pass, Combat Mission's independently repeated Setup-to-Orders rendering
+  pass, Unreal Tournament's current-driver menu gate, Dark Vengeance 1.2's
+  retail-media blocker, and the isolated Myth II software/GXMetal comparison
+  that localizes its black gameplay transition after blank texture-pool setup.
 
 ## 2.2.0 beta 2 — 2026-08-26
 

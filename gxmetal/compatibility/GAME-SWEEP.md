@@ -16,15 +16,15 @@ records sources, hashes, recipes, evidence descriptions, and driver fixes.
 
 | ID | Game | Primary path under test | Minimum qualification route | Media and current state |
 | --- | --- | --- | --- | --- |
-| `bugdom` | Bugdom 1.2.1 | QuickDraw 3D 1.6 / RAVE, ATI behavior | Highest quality; load The Lawn; verify terrain, fog, foliage alpha, and HUD for five minutes; quit and relaunch | Launcher, Pangea intro, title, and direct rendering pass; main-menu composition is malformed and the Lawn remains unqualified |
-| `cro-mag-rally` | Cro-Mag Rally Demo | Apple OpenGL 1.1.2 | Confirm hardware/OpenGL; complete a lap with terrain, particles, HUD, transparency, and camera transitions | Accelerated 800x600 title/menu pass with zero fallback; 640x480 GXMetal reaches a static Pangea splash while the matched software control remains black |
-| `weekend-warrior` | Weekend Warrior | QuickDraw 3D / RAVE | Load the first arena; verify camera clipping, textured characters, UI, depth ordering, and transitions for five minutes | PerspectiveZ gap fixed and verified through title/menu/selection plus a ten-minute 3D center-stage soak with zero fallback; first-arena qualification pending |
+| `bugdom` | Bugdom 1.2.1 | QuickDraw 3D 1.6 / RAVE, ATI behavior | Highest quality; load The Lawn; verify terrain, fog, foliage alpha, and HUD for five minutes; quit and relaunch | Gameplay pass: coherent Lawn rendering, sustained movement/turning, direct presentation, and zero fallback |
+| `cro-mag-rally` | Cro-Mag Rally Demo | Apple OpenGL 1.1.2 | Confirm hardware/OpenGL; complete a lap with terrain, particles, HUD, transparency, and camera transitions | Gameplay smoke pass at 640x480: Practice/Desert renders coherently, acceleration and steering visibly respond, 24-28 fps, ~204 direct draws/frame, zero fallback, and expected demo exit screen |
+| `weekend-warrior` | Weekend Warrior | QuickDraw 3D / RAVE | Load the first arena; verify camera clipping, textured characters, UI, depth ordering, and transitions for five minutes | Gameplay smoke pass through scripted selection, Center Stage play, movement/turning/action input, and short soak with zero fallback |
 | `future-cop` | Future Cop: LAPD Demo | Selectable QuickDraw 3D RAVE | Select RAVE; enter Crime War; verify weapon blending, transparent HUD, depth, and explosions | Qualified on GXMetal: coherent ATI-private rendering, live gameplay/input, 2,610 direct frames, zero fallback, and clean exit |
-| `dark-vengeance` | Dark Vengeance Demo | Direct RAVE | Reach first combat and scripted sequence; inspect lighting, translucent effects, animated geometry, and camera motion | Blocked before 3D by deterministic game-level error in GXMetal and software controls |
-| `myth-ii` | Myth II: Soulblighter 1.5.1 Demo | RAVE | Select RAVE; load a solo map; pan, zoom, rotate, issue orders, and verify terrain, water, units, decals, projectiles, and explosions | Menu and new-game dialog pass; selected demo level remains black without creating a GXMetal context, so acceleration is unqualified |
-| `unreal-tournament` | Unreal Tournament 348m3 Demo | ATI renderer through RAVE | Confirm RAVE; render intro flyby; run a five-minute bot match checking lightmaps, fog, weapon alpha, HUD, and texture cycling | RAVE Rage 128 is detected and selected, but RAVE and explicit software controls stop at the identical black frame before creating a GXMetal context; gameplay unqualified |
-| `combat-mission` | Combat Mission: Beyond Overlord 1.02 Demo | RAVE hardware probe | Complete detection; load Chance Encounter; move through the map and execute a turn with terrain, markers, smoke, and animation | Packed-Alpha1 fix verified: full Chance Encounter setup renders for 246.6 seconds at 49.75-53.64 fps, direct-only; input and turn execution remain unqualified |
-| `oni` | Oni Demo | Classic Apple OpenGL | Reach training and first fight; verify animation, lightmaps, transparency, HUD, and an indoor/outdoor transition | Bink intro passes, but AGL/OpenGL context creation fails after a successful 640x480x32 mode switch; no GXMetal presentation traffic, and the software fallback also fails |
+| `dark-vengeance` | Dark Vengeance Demo | Direct RAVE | Reach first combat and scripted sequence; inspect lighting, translucent effects, animated geometry, and camera motion | Demo 1.0.2 fails identically before RAVE in GXMetal/software; official retail 1.2 updater installs but then requires a legitimate game CD in every matched control |
+| `myth-ii` | Myth II: Soulblighter 1.5.1 Demo | RAVE | Select RAVE; load a solo map; pan, zoom, rotate, issue orders, and verify terrain, water, units, decals, projectiles, and explosions | Confirmed GXMetal transition blocker: the isolated Apple Software control reaches the rendered battlefield/objectives after early Escape, while GXMetal stays black after exactly 43 intentional blank texture preallocations and before the first populated replacement/draw |
+| `unreal-tournament` | Unreal Tournament 348m3 Demo | ATI renderer through RAVE | Confirm RAVE; render intro flyby; run a five-minute bot match checking lightmaps, fog, weapon alpha, HUD, and texture cycling | Sound-disabled current driver sustains the correct 640x480 v348 main menu for 26,854 direct frames with zero fallback; Practice configuration and gameplay input remain unqualified |
+| `combat-mission` | Combat Mission: Beyond Overlord 1.02 Demo | RAVE hardware probe | Complete detection; load Chance Encounter; move through the map and execute a turn with terrain, markers, smoke, and animation | Two fresh current-driver clones render Chance Encounter and visibly advance Setup to Orders; 207-265-second soaks, 16.7M combined draws, zero fallback/rejects; later camera/unit/lifecycle probes remained byte-identical |
+| `oni` | Oni Demo | Classic Apple OpenGL | Reach training and first fight; verify animation, lightmaps, transparency, HUD, and an indoor/outdoor transition | Gameplay smoke pass through Combat Training and the formerly corrupt +45-second transition; corrected ATI fan topology, coherent rendering, and zero rejected geometry/fallback |
 | `havoc` | Havoc Demo | First shipping QuickDraw 3D RAVE game | Select accelerated rendering; enter the demo arena; verify terrain, fog, textured objects, transparency, HUD, and camera motion for five minutes | Blocked before 3D by identical game resource-allocation error across clean controls |
 
 OpenGL titles only count as GXMetal tests when the host log contains GXMetal
@@ -367,3 +367,39 @@ VMs, each with an independent clone and unique local VNC and monitor sockets.
   verified while input, turn execution, clean quit, and relaunch remain open.
   Evidence is under
   `context/gxmetal-games/evidence/combat-mission-alpha1-fixed-production-20260825/`.
+
+### 2026-08-26 and 2026-08-27
+
+- Localized the Quake III regression introduced in the 2.2 betas to valid
+  ATI-private slot-60 pointer fans whose fourth argument is zero. Restoring
+  those draws removes the missing world surfaces. The retained silent Q3DM1
+  regression now captures six viewpoints, including both ornate and small
+  arches, the courtyard, passage lighting, pedestals, portal effects, and HUD.
+- Promoted Cro-Mag Rally from a menu/rendering result to a current-driver
+  gameplay smoke pass. The scripted 640x480 Practice/Desert route visibly
+  accelerates and steers in both directions, sustains roughly 24-28 fps at
+  about 204 direct draws/frame with zero fallback, and reaches the expected
+  demo exit screen.
+- Replayed Combat Mission from two fresh clones. Both reach Chance Encounter,
+  visibly advance Setup to Orders, and sustain coherent 3D for 207-265
+  seconds. The combined traces contain 16.7 million draws with zero host
+  fallback or guest rejects. Camera, unit-order execution, clean quit, and
+  relaunch remain open because strengthened post-transition input frames were
+  byte-identical.
+- Replayed Unreal Tournament on a current-driver derivative of the immutable
+  configured base. With audio disabled it sustains the coherent 640x480 v348
+  main menu for 26,854 direct frames, zero fallback, 185-312 fps after warmup,
+  and exactly 250 draws/frame. Practice configuration and match gameplay were
+  not reached; mislabeled menu screenshots are explicitly excluded.
+- Exhausted the available Dark Vengeance retail-1.2-updater route. The updater
+  installs in a disposable clone, but GXMetal, Apple Software, a reconstructed
+  read-only data disc, and explicit SOFT8 controls all stop at the same retail
+  game-CD validation before creating RAVE. The separate 1.2 demo or a
+  legitimate retail Mac CD/install is still required.
+- Corrected Myth II automation to press Escape while the complete “Into the
+  Breach” journal is still active. An isolated Apple Software control reaches
+  the fully rendered battlefield and Mission Objectives dialog; current
+  GXMetal instead remains black after exactly 43 intentional blank texture
+  preallocations and before the expected first populated replacement texture
+  or draw. This is now a confirmed driver-specific transition blocker with a
+  narrowly defined tracing and regression target.
