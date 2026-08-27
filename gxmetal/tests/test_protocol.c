@@ -44,7 +44,7 @@ static void test_endian_helpers(void)
 
 static void test_protocol_contract(void)
 {
-    CHECK(GXMETAL_PROTOCOL_VERSION == UINT32_C(0x00010018));
+    CHECK(GXMETAL_PROTOCOL_VERSION == UINT32_C(0x00010019));
     CHECK(GXMETAL_SHARED_BYTES == UINT32_C(0x00800000));
     CHECK(GXMETAL_REG_RELATIVE_INPUT == 0x40);
     CHECK(GXMETAL_REG_INPUT_BUTTONS == 0x44);
@@ -72,6 +72,9 @@ static void test_protocol_contract(void)
     CHECK(GXMETAL_FEATURE_REGION_CLIP == (UINT64_C(1) << 24));
     CHECK(GXMETAL_FEATURE_RGB24_FORMAT == (UINT64_C(1) << 25));
     CHECK(GXMETAL_FEATURE_DRAW_BUFFER_WRITEBACK == (UINT64_C(1) << 26));
+    CHECK(GXMETAL_FEATURE_HOMOGENEOUS_DRAW == (UINT64_C(1) << 27));
+    CHECK(GXMETAL_DRAW_HOMOGENEOUS == (1u << 2));
+    CHECK((GXMETAL_DRAW_FLAGS_VALID & GXMETAL_DRAW_HOMOGENEOUS) != 0);
     CHECK(GXMETAL_PIXEL_RGB24 == 15);
     CHECK(GXMETAL_CONTEXT_DEPTH_MASK ==
           (GXMETAL_CONTEXT_Z16 | GXMETAL_CONTEXT_DEEP_Z));
@@ -184,7 +187,16 @@ static void test_semantic_validation(void)
     CHECK(gxmetal_validate_packet(&view, GXMETAL_SHARED_BYTES) ==
           GXMETAL_ERROR_NONE);
     gxmetal_store_le32(packet + 16 + GXMETAL_DRAW_FLAGS_OFFSET,
-                       GXMETAL_DRAW_FLAGS_VALID << 1);
+                       GXMETAL_DRAW_HOMOGENEOUS);
+    CHECK(gxmetal_validate_packet(&view, GXMETAL_SHARED_BYTES) ==
+          GXMETAL_ERROR_NONE);
+    gxmetal_store_le32(packet + 16 + GXMETAL_DRAW_PRIMITIVE_OFFSET,
+                       GXMETAL_PRIMITIVE_TRIANGLE_STRIP);
+    CHECK(gxmetal_validate_packet(&view, GXMETAL_SHARED_BYTES) ==
+          GXMETAL_ERROR_BAD_PACKET);
+    gxmetal_store_le32(packet + 16 + GXMETAL_DRAW_PRIMITIVE_OFFSET,
+                       GXMETAL_PRIMITIVE_TRIANGLE);
+    gxmetal_store_le32(packet + 16 + GXMETAL_DRAW_FLAGS_OFFSET, 1u << 3);
     CHECK(gxmetal_validate_packet(&view, GXMETAL_SHARED_BYTES) ==
           GXMETAL_ERROR_BAD_PACKET);
     gxmetal_store_le32(packet + 16 + GXMETAL_DRAW_FLAGS_OFFSET,
@@ -204,6 +216,12 @@ static void test_semantic_validation(void)
           GXMETAL_DECODE_OK);
     CHECK(gxmetal_validate_packet(&view, GXMETAL_SHARED_BYTES) ==
           GXMETAL_ERROR_NONE);
+    gxmetal_store_le32(packet + 16 + GXMETAL_DRAW_FLAGS_OFFSET,
+                       GXMETAL_DRAW_HOMOGENEOUS);
+    CHECK(gxmetal_validate_packet(&view, GXMETAL_SHARED_BYTES) ==
+          GXMETAL_ERROR_NONE);
+    gxmetal_store_le32(packet + 16 + GXMETAL_DRAW_FLAGS_OFFSET,
+                       GXMETAL_DRAW_NONE);
     gxmetal_store_le32(packet + 16 + GXMETAL_DRAW_VERTEX_STRIDE_OFFSET, 76);
     CHECK(gxmetal_validate_packet(&view, GXMETAL_SHARED_BYTES) ==
           GXMETAL_ERROR_BAD_PACKET);

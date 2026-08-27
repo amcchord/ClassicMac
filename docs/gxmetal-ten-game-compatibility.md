@@ -148,6 +148,17 @@ but the evidence still does not support a universal-compatibility claim.
   while keeping public RAVE validation strict. The retained Tempest route has
   9,472 direct frames, zero fallback or rejects, 80.36-131.59 fps, and distinct
   movement, turn, combat, damage, death, and respawn frames.
+- Protocol 1.25 replaces the final per-vertex ATI/OpenGL coordinate inference
+  with negotiated whole-draw provenance. The guest marks transformed private
+  callback triangles only when the host advertises support; the host then
+  preserves signed reciprocal-W and clip-space Z consistently for textured and
+  Gouraud draws. Older guests retain a bounded whole-draw compatibility path,
+  while public RAVE depth behavior remains unchanged.
+- The exact packaged protocol-1.25 guest and signed QEMU complete the five-view
+  Q3DM1 gate. Human review confirms intact spawn and passage arches, walls,
+  floor, statues, pedestals, pickups, lighting, and HUD across all five frames.
+  Both cropped missing-surface thresholds pass, every camera transition is
+  distinct, presentation stays direct, and fallback remains zero.
 
 ## Current candidate matrix
 
@@ -198,6 +209,7 @@ Accepted evidence:
 - `context/gxmetal-games/evidence/gxmetal-quake3-render-owner-reset-candidate-20260827`
 - `context/gxmetal-games/evidence/gxmetal-quake3-five-view-regression-20260827`
 - `context/gxmetal-games/evidence/gxmetal-quake3-myth-depth-fix-five-view-20260827`
+- `context/gxmetal-games/evidence/gxmetal-quake3-homogeneous-draw-five-view-20260827`
 - `context/gxmetal-games/evidence/gxmetal-ut-beta3-combinedreal-slot2compact-menu-control-20260827`
 - `context/gxmetal-games/evidence/gxmetal-ut-beta3-homogeneous-clip-live-gameplay-20260827`
 - `context/gxmetal-games/evidence/gxmetal-ut-render-owner-reset-dedicated-retry-20260827`
@@ -256,6 +268,14 @@ driver work occurred.
 
 ## Final signed beta-3 candidate identity
 
+The final release rebuild uses GXMetal protocol 1.25 and the negotiated
+whole-draw coordinate path. Its exact prepared Quake III base SHA-256 is
+`e270325b4b3ce05a4cc4b4050717e9488df6ed80039bdff1d7d4569be7de81b3`.
+That base was prepared from the prior render-owner-reset base without attaching
+the source writable, contains the driver extracted from the packaged Tools CD,
+retains the disabled improper-shutdown disk check, and remained unchanged
+after the five-view sweep.
+
 - Immutable four-game evidence base with the UT layout fix SHA-256:
   `61541dac3a483cd7ce71edf6a820649fe9ea5651465f5b338765859d6f716cfe`
 - Immutable dedicated Quake III evidence base SHA-256:
@@ -281,15 +301,28 @@ driver work occurred.
 - Prepared full-retail HAVOC installed base SHA-256:
   `b2ff47a759be6b4848f2195a29c97dbef48b62964bc56d12103380bcd868ab13`
 - Signed Power Mac QEMU SHA-256:
-  `e62f95486b7d8526fbfa0ca6d299f9f88cf9f2edcbcbee01d84529202fdfc72e`
+  `a02479931f290b0cf0dfdb6e21159b318fb0a38ecc84d4a4317eef4ac6a4b59a`
 - Packaged Tools CD SHA-256:
-  `fb2bb086d28fd840cb6284dd64c6e6cd9aab2153cb91e185ba3a706c17df2250`
+  `20a640ae359cb4a31326e6b919f5767da04435c03cbfd26649d7c862f8446cc7`
 - Packaged Power Mac video NDRV SHA-256:
   `c5e63db45de7b58ea286f785e56811209b090673635da81fea07f9871312b27d`
 - NDRV loader SHA-256:
   `a5b441048916fdb58291e34ab029cfd06d7e6da9380b6035bd4d8740f040f27d`
+- GXMetal protocol-header SHA-256:
+  `346a0ddb317bd4cadfc268a41bd0988614d41a9767c96c32d24d0355c92f84dc`
+- Guest GXMetal driver MacBinary SHA-256:
+  `be2d142973f718821c57102d8b667e5224fff5520ffbb4161b3a70af7c4ee5ed`
 - Packaged GXMetal PEF data-fork SHA-256:
-  `b50b4abe5d672be78aafd43d04673b68ab7e0f2a3b168dc231c3fcaae46c0f70`
+  `cbf3d8af8be8eefd6b67aa3ac00d736f46dd48953a110b4901000920b1c94194`
+- Notarized and stapled `ClassicMac.dmg` SHA-256:
+  `90954881b7fe379ee6776baf8af96ba4ca3af63450373e1de36e65762b1e65a5`
+- Stapled `ClassicMac.zip` SHA-256:
+  `4639fbdd1d62f90b168e33b1fffd8969e2bc1e37c6f03169e24dcd291e42ba30`
+
+Apple accepted application submission
+`8b13f9b5-d431-4d48-af6a-d357b9164eb2` and DMG submission
+`643ddc2c-0c50-4253-a29a-d187fbc5456e`. Both tickets are stapled, and
+Gatekeeper accepts the app and disk image as Notarized Developer ID software.
 
 The final candidate defaults to the native Cocoa VM window; VNC remains an
 optional display/automation mode. Every retained qualification run in this

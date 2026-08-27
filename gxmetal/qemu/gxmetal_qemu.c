@@ -309,7 +309,8 @@ bool gxmetal_qemu_init(GXMetalQemuState *state, Object *owner,
                            GXMETAL_FEATURE_DEEP_Z |
                            GXMETAL_FEATURE_REGION_CLIP |
                            GXMETAL_FEATURE_RGB24_FORMAT |
-                           GXMETAL_FEATURE_DRAW_BUFFER_WRITEBACK;
+                           GXMETAL_FEATURE_DRAW_BUFFER_WRITEBACK |
+                           GXMETAL_FEATURE_HOMOGENEOUS_DRAW;
     } else {
         state->features |= GXMETAL_FEATURE_ACCESS_DRAW_BUFFER |
                            GXMETAL_FEATURE_DRAW_BUFFER_WRITEBACK |

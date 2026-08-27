@@ -4352,6 +4352,10 @@ static TQABoolean GXMetalATIPrivateQueueTriangle(
     TQAVGouraud gouraud[3];
     TQABoolean queued;
     uint32_t geometryIndex = GXMetalATIPrivateGeometryIndex(sourceMethod);
+    uint32_t drawFlags =
+        (state->transport->features &
+         GXMETAL_FEATURE_HOMOGENEOUS_DRAW) != 0 ?
+            GXMETAL_DRAW_HOMOGENEOUS : GXMETAL_DRAW_NONE;
     uint32_t vertexIndex;
 
     if (geometryIndex < GXMETAL_DIAGNOSTIC_ATI_GEOMETRY_METHODS) {
@@ -4367,7 +4371,8 @@ static TQABoolean GXMetalATIPrivateQueueTriangle(
          * private hooks 47, 48, 54, and 60. Texel-coordinate detection
          * belongs to the older public ATI RAVE path and only adds
          * per-triangle floating point work here. */
-        queued = GXMetalQueueTextureTriangle(state, triangle, 0, 0);
+        queued = GXMetalQueueTextureTriangle(
+            state, triangle, drawFlags, 0);
         if (queued) {
             state->ati_private_frame_has_draws = 1;
         }
@@ -4382,7 +4387,7 @@ static TQABoolean GXMetalATIPrivateQueueTriangle(
             gouraud[vertexIndex].b = triangle[vertexIndex].b;
             gouraud[vertexIndex].a = triangle[vertexIndex].a;
         }
-        queued = GXMetalQueueGouraudTriangle(state, gouraud, 0);
+        queued = GXMetalQueueGouraudTriangle(state, gouraud, drawFlags);
         if (queued) {
             state->ati_private_frame_has_draws = 1;
         }

@@ -66,7 +66,12 @@ _Static_assert(sizeof(GXMetalMetalVertex) == GXMETAL_GOURAUD_VERTEX_BYTES,
 typedef struct GXMetalMetalViewport {
     float width;
     float height;
+    uint32_t homogeneous_coordinates;
+    uint32_t padding;
 } GXMetalMetalViewport;
+
+_Static_assert(sizeof(GXMetalMetalViewport) == 16,
+               "Metal viewport constants must match the shader layout");
 
 typedef struct GXMetalMetalTextureVertex {
     float x;
@@ -573,7 +578,7 @@ static NSString *const kGXMetalShaderSource = @
     "#include <metal_stdlib>\n"
     "using namespace metal;\n"
     "struct GXVertex { float x; float y; float z; float invW; float r; float g; float b; float a; };\n"
-    "struct GXViewport { float width; float height; };\n"
+    "struct GXViewport { float width; float height; uint homogeneous; uint padding; };\n"
     "struct GXOut { float4 position [[position]]; float4 color;\n"
     "               float invW [[center_no_perspective]]; };\n"
     "struct GXFog {\n"
@@ -644,9 +649,13 @@ static NSString *const kGXMetalShaderSource = @
     "                            uint index [[vertex_id]]) {\n"
     "  GXVertex v = vertices[index];\n"
     "  GXOut out;\n"
-    "  float depth = min(v.z, 0.99999994);\n"
-    "  out.position = float4(v.x / viewport.width * 2.0 - 1.0, "
-    "                        1.0 - v.y / viewport.height * 2.0, depth, 1.0);\n"
+    "  float safeInvW = copysign(max(abs(v.invW), 0.000001), v.invW);\n"
+    "  float clipW = viewport.homogeneous != 0u ? 1.0 / safeInvW : 1.0;\n"
+    "  float depth = viewport.homogeneous != 0u ? v.z : min(v.z, 0.99999994);\n"
+    "  float ndcX = v.x / viewport.width * 2.0 - 1.0;\n"
+    "  float ndcY = 1.0 - v.y / viewport.height * 2.0;\n"
+    "  out.position = float4(ndcX * clipW, ndcY * clipW, "
+    "                        depth * clipW, clipW);\n"
     "  out.color = float4(v.r, v.g, v.b, v.a);\n"
     "  out.invW = v.invW;\n"
     "  return out;\n"
@@ -1805,6 +1814,8 @@ static uint32_t gxmetal_metal_clear(GXMetalMetalRenderer *renderer,
     }
     viewport.width = (float)context->width;
     viewport.height = (float)context->height;
+    viewport.homogeneous_coordinates = 0;
+    viewport.padding = 0;
     [context->encoder setVertexBytes:vertices length:sizeof(vertices)
         atIndex:0];
     [context->encoder setVertexBytes:&viewport length:sizeof(viewport)
@@ -1877,15 +1888,51 @@ static float gxmetal_metal_perspective_depth(float inv_w)
     return 1.0f / (1.0f + inv_w);
 }
 
+static int gxmetal_metal_draw_uses_homogeneous_coordinates(
+    const GXMetalMetalContext *context, const GXMetalPacketView *packet,
+    const uint8_t *source, uint32_t count, uint32_t stride)
+{
+    uint32_t draw_flags = gxmetal_load_le32(
+        packet->payload + GXMETAL_DRAW_FLAGS_OFFSET);
+    uint32_t i;
+
+    /* New guests mark the private ATI/OpenGL geometry callback at its source,
+     * which distinguishes it from Myth II's public RAVE draws even though
+     * both retain ATI-private context state. */
+    if ((draw_flags & GXMETAL_DRAW_HOMOGENEOUS) != 0) {
+        return 1;
+    }
+    /* Preserve compatibility with older guests that cannot emit the flag.
+     * Classify the complete draw once so a mixed-sign eye-plane primitive
+     * never receives different coordinate semantics per vertex. */
+    if (context->ati_private == 0 || context->perspective_z != 0) {
+        return 0;
+    }
+    if (context->z_function != GXMETAL_Z_NONE ||
+        context->fog.mode_and_padding[0] != GXMETAL_FOG_NONE) {
+        return 1;
+    }
+    for (i = 0; i < count; i++) {
+        float inv_w = gxmetal_metal_load_float(
+            source + (uint64_t)i * stride + GXMETAL_VERTEX_INV_W_OFFSET);
+
+        if (isfinite(inv_w) && inv_w < 0.0f) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
 static int gxmetal_metal_read_vertex(const GXMetalMetalContext *context,
                                      const uint8_t *source,
-                                     GXMetalMetalVertex *vertex)
+                                     GXMetalMetalVertex *vertex,
+                                     int homogeneous_coordinates)
 {
     vertex->x = gxmetal_metal_load_float(source + GXMETAL_VERTEX_X_OFFSET);
     vertex->y = gxmetal_metal_load_float(source + GXMETAL_VERTEX_Y_OFFSET);
     vertex->z = gxmetal_metal_load_float(source + GXMETAL_VERTEX_Z_OFFSET);
     vertex->inv_w = 1.0f;
-    if (context->perspective_z != 0) {
+    if (context->perspective_z != 0 || homogeneous_coordinates) {
         vertex->inv_w = gxmetal_metal_load_float(
             source + GXMETAL_VERTEX_INV_W_OFFSET);
     }
@@ -1894,13 +1941,16 @@ static int gxmetal_metal_read_vertex(const GXMetalMetalContext *context,
     vertex->b = gxmetal_metal_load_float(source + GXMETAL_VERTEX_B_OFFSET);
     vertex->a = gxmetal_metal_load_float(source + GXMETAL_VERTEX_A_OFFSET);
     if (!isfinite(vertex->x) || !isfinite(vertex->y) ||
-        !isfinite(vertex->z) || vertex->z < 0.0f || vertex->z > 1.0f ||
-        !isfinite(vertex->inv_w) || vertex->inv_w <= 0.0f ||
+        !isfinite(vertex->z) ||
+        (!homogeneous_coordinates &&
+         (vertex->z < 0.0f || vertex->z > 1.0f)) ||
+        !isfinite(vertex->inv_w) || vertex->inv_w == 0.0f ||
+        (!homogeneous_coordinates && vertex->inv_w < 0.0f) ||
         !isfinite(vertex->r) || !isfinite(vertex->g) ||
         !isfinite(vertex->b) || !isfinite(vertex->a)) {
         return 0;
     }
-    if (context->perspective_z != 0) {
+    if (context->perspective_z != 0 && !homogeneous_coordinates) {
         vertex->z = gxmetal_metal_perspective_depth(vertex->inv_w);
     }
     return 1;
@@ -1924,6 +1974,9 @@ static uint32_t gxmetal_metal_draw(GXMetalMetalRenderer *renderer,
     uint32_t draw_count = count;
     uint32_t i;
     uint32_t pass;
+    int homogeneous_coordinates =
+        gxmetal_metal_draw_uses_homogeneous_coordinates(
+            context, packet, source, count, GXMETAL_GOURAUD_VERTEX_BYTES);
 
     vertices = stack_vertices;
     if (count > GXMETAL_METAL_STACK_VERTICES) {
@@ -1935,7 +1988,7 @@ static uint32_t gxmetal_metal_draw(GXMetalMetalRenderer *renderer,
     for (i = 0; i < count; i++) {
         if (!gxmetal_metal_read_vertex(context,
                 source + i * GXMETAL_GOURAUD_VERTEX_BYTES,
-                &vertices[i])) {
+                &vertices[i], homogeneous_coordinates)) {
             if (vertices != stack_vertices) {
                 free(vertices);
             }
@@ -2000,6 +2053,8 @@ static uint32_t gxmetal_metal_draw(GXMetalMetalRenderer *renderer,
     }
     viewport.width = (float)context->width;
     viewport.height = (float)context->height;
+    viewport.homogeneous_coordinates = homogeneous_coordinates;
+    viewport.padding = 0;
     pipeline = gxmetal_metal_select_pipeline(renderer, context, 0);
     if (pipeline == nil) {
         if (draw_vertices != vertices) {
@@ -2050,10 +2105,9 @@ static uint32_t gxmetal_metal_draw(GXMetalMetalRenderer *renderer,
 static int gxmetal_metal_read_texture_vertex(
     const GXMetalMetalContext *context, const uint8_t *source,
     uint32_t stride, GXMetalMetalTextureVertex *vertex,
-    int host_ati_uv_transform)
+    int host_ati_uv_transform, int homogeneous_coordinates)
 {
     uint32_t texture_op = context->texture_op;
-    int ati_homogeneous_coordinates;
     int secondary_active = context->secondary_texture_id != 0 &&
         context->secondary_texture_id != context->texture_id &&
         context->secondary_texture_enable != 0;
@@ -2077,16 +2131,6 @@ static int gxmetal_metal_read_texture_vertex(
         !(vertex->a >= 0.0f && vertex->a <= 1.0f)) {
         vertex->a = 1.0f;
     }
-    /* OpenGLRendererATI submits finite transformed vertices before clipping.
-     * A signed reciprocal-W or active depth/fog state distinguishes that GL
-     * path from Myth II's ATI-private RAVE terrain, which keeps positive W and
-     * unused eye-space Z while both depth and fog are disabled. */
-    ati_homogeneous_coordinates = context->ati_private != 0 &&
-        context->perspective_z == 0 &&
-        (vertex->inv_w < 0.0f ||
-         context->z_function != GXMETAL_Z_NONE ||
-         context->fog.mode_and_padding[0] != GXMETAL_FOG_NONE);
-
     if (!isfinite(vertex->x) || !isfinite(vertex->y) ||
         !isfinite(vertex->z) || !isfinite(vertex->inv_w) ||
         !isfinite(vertex->a) || !isfinite(vertex->u_over_w) ||
@@ -2095,18 +2139,18 @@ static int gxmetal_metal_read_texture_vertex(
          (vertex->z < 0.0f || vertex->z > 1.0f) &&
          (context->z_function != GXMETAL_Z_NONE ||
           context->fog.mode_and_padding[0] != GXMETAL_FOG_NONE) &&
-         !ati_homogeneous_coordinates) ||
+         !homogeneous_coordinates) ||
         vertex->inv_w == 0.0f ||
-        (vertex->inv_w < 0.0f && !ati_homogeneous_coordinates)) {
+        (vertex->inv_w < 0.0f && !homogeneous_coordinates)) {
         return 0;
     }
-    if (context->perspective_z != 0) {
+    if (context->perspective_z != 0 && !homogeneous_coordinates) {
         /* Perspective-Z selects reciprocal W as the depth source. Classic
          * clients may retain a finite eye-space value in the now-unused
          * normalized-Z slot; validate finiteness above, but do not reject
          * its range before replacing it here. */
         vertex->z = gxmetal_metal_perspective_depth(vertex->inv_w);
-    } else if (!ati_homogeneous_coordinates &&
+    } else if (!homogeneous_coordinates &&
                context->z_function == GXMETAL_Z_NONE &&
                context->fog.mode_and_padding[0] == GXMETAL_FOG_NONE &&
                (vertex->z < 0.0f || vertex->z > 1.0f)) {
@@ -2227,6 +2271,9 @@ static uint32_t gxmetal_metal_draw_textured(
     uint32_t pass;
     int host_ati_uv_transform =
         (draw_flags & GXMETAL_DRAW_HOST_ATI_UV) != 0;
+    int homogeneous_coordinates =
+        gxmetal_metal_draw_uses_homogeneous_coordinates(
+            context, packet, source, count, stride);
     int ati_texel_coordinates = 0;
     int ati_negative_v_coordinates = 0;
 
@@ -2268,7 +2315,7 @@ static uint32_t gxmetal_metal_draw_textured(
     for (i = 0; i < count; i++) {
         if (!gxmetal_metal_read_texture_vertex(
                 context, source + i * stride, stride, &vertices[i],
-                host_ati_uv_transform)) {
+                host_ati_uv_transform, homogeneous_coordinates)) {
             if (vertices != stack_vertices) {
                 free(vertices);
             }
@@ -2456,6 +2503,8 @@ static uint32_t gxmetal_metal_draw_textured(
     }
     viewport.width = (float)context->width;
     viewport.height = (float)context->height;
+    viewport.homogeneous_coordinates = homogeneous_coordinates;
+    viewport.padding = 0;
     pipeline_context = *context;
     multi_texture = context->multi_texture;
     if (context->ati_private && multi_texture.enabled &&

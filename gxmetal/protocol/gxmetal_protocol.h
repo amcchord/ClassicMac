@@ -22,7 +22,7 @@ extern "C" {
 
 #define GXMETAL_PROTOCOL_MAGIC            UINT32_C(0x47584d54) /* "GXMT" */
 #define GXMETAL_PROTOCOL_VERSION_MAJOR    1u
-#define GXMETAL_PROTOCOL_VERSION_MINOR    24u
+#define GXMETAL_PROTOCOL_VERSION_MINOR    25u
 #define GXMETAL_PROTOCOL_VERSION \
     ((GXMETAL_PROTOCOL_VERSION_MAJOR << 16) | GXMETAL_PROTOCOL_VERSION_MINOR)
 
@@ -141,7 +141,11 @@ enum GXMetalFeature {
     GXMETAL_FEATURE_RGB24_FORMAT = UINT64_C(1) << 25,
     /* AccessDrawBufferEnd can upload a validated dirty rectangle from the
      * shared readback staging area into the active render target. */
-    GXMETAL_FEATURE_DRAW_BUFFER_WRITEBACK = UINT64_C(1) << 26
+    GXMETAL_FEATURE_DRAW_BUFFER_WRITEBACK = UINT64_C(1) << 26,
+    /* Draw packets can identify geometry sourced from OpenGLRendererATI's
+     * transformed private callbacks.  The host may then preserve signed W
+     * and clip-space Z for the complete draw without guessing from state. */
+    GXMETAL_FEATURE_HOMOGENEOUS_DRAW = UINT64_C(1) << 27
 };
 
 /* C11 enum constants are restricted to int even though the feature word is 64-bit. */
@@ -512,8 +516,10 @@ enum {
     GXMETAL_DRAW_NONE          = 0,
     GXMETAL_DRAW_BACKFACING    = 1u << 0,
     GXMETAL_DRAW_HOST_ATI_UV   = 1u << 1,
+    GXMETAL_DRAW_HOMOGENEOUS   = 1u << 2,
     GXMETAL_DRAW_FLAGS_VALID   = GXMETAL_DRAW_BACKFACING |
-                                 GXMETAL_DRAW_HOST_ATI_UV
+                                 GXMETAL_DRAW_HOST_ATI_UV |
+                                 GXMETAL_DRAW_HOMOGENEOUS
 };
 
 /* Both vertex forms start with x, y, z, invW, r, g, b, a. */

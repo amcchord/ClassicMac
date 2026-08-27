@@ -4,6 +4,16 @@
 
 ### Fixed
 
+- Replaced per-vertex ATI/OpenGL coordinate guessing with a negotiated,
+  whole-draw provenance flag. New guests explicitly identify transformed
+  private OpenGL geometry, so Metal preserves signed reciprocal-W and
+  clip-space Z consistently across every vertex while public RAVE draws retain
+  their legacy depth rules. Older guests keep a bounded whole-draw fallback.
+- Added Gouraud and textured Metal regressions for explicit and legacy
+  homogeneous draws, mixed-sign eye-plane geometry, Myth II's no-Z terrain
+  coordinates, clipped far-out geometry, and zero/nonfinite reciprocal-W.
+  Protocol validation accepts the new flag only on triangle packets and
+  rejects unknown flags and unsupported primitive combinations.
 - Force Quit and same-boot relaunch now start a fresh GXMetal context/resource
   generation from the rendering owner's first context. The host atomically
   clears rendering and queue state while preserving cursor and InputSprocket
@@ -35,6 +45,10 @@
   named-frame transition plus cropped missing-surface assertions. Weekend
   Warrior now passes title → OS Force Quit → Finder → same-boot relaunch and a
   second-title soak on the exact signed candidate.
+- The final protocol-1.25 candidate repeats all five Q3DM1 views with the exact
+  packaged guest driver and signed QEMU. The spawn arches, courtyards, statue,
+  pedestals, walls, floor, and forward passage are complete in every retained
+  frame; all visual thresholds pass with direct presentation and zero fallback.
 - Added reusable silent Cro-Mag Rally gameplay and Myth II transition routes.
   The current ten-game ledger now records Cro-Mag's accelerated race/input
   pass, Combat Mission's independently repeated Setup-to-Orders rendering
