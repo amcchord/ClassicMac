@@ -1,5 +1,30 @@
 # Changelog
 
+## 2.2.1 — 2026-08-27
+
+### Changed
+
+- Promoted the complete 2.2 beta series to a stable release after rebuilding
+  the app, QEMU transport, Tools CD, and every GXMetal guest component with
+  final 2.2.1 version metadata.
+- The native Cocoa VM window remains the default. Browser/VNC viewing remains
+  an optional per-machine setting and is never required for ordinary use.
+- GXMetal protocol 1.25 explicitly identifies complete ATI/OpenGL homogeneous
+  draws while retaining bounded old-guest compatibility and strict public-RAVE
+  validation. The ten-game ledger records the different qualification depths
+  and remaining lifecycle/audio gaps instead of making a universal game claim.
+
+### Validation
+
+- The stable candidate retains the five-view Quake III regression, Myth II
+  terrain/effects correction, Oni gameplay/input and first-process quit route,
+  Unreal Tournament live Tempest route, and the public-RAVE gameplay evidence
+  for Bugdom, Future Cop, Combat Mission, Weekend Warrior, and Cro-Mag Rally.
+- Release gates cover the complete native GXMetal suite, warning-as-error
+  PowerPC guest build and CFM-layout audit, QEMU transport checks, 39 Swift app
+  tests, Developer ID signing, Apple notarization/stapling, mounted-DMG
+  verification, and Gatekeeper assessment.
+
 ## 2.2.0 beta 3 — 2026-08-27
 
 ### Fixed
