@@ -1,0 +1,33 @@
+ClassicMac Additions for Mac OS 9.2.1
+=====================================
+
+These additions were installed automatically by the regular Mac OS
+installer.  No second installer pass is required.
+
+System Folder additions
+-----------------------
+
+GXMetal, GXMetal Input, and GXMetal Startup provide experimental host-
+accelerated QuickDraw 3D RAVE support for ClassicMac.  Run GXMetal Test in
+Apple Extras after restarting; proceed to a game only after it reports PASS.
+
+USB Overdrive provides native USB mouse scrolling and contextual clicks.
+Its original registration information and documentation are in Apple
+Extras:USB Overdrive.  Turn off ClassicMac's host-side Secondary Click and
+Scrolling helpers when USB Overdrive is active so events are not doubled.
+
+StuffIt Engine and its PowerPlug are installed for DropStuff 5.5.
+
+Apple Extras
+------------
+
+StuffIt Expander 5.5, DropStuff 5.5, Transmit 1.6 PPC, the GXMetal test and
+repair utilities, and USB Overdrive documentation are ready to use in the
+Apple Extras folder at the top level of the startup disk.
+
+Recovery
+--------
+
+To disable GXMetal, move GXMetal, GXMetal Input, and GXMetal Startup out of
+the Extensions folder and restart.  Apple's normal software renderer then
+handles QuickDraw 3D again.

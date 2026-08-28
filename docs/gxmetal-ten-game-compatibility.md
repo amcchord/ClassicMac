@@ -281,7 +281,34 @@ but the evidence still does not support a universal-compatibility claim.
   Both cropped missing-surface thresholds pass, every camera transition is
   distinct, presentation stays direct, and fallback remains zero.
 
-## Current 2.2.1 through 2.2.3 candidate matrix
+## Strict ten-game qualification audit (2026-08-28)
+
+The schema-2 mechanical audit began this sweep at **0/10 fully qualified**.
+This does not erase the rendering fixes or the substantial partial coverage
+below: it means no single retained run yet satisfied every release gate at
+once, including effects-heavy gameplay, a genuinely active five-minute scope,
+clean application exit, same-boot relaunch, two renderer generations, complete
+human review, muted audio, disabled networking, immutable source proof, direct
+presentation, zero fallback, and zero queue/transport faults.
+
+| Game | Strongest retained scope at audit start | Remaining strict gate |
+|---|---|---|
+| Bugdom | Coherent Lawn gameplay plus a separate clean menu lifecycle | One active five-minute gameplay-to-clean-relaunch record |
+| Cro-Mag Rally | Coherent 640x480 Practice/Desert race and input | Effects, five-minute scope, clean exit, and second launch; the old post-Command-Q frame is still the race |
+| Weekend Warrior | Center Stage gameplay/input plus Force Quit recovery/relaunch | Active minute four/five coverage and clean application exit |
+| Future Cop: LAPD | Crime War gameplay/input plus Force Quit recovery/relaunch | Effects-heavy active five-minute scope and clean application exit |
+| Dark Vengeance | Exact packaged 2.2.4 gameplay and coherent five-minute presentation soak | Active movement after minute two, clean exit, and second launch |
+| Myth II | Battlefield input and a separate effects-film pass | One five-minute clean lifecycle record |
+| Unreal Tournament | Reviewed two-process gameplay/input/clean lifecycle | Five-minute bot match |
+| Combat Mission | Complete GO turn plus Force Quit recovery/relaunch | Effects-heavy five-minute scope and clean application exit |
+| Oni | Reviewed gameplay/input and clean two-process lifecycle | First-fight/transition effects and five-minute scope |
+| HAVOC | Hardware cockpit/input plus a long run that later returns to static menus | Fail-closed five-minute cockpit coverage, clean exit, and fresh-generation relaunch |
+
+The new UT, Cro-Mag, and HAVOC manifests are candidate routes until their live
+automation, telemetry, screenshots, and review records complete. Failed routes
+remain useful evidence and are not rewritten as passes.
+
+## Current 2.2.1 through 2.2.4 candidate matrix
 
 | Game | Classification | Furthest qualified state | Important open item |
 |---|---|---|---|
@@ -289,9 +316,9 @@ but the evidence still does not support a universal-compatibility claim.
 | Future Cop: LAPD | Exact-2.2.1 short gameplay pass; post-release recovery pass | Published build renders Crime War coherently, passes movement/fire at 0.725452, and changes ammo 7500→7482; 1,784 direct/0 fallback frames and 3,976,505 draws. A 258-second post-release route proves Finder recovery and a second rendered launch | Clean application quit after the promo page; audio |
 | Combat Mission | Exact-2.2.1 setup pass; post-release full-turn and recovery passes | The 410-second current-driver route selects Rifle 45 Sqd, plots Move/Disembark, executes GO, and reaches DONE after the visible movement. A separate 242-second route proves the real Mac OS Force Quit dialog, Finder recovery, and a coherent second scenario selector | Clean application quit/relaunch and audio |
 | Weekend Warrior | Exact-2.2.1 short gameplay pass; post-release recovery pass | Published build renders Center Stage coherently and passes movement/fire at 0.798568; 24,707 direct/0 fallback frames and 1,517,694 draws. A 131-second post-release title-state recovery returns to Finder and reaches the second launch | Clean in-game quit/relaunch, collision-aware five-minute route, and audio |
-| Cro-Mag Rally | Gameplay smoke pass on current Q3 fix | Correct accelerated title/menu/loading and Practice/Desert gameplay at 640x480; acceleration and steering visibly alter position/heading; 24-28 fps, ~204 direct draws/frame, zero fallback; expected demo exit screen | Complete-lap/longer lifecycle soak and audio |
+| Cro-Mag Rally | Gameplay smoke pass on current Q3 fix | Correct accelerated title/menu/loading and Practice/Desert gameplay at 640x480; acceleration and steering visibly alter position/heading; 24-28 fps, ~204 direct draws/frame, zero fallback | Complete lap, proven clean exit/relaunch, and audio; the retained post-Command-Q frame is still the race |
 | Dark Vengeance | Packaged five-minute accelerated gameplay-soak pass | Exact tracing proves `cscGetGamma` success-with-null caused `-49`; `DARKVENG.INI` opens correctly. The packaged 419.755-second route reaches five reviewed gameplay checkpoints, proves movement/animation through minute two, and holds a coherent textured combat state through minute five with 12,686 direct/0 fallback frames, 1,602,243 draws, no faults, QEMU 0, and an unchanged source | Clean exit/same-boot relaunch; audio. Escape, Command-Q, and Command-Option-Escape are ignored in the tested fullscreen state, so the retained route makes no lifecycle claim |
-| HAVOC | Saved-hardware five-minute lifecycle and HUD-gated input pass | The gamma fix clears the memory dialog; pre-context resource generation preserves 48 textures across first context; invalid clipped unflagged triangles are isolated without faulting the queue. The 469.1-second lifecycle records 45,094 direct/0 fallback frames and 5,940,035 draws; the separate HUD-gated route changes 0.782257 after scripted input with 24,385 direct/0 fallback frames and 3,357,172 draws. Both are automation-complete, QEMU 0, fault-free, silent/offline, and source-immutable | Main-menu clean exit/same-boot relaunch on this exact build; audio |
+| HAVOC | Saved-hardware rendering/input pass; long lifecycle remains partial | The gamma fix clears the memory dialog; pre-context resource generation preserves 48 textures across first context; invalid clipped unflagged triangles are isolated without faulting the queue. The 469.1-second run records 45,094 direct/0 fallback frames and 5,940,035 draws, but its cockpit is visible only early and it later remains on help/main-menu screens. The separate HUD-gated route changes 0.782257 after scripted input with 24,385 direct/0 fallback frames and 3,357,172 draws | Complete the new 15-sortie route with 310.5 seconds of HUD-bracketed gameplay, clean exit, same-boot fresh-generation relaunch, and audio |
 | Myth II | Battlefield rendering and broad-input pass on post-2.2.1 candidate | Coherent Into the Breach battlefield; unit selection/orders, Stop, ten paired camera direction/zoom/orbit actions, and 30-second soak | Effects-heavy long film, clean exit/relaunch, and audio |
 | Oni | Full two-process gameplay/input/lifecycle pass on post-2.2.1 candidate | Warehouse gameplay/input/F1, clean Quit/Yes, exact `-nosound` relaunch, upload-ID reset, active second Bink sequence, Escape, and stable four-pixel second-menu signature | Longer second-process gameplay and audio |
 | Unreal Tournament | Two-process rendering/input short-route pass | Process one renders Tempest and cleanly exits; process two renders another map. The exact read-only `CheckButtonKeys` probe observes Control in `LMKeyMap` and UT's stack-local modifier, hits the transition-emission instruction, and the reviewed final frame shows visible fire and lower ammunition | Five-minute bot match and audio; keep sound disabled under the current VM audio path |

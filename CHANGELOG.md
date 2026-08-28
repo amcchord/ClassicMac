@@ -1,9 +1,14 @@
 # Changelog
 
-## 2.2.4 — 2026-08-28
+## 2.3.0 — 2026-08-28
 
 ### Added
 
+- Added a transactional enhanced Mac OS 9.2.1 installer-image builder. Starting
+  from the verified stock Apple CD, it preserves the partition map, boot
+  drivers, blessing, and pre-HFS blocks while integrating GXMetal 2.3.0, USB
+  Overdrive, StuffIt Expander, DropStuff, Transmit, and the GXMetal test and
+  renderer-selection tools into Apple's normal Installer package graph.
 - Added **Force Quit Frontmost App…** to the running Mac and library Machine
   menus. It sends the classic Command-Option-Escape recovery chord from the
   host, so one application that stops yielding no longer requires powering off
@@ -34,6 +39,9 @@
 
 ### Changed
 
+- Promoted the complete post-2.2.3 GXMetal, recovery, testing, and installer
+  work as 2.3.0. All seven classic Mac components now carry matching numeric
+  and display version resources.
 - Hardened the Carmageddon II regression around the canonical media route:
   launch Virtual CD/DVD Utility first, use Open inside the utility, and select
   the Toast image in that dialog. Stable mounted-disc, main-menu, and six-point
@@ -54,11 +62,11 @@
 - The new engine-selection probe records GXMetal first and Apple Software
   second; both an untouched interactive renderer and explicit best-choice
   renderer select GXMetal without changing global engine enablement.
-- HAVOC completes a 469.1-second hardware lifecycle with 5,940,035 accelerated
-  draws, 45,094 direct frames, zero fallback, no queue/transport fault, QEMU 0,
-  and an unchanged source. A separate HUD-gated in-scene route completes with
-  a 0.782257 post-input frame change, 3,357,172 draws, 24,385 direct frames,
-  zero fallback/faults, QEMU 0, and an unchanged source.
+- HAVOC's saved-hardware route repeatedly reaches a coherent cockpit and
+  records millions of accelerated draws with zero fallback or queue/transport
+  fault. The strict five-minute/lifecycle audit remains intentionally open:
+  the demo can return to its promotion screen during a timed sortie, and that
+  automation failure is not counted as a qualifying pass.
 - The complete native GXMetal suite passes, including 47 VNC harness tests,
   7 Unreal Tournament input tests, 22 diagnostic decoder tests, and focused
   Metal coverage for ATI-private UV vertices, pre-context resource generations,

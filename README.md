@@ -143,6 +143,10 @@ Requirements: an Apple Silicon Mac (M1 or later) running a recent macOS.
 #    app bundling so the exact GXMetal driver and installer enter the release.
 ./scripts/build-guest-cd.sh
 
+# Optional: clone a user-supplied Mac OS 9.2.1 CD and integrate GXMetal,
+# USB Overdrive, StuffIt/DropStuff, and Transmit into the regular OS installer.
+./scripts/build-os9-921-installer-cd.sh /path/to/macos_921_ppc.iso
+
 # 3. Build the SwiftUI app and bundle QEMU + firmware + dylibs into
 #    dist/ClassicMac.app (code-signed)
 ./scripts/bundle-qemu.sh
@@ -152,7 +156,7 @@ Requirements: an Apple Silicon Mac (M1 or later) running a recent macOS.
 
 # 5. Verify the exact signed/stapled artifact, including versions, Gatekeeper,
 #    the bundled Tools CD, and the GXMetal-enabled Power Mac executable
-./scripts/verify-release.sh dist/ClassicMac.dmg 2.2.4 2.2.4
+./scripts/verify-release.sh dist/ClassicMac.dmg 2.3.0 2.3.0
 ```
 
 All scripts are idempotent and safe to re-run. Building needs the Xcode command line tools and [Homebrew](https://brew.sh).

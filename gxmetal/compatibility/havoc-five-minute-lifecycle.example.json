@@ -3,70 +3,3487 @@
   "defaults": {
     "boot_wait_seconds": 5,
     "observation_seconds": 0,
-    "capture_interval_seconds": 15,
+    "capture_interval_seconds": 10,
     "resolution": "1024x768x15"
   },
   "games": [
     {
       "id": "havoc-five-minute-hardware-lifecycle",
-      "name": "HAVOC GXMetal hardware gameplay and five-minute lifecycle soak",
-      "modes": ["gxmetal"],
+      "name": "HAVOC GXMetal deterministic multi-sortie five-minute gameplay and relaunch lifecycle",
+      "modes": [
+        "gxmetal"
+      ],
       "steps": [
-        {"note": "Precondition: HAVOC's saved preference selects 3-D hardware acceleration. Run only from a disposable clone with audio and networking disabled."},
-        {"wait_for_pixel": {"x": 22, "y": 11, "red": 221, "green": 0, "blue": 0, "tolerance": 8, "timeout_seconds": 180, "poll_interval_seconds": 1}},
-        {"screenshot": "finder-ready"},
-        {"rehome_pointer": true, "delay_after": 0.25},
-        {"chord": "Super_L+Alt_L+w", "delay_after": 2},
-        {"double_click": [590, 52], "delay_after": 3},
-        {"text": "GXMetal Sweep Games", "delay_after": 1},
-        {"chord": "Super_L+o", "delay_after": 3},
-        {"text": "HAVOC", "delay_after": 1},
-        {"chord": "Super_L+o", "delay_after": 3},
-        {"text": "HAVOC", "delay_after": 1},
-        {"chord": "Super_L+o", "delay_after": 35},
-        {"key": "Escape", "delay_after": 2},
-        {"wait_for_pixel": {"x": 350, "y": 448, "red": 184, "green": 120, "blue": 0, "tolerance": 8, "timeout_seconds": 90, "poll_interval_seconds": 1}},
-        {"screenshot": "hardware-how-to-play"},
-        {"rehome_pointer": true, "delay_after": 0.25},
-        {"click": [350, 448], "delay_after": 5},
-        {"wait_for_pixels": {"pixels": [{"x": 320, "y": 99, "red": 231, "green": 181, "blue": 74}, {"x": 382, "y": 99, "red": 98, "green": 98, "blue": 98}, {"x": 420, "y": 365, "red": 214, "green": 33, "blue": 33}, {"x": 300, "y": 35, "red": 223, "green": 223, "blue": 0}], "tolerance": 16, "timeout_seconds": 30, "poll_interval_seconds": 1}},
-        {"screenshot": "hardware-main-menu"},
-        {"rehome_pointer": true, "delay_after": 0.25},
-        {"click": [382, 99], "delay_after": 3},
-        {"wait_for_pixels": {"pixels": [{"x": 252, "y": 290, "red": 74, "green": 49, "blue": 8}, {"x": 320, "y": 312, "red": 239, "green": 214, "blue": 140}, {"x": 300, "y": 242, "red": 255, "green": 255, "blue": 0}], "tolerance": 16, "timeout_seconds": 30, "poll_interval_seconds": 1}},
-        {"screenshot": "hardware-vehicle-select"},
-        {"rehome_pointer": true, "delay_after": 0.25},
-        {"click": [320, 312], "delay_after": 5},
-        {"wait_for_pixels": {"pixels": [{"x": 300, "y": 400, "red": 152, "green": 152, "blue": 0}, {"x": 240, "y": 420, "red": 0, "green": 152, "blue": 0}, {"x": 440, "y": 400, "red": 168, "green": 128, "blue": 72}], "tolerance": 8, "timeout_seconds": 90, "poll_interval_seconds": 1}},
-        {"screenshot": "hardware-gameplay-start"},
-        {"key": "Up", "hold_ms": 3000, "delay_after": 1},
-        {"key": "Left", "hold_ms": 1200, "delay_after": 1},
-        {"key": "Control_L", "hold_ms": 500, "delay_after": 2},
-        {"screenshot": "hardware-gameplay-after-input"},
-        {"assert_frame_changed_since": {"screenshot": "hardware-gameplay-start", "minimum_changed_fraction": 0.15, "channel_tolerance": 16, "region": [0, 62, 640, 388]}},
-        {"wait": 55},
-        {"key": "Up", "hold_ms": 3000, "delay_after": 1},
-        {"key": "Right", "hold_ms": 1200, "delay_after": 1},
-        {"screenshot": "hardware-gameplay-t60"},
-        {"wait": 55},
-        {"key": "Up", "hold_ms": 3000, "delay_after": 1},
-        {"key": "Left", "hold_ms": 1200, "delay_after": 1},
-        {"key": "Control_L", "hold_ms": 500, "delay_after": 1},
-        {"screenshot": "hardware-gameplay-t120"},
-        {"wait": 55},
-        {"key": "Up", "hold_ms": 3000, "delay_after": 1},
-        {"key": "Right", "hold_ms": 1200, "delay_after": 1},
-        {"screenshot": "hardware-gameplay-t180"},
-        {"wait": 55},
-        {"key": "Up", "hold_ms": 3000, "delay_after": 1},
-        {"key": "Left", "hold_ms": 1200, "delay_after": 1},
-        {"key": "Control_L", "hold_ms": 500, "delay_after": 1},
-        {"screenshot": "hardware-gameplay-t240"},
-        {"wait": 55},
-        {"key": "Up", "hold_ms": 3000, "delay_after": 1},
-        {"key": "Right", "hold_ms": 1200, "delay_after": 1},
-        {"screenshot": "hardware-gameplay-t300"},
-        {"note": "A completed or failed sortie may legitimately return to the static main menu before this final capture; the early input assertion, renderer telemetry, and timed captures qualify the graphics lifecycle. Test app exit and relaunch separately from a known main-menu state."}
+        {
+          "note": "Candidate route only until a complete run and screenshot/telemetry review. Precondition: HAVOC's saved preference selects 3-D hardware acceleration. Use only a disposable clone with audio and networking disabled. Final10 shows an idle cockpit can leave for promo/help after roughly 40 seconds, so this route uses fifteen independently gated short sorties. Each brackets 8.7 seconds of movement/fire and delay dwell plus a 12-second wait with exact cockpit HUD checks, conservatively accumulating 310.5 seconds of actual HUD-present gameplay before explicit Escape-to-menu transitions."
+        },
+        {
+          "wait_for_pixel": {
+            "x": 22,
+            "y": 11,
+            "red": 221,
+            "green": 0,
+            "blue": 0,
+            "tolerance": 8,
+            "timeout_seconds": 180,
+            "poll_interval_seconds": 1
+          }
+        },
+        {
+          "screenshot": "finder-ready"
+        },
+        {
+          "rehome_pointer": true,
+          "delay_after": 0.25
+        },
+        {
+          "chord": "Super_L+Alt_L+w",
+          "delay_after": 2
+        },
+        {
+          "double_click": [
+            590,
+            52
+          ],
+          "delay_after": 3
+        },
+        {
+          "text": "GXMetal Sweep Games",
+          "delay_after": 1
+        },
+        {
+          "chord": "Super_L+o",
+          "delay_after": 3
+        },
+        {
+          "text": "HAVOC",
+          "delay_after": 1
+        },
+        {
+          "chord": "Super_L+o",
+          "delay_after": 3
+        },
+        {
+          "text": "HAVOC",
+          "delay_after": 1
+        },
+        {
+          "chord": "Super_L+o",
+          "delay_after": 35
+        },
+        {
+          "key": "Escape",
+          "delay_after": 2
+        },
+        {
+          "wait_for_pixel": {
+            "x": 350,
+            "y": 448,
+            "red": 184,
+            "green": 120,
+            "blue": 0,
+            "tolerance": 8,
+            "timeout_seconds": 90,
+            "poll_interval_seconds": 1
+          }
+        },
+        {
+          "screenshot": "hardware-how-to-play"
+        },
+        {
+          "rehome_pointer": true,
+          "delay_after": 0.25
+        },
+        {
+          "click": [
+            350,
+            448
+          ],
+          "delay_after": 5
+        },
+        {
+          "wait_for_pixels": {
+            "pixels": [
+              {
+                "x": 320,
+                "y": 99,
+                "red": 224,
+                "green": 176,
+                "blue": 72
+              },
+              {
+                "x": 382,
+                "y": 99,
+                "red": 96,
+                "green": 96,
+                "blue": 96
+              },
+              {
+                "x": 420,
+                "y": 365,
+                "red": 208,
+                "green": 32,
+                "blue": 32
+              },
+              {
+                "x": 300,
+                "y": 35,
+                "red": 208,
+                "green": 208,
+                "blue": 0
+              }
+            ],
+            "tolerance": 8,
+            "timeout_seconds": 30,
+            "poll_interval_seconds": 1
+          }
+        },
+        {
+          "screenshot": "hardware-main-menu"
+        },
+        {
+          "note": "Candidate short sortie 1 of 15. This route has not qualified until every HUD, input-delta, Escape, and exact-menu gate completes in one reviewed run."
+        },
+        {
+          "rehome_pointer": true,
+          "delay_after": 0.25
+        },
+        {
+          "click": [
+            382,
+            99
+          ],
+          "delay_after": 3
+        },
+        {
+          "wait_for_pixels": {
+            "pixels": [
+              {
+                "x": 252,
+                "y": 290,
+                "red": 72,
+                "green": 48,
+                "blue": 8
+              },
+              {
+                "x": 320,
+                "y": 312,
+                "red": 232,
+                "green": 208,
+                "blue": 136
+              },
+              {
+                "x": 300,
+                "y": 242,
+                "red": 248,
+                "green": 248,
+                "blue": 0
+              }
+            ],
+            "tolerance": 8,
+            "timeout_seconds": 30,
+            "poll_interval_seconds": 1
+          }
+        },
+        {
+          "screenshot": "sortie-01-vehicle-select"
+        },
+        {
+          "rehome_pointer": true,
+          "delay_after": 0.25
+        },
+        {
+          "click": [
+            320,
+            312
+          ],
+          "delay_after": 5
+        },
+        {
+          "wait_for_pixels": {
+            "pixels": [
+              {
+                "x": 300,
+                "y": 400,
+                "red": 152,
+                "green": 152,
+                "blue": 0
+              },
+              {
+                "x": 240,
+                "y": 420,
+                "red": 0,
+                "green": 152,
+                "blue": 0
+              },
+              {
+                "x": 440,
+                "y": 400,
+                "red": 168,
+                "green": 128,
+                "blue": 72
+              }
+            ],
+            "tolerance": 8,
+            "timeout_seconds": 90,
+            "poll_interval_seconds": 1
+          }
+        },
+        {
+          "screenshot": "sortie-01-gameplay-start"
+        },
+        {
+          "key": "Up",
+          "hold_ms": 3000,
+          "delay_after": 1
+        },
+        {
+          "key": "Left",
+          "hold_ms": 1200,
+          "delay_after": 1
+        },
+        {
+          "key": "Control_L",
+          "hold_ms": 500,
+          "delay_after": 2
+        },
+        {
+          "wait": 12
+        },
+        {
+          "wait_for_pixels": {
+            "pixels": [
+              {
+                "x": 300,
+                "y": 400,
+                "red": 152,
+                "green": 152,
+                "blue": 0
+              },
+              {
+                "x": 240,
+                "y": 420,
+                "red": 0,
+                "green": 152,
+                "blue": 0
+              },
+              {
+                "x": 440,
+                "y": 400,
+                "red": 168,
+                "green": 128,
+                "blue": 72
+              }
+            ],
+            "tolerance": 8,
+            "timeout_seconds": 10,
+            "poll_interval_seconds": 1
+          }
+        },
+        {
+          "screenshot": "sortie-01-gameplay-final"
+        },
+        {
+          "assert_frame_changed_since": {
+            "screenshot": "sortie-01-gameplay-start",
+            "minimum_changed_fraction": 0.1,
+            "channel_tolerance": 16,
+            "region": [
+              0,
+              62,
+              640,
+              388
+            ]
+          }
+        },
+        {
+          "key": "Escape",
+          "delay_after": 3
+        },
+        {
+          "wait_for_pixels": {
+            "pixels": [
+              {
+                "x": 320,
+                "y": 99,
+                "red": 224,
+                "green": 176,
+                "blue": 72
+              },
+              {
+                "x": 382,
+                "y": 99,
+                "red": 96,
+                "green": 96,
+                "blue": 96
+              },
+              {
+                "x": 420,
+                "y": 365,
+                "red": 208,
+                "green": 32,
+                "blue": 32
+              },
+              {
+                "x": 300,
+                "y": 35,
+                "red": 208,
+                "green": 208,
+                "blue": 0
+              }
+            ],
+            "tolerance": 8,
+            "timeout_seconds": 60,
+            "poll_interval_seconds": 1
+          }
+        },
+        {
+          "screenshot": "sortie-01-main-menu-after-escape"
+        },
+        {
+          "note": "Candidate short sortie 2 of 15. This route has not qualified until every HUD, input-delta, Escape, and exact-menu gate completes in one reviewed run."
+        },
+        {
+          "rehome_pointer": true,
+          "delay_after": 0.25
+        },
+        {
+          "click": [
+            382,
+            99
+          ],
+          "delay_after": 3
+        },
+        {
+          "wait_for_pixels": {
+            "pixels": [
+              {
+                "x": 252,
+                "y": 290,
+                "red": 72,
+                "green": 48,
+                "blue": 8
+              },
+              {
+                "x": 320,
+                "y": 312,
+                "red": 232,
+                "green": 208,
+                "blue": 136
+              },
+              {
+                "x": 300,
+                "y": 242,
+                "red": 248,
+                "green": 248,
+                "blue": 0
+              }
+            ],
+            "tolerance": 8,
+            "timeout_seconds": 30,
+            "poll_interval_seconds": 1
+          }
+        },
+        {
+          "screenshot": "sortie-02-vehicle-select"
+        },
+        {
+          "rehome_pointer": true,
+          "delay_after": 0.25
+        },
+        {
+          "click": [
+            320,
+            312
+          ],
+          "delay_after": 5
+        },
+        {
+          "wait_for_pixels": {
+            "pixels": [
+              {
+                "x": 300,
+                "y": 400,
+                "red": 152,
+                "green": 152,
+                "blue": 0
+              },
+              {
+                "x": 240,
+                "y": 420,
+                "red": 0,
+                "green": 152,
+                "blue": 0
+              },
+              {
+                "x": 440,
+                "y": 400,
+                "red": 168,
+                "green": 128,
+                "blue": 72
+              }
+            ],
+            "tolerance": 8,
+            "timeout_seconds": 90,
+            "poll_interval_seconds": 1
+          }
+        },
+        {
+          "screenshot": "sortie-02-gameplay-start"
+        },
+        {
+          "key": "Up",
+          "hold_ms": 3000,
+          "delay_after": 1
+        },
+        {
+          "key": "Right",
+          "hold_ms": 1200,
+          "delay_after": 1
+        },
+        {
+          "key": "Control_L",
+          "hold_ms": 500,
+          "delay_after": 2
+        },
+        {
+          "wait": 12
+        },
+        {
+          "wait_for_pixels": {
+            "pixels": [
+              {
+                "x": 300,
+                "y": 400,
+                "red": 152,
+                "green": 152,
+                "blue": 0
+              },
+              {
+                "x": 240,
+                "y": 420,
+                "red": 0,
+                "green": 152,
+                "blue": 0
+              },
+              {
+                "x": 440,
+                "y": 400,
+                "red": 168,
+                "green": 128,
+                "blue": 72
+              }
+            ],
+            "tolerance": 8,
+            "timeout_seconds": 10,
+            "poll_interval_seconds": 1
+          }
+        },
+        {
+          "screenshot": "sortie-02-gameplay-final"
+        },
+        {
+          "assert_frame_changed_since": {
+            "screenshot": "sortie-02-gameplay-start",
+            "minimum_changed_fraction": 0.1,
+            "channel_tolerance": 16,
+            "region": [
+              0,
+              62,
+              640,
+              388
+            ]
+          }
+        },
+        {
+          "key": "Escape",
+          "delay_after": 3
+        },
+        {
+          "wait_for_pixels": {
+            "pixels": [
+              {
+                "x": 320,
+                "y": 99,
+                "red": 224,
+                "green": 176,
+                "blue": 72
+              },
+              {
+                "x": 382,
+                "y": 99,
+                "red": 96,
+                "green": 96,
+                "blue": 96
+              },
+              {
+                "x": 420,
+                "y": 365,
+                "red": 208,
+                "green": 32,
+                "blue": 32
+              },
+              {
+                "x": 300,
+                "y": 35,
+                "red": 208,
+                "green": 208,
+                "blue": 0
+              }
+            ],
+            "tolerance": 8,
+            "timeout_seconds": 60,
+            "poll_interval_seconds": 1
+          }
+        },
+        {
+          "screenshot": "sortie-02-main-menu-after-escape"
+        },
+        {
+          "note": "Candidate short sortie 3 of 15. This route has not qualified until every HUD, input-delta, Escape, and exact-menu gate completes in one reviewed run."
+        },
+        {
+          "rehome_pointer": true,
+          "delay_after": 0.25
+        },
+        {
+          "click": [
+            382,
+            99
+          ],
+          "delay_after": 3
+        },
+        {
+          "wait_for_pixels": {
+            "pixels": [
+              {
+                "x": 252,
+                "y": 290,
+                "red": 72,
+                "green": 48,
+                "blue": 8
+              },
+              {
+                "x": 320,
+                "y": 312,
+                "red": 232,
+                "green": 208,
+                "blue": 136
+              },
+              {
+                "x": 300,
+                "y": 242,
+                "red": 248,
+                "green": 248,
+                "blue": 0
+              }
+            ],
+            "tolerance": 8,
+            "timeout_seconds": 30,
+            "poll_interval_seconds": 1
+          }
+        },
+        {
+          "screenshot": "sortie-03-vehicle-select"
+        },
+        {
+          "rehome_pointer": true,
+          "delay_after": 0.25
+        },
+        {
+          "click": [
+            320,
+            312
+          ],
+          "delay_after": 5
+        },
+        {
+          "wait_for_pixels": {
+            "pixels": [
+              {
+                "x": 300,
+                "y": 400,
+                "red": 152,
+                "green": 152,
+                "blue": 0
+              },
+              {
+                "x": 240,
+                "y": 420,
+                "red": 0,
+                "green": 152,
+                "blue": 0
+              },
+              {
+                "x": 440,
+                "y": 400,
+                "red": 168,
+                "green": 128,
+                "blue": 72
+              }
+            ],
+            "tolerance": 8,
+            "timeout_seconds": 90,
+            "poll_interval_seconds": 1
+          }
+        },
+        {
+          "screenshot": "sortie-03-gameplay-start"
+        },
+        {
+          "key": "Up",
+          "hold_ms": 3000,
+          "delay_after": 1
+        },
+        {
+          "key": "Left",
+          "hold_ms": 1200,
+          "delay_after": 1
+        },
+        {
+          "key": "Control_L",
+          "hold_ms": 500,
+          "delay_after": 2
+        },
+        {
+          "wait": 12
+        },
+        {
+          "wait_for_pixels": {
+            "pixels": [
+              {
+                "x": 300,
+                "y": 400,
+                "red": 152,
+                "green": 152,
+                "blue": 0
+              },
+              {
+                "x": 240,
+                "y": 420,
+                "red": 0,
+                "green": 152,
+                "blue": 0
+              },
+              {
+                "x": 440,
+                "y": 400,
+                "red": 168,
+                "green": 128,
+                "blue": 72
+              }
+            ],
+            "tolerance": 8,
+            "timeout_seconds": 10,
+            "poll_interval_seconds": 1
+          }
+        },
+        {
+          "screenshot": "sortie-03-gameplay-final"
+        },
+        {
+          "assert_frame_changed_since": {
+            "screenshot": "sortie-03-gameplay-start",
+            "minimum_changed_fraction": 0.1,
+            "channel_tolerance": 16,
+            "region": [
+              0,
+              62,
+              640,
+              388
+            ]
+          }
+        },
+        {
+          "key": "Escape",
+          "delay_after": 3
+        },
+        {
+          "wait_for_pixels": {
+            "pixels": [
+              {
+                "x": 320,
+                "y": 99,
+                "red": 224,
+                "green": 176,
+                "blue": 72
+              },
+              {
+                "x": 382,
+                "y": 99,
+                "red": 96,
+                "green": 96,
+                "blue": 96
+              },
+              {
+                "x": 420,
+                "y": 365,
+                "red": 208,
+                "green": 32,
+                "blue": 32
+              },
+              {
+                "x": 300,
+                "y": 35,
+                "red": 208,
+                "green": 208,
+                "blue": 0
+              }
+            ],
+            "tolerance": 8,
+            "timeout_seconds": 60,
+            "poll_interval_seconds": 1
+          }
+        },
+        {
+          "screenshot": "sortie-03-main-menu-after-escape"
+        },
+        {
+          "note": "Candidate short sortie 4 of 15. This route has not qualified until every HUD, input-delta, Escape, and exact-menu gate completes in one reviewed run."
+        },
+        {
+          "rehome_pointer": true,
+          "delay_after": 0.25
+        },
+        {
+          "click": [
+            382,
+            99
+          ],
+          "delay_after": 3
+        },
+        {
+          "wait_for_pixels": {
+            "pixels": [
+              {
+                "x": 252,
+                "y": 290,
+                "red": 72,
+                "green": 48,
+                "blue": 8
+              },
+              {
+                "x": 320,
+                "y": 312,
+                "red": 232,
+                "green": 208,
+                "blue": 136
+              },
+              {
+                "x": 300,
+                "y": 242,
+                "red": 248,
+                "green": 248,
+                "blue": 0
+              }
+            ],
+            "tolerance": 8,
+            "timeout_seconds": 30,
+            "poll_interval_seconds": 1
+          }
+        },
+        {
+          "screenshot": "sortie-04-vehicle-select"
+        },
+        {
+          "rehome_pointer": true,
+          "delay_after": 0.25
+        },
+        {
+          "click": [
+            320,
+            312
+          ],
+          "delay_after": 5
+        },
+        {
+          "wait_for_pixels": {
+            "pixels": [
+              {
+                "x": 300,
+                "y": 400,
+                "red": 152,
+                "green": 152,
+                "blue": 0
+              },
+              {
+                "x": 240,
+                "y": 420,
+                "red": 0,
+                "green": 152,
+                "blue": 0
+              },
+              {
+                "x": 440,
+                "y": 400,
+                "red": 168,
+                "green": 128,
+                "blue": 72
+              }
+            ],
+            "tolerance": 8,
+            "timeout_seconds": 90,
+            "poll_interval_seconds": 1
+          }
+        },
+        {
+          "screenshot": "sortie-04-gameplay-start"
+        },
+        {
+          "key": "Up",
+          "hold_ms": 3000,
+          "delay_after": 1
+        },
+        {
+          "key": "Right",
+          "hold_ms": 1200,
+          "delay_after": 1
+        },
+        {
+          "key": "Control_L",
+          "hold_ms": 500,
+          "delay_after": 2
+        },
+        {
+          "wait": 12
+        },
+        {
+          "wait_for_pixels": {
+            "pixels": [
+              {
+                "x": 300,
+                "y": 400,
+                "red": 152,
+                "green": 152,
+                "blue": 0
+              },
+              {
+                "x": 240,
+                "y": 420,
+                "red": 0,
+                "green": 152,
+                "blue": 0
+              },
+              {
+                "x": 440,
+                "y": 400,
+                "red": 168,
+                "green": 128,
+                "blue": 72
+              }
+            ],
+            "tolerance": 8,
+            "timeout_seconds": 10,
+            "poll_interval_seconds": 1
+          }
+        },
+        {
+          "screenshot": "sortie-04-gameplay-final"
+        },
+        {
+          "assert_frame_changed_since": {
+            "screenshot": "sortie-04-gameplay-start",
+            "minimum_changed_fraction": 0.1,
+            "channel_tolerance": 16,
+            "region": [
+              0,
+              62,
+              640,
+              388
+            ]
+          }
+        },
+        {
+          "key": "Escape",
+          "delay_after": 3
+        },
+        {
+          "wait_for_pixels": {
+            "pixels": [
+              {
+                "x": 320,
+                "y": 99,
+                "red": 224,
+                "green": 176,
+                "blue": 72
+              },
+              {
+                "x": 382,
+                "y": 99,
+                "red": 96,
+                "green": 96,
+                "blue": 96
+              },
+              {
+                "x": 420,
+                "y": 365,
+                "red": 208,
+                "green": 32,
+                "blue": 32
+              },
+              {
+                "x": 300,
+                "y": 35,
+                "red": 208,
+                "green": 208,
+                "blue": 0
+              }
+            ],
+            "tolerance": 8,
+            "timeout_seconds": 60,
+            "poll_interval_seconds": 1
+          }
+        },
+        {
+          "screenshot": "sortie-04-main-menu-after-escape"
+        },
+        {
+          "note": "Candidate short sortie 5 of 15. This route has not qualified until every HUD, input-delta, Escape, and exact-menu gate completes in one reviewed run."
+        },
+        {
+          "rehome_pointer": true,
+          "delay_after": 0.25
+        },
+        {
+          "click": [
+            382,
+            99
+          ],
+          "delay_after": 3
+        },
+        {
+          "wait_for_pixels": {
+            "pixels": [
+              {
+                "x": 252,
+                "y": 290,
+                "red": 72,
+                "green": 48,
+                "blue": 8
+              },
+              {
+                "x": 320,
+                "y": 312,
+                "red": 232,
+                "green": 208,
+                "blue": 136
+              },
+              {
+                "x": 300,
+                "y": 242,
+                "red": 248,
+                "green": 248,
+                "blue": 0
+              }
+            ],
+            "tolerance": 8,
+            "timeout_seconds": 30,
+            "poll_interval_seconds": 1
+          }
+        },
+        {
+          "screenshot": "sortie-05-vehicle-select"
+        },
+        {
+          "rehome_pointer": true,
+          "delay_after": 0.25
+        },
+        {
+          "click": [
+            320,
+            312
+          ],
+          "delay_after": 5
+        },
+        {
+          "wait_for_pixels": {
+            "pixels": [
+              {
+                "x": 300,
+                "y": 400,
+                "red": 152,
+                "green": 152,
+                "blue": 0
+              },
+              {
+                "x": 240,
+                "y": 420,
+                "red": 0,
+                "green": 152,
+                "blue": 0
+              },
+              {
+                "x": 440,
+                "y": 400,
+                "red": 168,
+                "green": 128,
+                "blue": 72
+              }
+            ],
+            "tolerance": 8,
+            "timeout_seconds": 90,
+            "poll_interval_seconds": 1
+          }
+        },
+        {
+          "screenshot": "sortie-05-gameplay-start"
+        },
+        {
+          "key": "Up",
+          "hold_ms": 3000,
+          "delay_after": 1
+        },
+        {
+          "key": "Left",
+          "hold_ms": 1200,
+          "delay_after": 1
+        },
+        {
+          "key": "Control_L",
+          "hold_ms": 500,
+          "delay_after": 2
+        },
+        {
+          "wait": 12
+        },
+        {
+          "wait_for_pixels": {
+            "pixels": [
+              {
+                "x": 300,
+                "y": 400,
+                "red": 152,
+                "green": 152,
+                "blue": 0
+              },
+              {
+                "x": 240,
+                "y": 420,
+                "red": 0,
+                "green": 152,
+                "blue": 0
+              },
+              {
+                "x": 440,
+                "y": 400,
+                "red": 168,
+                "green": 128,
+                "blue": 72
+              }
+            ],
+            "tolerance": 8,
+            "timeout_seconds": 10,
+            "poll_interval_seconds": 1
+          }
+        },
+        {
+          "screenshot": "sortie-05-gameplay-final"
+        },
+        {
+          "assert_frame_changed_since": {
+            "screenshot": "sortie-05-gameplay-start",
+            "minimum_changed_fraction": 0.1,
+            "channel_tolerance": 16,
+            "region": [
+              0,
+              62,
+              640,
+              388
+            ]
+          }
+        },
+        {
+          "key": "Escape",
+          "delay_after": 3
+        },
+        {
+          "wait_for_pixels": {
+            "pixels": [
+              {
+                "x": 320,
+                "y": 99,
+                "red": 224,
+                "green": 176,
+                "blue": 72
+              },
+              {
+                "x": 382,
+                "y": 99,
+                "red": 96,
+                "green": 96,
+                "blue": 96
+              },
+              {
+                "x": 420,
+                "y": 365,
+                "red": 208,
+                "green": 32,
+                "blue": 32
+              },
+              {
+                "x": 300,
+                "y": 35,
+                "red": 208,
+                "green": 208,
+                "blue": 0
+              }
+            ],
+            "tolerance": 8,
+            "timeout_seconds": 60,
+            "poll_interval_seconds": 1
+          }
+        },
+        {
+          "screenshot": "sortie-05-main-menu-after-escape"
+        },
+        {
+          "note": "Candidate short sortie 6 of 15. This route has not qualified until every HUD, input-delta, Escape, and exact-menu gate completes in one reviewed run."
+        },
+        {
+          "rehome_pointer": true,
+          "delay_after": 0.25
+        },
+        {
+          "click": [
+            382,
+            99
+          ],
+          "delay_after": 3
+        },
+        {
+          "wait_for_pixels": {
+            "pixels": [
+              {
+                "x": 252,
+                "y": 290,
+                "red": 72,
+                "green": 48,
+                "blue": 8
+              },
+              {
+                "x": 320,
+                "y": 312,
+                "red": 232,
+                "green": 208,
+                "blue": 136
+              },
+              {
+                "x": 300,
+                "y": 242,
+                "red": 248,
+                "green": 248,
+                "blue": 0
+              }
+            ],
+            "tolerance": 8,
+            "timeout_seconds": 30,
+            "poll_interval_seconds": 1
+          }
+        },
+        {
+          "screenshot": "sortie-06-vehicle-select"
+        },
+        {
+          "rehome_pointer": true,
+          "delay_after": 0.25
+        },
+        {
+          "click": [
+            320,
+            312
+          ],
+          "delay_after": 5
+        },
+        {
+          "wait_for_pixels": {
+            "pixels": [
+              {
+                "x": 300,
+                "y": 400,
+                "red": 152,
+                "green": 152,
+                "blue": 0
+              },
+              {
+                "x": 240,
+                "y": 420,
+                "red": 0,
+                "green": 152,
+                "blue": 0
+              },
+              {
+                "x": 440,
+                "y": 400,
+                "red": 168,
+                "green": 128,
+                "blue": 72
+              }
+            ],
+            "tolerance": 8,
+            "timeout_seconds": 90,
+            "poll_interval_seconds": 1
+          }
+        },
+        {
+          "screenshot": "sortie-06-gameplay-start"
+        },
+        {
+          "key": "Up",
+          "hold_ms": 3000,
+          "delay_after": 1
+        },
+        {
+          "key": "Right",
+          "hold_ms": 1200,
+          "delay_after": 1
+        },
+        {
+          "key": "Control_L",
+          "hold_ms": 500,
+          "delay_after": 2
+        },
+        {
+          "wait": 12
+        },
+        {
+          "wait_for_pixels": {
+            "pixels": [
+              {
+                "x": 300,
+                "y": 400,
+                "red": 152,
+                "green": 152,
+                "blue": 0
+              },
+              {
+                "x": 240,
+                "y": 420,
+                "red": 0,
+                "green": 152,
+                "blue": 0
+              },
+              {
+                "x": 440,
+                "y": 400,
+                "red": 168,
+                "green": 128,
+                "blue": 72
+              }
+            ],
+            "tolerance": 8,
+            "timeout_seconds": 10,
+            "poll_interval_seconds": 1
+          }
+        },
+        {
+          "screenshot": "sortie-06-gameplay-final"
+        },
+        {
+          "assert_frame_changed_since": {
+            "screenshot": "sortie-06-gameplay-start",
+            "minimum_changed_fraction": 0.1,
+            "channel_tolerance": 16,
+            "region": [
+              0,
+              62,
+              640,
+              388
+            ]
+          }
+        },
+        {
+          "key": "Escape",
+          "delay_after": 3
+        },
+        {
+          "wait_for_pixels": {
+            "pixels": [
+              {
+                "x": 320,
+                "y": 99,
+                "red": 224,
+                "green": 176,
+                "blue": 72
+              },
+              {
+                "x": 382,
+                "y": 99,
+                "red": 96,
+                "green": 96,
+                "blue": 96
+              },
+              {
+                "x": 420,
+                "y": 365,
+                "red": 208,
+                "green": 32,
+                "blue": 32
+              },
+              {
+                "x": 300,
+                "y": 35,
+                "red": 208,
+                "green": 208,
+                "blue": 0
+              }
+            ],
+            "tolerance": 8,
+            "timeout_seconds": 60,
+            "poll_interval_seconds": 1
+          }
+        },
+        {
+          "screenshot": "sortie-06-main-menu-after-escape"
+        },
+        {
+          "note": "Candidate short sortie 7 of 15. This route has not qualified until every HUD, input-delta, Escape, and exact-menu gate completes in one reviewed run."
+        },
+        {
+          "rehome_pointer": true,
+          "delay_after": 0.25
+        },
+        {
+          "click": [
+            382,
+            99
+          ],
+          "delay_after": 3
+        },
+        {
+          "wait_for_pixels": {
+            "pixels": [
+              {
+                "x": 252,
+                "y": 290,
+                "red": 72,
+                "green": 48,
+                "blue": 8
+              },
+              {
+                "x": 320,
+                "y": 312,
+                "red": 232,
+                "green": 208,
+                "blue": 136
+              },
+              {
+                "x": 300,
+                "y": 242,
+                "red": 248,
+                "green": 248,
+                "blue": 0
+              }
+            ],
+            "tolerance": 8,
+            "timeout_seconds": 30,
+            "poll_interval_seconds": 1
+          }
+        },
+        {
+          "screenshot": "sortie-07-vehicle-select"
+        },
+        {
+          "rehome_pointer": true,
+          "delay_after": 0.25
+        },
+        {
+          "click": [
+            320,
+            312
+          ],
+          "delay_after": 5
+        },
+        {
+          "wait_for_pixels": {
+            "pixels": [
+              {
+                "x": 300,
+                "y": 400,
+                "red": 152,
+                "green": 152,
+                "blue": 0
+              },
+              {
+                "x": 240,
+                "y": 420,
+                "red": 0,
+                "green": 152,
+                "blue": 0
+              },
+              {
+                "x": 440,
+                "y": 400,
+                "red": 168,
+                "green": 128,
+                "blue": 72
+              }
+            ],
+            "tolerance": 8,
+            "timeout_seconds": 90,
+            "poll_interval_seconds": 1
+          }
+        },
+        {
+          "screenshot": "sortie-07-gameplay-start"
+        },
+        {
+          "key": "Up",
+          "hold_ms": 3000,
+          "delay_after": 1
+        },
+        {
+          "key": "Left",
+          "hold_ms": 1200,
+          "delay_after": 1
+        },
+        {
+          "key": "Control_L",
+          "hold_ms": 500,
+          "delay_after": 2
+        },
+        {
+          "wait": 12
+        },
+        {
+          "wait_for_pixels": {
+            "pixels": [
+              {
+                "x": 300,
+                "y": 400,
+                "red": 152,
+                "green": 152,
+                "blue": 0
+              },
+              {
+                "x": 240,
+                "y": 420,
+                "red": 0,
+                "green": 152,
+                "blue": 0
+              },
+              {
+                "x": 440,
+                "y": 400,
+                "red": 168,
+                "green": 128,
+                "blue": 72
+              }
+            ],
+            "tolerance": 8,
+            "timeout_seconds": 10,
+            "poll_interval_seconds": 1
+          }
+        },
+        {
+          "screenshot": "sortie-07-gameplay-final"
+        },
+        {
+          "assert_frame_changed_since": {
+            "screenshot": "sortie-07-gameplay-start",
+            "minimum_changed_fraction": 0.1,
+            "channel_tolerance": 16,
+            "region": [
+              0,
+              62,
+              640,
+              388
+            ]
+          }
+        },
+        {
+          "key": "Escape",
+          "delay_after": 3
+        },
+        {
+          "wait_for_pixels": {
+            "pixels": [
+              {
+                "x": 320,
+                "y": 99,
+                "red": 224,
+                "green": 176,
+                "blue": 72
+              },
+              {
+                "x": 382,
+                "y": 99,
+                "red": 96,
+                "green": 96,
+                "blue": 96
+              },
+              {
+                "x": 420,
+                "y": 365,
+                "red": 208,
+                "green": 32,
+                "blue": 32
+              },
+              {
+                "x": 300,
+                "y": 35,
+                "red": 208,
+                "green": 208,
+                "blue": 0
+              }
+            ],
+            "tolerance": 8,
+            "timeout_seconds": 60,
+            "poll_interval_seconds": 1
+          }
+        },
+        {
+          "screenshot": "sortie-07-main-menu-after-escape"
+        },
+        {
+          "note": "Candidate short sortie 8 of 15. This route has not qualified until every HUD, input-delta, Escape, and exact-menu gate completes in one reviewed run."
+        },
+        {
+          "rehome_pointer": true,
+          "delay_after": 0.25
+        },
+        {
+          "click": [
+            382,
+            99
+          ],
+          "delay_after": 3
+        },
+        {
+          "wait_for_pixels": {
+            "pixels": [
+              {
+                "x": 252,
+                "y": 290,
+                "red": 72,
+                "green": 48,
+                "blue": 8
+              },
+              {
+                "x": 320,
+                "y": 312,
+                "red": 232,
+                "green": 208,
+                "blue": 136
+              },
+              {
+                "x": 300,
+                "y": 242,
+                "red": 248,
+                "green": 248,
+                "blue": 0
+              }
+            ],
+            "tolerance": 8,
+            "timeout_seconds": 30,
+            "poll_interval_seconds": 1
+          }
+        },
+        {
+          "screenshot": "sortie-08-vehicle-select"
+        },
+        {
+          "rehome_pointer": true,
+          "delay_after": 0.25
+        },
+        {
+          "click": [
+            320,
+            312
+          ],
+          "delay_after": 5
+        },
+        {
+          "wait_for_pixels": {
+            "pixels": [
+              {
+                "x": 300,
+                "y": 400,
+                "red": 152,
+                "green": 152,
+                "blue": 0
+              },
+              {
+                "x": 240,
+                "y": 420,
+                "red": 0,
+                "green": 152,
+                "blue": 0
+              },
+              {
+                "x": 440,
+                "y": 400,
+                "red": 168,
+                "green": 128,
+                "blue": 72
+              }
+            ],
+            "tolerance": 8,
+            "timeout_seconds": 90,
+            "poll_interval_seconds": 1
+          }
+        },
+        {
+          "screenshot": "sortie-08-gameplay-start"
+        },
+        {
+          "key": "Up",
+          "hold_ms": 3000,
+          "delay_after": 1
+        },
+        {
+          "key": "Right",
+          "hold_ms": 1200,
+          "delay_after": 1
+        },
+        {
+          "key": "Control_L",
+          "hold_ms": 500,
+          "delay_after": 2
+        },
+        {
+          "wait": 12
+        },
+        {
+          "wait_for_pixels": {
+            "pixels": [
+              {
+                "x": 300,
+                "y": 400,
+                "red": 152,
+                "green": 152,
+                "blue": 0
+              },
+              {
+                "x": 240,
+                "y": 420,
+                "red": 0,
+                "green": 152,
+                "blue": 0
+              },
+              {
+                "x": 440,
+                "y": 400,
+                "red": 168,
+                "green": 128,
+                "blue": 72
+              }
+            ],
+            "tolerance": 8,
+            "timeout_seconds": 10,
+            "poll_interval_seconds": 1
+          }
+        },
+        {
+          "screenshot": "sortie-08-gameplay-final"
+        },
+        {
+          "assert_frame_changed_since": {
+            "screenshot": "sortie-08-gameplay-start",
+            "minimum_changed_fraction": 0.1,
+            "channel_tolerance": 16,
+            "region": [
+              0,
+              62,
+              640,
+              388
+            ]
+          }
+        },
+        {
+          "key": "Escape",
+          "delay_after": 3
+        },
+        {
+          "wait_for_pixels": {
+            "pixels": [
+              {
+                "x": 320,
+                "y": 99,
+                "red": 224,
+                "green": 176,
+                "blue": 72
+              },
+              {
+                "x": 382,
+                "y": 99,
+                "red": 96,
+                "green": 96,
+                "blue": 96
+              },
+              {
+                "x": 420,
+                "y": 365,
+                "red": 208,
+                "green": 32,
+                "blue": 32
+              },
+              {
+                "x": 300,
+                "y": 35,
+                "red": 208,
+                "green": 208,
+                "blue": 0
+              }
+            ],
+            "tolerance": 8,
+            "timeout_seconds": 60,
+            "poll_interval_seconds": 1
+          }
+        },
+        {
+          "screenshot": "sortie-08-main-menu-after-escape"
+        },
+        {
+          "note": "Candidate short sortie 9 of 15. This route has not qualified until every HUD, input-delta, Escape, and exact-menu gate completes in one reviewed run."
+        },
+        {
+          "rehome_pointer": true,
+          "delay_after": 0.25
+        },
+        {
+          "click": [
+            382,
+            99
+          ],
+          "delay_after": 3
+        },
+        {
+          "wait_for_pixels": {
+            "pixels": [
+              {
+                "x": 252,
+                "y": 290,
+                "red": 72,
+                "green": 48,
+                "blue": 8
+              },
+              {
+                "x": 320,
+                "y": 312,
+                "red": 232,
+                "green": 208,
+                "blue": 136
+              },
+              {
+                "x": 300,
+                "y": 242,
+                "red": 248,
+                "green": 248,
+                "blue": 0
+              }
+            ],
+            "tolerance": 8,
+            "timeout_seconds": 30,
+            "poll_interval_seconds": 1
+          }
+        },
+        {
+          "screenshot": "sortie-09-vehicle-select"
+        },
+        {
+          "rehome_pointer": true,
+          "delay_after": 0.25
+        },
+        {
+          "click": [
+            320,
+            312
+          ],
+          "delay_after": 5
+        },
+        {
+          "wait_for_pixels": {
+            "pixels": [
+              {
+                "x": 300,
+                "y": 400,
+                "red": 152,
+                "green": 152,
+                "blue": 0
+              },
+              {
+                "x": 240,
+                "y": 420,
+                "red": 0,
+                "green": 152,
+                "blue": 0
+              },
+              {
+                "x": 440,
+                "y": 400,
+                "red": 168,
+                "green": 128,
+                "blue": 72
+              }
+            ],
+            "tolerance": 8,
+            "timeout_seconds": 90,
+            "poll_interval_seconds": 1
+          }
+        },
+        {
+          "screenshot": "sortie-09-gameplay-start"
+        },
+        {
+          "key": "Up",
+          "hold_ms": 3000,
+          "delay_after": 1
+        },
+        {
+          "key": "Left",
+          "hold_ms": 1200,
+          "delay_after": 1
+        },
+        {
+          "key": "Control_L",
+          "hold_ms": 500,
+          "delay_after": 2
+        },
+        {
+          "wait": 12
+        },
+        {
+          "wait_for_pixels": {
+            "pixels": [
+              {
+                "x": 300,
+                "y": 400,
+                "red": 152,
+                "green": 152,
+                "blue": 0
+              },
+              {
+                "x": 240,
+                "y": 420,
+                "red": 0,
+                "green": 152,
+                "blue": 0
+              },
+              {
+                "x": 440,
+                "y": 400,
+                "red": 168,
+                "green": 128,
+                "blue": 72
+              }
+            ],
+            "tolerance": 8,
+            "timeout_seconds": 10,
+            "poll_interval_seconds": 1
+          }
+        },
+        {
+          "screenshot": "sortie-09-gameplay-final"
+        },
+        {
+          "assert_frame_changed_since": {
+            "screenshot": "sortie-09-gameplay-start",
+            "minimum_changed_fraction": 0.1,
+            "channel_tolerance": 16,
+            "region": [
+              0,
+              62,
+              640,
+              388
+            ]
+          }
+        },
+        {
+          "key": "Escape",
+          "delay_after": 3
+        },
+        {
+          "wait_for_pixels": {
+            "pixels": [
+              {
+                "x": 320,
+                "y": 99,
+                "red": 224,
+                "green": 176,
+                "blue": 72
+              },
+              {
+                "x": 382,
+                "y": 99,
+                "red": 96,
+                "green": 96,
+                "blue": 96
+              },
+              {
+                "x": 420,
+                "y": 365,
+                "red": 208,
+                "green": 32,
+                "blue": 32
+              },
+              {
+                "x": 300,
+                "y": 35,
+                "red": 208,
+                "green": 208,
+                "blue": 0
+              }
+            ],
+            "tolerance": 8,
+            "timeout_seconds": 60,
+            "poll_interval_seconds": 1
+          }
+        },
+        {
+          "screenshot": "sortie-09-main-menu-after-escape"
+        },
+        {
+          "note": "Candidate short sortie 10 of 15. This route has not qualified until every HUD, input-delta, Escape, and exact-menu gate completes in one reviewed run."
+        },
+        {
+          "rehome_pointer": true,
+          "delay_after": 0.25
+        },
+        {
+          "click": [
+            382,
+            99
+          ],
+          "delay_after": 3
+        },
+        {
+          "wait_for_pixels": {
+            "pixels": [
+              {
+                "x": 252,
+                "y": 290,
+                "red": 72,
+                "green": 48,
+                "blue": 8
+              },
+              {
+                "x": 320,
+                "y": 312,
+                "red": 232,
+                "green": 208,
+                "blue": 136
+              },
+              {
+                "x": 300,
+                "y": 242,
+                "red": 248,
+                "green": 248,
+                "blue": 0
+              }
+            ],
+            "tolerance": 8,
+            "timeout_seconds": 30,
+            "poll_interval_seconds": 1
+          }
+        },
+        {
+          "screenshot": "sortie-10-vehicle-select"
+        },
+        {
+          "rehome_pointer": true,
+          "delay_after": 0.25
+        },
+        {
+          "click": [
+            320,
+            312
+          ],
+          "delay_after": 5
+        },
+        {
+          "wait_for_pixels": {
+            "pixels": [
+              {
+                "x": 300,
+                "y": 400,
+                "red": 152,
+                "green": 152,
+                "blue": 0
+              },
+              {
+                "x": 240,
+                "y": 420,
+                "red": 0,
+                "green": 152,
+                "blue": 0
+              },
+              {
+                "x": 440,
+                "y": 400,
+                "red": 168,
+                "green": 128,
+                "blue": 72
+              }
+            ],
+            "tolerance": 8,
+            "timeout_seconds": 90,
+            "poll_interval_seconds": 1
+          }
+        },
+        {
+          "screenshot": "sortie-10-gameplay-start"
+        },
+        {
+          "key": "Up",
+          "hold_ms": 3000,
+          "delay_after": 1
+        },
+        {
+          "key": "Right",
+          "hold_ms": 1200,
+          "delay_after": 1
+        },
+        {
+          "key": "Control_L",
+          "hold_ms": 500,
+          "delay_after": 2
+        },
+        {
+          "wait": 12
+        },
+        {
+          "wait_for_pixels": {
+            "pixels": [
+              {
+                "x": 300,
+                "y": 400,
+                "red": 152,
+                "green": 152,
+                "blue": 0
+              },
+              {
+                "x": 240,
+                "y": 420,
+                "red": 0,
+                "green": 152,
+                "blue": 0
+              },
+              {
+                "x": 440,
+                "y": 400,
+                "red": 168,
+                "green": 128,
+                "blue": 72
+              }
+            ],
+            "tolerance": 8,
+            "timeout_seconds": 10,
+            "poll_interval_seconds": 1
+          }
+        },
+        {
+          "screenshot": "sortie-10-gameplay-final"
+        },
+        {
+          "assert_frame_changed_since": {
+            "screenshot": "sortie-10-gameplay-start",
+            "minimum_changed_fraction": 0.1,
+            "channel_tolerance": 16,
+            "region": [
+              0,
+              62,
+              640,
+              388
+            ]
+          }
+        },
+        {
+          "key": "Escape",
+          "delay_after": 3
+        },
+        {
+          "wait_for_pixels": {
+            "pixels": [
+              {
+                "x": 320,
+                "y": 99,
+                "red": 224,
+                "green": 176,
+                "blue": 72
+              },
+              {
+                "x": 382,
+                "y": 99,
+                "red": 96,
+                "green": 96,
+                "blue": 96
+              },
+              {
+                "x": 420,
+                "y": 365,
+                "red": 208,
+                "green": 32,
+                "blue": 32
+              },
+              {
+                "x": 300,
+                "y": 35,
+                "red": 208,
+                "green": 208,
+                "blue": 0
+              }
+            ],
+            "tolerance": 8,
+            "timeout_seconds": 60,
+            "poll_interval_seconds": 1
+          }
+        },
+        {
+          "screenshot": "sortie-10-main-menu-after-escape"
+        },
+        {
+          "note": "Candidate short sortie 11 of 15. This route has not qualified until every HUD, input-delta, Escape, and exact-menu gate completes in one reviewed run."
+        },
+        {
+          "rehome_pointer": true,
+          "delay_after": 0.25
+        },
+        {
+          "click": [
+            382,
+            99
+          ],
+          "delay_after": 3
+        },
+        {
+          "wait_for_pixels": {
+            "pixels": [
+              {
+                "x": 252,
+                "y": 290,
+                "red": 72,
+                "green": 48,
+                "blue": 8
+              },
+              {
+                "x": 320,
+                "y": 312,
+                "red": 232,
+                "green": 208,
+                "blue": 136
+              },
+              {
+                "x": 300,
+                "y": 242,
+                "red": 248,
+                "green": 248,
+                "blue": 0
+              }
+            ],
+            "tolerance": 8,
+            "timeout_seconds": 30,
+            "poll_interval_seconds": 1
+          }
+        },
+        {
+          "screenshot": "sortie-11-vehicle-select"
+        },
+        {
+          "rehome_pointer": true,
+          "delay_after": 0.25
+        },
+        {
+          "click": [
+            320,
+            312
+          ],
+          "delay_after": 5
+        },
+        {
+          "wait_for_pixels": {
+            "pixels": [
+              {
+                "x": 300,
+                "y": 400,
+                "red": 152,
+                "green": 152,
+                "blue": 0
+              },
+              {
+                "x": 240,
+                "y": 420,
+                "red": 0,
+                "green": 152,
+                "blue": 0
+              },
+              {
+                "x": 440,
+                "y": 400,
+                "red": 168,
+                "green": 128,
+                "blue": 72
+              }
+            ],
+            "tolerance": 8,
+            "timeout_seconds": 90,
+            "poll_interval_seconds": 1
+          }
+        },
+        {
+          "screenshot": "sortie-11-gameplay-start"
+        },
+        {
+          "key": "Up",
+          "hold_ms": 3000,
+          "delay_after": 1
+        },
+        {
+          "key": "Left",
+          "hold_ms": 1200,
+          "delay_after": 1
+        },
+        {
+          "key": "Control_L",
+          "hold_ms": 500,
+          "delay_after": 2
+        },
+        {
+          "wait": 12
+        },
+        {
+          "wait_for_pixels": {
+            "pixels": [
+              {
+                "x": 300,
+                "y": 400,
+                "red": 152,
+                "green": 152,
+                "blue": 0
+              },
+              {
+                "x": 240,
+                "y": 420,
+                "red": 0,
+                "green": 152,
+                "blue": 0
+              },
+              {
+                "x": 440,
+                "y": 400,
+                "red": 168,
+                "green": 128,
+                "blue": 72
+              }
+            ],
+            "tolerance": 8,
+            "timeout_seconds": 10,
+            "poll_interval_seconds": 1
+          }
+        },
+        {
+          "screenshot": "sortie-11-gameplay-final"
+        },
+        {
+          "assert_frame_changed_since": {
+            "screenshot": "sortie-11-gameplay-start",
+            "minimum_changed_fraction": 0.1,
+            "channel_tolerance": 16,
+            "region": [
+              0,
+              62,
+              640,
+              388
+            ]
+          }
+        },
+        {
+          "key": "Escape",
+          "delay_after": 3
+        },
+        {
+          "wait_for_pixels": {
+            "pixels": [
+              {
+                "x": 320,
+                "y": 99,
+                "red": 224,
+                "green": 176,
+                "blue": 72
+              },
+              {
+                "x": 382,
+                "y": 99,
+                "red": 96,
+                "green": 96,
+                "blue": 96
+              },
+              {
+                "x": 420,
+                "y": 365,
+                "red": 208,
+                "green": 32,
+                "blue": 32
+              },
+              {
+                "x": 300,
+                "y": 35,
+                "red": 208,
+                "green": 208,
+                "blue": 0
+              }
+            ],
+            "tolerance": 8,
+            "timeout_seconds": 60,
+            "poll_interval_seconds": 1
+          }
+        },
+        {
+          "screenshot": "sortie-11-main-menu-after-escape"
+        },
+        {
+          "note": "Candidate short sortie 12 of 15. This route has not qualified until every HUD, input-delta, Escape, and exact-menu gate completes in one reviewed run."
+        },
+        {
+          "rehome_pointer": true,
+          "delay_after": 0.25
+        },
+        {
+          "click": [
+            382,
+            99
+          ],
+          "delay_after": 3
+        },
+        {
+          "wait_for_pixels": {
+            "pixels": [
+              {
+                "x": 252,
+                "y": 290,
+                "red": 72,
+                "green": 48,
+                "blue": 8
+              },
+              {
+                "x": 320,
+                "y": 312,
+                "red": 232,
+                "green": 208,
+                "blue": 136
+              },
+              {
+                "x": 300,
+                "y": 242,
+                "red": 248,
+                "green": 248,
+                "blue": 0
+              }
+            ],
+            "tolerance": 8,
+            "timeout_seconds": 30,
+            "poll_interval_seconds": 1
+          }
+        },
+        {
+          "screenshot": "sortie-12-vehicle-select"
+        },
+        {
+          "rehome_pointer": true,
+          "delay_after": 0.25
+        },
+        {
+          "click": [
+            320,
+            312
+          ],
+          "delay_after": 5
+        },
+        {
+          "wait_for_pixels": {
+            "pixels": [
+              {
+                "x": 300,
+                "y": 400,
+                "red": 152,
+                "green": 152,
+                "blue": 0
+              },
+              {
+                "x": 240,
+                "y": 420,
+                "red": 0,
+                "green": 152,
+                "blue": 0
+              },
+              {
+                "x": 440,
+                "y": 400,
+                "red": 168,
+                "green": 128,
+                "blue": 72
+              }
+            ],
+            "tolerance": 8,
+            "timeout_seconds": 90,
+            "poll_interval_seconds": 1
+          }
+        },
+        {
+          "screenshot": "sortie-12-gameplay-start"
+        },
+        {
+          "key": "Up",
+          "hold_ms": 3000,
+          "delay_after": 1
+        },
+        {
+          "key": "Right",
+          "hold_ms": 1200,
+          "delay_after": 1
+        },
+        {
+          "key": "Control_L",
+          "hold_ms": 500,
+          "delay_after": 2
+        },
+        {
+          "wait": 12
+        },
+        {
+          "wait_for_pixels": {
+            "pixels": [
+              {
+                "x": 300,
+                "y": 400,
+                "red": 152,
+                "green": 152,
+                "blue": 0
+              },
+              {
+                "x": 240,
+                "y": 420,
+                "red": 0,
+                "green": 152,
+                "blue": 0
+              },
+              {
+                "x": 440,
+                "y": 400,
+                "red": 168,
+                "green": 128,
+                "blue": 72
+              }
+            ],
+            "tolerance": 8,
+            "timeout_seconds": 10,
+            "poll_interval_seconds": 1
+          }
+        },
+        {
+          "screenshot": "sortie-12-gameplay-final"
+        },
+        {
+          "assert_frame_changed_since": {
+            "screenshot": "sortie-12-gameplay-start",
+            "minimum_changed_fraction": 0.1,
+            "channel_tolerance": 16,
+            "region": [
+              0,
+              62,
+              640,
+              388
+            ]
+          }
+        },
+        {
+          "key": "Escape",
+          "delay_after": 3
+        },
+        {
+          "wait_for_pixels": {
+            "pixels": [
+              {
+                "x": 320,
+                "y": 99,
+                "red": 224,
+                "green": 176,
+                "blue": 72
+              },
+              {
+                "x": 382,
+                "y": 99,
+                "red": 96,
+                "green": 96,
+                "blue": 96
+              },
+              {
+                "x": 420,
+                "y": 365,
+                "red": 208,
+                "green": 32,
+                "blue": 32
+              },
+              {
+                "x": 300,
+                "y": 35,
+                "red": 208,
+                "green": 208,
+                "blue": 0
+              }
+            ],
+            "tolerance": 8,
+            "timeout_seconds": 60,
+            "poll_interval_seconds": 1
+          }
+        },
+        {
+          "screenshot": "sortie-12-main-menu-after-escape"
+        },
+        {
+          "note": "Candidate short sortie 13 of 15. This route has not qualified until every HUD, input-delta, Escape, and exact-menu gate completes in one reviewed run."
+        },
+        {
+          "rehome_pointer": true,
+          "delay_after": 0.25
+        },
+        {
+          "click": [
+            382,
+            99
+          ],
+          "delay_after": 3
+        },
+        {
+          "wait_for_pixels": {
+            "pixels": [
+              {
+                "x": 252,
+                "y": 290,
+                "red": 72,
+                "green": 48,
+                "blue": 8
+              },
+              {
+                "x": 320,
+                "y": 312,
+                "red": 232,
+                "green": 208,
+                "blue": 136
+              },
+              {
+                "x": 300,
+                "y": 242,
+                "red": 248,
+                "green": 248,
+                "blue": 0
+              }
+            ],
+            "tolerance": 8,
+            "timeout_seconds": 30,
+            "poll_interval_seconds": 1
+          }
+        },
+        {
+          "screenshot": "sortie-13-vehicle-select"
+        },
+        {
+          "rehome_pointer": true,
+          "delay_after": 0.25
+        },
+        {
+          "click": [
+            320,
+            312
+          ],
+          "delay_after": 5
+        },
+        {
+          "wait_for_pixels": {
+            "pixels": [
+              {
+                "x": 300,
+                "y": 400,
+                "red": 152,
+                "green": 152,
+                "blue": 0
+              },
+              {
+                "x": 240,
+                "y": 420,
+                "red": 0,
+                "green": 152,
+                "blue": 0
+              },
+              {
+                "x": 440,
+                "y": 400,
+                "red": 168,
+                "green": 128,
+                "blue": 72
+              }
+            ],
+            "tolerance": 8,
+            "timeout_seconds": 90,
+            "poll_interval_seconds": 1
+          }
+        },
+        {
+          "screenshot": "sortie-13-gameplay-start"
+        },
+        {
+          "key": "Up",
+          "hold_ms": 3000,
+          "delay_after": 1
+        },
+        {
+          "key": "Left",
+          "hold_ms": 1200,
+          "delay_after": 1
+        },
+        {
+          "key": "Control_L",
+          "hold_ms": 500,
+          "delay_after": 2
+        },
+        {
+          "wait": 12
+        },
+        {
+          "wait_for_pixels": {
+            "pixels": [
+              {
+                "x": 300,
+                "y": 400,
+                "red": 152,
+                "green": 152,
+                "blue": 0
+              },
+              {
+                "x": 240,
+                "y": 420,
+                "red": 0,
+                "green": 152,
+                "blue": 0
+              },
+              {
+                "x": 440,
+                "y": 400,
+                "red": 168,
+                "green": 128,
+                "blue": 72
+              }
+            ],
+            "tolerance": 8,
+            "timeout_seconds": 10,
+            "poll_interval_seconds": 1
+          }
+        },
+        {
+          "screenshot": "sortie-13-gameplay-final"
+        },
+        {
+          "assert_frame_changed_since": {
+            "screenshot": "sortie-13-gameplay-start",
+            "minimum_changed_fraction": 0.1,
+            "channel_tolerance": 16,
+            "region": [
+              0,
+              62,
+              640,
+              388
+            ]
+          }
+        },
+        {
+          "key": "Escape",
+          "delay_after": 3
+        },
+        {
+          "wait_for_pixels": {
+            "pixels": [
+              {
+                "x": 320,
+                "y": 99,
+                "red": 224,
+                "green": 176,
+                "blue": 72
+              },
+              {
+                "x": 382,
+                "y": 99,
+                "red": 96,
+                "green": 96,
+                "blue": 96
+              },
+              {
+                "x": 420,
+                "y": 365,
+                "red": 208,
+                "green": 32,
+                "blue": 32
+              },
+              {
+                "x": 300,
+                "y": 35,
+                "red": 208,
+                "green": 208,
+                "blue": 0
+              }
+            ],
+            "tolerance": 8,
+            "timeout_seconds": 60,
+            "poll_interval_seconds": 1
+          }
+        },
+        {
+          "screenshot": "sortie-13-main-menu-after-escape"
+        },
+        {
+          "note": "Candidate short sortie 14 of 15. This route has not qualified until every HUD, input-delta, Escape, and exact-menu gate completes in one reviewed run."
+        },
+        {
+          "rehome_pointer": true,
+          "delay_after": 0.25
+        },
+        {
+          "click": [
+            382,
+            99
+          ],
+          "delay_after": 3
+        },
+        {
+          "wait_for_pixels": {
+            "pixels": [
+              {
+                "x": 252,
+                "y": 290,
+                "red": 72,
+                "green": 48,
+                "blue": 8
+              },
+              {
+                "x": 320,
+                "y": 312,
+                "red": 232,
+                "green": 208,
+                "blue": 136
+              },
+              {
+                "x": 300,
+                "y": 242,
+                "red": 248,
+                "green": 248,
+                "blue": 0
+              }
+            ],
+            "tolerance": 8,
+            "timeout_seconds": 30,
+            "poll_interval_seconds": 1
+          }
+        },
+        {
+          "screenshot": "sortie-14-vehicle-select"
+        },
+        {
+          "rehome_pointer": true,
+          "delay_after": 0.25
+        },
+        {
+          "click": [
+            320,
+            312
+          ],
+          "delay_after": 5
+        },
+        {
+          "wait_for_pixels": {
+            "pixels": [
+              {
+                "x": 300,
+                "y": 400,
+                "red": 152,
+                "green": 152,
+                "blue": 0
+              },
+              {
+                "x": 240,
+                "y": 420,
+                "red": 0,
+                "green": 152,
+                "blue": 0
+              },
+              {
+                "x": 440,
+                "y": 400,
+                "red": 168,
+                "green": 128,
+                "blue": 72
+              }
+            ],
+            "tolerance": 8,
+            "timeout_seconds": 90,
+            "poll_interval_seconds": 1
+          }
+        },
+        {
+          "screenshot": "sortie-14-gameplay-start"
+        },
+        {
+          "key": "Up",
+          "hold_ms": 3000,
+          "delay_after": 1
+        },
+        {
+          "key": "Right",
+          "hold_ms": 1200,
+          "delay_after": 1
+        },
+        {
+          "key": "Control_L",
+          "hold_ms": 500,
+          "delay_after": 2
+        },
+        {
+          "wait": 12
+        },
+        {
+          "wait_for_pixels": {
+            "pixels": [
+              {
+                "x": 300,
+                "y": 400,
+                "red": 152,
+                "green": 152,
+                "blue": 0
+              },
+              {
+                "x": 240,
+                "y": 420,
+                "red": 0,
+                "green": 152,
+                "blue": 0
+              },
+              {
+                "x": 440,
+                "y": 400,
+                "red": 168,
+                "green": 128,
+                "blue": 72
+              }
+            ],
+            "tolerance": 8,
+            "timeout_seconds": 10,
+            "poll_interval_seconds": 1
+          }
+        },
+        {
+          "screenshot": "sortie-14-gameplay-final"
+        },
+        {
+          "assert_frame_changed_since": {
+            "screenshot": "sortie-14-gameplay-start",
+            "minimum_changed_fraction": 0.1,
+            "channel_tolerance": 16,
+            "region": [
+              0,
+              62,
+              640,
+              388
+            ]
+          }
+        },
+        {
+          "key": "Escape",
+          "delay_after": 3
+        },
+        {
+          "wait_for_pixels": {
+            "pixels": [
+              {
+                "x": 320,
+                "y": 99,
+                "red": 224,
+                "green": 176,
+                "blue": 72
+              },
+              {
+                "x": 382,
+                "y": 99,
+                "red": 96,
+                "green": 96,
+                "blue": 96
+              },
+              {
+                "x": 420,
+                "y": 365,
+                "red": 208,
+                "green": 32,
+                "blue": 32
+              },
+              {
+                "x": 300,
+                "y": 35,
+                "red": 208,
+                "green": 208,
+                "blue": 0
+              }
+            ],
+            "tolerance": 8,
+            "timeout_seconds": 60,
+            "poll_interval_seconds": 1
+          }
+        },
+        {
+          "screenshot": "sortie-14-main-menu-after-escape"
+        },
+        {
+          "note": "Candidate short sortie 15 of 15. This route has not qualified until every HUD, input-delta, Escape, and exact-menu gate completes in one reviewed run."
+        },
+        {
+          "rehome_pointer": true,
+          "delay_after": 0.25
+        },
+        {
+          "click": [
+            382,
+            99
+          ],
+          "delay_after": 3
+        },
+        {
+          "wait_for_pixels": {
+            "pixels": [
+              {
+                "x": 252,
+                "y": 290,
+                "red": 72,
+                "green": 48,
+                "blue": 8
+              },
+              {
+                "x": 320,
+                "y": 312,
+                "red": 232,
+                "green": 208,
+                "blue": 136
+              },
+              {
+                "x": 300,
+                "y": 242,
+                "red": 248,
+                "green": 248,
+                "blue": 0
+              }
+            ],
+            "tolerance": 8,
+            "timeout_seconds": 30,
+            "poll_interval_seconds": 1
+          }
+        },
+        {
+          "screenshot": "sortie-15-vehicle-select"
+        },
+        {
+          "rehome_pointer": true,
+          "delay_after": 0.25
+        },
+        {
+          "click": [
+            320,
+            312
+          ],
+          "delay_after": 5
+        },
+        {
+          "wait_for_pixels": {
+            "pixels": [
+              {
+                "x": 300,
+                "y": 400,
+                "red": 152,
+                "green": 152,
+                "blue": 0
+              },
+              {
+                "x": 240,
+                "y": 420,
+                "red": 0,
+                "green": 152,
+                "blue": 0
+              },
+              {
+                "x": 440,
+                "y": 400,
+                "red": 168,
+                "green": 128,
+                "blue": 72
+              }
+            ],
+            "tolerance": 8,
+            "timeout_seconds": 90,
+            "poll_interval_seconds": 1
+          }
+        },
+        {
+          "screenshot": "sortie-15-gameplay-start"
+        },
+        {
+          "key": "Up",
+          "hold_ms": 3000,
+          "delay_after": 1
+        },
+        {
+          "key": "Left",
+          "hold_ms": 1200,
+          "delay_after": 1
+        },
+        {
+          "key": "Control_L",
+          "hold_ms": 500,
+          "delay_after": 2
+        },
+        {
+          "wait": 12
+        },
+        {
+          "wait_for_pixels": {
+            "pixels": [
+              {
+                "x": 300,
+                "y": 400,
+                "red": 152,
+                "green": 152,
+                "blue": 0
+              },
+              {
+                "x": 240,
+                "y": 420,
+                "red": 0,
+                "green": 152,
+                "blue": 0
+              },
+              {
+                "x": 440,
+                "y": 400,
+                "red": 168,
+                "green": 128,
+                "blue": 72
+              }
+            ],
+            "tolerance": 8,
+            "timeout_seconds": 10,
+            "poll_interval_seconds": 1
+          }
+        },
+        {
+          "screenshot": "sortie-15-gameplay-final"
+        },
+        {
+          "assert_frame_changed_since": {
+            "screenshot": "sortie-15-gameplay-start",
+            "minimum_changed_fraction": 0.1,
+            "channel_tolerance": 16,
+            "region": [
+              0,
+              62,
+              640,
+              388
+            ]
+          }
+        },
+        {
+          "key": "Escape",
+          "delay_after": 3
+        },
+        {
+          "wait_for_pixels": {
+            "pixels": [
+              {
+                "x": 320,
+                "y": 99,
+                "red": 224,
+                "green": 176,
+                "blue": 72
+              },
+              {
+                "x": 382,
+                "y": 99,
+                "red": 96,
+                "green": 96,
+                "blue": 96
+              },
+              {
+                "x": 420,
+                "y": 365,
+                "red": 208,
+                "green": 32,
+                "blue": 32
+              },
+              {
+                "x": 300,
+                "y": 35,
+                "red": 208,
+                "green": 208,
+                "blue": 0
+              }
+            ],
+            "tolerance": 8,
+            "timeout_seconds": 60,
+            "poll_interval_seconds": 1
+          }
+        },
+        {
+          "screenshot": "sortie-15-main-menu-after-escape"
+        },
+        {
+          "note": "Normalize menu focus through the retained options-open/cancel route before quitting. This exact focus sequence reached HAVOC's ordinary main menu before successful Command-Q in the v2.2.3 persistent-options evidence; the v2.2.4 hardware diagnostic independently proves the same settings controls."
+        },
+        {
+          "rehome_pointer": true,
+          "delay_after": 0.25
+        },
+        {
+          "click": [
+            400,
+            262
+          ],
+          "delay_after": 2
+        },
+        {
+          "click": [
+            400,
+            262
+          ],
+          "delay_after": 4
+        },
+        {
+          "screenshot": "exit-settings-category-menu"
+        },
+        {
+          "click": [
+            394,
+            192
+          ],
+          "delay_after": 2
+        },
+        {
+          "click": [
+            394,
+            192
+          ],
+          "delay_after": 4
+        },
+        {
+          "screenshot": "exit-display-settings-page"
+        },
+        {
+          "key": "Escape",
+          "delay_after": 3
+        },
+        {
+          "click": [
+            386,
+            123
+          ],
+          "delay_after": 2
+        },
+        {
+          "click": [
+            386,
+            123
+          ],
+          "delay_after": 4
+        },
+        {
+          "screenshot": "exit-game-settings-page"
+        },
+        {
+          "key": "Escape",
+          "delay_after": 3
+        },
+        {
+          "click": [
+            399,
+            260
+          ],
+          "delay_after": 2
+        },
+        {
+          "click": [
+            399,
+            260
+          ],
+          "delay_after": 4
+        },
+        {
+          "screenshot": "exit-keyboard-settings-page"
+        },
+        {
+          "key": "Escape",
+          "delay_after": 3
+        },
+        {
+          "key": "Escape",
+          "delay_after": 3
+        },
+        {
+          "wait_for_pixels": {
+            "pixels": [
+              {
+                "x": 320,
+                "y": 99,
+                "red": 224,
+                "green": 176,
+                "blue": 72
+              },
+              {
+                "x": 382,
+                "y": 99,
+                "red": 96,
+                "green": 96,
+                "blue": 96
+              },
+              {
+                "x": 420,
+                "y": 365,
+                "red": 208,
+                "green": 32,
+                "blue": 32
+              },
+              {
+                "x": 300,
+                "y": 35,
+                "red": 208,
+                "green": 208,
+                "blue": 0
+              }
+            ],
+            "tolerance": 8,
+            "timeout_seconds": 30,
+            "poll_interval_seconds": 1
+          }
+        },
+        {
+          "screenshot": "ordinary-main-menu-after-options-cancel"
+        },
+        {
+          "note": "Clean-exit boundary: Command-Q is evidence-backed after the ordinary main-menu/options-cancel state. Keep this fail-closed: do not claim clean exit or relaunch unless the following Finder and second-process gameplay gates pass."
+        },
+        {
+          "chord": "Super_L+q",
+          "delay_after": 10
+        },
+        {
+          "wait_for_pixel": {
+            "x": 22,
+            "y": 11,
+            "red": 221,
+            "green": 0,
+            "blue": 0,
+            "tolerance": 8,
+            "timeout_seconds": 60,
+            "poll_interval_seconds": 1
+          }
+        },
+        {
+          "screenshot": "finder-after-first-clean-quit"
+        },
+        {
+          "rehome_pointer": true,
+          "delay_after": 0.25
+        },
+        {
+          "chord": "Super_L+Alt_L+w",
+          "delay_after": 2
+        },
+        {
+          "double_click": [
+            590,
+            52
+          ],
+          "delay_after": 3
+        },
+        {
+          "text": "GXMetal Sweep Games",
+          "delay_after": 1
+        },
+        {
+          "chord": "Super_L+o",
+          "delay_after": 3
+        },
+        {
+          "text": "HAVOC",
+          "delay_after": 1
+        },
+        {
+          "chord": "Super_L+o",
+          "delay_after": 3
+        },
+        {
+          "text": "HAVOC",
+          "delay_after": 1
+        },
+        {
+          "chord": "Super_L+o",
+          "delay_after": 35
+        },
+        {
+          "key": "Escape",
+          "delay_after": 2
+        },
+        {
+          "wait_for_pixels": {
+            "pixels": [
+              {
+                "x": 320,
+                "y": 99,
+                "red": 224,
+                "green": 176,
+                "blue": 72
+              },
+              {
+                "x": 382,
+                "y": 99,
+                "red": 96,
+                "green": 96,
+                "blue": 96
+              },
+              {
+                "x": 420,
+                "y": 365,
+                "red": 208,
+                "green": 32,
+                "blue": 32
+              },
+              {
+                "x": 300,
+                "y": 35,
+                "red": 208,
+                "green": 208,
+                "blue": 0
+              }
+            ],
+            "tolerance": 8,
+            "timeout_seconds": 90,
+            "poll_interval_seconds": 1
+          }
+        },
+        {
+          "screenshot": "second-process-main-menu"
+        },
+        {
+          "rehome_pointer": true,
+          "delay_after": 0.25
+        },
+        {
+          "click": [
+            382,
+            99
+          ],
+          "delay_after": 3
+        },
+        {
+          "wait_for_pixels": {
+            "pixels": [
+              {
+                "x": 252,
+                "y": 290,
+                "red": 72,
+                "green": 48,
+                "blue": 8
+              },
+              {
+                "x": 320,
+                "y": 312,
+                "red": 232,
+                "green": 208,
+                "blue": 136
+              },
+              {
+                "x": 300,
+                "y": 242,
+                "red": 248,
+                "green": 248,
+                "blue": 0
+              }
+            ],
+            "tolerance": 8,
+            "timeout_seconds": 30,
+            "poll_interval_seconds": 1
+          }
+        },
+        {
+          "screenshot": "second-process-vehicle-select"
+        },
+        {
+          "rehome_pointer": true,
+          "delay_after": 0.25
+        },
+        {
+          "click": [
+            320,
+            312
+          ],
+          "delay_after": 5
+        },
+        {
+          "wait_for_pixels": {
+            "pixels": [
+              {
+                "x": 300,
+                "y": 400,
+                "red": 152,
+                "green": 152,
+                "blue": 0
+              },
+              {
+                "x": 240,
+                "y": 420,
+                "red": 0,
+                "green": 152,
+                "blue": 0
+              },
+              {
+                "x": 440,
+                "y": 400,
+                "red": 168,
+                "green": 128,
+                "blue": 72
+              }
+            ],
+            "tolerance": 8,
+            "timeout_seconds": 90,
+            "poll_interval_seconds": 1
+          }
+        },
+        {
+          "screenshot": "second-process-gameplay-start"
+        },
+        {
+          "key": "Up",
+          "hold_ms": 3000,
+          "delay_after": 1
+        },
+        {
+          "key": "Left",
+          "hold_ms": 1200,
+          "delay_after": 1
+        },
+        {
+          "key": "Control_L",
+          "hold_ms": 500,
+          "delay_after": 2
+        },
+        {
+          "screenshot": "second-process-after-input"
+        },
+        {
+          "assert_frame_changed_since": {
+            "screenshot": "second-process-gameplay-start",
+            "minimum_changed_fraction": 0.15,
+            "channel_tolerance": 16,
+            "region": [
+              0,
+              62,
+              640,
+              388
+            ]
+          }
+        },
+        {
+          "note": "A qualified review must additionally require at least two distinct context_create_generations in result.json. The second-process cockpit and input gates force fresh RAVE work, while the result audit—not this JSON manifest—proves that the work belongs to a fresh renderer generation."
+        }
       ]
     }
   ]
