@@ -696,11 +696,19 @@ VMs, each with an independent clone and unique local VNC and monitor sockets.
   format. Requiring ATI ARGB4444 incorrectly faulted ordinary RAVE textures
   before the race. The host now requires only the proven 64-byte stride for
   this flag, with a focused Metal regression. The canonical Virtual CD/DVD
-  Utility route then reaches the race, passes the stable five-point HUD gate
+  Utility route then reaches the race, passes the stable six-point HUD gate
   twice, and records 3,618 direct frames, zero fallback, 1,075,097 draws, and
   no queue or transport fault. Five post-collision frames remain coherent with
   no red spike fan or missing textures. Evidence is retained under
   `context/gxmetal-games/evidence/gxmetal-carmageddon2-dev-ati-uv-fix-race-20260828/`.
+  The final end-to-end packaged 2.2.4 guest/host route name-selects the Toast
+  image from Virtual CD/DVD Utility's Open dialog, verifies the mounted disc,
+  launches the installed RAVE executable, and reaches the same race. It records
+  3,926 direct frames, zero fallback, 969,630 draws, no queue or transport
+  fault, a clean QEMU exit, and an unchanged source digest. Six reviewed race
+  frames retain coherent car, wall, road, HUD, and minimap textures. Evidence
+  is retained under
+  `context/gxmetal-games/evidence/gxmetal-carmageddon2-v2.2.4-packaged-full-candidate-final6-20260828/`.
 - Added `GXMetal RAVE Selection`, a guest probe that inventories main-display
   RAVE engines and records the engines selected by an untouched QuickDraw 3D
   interactive renderer and a separate explicit best-choice renderer. It does

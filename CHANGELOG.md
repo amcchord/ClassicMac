@@ -25,14 +25,18 @@
 
 - Hardened the Carmageddon II regression around the canonical media route:
   launch Virtual CD/DVD Utility, choose its Toast mount command, and open the
-  Toast image from inside the utility. Stable skill-dialog and five-point race
-  HUD gates replace fixed-delay assumptions.
+  Toast image from inside the utility. Stable mounted-disc, main-menu, and
+  six-point race-HUD gates replace fixed-delay assumptions.
 
 ### Validation
 
 - The exact signed-host Carmageddon II route reaches the race and remains
   coherent across six reviewed frames, with 4,289 direct frames, zero
   fallback, 1,015,895 accelerated draws, and no queue or transport fault.
+- A separate end-to-end run with the packaged 2.2.4 guest driver and signed
+  host completes the canonical Toast mount and race route with 3,926 direct
+  frames, zero fallback, 969,630 accelerated draws, no queue or transport
+  fault, a clean QEMU exit, and an unchanged source image.
 - The new engine-selection probe records GXMetal first and Apple Software
   second; both an untouched interactive renderer and explicit best-choice
   renderer select GXMetal without changing global engine enablement.
