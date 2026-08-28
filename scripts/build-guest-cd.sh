@@ -132,7 +132,10 @@ Disk Copy 6.3.3.smi
    Copy application onto your hard disk.
 
 Virtual CD-DVD Utility
-   Mounts .iso and .toast CD images straight from the Finder.
+   Mounts .iso and .toast CD images. Open the utility first,
+   choose Open from inside the utility, then select the image
+   in its file dialog. Do not rely on opening the image from
+   the Finder.
    The utility ships as a Disk Copy image: install Disk Copy
    first, mount Virtual-CD-DVD-Utility-10d3.img with it, and
    drag the utility to your hard disk. Pairs well with the

@@ -18,6 +18,7 @@ typedef struct GenerationHarness {
     int context_active[8];
     int initialized;
     unsigned int live_contexts;
+    unsigned int live_resources;
     unsigned int resets;
 } GenerationHarness;
 
@@ -28,16 +29,16 @@ static int same_process(const GXMetalGenerationOwner *owner,
            (!process_known || (owner->high == high && owner->low == low));
 }
 
-static int create_context(GenerationHarness *harness, int process_known,
-                          uint32_t high, uint32_t low)
+static int prepare_generation(GenerationHarness *harness, int process_known,
+                              uint32_t high, uint32_t low)
 {
-    unsigned int i;
     int reset = gxmetal_generation_should_reset(
         harness->initialized, harness->live_contexts != 0, &harness->owner,
         process_known, high, low);
 
     if (reset) {
         harness->initialized = 1;
+        harness->live_resources = 0;
         harness->resets++;
         gxmetal_generation_note_owner(&harness->owner, process_known,
                                        high, low);
@@ -45,6 +46,15 @@ static int create_context(GenerationHarness *harness, int process_known,
                !harness->owner.valid) {
         gxmetal_generation_note_owner(&harness->owner, 1, high, low);
     }
+    return reset;
+}
+
+static int create_context(GenerationHarness *harness, int process_known,
+                          uint32_t high, uint32_t low)
+{
+    unsigned int i;
+    int reset = prepare_generation(harness, process_known, high, low);
+
     for (i = 0; i < 8; i++) {
         if (!harness->context_active[i]) {
             harness->context_active[i] = 1;
@@ -55,6 +65,15 @@ static int create_context(GenerationHarness *harness, int process_known,
     }
     CHECK(i != 8);
     harness->live_contexts++;
+    return reset;
+}
+
+static int create_resource(GenerationHarness *harness, int process_known,
+                           uint32_t high, uint32_t low)
+{
+    int reset = prepare_generation(harness, process_known, high, low);
+
+    harness->live_resources++;
     return reset;
 }
 
@@ -111,6 +130,34 @@ static void test_first_context_and_same_process_recreation(void)
 
     CHECK(create_context(&harness, 1, 0, 100) == 0);
     CHECK(harness.resets == 1);
+}
+
+static void test_resource_before_first_context_establishes_generation(void)
+{
+    GenerationHarness harness = {0};
+
+    CHECK(create_resource(&harness, 1, 1, 90) == 1);
+    CHECK(harness.resets == 1);
+    CHECK(harness.live_resources == 1);
+
+    CHECK(create_context(&harness, 1, 1, 90) == 0);
+    CHECK(harness.resets == 1);
+    CHECK(harness.live_resources == 1);
+}
+
+static void test_new_process_resource_resets_before_create(void)
+{
+    GenerationHarness harness = {0};
+
+    CHECK(create_resource(&harness, 1, 2, 95) == 1);
+    CHECK(create_resource(&harness, 1, 2, 95) == 0);
+    CHECK(harness.live_resources == 2);
+
+    CHECK(create_resource(&harness, 1, 2, 96) == 1);
+    CHECK(harness.resets == 2);
+    CHECK(harness.live_resources == 1);
+    CHECK(create_context(&harness, 1, 2, 96) == 0);
+    CHECK(harness.live_resources == 1);
 }
 
 static void test_new_process_after_idle_resets(void)
@@ -208,6 +255,8 @@ static void test_exited_context_does_not_retire_live_concurrent_context(void)
 int main(void)
 {
     test_first_context_and_same_process_recreation();
+    test_resource_before_first_context_establishes_generation();
+    test_new_process_resource_resets_before_create();
     test_new_process_after_idle_resets();
     test_concurrent_process_does_not_reset_live_contexts();
     test_unknown_process_never_forces_spurious_reset();

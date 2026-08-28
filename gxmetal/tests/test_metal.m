@@ -734,6 +734,285 @@ static uint16_t framebuffer_pixel(const uint8_t *framebuffer,
                       framebuffer[offset + 1]);
 }
 
+static void test_metal_invalid_triangle_batch_isolation(void)
+{
+    enum {
+        kContext = 39,
+        kResource = 639,
+        kGouraudPacketBytes = GXMETAL_PACKET_HEADER_BYTES +
+            GXMETAL_DRAW_HEADER_BYTES +
+            6 * GXMETAL_GOURAUD_VERTEX_BYTES,
+        kTexturePacketBytes = GXMETAL_PACKET_HEADER_BYTES +
+            GXMETAL_DRAW_HEADER_BYTES +
+            6 * GXMETAL_TEXTURE_VERTEX_BYTES,
+        kObservedTexturePacketBytes = GXMETAL_PACKET_HEADER_BYTES +
+            GXMETAL_DRAW_HEADER_BYTES +
+            21 * GXMETAL_TEXTURE_VERTEX_BYTES
+    };
+    uint8_t framebuffer[64 * 64 * 2] = {0};
+    uint8_t packet[kTexturePacketBytes];
+    uint8_t control[64];
+    uint8_t *shared = calloc(1, GXMETAL_SHARED_BYTES);
+    uint8_t *payload;
+    uint8_t *vertices;
+    const uint8_t white[4] = {0xff, 0xff, 0xff, 0xff};
+    GXMetalMetalRenderer *renderer;
+
+    CHECK(shared != NULL);
+    if (shared == NULL) {
+        return;
+    }
+    renderer = gxmetal_metal_create(framebuffer, sizeof(framebuffer),
+                                     shared, GXMETAL_SHARED_BYTES);
+    if (renderer == NULL) {
+        free(shared);
+        return;
+    }
+    upload_single_pixel_texture(renderer, packet, shared, kResource,
+                                GXMETAL_PIXEL_ARGB8888, white);
+    make_packet(packet, GXMETAL_OP_CONTEXT_CREATE, 48, kContext);
+    payload = packet + GXMETAL_PACKET_HEADER_BYTES;
+    gxmetal_store_le32(payload + GXMETAL_CONTEXT_WIDTH_OFFSET, 64);
+    gxmetal_store_le32(payload + GXMETAL_CONTEXT_HEIGHT_OFFSET, 64);
+    gxmetal_store_le32(payload + GXMETAL_CONTEXT_ROW_BYTES_OFFSET, 128);
+    gxmetal_store_le32(payload + GXMETAL_CONTEXT_PIXEL_FORMAT_OFFSET,
+                       GXMETAL_PIXEL_RGB555);
+    CHECK(dispatch(renderer, packet, 48) == GXMETAL_ERROR_NONE);
+
+    make_packet(control, GXMETAL_OP_BEGIN_FRAME, 32, kContext);
+    CHECK(dispatch(renderer, control, 32) == GXMETAL_ERROR_NONE);
+    make_packet(control, GXMETAL_OP_CLEAR, 64, kContext);
+    payload = control + GXMETAL_PACKET_HEADER_BYTES;
+    gxmetal_store_le32(payload + GXMETAL_CLEAR_FLAGS_OFFSET,
+                       GXMETAL_CLEAR_COLOR);
+    store_float(payload + GXMETAL_CLEAR_COLOR_A_OFFSET, 1.0f);
+    gxmetal_store_le32(payload + GXMETAL_CLEAR_RECT_OFFSET +
+                       GXMETAL_RECT_RIGHT_OFFSET, 64);
+    gxmetal_store_le32(payload + GXMETAL_CLEAR_RECT_OFFSET +
+                       GXMETAL_RECT_BOTTOM_OFFSET, 64);
+    CHECK(dispatch(renderer, control, 64) == GXMETAL_ERROR_NONE);
+
+    /* Public RAVE triangle lists are independently useful primitives.  A
+     * clipped-away sentinel in one triangle must not discard a valid sibling
+     * or poison all subsequent commands in the shared queue. */
+    make_packet(packet, GXMETAL_OP_DRAW_GOURAUD,
+                kGouraudPacketBytes, kContext);
+    payload = packet + GXMETAL_PACKET_HEADER_BYTES;
+    gxmetal_store_le32(payload + GXMETAL_DRAW_PRIMITIVE_OFFSET,
+                       GXMETAL_PRIMITIVE_TRIANGLE);
+    gxmetal_store_le32(payload + GXMETAL_DRAW_VERTEX_COUNT_OFFSET, 6);
+    gxmetal_store_le32(payload + GXMETAL_DRAW_VERTEX_STRIDE_OFFSET,
+                       GXMETAL_GOURAUD_VERTEX_BYTES);
+    vertices = payload + GXMETAL_DRAW_VERTICES_OFFSET;
+    set_vertex(vertices + 0 * GXMETAL_GOURAUD_VERTEX_BYTES,
+               0, 0, 1, 0, 0);
+    set_vertex(vertices + 1 * GXMETAL_GOURAUD_VERTEX_BYTES,
+               24, 0, 1, 0, 0);
+    set_vertex(vertices + 2 * GXMETAL_GOURAUD_VERTEX_BYTES,
+               0, 24, 1, 0, 0);
+    store_float(vertices + GXMETAL_GOURAUD_VERTEX_BYTES +
+                GXMETAL_VERTEX_X_OFFSET, NAN);
+    set_vertex(vertices + 3 * GXMETAL_GOURAUD_VERTEX_BYTES,
+               32, 32, 1, 0, 0);
+    set_vertex(vertices + 4 * GXMETAL_GOURAUD_VERTEX_BYTES,
+               60, 32, 1, 0, 0);
+    set_vertex(vertices + 5 * GXMETAL_GOURAUD_VERTEX_BYTES,
+               32, 60, 1, 0, 0);
+    CHECK(dispatch(renderer, packet, kGouraudPacketBytes) ==
+          GXMETAL_ERROR_NONE);
+    gxmetal_store_le32(payload + GXMETAL_DRAW_FLAGS_OFFSET,
+                       GXMETAL_DRAW_BACKFACING);
+    CHECK(dispatch(renderer, packet, kGouraudPacketBytes) ==
+          GXMETAL_ERROR_BAD_PACKET);
+    gxmetal_store_le32(payload + GXMETAL_DRAW_FLAGS_OFFSET,
+                       GXMETAL_DRAW_NONE);
+    make_packet(control, GXMETAL_OP_END_FRAME, 32, kContext);
+    CHECK(dispatch(renderer, control, 32) == GXMETAL_ERROR_NONE);
+    present_rect(renderer, control, kContext, 0, 0, 64, 64);
+    CHECK(framebuffer_pixel(framebuffer, 40, 40) == 0x7c00);
+    CHECK(framebuffer_pixel(framebuffer, 8, 8) == 0x0000);
+
+    /* Perspective-Z consumes reciprocal W as depth, so a finite eye-space Z
+     * value in the unused normalized slot is valid for Gouraud just as it is
+     * for textured vertices. */
+    set_int_state(renderer, control, kContext,
+                  GXMETAL_STATE_PERSPECTIVE_Z, 1);
+    make_packet(packet, GXMETAL_OP_DRAW_GOURAUD,
+                GXMETAL_PACKET_HEADER_BYTES + GXMETAL_DRAW_HEADER_BYTES +
+                    3 * GXMETAL_GOURAUD_VERTEX_BYTES,
+                kContext);
+    payload = packet + GXMETAL_PACKET_HEADER_BYTES;
+    gxmetal_store_le32(payload + GXMETAL_DRAW_PRIMITIVE_OFFSET,
+                       GXMETAL_PRIMITIVE_TRIANGLE);
+    gxmetal_store_le32(payload + GXMETAL_DRAW_VERTEX_COUNT_OFFSET, 3);
+    gxmetal_store_le32(payload + GXMETAL_DRAW_VERTEX_STRIDE_OFFSET,
+                       GXMETAL_GOURAUD_VERTEX_BYTES);
+    vertices = payload + GXMETAL_DRAW_VERTICES_OFFSET;
+    set_vertex_z_alpha(vertices + 0 * GXMETAL_GOURAUD_VERTEX_BYTES,
+                       8, 8, -128.0f, 1, 0, 0, 1);
+    set_vertex_z_alpha(vertices + 1 * GXMETAL_GOURAUD_VERTEX_BYTES,
+                       24, 8, -128.0f, 1, 0, 0, 1);
+    set_vertex_z_alpha(vertices + 2 * GXMETAL_GOURAUD_VERTEX_BYTES,
+                       8, 24, -128.0f, 1, 0, 0, 1);
+    store_float(vertices + 0 * GXMETAL_GOURAUD_VERTEX_BYTES +
+                GXMETAL_VERTEX_INV_W_OFFSET, 2.0f);
+    store_float(vertices + 1 * GXMETAL_GOURAUD_VERTEX_BYTES +
+                GXMETAL_VERTEX_INV_W_OFFSET, 2.0f);
+    store_float(vertices + 2 * GXMETAL_GOURAUD_VERTEX_BYTES +
+                GXMETAL_VERTEX_INV_W_OFFSET, 2.0f);
+    CHECK(dispatch(renderer, packet,
+                   GXMETAL_PACKET_HEADER_BYTES +
+                       GXMETAL_DRAW_HEADER_BYTES +
+                       3 * GXMETAL_GOURAUD_VERTEX_BYTES) ==
+          GXMETAL_ERROR_NONE);
+    set_int_state(renderer, control, kContext,
+                  GXMETAL_STATE_PERSPECTIVE_Z, 0);
+
+    /* A standalone unflagged sentinel triangle is equally discardable.  An
+     * explicit flag keeps validation strict because it may carry a distinct
+     * coordinate/provenance contract. */
+    store_float(vertices + GXMETAL_VERTEX_X_OFFSET, NAN);
+    CHECK(dispatch(renderer, packet,
+                   GXMETAL_PACKET_HEADER_BYTES +
+                       GXMETAL_DRAW_HEADER_BYTES +
+                       3 * GXMETAL_GOURAUD_VERTEX_BYTES) ==
+          GXMETAL_ERROR_NONE);
+    gxmetal_store_le32(payload + GXMETAL_DRAW_FLAGS_OFFSET,
+                       GXMETAL_DRAW_BACKFACING);
+    CHECK(dispatch(renderer, packet,
+                   GXMETAL_PACKET_HEADER_BYTES +
+                       GXMETAL_DRAW_HEADER_BYTES +
+                       3 * GXMETAL_GOURAUD_VERTEX_BYTES) ==
+          GXMETAL_ERROR_BAD_PACKET);
+
+    set_resource_state(renderer, control, kContext,
+                       GXMETAL_STATE_TEXTURE, kResource);
+    set_int_state(renderer, control, kContext,
+                  GXMETAL_STATE_TEXTURE_OP, GXMETAL_TEXTURE_MODULATE);
+    make_packet(control, GXMETAL_OP_BEGIN_FRAME, 32, kContext);
+    CHECK(dispatch(renderer, control, 32) == GXMETAL_ERROR_NONE);
+    make_packet(control, GXMETAL_OP_CLEAR, 64, kContext);
+    payload = control + GXMETAL_PACKET_HEADER_BYTES;
+    gxmetal_store_le32(payload + GXMETAL_CLEAR_FLAGS_OFFSET,
+                       GXMETAL_CLEAR_COLOR);
+    store_float(payload + GXMETAL_CLEAR_COLOR_A_OFFSET, 1.0f);
+    gxmetal_store_le32(payload + GXMETAL_CLEAR_RECT_OFFSET +
+                       GXMETAL_RECT_RIGHT_OFFSET, 64);
+    gxmetal_store_le32(payload + GXMETAL_CLEAR_RECT_OFFSET +
+                       GXMETAL_RECT_BOTTOM_OFFSET, 64);
+    CHECK(dispatch(renderer, control, 64) == GXMETAL_ERROR_NONE);
+
+    make_packet(packet, GXMETAL_OP_DRAW_TEXTURED,
+                kTexturePacketBytes, kContext);
+    payload = packet + GXMETAL_PACKET_HEADER_BYTES;
+    gxmetal_store_le32(payload + GXMETAL_DRAW_PRIMITIVE_OFFSET,
+                       GXMETAL_PRIMITIVE_TRIANGLE);
+    gxmetal_store_le32(payload + GXMETAL_DRAW_VERTEX_COUNT_OFFSET, 6);
+    gxmetal_store_le32(payload + GXMETAL_DRAW_VERTEX_STRIDE_OFFSET,
+                       GXMETAL_TEXTURE_VERTEX_BYTES);
+    vertices = payload + GXMETAL_DRAW_VERTICES_OFFSET;
+    set_texture_vertex(vertices + 0 * GXMETAL_TEXTURE_VERTEX_BYTES,
+                       8, 8, 0, 0);
+    set_texture_vertex(vertices + 1 * GXMETAL_TEXTURE_VERTEX_BYTES,
+                       28, 8, 0, 0);
+    set_texture_vertex(vertices + 2 * GXMETAL_TEXTURE_VERTEX_BYTES,
+                       8, 28, 0, 0);
+    set_texture_vertex(vertices + 3 * GXMETAL_TEXTURE_VERTEX_BYTES,
+                       36, 36, 0, 0);
+    set_texture_vertex(vertices + 4 * GXMETAL_TEXTURE_VERTEX_BYTES,
+                       60, 36, 0, 0);
+    set_texture_vertex(vertices + 5 * GXMETAL_TEXTURE_VERTEX_BYTES,
+                       36, 60, 0, 0);
+    store_float(vertices + 4 * GXMETAL_TEXTURE_VERTEX_BYTES +
+                GXMETAL_VERTEX_U_OVER_W_OFFSET, NAN);
+    CHECK(dispatch(renderer, packet, kTexturePacketBytes) ==
+          GXMETAL_ERROR_NONE);
+
+    /* Exact shape of HAVOC's first observed fault: seven independent
+     * triangles, 21 public 64-byte texture vertices, flags zero, and one
+     * clipped sentinel in vertex 19.  The six complete siblings still reach
+     * Metal and the command returns success. */
+    {
+        uint8_t observed[kObservedTexturePacketBytes];
+        uint8_t *observed_payload;
+        uint8_t *observed_vertices;
+        uint32_t i;
+
+        set_int_state(renderer, control, kContext,
+                      GXMETAL_STATE_TEXTURE_OP,
+                      GXMETAL_TEXTURE_MODULATE |
+                      GXMETAL_TEXTURE_HIGHLIGHT);
+        make_packet(observed, GXMETAL_OP_DRAW_TEXTURED,
+                    kObservedTexturePacketBytes, kContext);
+        observed_payload = observed + GXMETAL_PACKET_HEADER_BYTES;
+        gxmetal_store_le32(observed_payload + GXMETAL_DRAW_PRIMITIVE_OFFSET,
+                           GXMETAL_PRIMITIVE_TRIANGLE);
+        gxmetal_store_le32(observed_payload +
+                           GXMETAL_DRAW_VERTEX_COUNT_OFFSET, 21);
+        gxmetal_store_le32(observed_payload +
+                           GXMETAL_DRAW_VERTEX_STRIDE_OFFSET,
+                           GXMETAL_TEXTURE_VERTEX_BYTES);
+        observed_vertices = observed_payload + GXMETAL_DRAW_VERTICES_OFFSET;
+        for (i = 0; i < 21; i += 3) {
+            set_texture_vertex(observed_vertices +
+                               (i + 0) * GXMETAL_TEXTURE_VERTEX_BYTES,
+                               8, 8, 0, 0);
+            set_texture_vertex(observed_vertices +
+                               (i + 1) * GXMETAL_TEXTURE_VERTEX_BYTES,
+                               28, 8, 0, 0);
+            set_texture_vertex(observed_vertices +
+                               (i + 2) * GXMETAL_TEXTURE_VERTEX_BYTES,
+                               8, 28, 0, 0);
+        }
+        store_float(observed_vertices +
+                    19 * GXMETAL_TEXTURE_VERTEX_BYTES +
+                    GXMETAL_VERTEX_U_OVER_W_OFFSET, NAN);
+        store_float(observed_vertices +
+                    19 * GXMETAL_TEXTURE_VERTEX_BYTES +
+                    GXMETAL_VERTEX_V_OVER_W_OFFSET, NAN);
+        CHECK(dispatch(renderer, observed, kObservedTexturePacketBytes) ==
+              GXMETAL_ERROR_NONE);
+    }
+    make_packet(control, GXMETAL_OP_END_FRAME, 32, kContext);
+    CHECK(dispatch(renderer, control, 32) == GXMETAL_ERROR_NONE);
+    present_rect(renderer, control, kContext, 0, 0, 64, 64);
+    CHECK(framebuffer_pixel(framebuffer, 12, 12) == 0x7fff);
+    CHECK(framebuffer_pixel(framebuffer, 44, 44) == 0x0000);
+
+    make_packet(packet, GXMETAL_OP_DRAW_TEXTURED,
+                GXMETAL_PACKET_HEADER_BYTES + GXMETAL_DRAW_HEADER_BYTES +
+                    3 * GXMETAL_TEXTURE_VERTEX_BYTES,
+                kContext);
+    payload = packet + GXMETAL_PACKET_HEADER_BYTES;
+    gxmetal_store_le32(payload + GXMETAL_DRAW_PRIMITIVE_OFFSET,
+                       GXMETAL_PRIMITIVE_TRIANGLE);
+    gxmetal_store_le32(payload + GXMETAL_DRAW_VERTEX_COUNT_OFFSET, 3);
+    gxmetal_store_le32(payload + GXMETAL_DRAW_VERTEX_STRIDE_OFFSET,
+                       GXMETAL_TEXTURE_VERTEX_BYTES);
+    vertices = payload + GXMETAL_DRAW_VERTICES_OFFSET;
+    set_texture_vertex(vertices + 0 * GXMETAL_TEXTURE_VERTEX_BYTES,
+                       8, 8, 0, 0);
+    set_texture_vertex(vertices + 1 * GXMETAL_TEXTURE_VERTEX_BYTES,
+                       28, 8, NAN, 0);
+    set_texture_vertex(vertices + 2 * GXMETAL_TEXTURE_VERTEX_BYTES,
+                       8, 28, 0, 0);
+    CHECK(dispatch(renderer, packet,
+                   GXMETAL_PACKET_HEADER_BYTES +
+                       GXMETAL_DRAW_HEADER_BYTES +
+                       3 * GXMETAL_TEXTURE_VERTEX_BYTES) ==
+          GXMETAL_ERROR_NONE);
+    gxmetal_store_le32(payload + GXMETAL_DRAW_FLAGS_OFFSET,
+                       GXMETAL_DRAW_BACKFACING);
+    CHECK(dispatch(renderer, packet,
+                   GXMETAL_PACKET_HEADER_BYTES +
+                       GXMETAL_DRAW_HEADER_BYTES +
+                       3 * GXMETAL_TEXTURE_VERTEX_BYTES) ==
+          GXMETAL_ERROR_BAD_PACKET);
+
+    gxmetal_metal_destroy(renderer);
+    free(shared);
+}
+
 static void test_metal_ati_homogeneous_eye_plane_clipping(void)
 {
     enum {
@@ -3372,12 +3651,73 @@ static void test_metal_sampler_rendering(void)
     free(shared);
 }
 
+static void test_metal_stale_texture_destroy_after_reset(void)
+{
+    uint8_t framebuffer[8 * 8 * 2] = {0};
+    uint8_t packet[GXMETAL_CONTEXT_CREATE_PACKET_BYTES];
+    uint8_t *payload;
+    uint8_t *shared = calloc(1, GXMETAL_SHARED_BYTES);
+    GXMetalMetalRenderer *renderer;
+
+    CHECK(shared != NULL);
+    if (shared == NULL) {
+        return;
+    }
+    renderer = gxmetal_metal_create(framebuffer, sizeof(framebuffer),
+                                     shared, GXMETAL_SHARED_BYTES);
+    if (renderer == NULL) {
+        free(shared);
+        return;
+    }
+
+    make_packet(packet, GXMETAL_OP_TEXTURE_CREATE,
+                GXMETAL_RESOURCE_CREATE_PACKET_BYTES, 0);
+    payload = packet + GXMETAL_PACKET_HEADER_BYTES;
+    gxmetal_store_le32(payload + GXMETAL_RESOURCE_ID_OFFSET, 1);
+    gxmetal_store_le32(payload + GXMETAL_RESOURCE_WIDTH_OFFSET, 1);
+    gxmetal_store_le32(payload + GXMETAL_RESOURCE_HEIGHT_OFFSET, 1);
+    gxmetal_store_le32(payload + GXMETAL_RESOURCE_ROW_BYTES_OFFSET, 2);
+    gxmetal_store_le32(payload + GXMETAL_RESOURCE_PIXEL_FORMAT_OFFSET,
+                       GXMETAL_PIXEL_RGB555);
+    gxmetal_store_le32(payload + GXMETAL_RESOURCE_LEVELS_OFFSET, 1);
+    CHECK(dispatch(renderer, packet, GXMETAL_RESOURCE_CREATE_PACKET_BYTES) ==
+          GXMETAL_ERROR_NONE);
+
+    /* A generation reset can reclaim host resources before a surviving guest
+     * teardown path submits its destroy packet.  That cleanup is idempotent. */
+    gxmetal_metal_reset(renderer);
+    make_packet(packet, GXMETAL_OP_CONTEXT_CREATE,
+                GXMETAL_CONTEXT_CREATE_PACKET_BYTES, 1);
+    payload = packet + GXMETAL_PACKET_HEADER_BYTES;
+    gxmetal_store_le32(payload + GXMETAL_CONTEXT_WIDTH_OFFSET, 8);
+    gxmetal_store_le32(payload + GXMETAL_CONTEXT_HEIGHT_OFFSET, 8);
+    gxmetal_store_le32(payload + GXMETAL_CONTEXT_ROW_BYTES_OFFSET, 16);
+    gxmetal_store_le32(payload + GXMETAL_CONTEXT_PIXEL_FORMAT_OFFSET,
+                       GXMETAL_PIXEL_RGB555);
+    CHECK(dispatch(renderer, packet,
+                   GXMETAL_CONTEXT_CREATE_PACKET_BYTES) ==
+          GXMETAL_ERROR_NONE);
+
+    make_packet(packet, GXMETAL_OP_TEXTURE_DESTROY,
+                GXMETAL_RESOURCE_DESTROY_PACKET_BYTES, 0);
+    payload = packet + GXMETAL_PACKET_HEADER_BYTES;
+    gxmetal_store_le32(payload + GXMETAL_DESTROY_RESOURCE_ID_OFFSET, 1);
+    CHECK(dispatch(renderer, packet, GXMETAL_RESOURCE_DESTROY_PACKET_BYTES) ==
+          GXMETAL_ERROR_NONE);
+    CHECK(dispatch(renderer, packet, GXMETAL_RESOURCE_DESTROY_PACKET_BYTES) ==
+          GXMETAL_ERROR_NONE);
+
+    gxmetal_metal_destroy(renderer);
+    free(shared);
+}
+
 int main(void)
 {
     @autoreleasepool {
         test_metal_triangle();
         test_metal_homogeneous_gouraud_draw();
         test_metal_large_vertex_batches();
+        test_metal_invalid_triangle_batch_isolation();
         test_metal_ati_homogeneous_eye_plane_clipping();
         test_metal_depth_blend_and_double_buffer();
         test_metal_texture_upload_and_sampling();
@@ -3388,6 +3728,7 @@ int main(void)
         test_metal_draw_buffer_dirty_writeback();
         test_metal_sampler_filter_state();
         test_metal_sampler_rendering();
+        test_metal_stale_texture_destroy_after_reset();
     }
     if (failures != 0) {
         fprintf(stderr, "GXMetal Metal: %u failure(s)\n", failures);

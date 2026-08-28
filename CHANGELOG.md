@@ -17,6 +17,17 @@
 - Fixed Carmageddon II's race-start black screen. ATI-private UV vertex
   coordinates no longer incorrectly require the texture itself to use ATI's
   ARGB4444 storage format; valid ordinary RAVE textures now reach Metal.
+- Fixed HAVOC's hardware-renderer restart. RAVE permits textures and bitmaps
+  to be created before the first draw context; GXMetal now establishes the
+  process generation before publishing those resources, so first-context
+  setup no longer resets and erases HAVOC's 48 pre-created textures.
+- Isolated non-finite clipped geometry in unflagged public-RAVE triangle lists.
+  GXMetal drops only the affected independent triangle instead of permanently
+  faulting the shared queue; explicitly flagged/homogeneous draws, strips,
+  fans, lines, points, and malformed wire layouts retain strict validation.
+- Aligned Gouraud Perspective-Z validation with textured draws: a finite value
+  in the unused normalized-Z slot is accepted when reciprocal W supplies
+  depth. Resource teardown is idempotent after a generation reset.
 - Made game-sweep profile aggregation generation-aware, so a still-running
   renderer is combined with completed lifecycle generations instead of being
   overwritten by an earlier zero-draw reset summary.
@@ -24,9 +35,12 @@
 ### Changed
 
 - Hardened the Carmageddon II regression around the canonical media route:
-  launch Virtual CD/DVD Utility, choose its Toast mount command, and open the
-  Toast image from inside the utility. Stable mounted-disc, main-menu, and
-  six-point race-HUD gates replace fixed-delay assumptions.
+  launch Virtual CD/DVD Utility first, use Open inside the utility, and select
+  the Toast image in that dialog. Stable mounted-disc, main-menu, and six-point
+  race-HUD gates replace Finder-open and fixed-delay assumptions.
+- Added a saved-hardware HAVOC lifecycle route with semantic help/main/vehicle
+  gates, a three-pixel in-scene HUD gate, scripted input, timed captures, and a
+  separate short input proof so a loading transition cannot qualify as motion.
 
 ### Validation
 
@@ -40,9 +54,16 @@
 - The new engine-selection probe records GXMetal first and Apple Software
   second; both an untouched interactive renderer and explicit best-choice
   renderer select GXMetal without changing global engine enablement.
+- HAVOC completes a 469.1-second hardware lifecycle with 5,940,035 accelerated
+  draws, 45,094 direct frames, zero fallback, no queue/transport fault, QEMU 0,
+  and an unchanged source. A separate HUD-gated in-scene route completes with
+  a 0.782257 post-input frame change, 3,357,172 draws, 24,385 direct frames,
+  zero fallback/faults, QEMU 0, and an unchanged source.
 - The complete native GXMetal suite passes, including 47 VNC harness tests,
   7 Unreal Tournament input tests, 22 diagnostic decoder tests, and focused
-  Metal coverage for ATI-private UV vertices with ordinary RAVE textures.
+  Metal coverage for ATI-private UV vertices, pre-context resource generations,
+  Perspective-Z Gouraud vertices, idempotent teardown, and invalid-triangle
+  isolation.
 
 ## 2.2.3 — 2026-08-27
 

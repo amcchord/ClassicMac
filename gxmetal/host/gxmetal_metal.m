@@ -36,6 +36,7 @@
 #define GXMETAL_METAL_MIP_FILTERS 3u
 #define GXMETAL_METAL_PROFILE_SUSPECT_WINDOW_LIMIT 8u
 #define GXMETAL_METAL_PROFILE_SUSPECT_LIMIT 96u
+#define GXMETAL_METAL_INVALID_VERTEX_LOG_LIMIT 8u
 
 enum GXMetalMetalMinMagFilter {
     GXMETAL_METAL_FILTER_NEAREST = 0,
@@ -275,6 +276,8 @@ struct GXMetalMetalRenderer {
     float profile_last_depth_clear;
     uint64_t profile_resource_lookup_count;
     uint64_t profile_resource_lookup_probes;
+    uint64_t invalid_primitive_drop_count;
+    uint32_t invalid_vertex_log_count;
     id<MTLDevice> device;
     id<MTLCommandQueue> command_queue;
     id<MTLFunction> vertex_function;
@@ -1698,7 +1701,11 @@ static uint32_t gxmetal_metal_resource_destroy(
     uint32_t i;
 
     if (resource == NULL) {
-        return GXMETAL_ERROR_BAD_RESOURCE;
+        /* A display/render-owner reset releases every host resource at once.
+         * A guest can still submit teardown for an object that the reset has
+         * already reclaimed, so treat that destroy as defensive cleanup
+         * rather than poisoning the next context generation's command queue. */
+        return GXMETAL_ERROR_NONE;
     }
     for (i = 0; i < GXMETAL_METAL_MAX_CONTEXTS; i++) {
         if (renderer->contexts[i].active &&
@@ -1982,7 +1989,7 @@ static int gxmetal_metal_read_vertex(const GXMetalMetalContext *context,
     vertex->a = gxmetal_metal_load_float(source + GXMETAL_VERTEX_A_OFFSET);
     if (!isfinite(vertex->x) || !isfinite(vertex->y) ||
         !isfinite(vertex->z) ||
-        (!homogeneous_coordinates &&
+        (context->perspective_z == 0 && !homogeneous_coordinates &&
          (vertex->z < 0.0f || vertex->z > 1.0f)) ||
         !isfinite(vertex->inv_w) || vertex->inv_w == 0.0f ||
         (!homogeneous_coordinates && vertex->inv_w < 0.0f) ||
@@ -2241,14 +2248,25 @@ static uint32_t gxmetal_metal_draw(GXMetalMetalRenderer *renderer,
     MTLPrimitiveType metal_primitive;
     uint32_t primitive = gxmetal_load_le32(
         packet->payload + GXMETAL_DRAW_PRIMITIVE_OFFSET);
+    uint32_t draw_flags = gxmetal_load_le32(
+        packet->payload + GXMETAL_DRAW_FLAGS_OFFSET);
     uint32_t count = gxmetal_load_le32(
         packet->payload + GXMETAL_DRAW_VERTEX_COUNT_OFFSET);
     uint32_t draw_count = count;
+    uint32_t converted_count = 0;
     uint32_t i;
     uint32_t pass;
     int homogeneous_coordinates =
         gxmetal_metal_draw_uses_homogeneous_coordinates(
             context, packet, source, count, GXMETAL_GOURAUD_VERTEX_BYTES);
+    /* Period RAVE clients can retain non-finite sentinel attributes in a
+     * triangle that was clipped away.  An unflagged public triangle list is
+     * made of independent elements, so isolate that one element instead of
+     * poisoning the shared queue.  Flags and every connected primitive keep
+     * the strict all-or-nothing contract below. */
+    int filter_invalid_triangles =
+        primitive == GXMETAL_PRIMITIVE_TRIANGLE && count >= 3u &&
+        draw_flags == GXMETAL_DRAW_NONE;
 
     vertices = stack_vertices;
     if (count > GXMETAL_METAL_STACK_VERTICES) {
@@ -2257,19 +2275,83 @@ static uint32_t gxmetal_metal_draw(GXMetalMetalRenderer *renderer,
             return GXMETAL_ERROR_RENDERER;
         }
     }
-    for (i = 0; i < count; i++) {
-        if (!gxmetal_metal_read_vertex(context,
-                source + i * GXMETAL_GOURAUD_VERTEX_BYTES,
-                &vertices[i], homogeneous_coordinates)) {
+    for (i = 0; i < count; i += filter_invalid_triangles ? 3u : 1u) {
+        uint32_t group_count = filter_invalid_triangles ? 3u : 1u;
+        uint32_t j;
+        int group_valid = 1;
+
+        for (j = 0; j < group_count; j++) {
+            uint32_t index = i + j;
+            const uint8_t *raw = source +
+                (uint64_t)index * GXMETAL_GOURAUD_VERTEX_BYTES;
+            int valid = gxmetal_metal_read_vertex(
+                context, raw, &vertices[index], homogeneous_coordinates);
+
+            if (!valid) {
+                group_valid = 0;
+                if (renderer->invalid_vertex_log_count <
+                        GXMETAL_METAL_INVALID_VERTEX_LOG_LIMIT) {
+                    fprintf(stderr,
+                            "GXMetal invalid Gouraud vertex: context=%u "
+                            "primitive=%u count=%u index=%u homogeneous=%u "
+                            "perspective_z=%u "
+                            "x=%g y=%g z=%g inv_w=%g "
+                            "r=%g g=%g b=%g a=%g\n",
+                            context->id, primitive, count, index,
+                            (unsigned)(homogeneous_coordinates != 0),
+                            context->perspective_z,
+                            gxmetal_metal_load_float(
+                                raw + GXMETAL_VERTEX_X_OFFSET),
+                            gxmetal_metal_load_float(
+                                raw + GXMETAL_VERTEX_Y_OFFSET),
+                            gxmetal_metal_load_float(
+                                raw + GXMETAL_VERTEX_Z_OFFSET),
+                            gxmetal_metal_load_float(
+                                raw + GXMETAL_VERTEX_INV_W_OFFSET),
+                            gxmetal_metal_load_float(
+                                raw + GXMETAL_VERTEX_R_OFFSET),
+                            gxmetal_metal_load_float(
+                                raw + GXMETAL_VERTEX_G_OFFSET),
+                            gxmetal_metal_load_float(
+                                raw + GXMETAL_VERTEX_B_OFFSET),
+                            gxmetal_metal_load_float(
+                                raw + GXMETAL_VERTEX_A_OFFSET));
+                }
+                renderer->invalid_vertex_log_count++;
+            }
+        }
+        if (!group_valid && !filter_invalid_triangles) {
             if (vertices != stack_vertices) {
                 free(vertices);
             }
             return GXMETAL_ERROR_BAD_PACKET;
         }
+        if (filter_invalid_triangles) {
+            if (!group_valid) {
+                renderer->invalid_primitive_drop_count++;
+                continue;
+            }
+            if (converted_count != i) {
+                memmove(&vertices[converted_count], &vertices[i],
+                        3u * sizeof(*vertices));
+            }
+            converted_count += 3u;
+        }
     }
-    gxmetal_metal_profile_suspect_geometry(
-        renderer, context, packet, vertices, sizeof(*vertices), 0,
-        homogeneous_coordinates, 0);
+    if (filter_invalid_triangles && converted_count != count) {
+        count = converted_count;
+        draw_count = count;
+        if (count == 0) {
+            if (vertices != stack_vertices) {
+                free(vertices);
+            }
+            return GXMETAL_ERROR_NONE;
+        }
+    } else {
+        gxmetal_metal_profile_suspect_geometry(
+            renderer, context, packet, vertices, sizeof(*vertices), 0,
+            homogeneous_coordinates, 0);
+    }
     draw_vertices = vertices;
     switch (primitive) {
     case GXMETAL_PRIMITIVE_POINT:
@@ -2535,6 +2617,7 @@ static uint32_t gxmetal_metal_draw_textured(
     uint32_t stride = gxmetal_load_le32(
         packet->payload + GXMETAL_DRAW_VERTEX_STRIDE_OFFSET);
     uint32_t draw_count = count;
+    uint32_t converted_count = 0;
     uint32_t address_mode = context->texture_wrap_u |
                             (context->texture_wrap_v << 1);
     uint32_t secondary_address_mode = context->secondary_texture_wrap_u |
@@ -2549,6 +2632,12 @@ static uint32_t gxmetal_metal_draw_textured(
     int homogeneous_coordinates =
         gxmetal_metal_draw_uses_homogeneous_coordinates(
             context, packet, source, count, stride);
+    /* Apply the same narrow public-RAVE triangle-list isolation as Gouraud.
+     * In particular this does not admit NaN/Inf into Metal and does not relax
+     * explicit OpenGL/homogeneous or ATI-private provenance. */
+    int filter_invalid_triangles =
+        primitive == GXMETAL_PRIMITIVE_TRIANGLE && count >= 3u &&
+        draw_flags == GXMETAL_DRAW_NONE;
     int ati_texel_coordinates = 0;
     int ati_negative_v_coordinates = 0;
 
@@ -2590,19 +2679,102 @@ static uint32_t gxmetal_metal_draw_textured(
             return GXMETAL_ERROR_RENDERER;
         }
     }
-    for (i = 0; i < count; i++) {
-        if (!gxmetal_metal_read_texture_vertex(
-                context, source + i * stride, stride, &vertices[i],
-                host_ati_uv_transform, homogeneous_coordinates)) {
+    for (i = 0; i < count; i += filter_invalid_triangles ? 3u : 1u) {
+        uint32_t group_count = filter_invalid_triangles ? 3u : 1u;
+        uint32_t j;
+        int group_valid = 1;
+
+        for (j = 0; j < group_count; j++) {
+            uint32_t index = i + j;
+            const uint8_t *raw = source + (uint64_t)index * stride;
+            int valid = gxmetal_metal_read_texture_vertex(
+                context, raw, stride, &vertices[index],
+                host_ati_uv_transform, homogeneous_coordinates);
+
+            if (!valid) {
+                group_valid = 0;
+                if (renderer->invalid_vertex_log_count <
+                        GXMETAL_METAL_INVALID_VERTEX_LOG_LIMIT) {
+                    fprintf(stderr,
+                            "GXMetal invalid texture vertex: context=%u "
+                            "primitive=%u count=%u index=%u stride=%u op=%u "
+                            "homogeneous=%u perspective_z=%u secondary=%u/%u "
+                            "xyzw=%g/%g/%g/%g rgba=%g/%g/%g/%g "
+                            "uv=%g/%g kd=%g/%g/%g ks=%g/%g/%g\n",
+                            context->id, primitive, count, index, stride,
+                            context->texture_op,
+                            (unsigned)(homogeneous_coordinates != 0),
+                            context->perspective_z,
+                            context->secondary_texture_enable,
+                            context->secondary_texture_id,
+                            gxmetal_metal_load_float(
+                                raw + GXMETAL_VERTEX_X_OFFSET),
+                            gxmetal_metal_load_float(
+                                raw + GXMETAL_VERTEX_Y_OFFSET),
+                            gxmetal_metal_load_float(
+                                raw + GXMETAL_VERTEX_Z_OFFSET),
+                            gxmetal_metal_load_float(
+                                raw + GXMETAL_VERTEX_INV_W_OFFSET),
+                            gxmetal_metal_load_float(
+                                raw + GXMETAL_VERTEX_R_OFFSET),
+                            gxmetal_metal_load_float(
+                                raw + GXMETAL_VERTEX_G_OFFSET),
+                            gxmetal_metal_load_float(
+                                raw + GXMETAL_VERTEX_B_OFFSET),
+                            gxmetal_metal_load_float(
+                                raw + GXMETAL_VERTEX_A_OFFSET),
+                            gxmetal_metal_load_float(
+                                raw + GXMETAL_VERTEX_U_OVER_W_OFFSET),
+                            gxmetal_metal_load_float(
+                                raw + GXMETAL_VERTEX_V_OVER_W_OFFSET),
+                            gxmetal_metal_load_float(
+                                raw + GXMETAL_VERTEX_KD_R_OFFSET),
+                            gxmetal_metal_load_float(
+                                raw + GXMETAL_VERTEX_KD_G_OFFSET),
+                            gxmetal_metal_load_float(
+                                raw + GXMETAL_VERTEX_KD_B_OFFSET),
+                            gxmetal_metal_load_float(
+                                raw + GXMETAL_VERTEX_KS_R_OFFSET),
+                            gxmetal_metal_load_float(
+                                raw + GXMETAL_VERTEX_KS_G_OFFSET),
+                            gxmetal_metal_load_float(
+                                raw + GXMETAL_VERTEX_KS_B_OFFSET));
+                }
+                renderer->invalid_vertex_log_count++;
+            }
+        }
+        if (!group_valid && !filter_invalid_triangles) {
             if (vertices != stack_vertices) {
                 free(vertices);
             }
             return GXMETAL_ERROR_BAD_PACKET;
         }
+        if (filter_invalid_triangles) {
+            if (!group_valid) {
+                renderer->invalid_primitive_drop_count++;
+                continue;
+            }
+            if (converted_count != i) {
+                memmove(&vertices[converted_count], &vertices[i],
+                        3u * sizeof(*vertices));
+            }
+            converted_count += 3u;
+        }
     }
-    gxmetal_metal_profile_suspect_geometry(
-        renderer, context, packet, vertices, sizeof(*vertices), 1,
-        homogeneous_coordinates, host_ati_uv_transform);
+    if (filter_invalid_triangles && converted_count != count) {
+        count = converted_count;
+        draw_count = count;
+        if (count == 0) {
+            if (vertices != stack_vertices) {
+                free(vertices);
+            }
+            return GXMETAL_ERROR_NONE;
+        }
+    } else {
+        gxmetal_metal_profile_suspect_geometry(
+            renderer, context, packet, vertices, sizeof(*vertices), 1,
+            homogeneous_coordinates, host_ati_uv_transform);
+    }
     if (renderer->profile_enabled && count != 0 &&
         !resource->profile_draw_logged) {
         float kd_min[3] = {
@@ -4299,7 +4471,7 @@ void gxmetal_metal_reset(GXMetalMetalRenderer *renderer)
                 "GXMetal lifecycle: generation=%llu event=reset "
                 "previous_generation=%llu released_contexts=%u "
                 "released_resources=%u draws=%llu writebacks=%llu "
-                "direct=%llu fallback=%llu\n",
+                "direct=%llu fallback=%llu dropped_triangles=%llu\n",
                 (unsigned long long)renderer->profile_generation,
                 (unsigned long long)completed_generation,
                 active_contexts, active_resources,
@@ -4309,7 +4481,9 @@ void gxmetal_metal_reset(GXMetalMetalRenderer *renderer)
                 (unsigned long long)
                     renderer->profile_generation_direct_present_count,
                 (unsigned long long)
-                    renderer->profile_generation_fallback_present_count);
+                    renderer->profile_generation_fallback_present_count,
+                (unsigned long long)
+                    renderer->invalid_primitive_drop_count);
         if (renderer->profile_suspect_after_draws != UINT64_MAX) {
             fprintf(stderr,
                     "GXMetal suspect geometry summary: generation=%llu "
@@ -4330,6 +4504,8 @@ void gxmetal_metal_reset(GXMetalMetalRenderer *renderer)
     renderer->profile_suspect_geometry_logged = 0;
     renderer->profile_suspect_geometry_window_logged = 0;
     renderer->profile_suspect_geometry_suppressed = 0;
+    renderer->invalid_primitive_drop_count = 0;
+    renderer->invalid_vertex_log_count = 0;
 }
 
 uint32_t gxmetal_metal_dispatch(void *opaque,

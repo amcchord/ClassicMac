@@ -3,13 +3,13 @@
   "defaults": {
     "boot_wait_seconds": 5,
     "observation_seconds": 0,
-    "capture_interval_seconds": 2,
+    "capture_interval_seconds": 10,
     "resolution": "1024x768x15"
   },
   "games": [
     {
       "id": "dark-notice-title-menu-gameplay",
-      "name": "Dark Vengeance notice contract title-to-gameplay route",
+      "name": "Dark Vengeance five-minute accelerated gameplay soak",
       "modes": ["gxmetal"],
       "steps": [
         {"wait_for_pixel": {"x": 22, "y": 11, "red": 221, "green": 0, "blue": 0, "tolerance": 8, "timeout_seconds": 180, "poll_interval_seconds": 1}},
@@ -28,12 +28,43 @@
         {"key": "Return", "delay_after": 15},
         {"wait_for_pixel": {"x": 75, "y": 80, "red": 80, "green": 88, "blue": 0, "tolerance": 8, "timeout_seconds": 30, "poll_interval_seconds": 1}},
         {"screenshot": "gameplay-ready"},
-        {"screenshot": "before-forward-input"},
         {"key": "w", "hold_ms": 1000, "delay_after": 3},
-        {"screenshot": "after-forward-input"},
-        {"assert_frame_changed_since": {"screenshot": "before-forward-input", "minimum_changed_fraction": 0.10, "channel_tolerance": 16}},
-        {"wait": 15},
-        {"screenshot": "short-soak"}
+        {"screenshot": "minute-0-after-forward-input"},
+        {"assert_frame_changed_since": {"screenshot": "gameplay-ready", "minimum_changed_fraction": 0.10, "channel_tolerance": 16}},
+        {"assert_color_range_fraction_below": {"minimum_rgb": [0, 0, 0], "maximum_rgb": [16, 16, 16], "maximum_fraction": 0.80}},
+
+        {"wait": 60},
+        {"wait_for_pixel": {"x": 75, "y": 80, "red": 80, "green": 88, "blue": 0, "tolerance": 8, "timeout_seconds": 10, "poll_interval_seconds": 1}},
+        {"screenshot": "minute-1-gameplay"},
+        {"assert_frame_changed_since": {"screenshot": "minute-0-after-forward-input", "minimum_changed_fraction": 0.05, "channel_tolerance": 16}},
+        {"key": "w", "hold_ms": 1000, "delay_after": 3},
+        {"screenshot": "minute-1-after-forward-input"},
+        {"assert_frame_changed_since": {"screenshot": "minute-1-gameplay", "minimum_changed_fraction": 0.10, "channel_tolerance": 16}},
+
+        {"wait": 60},
+        {"wait_for_pixel": {"x": 75, "y": 80, "red": 80, "green": 88, "blue": 0, "tolerance": 8, "timeout_seconds": 10, "poll_interval_seconds": 1}},
+        {"screenshot": "minute-2-gameplay"},
+        {"assert_frame_changed_since": {"screenshot": "minute-1-after-forward-input", "minimum_changed_fraction": 0.05, "channel_tolerance": 16}},
+        {"key": "w", "hold_ms": 1000, "delay_after": 3},
+        {"screenshot": "minute-2-after-forward-input"},
+        {"assert_frame_changed_since": {"screenshot": "minute-2-gameplay", "minimum_changed_fraction": 0.10, "channel_tolerance": 16}},
+
+        {"wait": 60},
+        {"wait_for_pixel": {"x": 75, "y": 80, "red": 80, "green": 88, "blue": 0, "tolerance": 8, "timeout_seconds": 10, "poll_interval_seconds": 1}},
+        {"screenshot": "minute-3-gameplay"},
+        {"assert_color_range_fraction_below": {"minimum_rgb": [0, 0, 0], "maximum_rgb": [16, 16, 16], "maximum_fraction": 0.80}},
+        {"note": "Later scripted combat states can hold a fixed camera and ignore movement while GXMetal continues presenting. Input and animation are proven in the first two minutes; the remaining soak requires the gameplay HUD, a coherent nonblack frame, direct presentation, and fault-free telemetry rather than inventing motion."},
+
+        {"wait": 60},
+        {"wait_for_pixel": {"x": 75, "y": 80, "red": 80, "green": 88, "blue": 0, "tolerance": 8, "timeout_seconds": 10, "poll_interval_seconds": 1}},
+        {"screenshot": "minute-4-gameplay"},
+        {"assert_color_range_fraction_below": {"minimum_rgb": [0, 0, 0], "maximum_rgb": [16, 16, 16], "maximum_fraction": 0.80}},
+
+        {"wait": 60},
+        {"wait_for_pixel": {"x": 75, "y": 80, "red": 80, "green": 88, "blue": 0, "tolerance": 8, "timeout_seconds": 10, "poll_interval_seconds": 1}},
+        {"screenshot": "minute-5-gameplay"},
+        {"assert_color_range_fraction_below": {"minimum_rgb": [0, 0, 0], "maximum_rgb": [16, 16, 16], "maximum_fraction": 0.80}},
+        {"note": "Escape, Command-Q, and the classic Mac force-quit chord are ignored while this build owns the fullscreen gameplay state. End the disposable-clone run here; this manifest proves the five-minute accelerated soak but makes no clean-exit or same-boot relaunch claim."}
       ]
     }
   ]

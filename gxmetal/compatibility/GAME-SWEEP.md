@@ -25,7 +25,7 @@ records sources, hashes, recipes, evidence descriptions, and driver fixes.
 | `unreal-tournament` | Unreal Tournament 348m3 Demo | ATI renderer through RAVE | Confirm RAVE; render intro flyby; run a five-minute bot match checking lightmaps, fog, weapon alpha, HUD, and texture cycling | Post-2.2.1 exact-base process one reaches coherent Tempest and cleanly exits; process two renders a different map and accepts held Control. The exact read-only `CheckButtonKeys` probe observes Control in both `LMKeyMap` and UT's stack-local modifier field, hits UT's transition-emission instruction, and the reviewed final frame shows weapon fire, lower ammunition, and shell casings. A five-minute bot match remains the longer release gate |
 | `combat-mission` | Combat Mission: Beyond Overlord 1.02 Demo | RAVE hardware probe | Complete detection; load Chance Encounter; move through the map and execute a turn with terrain, markers, smoke, and animation | Post-2.2.1 full-turn route selects Rifle 45 Sqd, plots Move/Disembark, executes GO, and reaches DONE after visible movement. A separate Force Quit recovery returns to Finder and reaches a second coherent scenario selector |
 | `oni` | Oni Demo | Classic Apple OpenGL | Reach training and first fight; verify animation, lightmaps, transparency, HUD, and an indoor/outdoor transition | Post-2.2.1 full lifecycle passes warehouse gameplay/input/F1, clean Quit/Yes, exact `-nosound` second launch, renderer upload reset, active Bink frame change, Escape, and a stable four-pixel second-menu signature |
-| `havoc` | Havoc Demo | First shipping QuickDraw 3D RAVE game | Select accelerated rendering; enter the demo arena; verify terrain, fog, textured objects, transparency, HUD, and camera motion for five minutes | Post-2.2.1 gamma candidate passes first-run help, main-screen, and cockpit semantic gates; steering changes 0.171768 of the frame and the coherent terrain/HUD soak contains only 0.000221 of the rejected solid-red range |
+| `havoc` | Havoc Demo | First shipping QuickDraw 3D RAVE game | Select accelerated rendering; enter the demo arena; verify terrain, fog, textured objects, transparency, HUD, and camera motion for five minutes | Saved-hardware candidate preserves 48 pre-context textures and isolates clipped sentinel triangles. A 469.1-second lifecycle produces 45,094 direct/0 fallback frames and 5,940,035 draws; a separate HUD-gated post-input route changes 0.782257 and produces 24,385 direct/0 fallback frames plus 3,357,172 draws. Both are automation-complete and fault-free |
 
 OpenGL titles only count as GXMetal tests when the host log contains GXMetal
 presentation traffic. If a game cannot launch or render, run the matched
@@ -651,6 +651,18 @@ VMs, each with an independent clone and unique local VNC and monitor sockets.
   Evidence is retained under the `gxmetal-post221-wave1-*`,
   `gxmetal-post221-wave2-*`, `gxmetal-post221-wave3-*`, and
   `gxmetal-post221-quake3-five-view-20260827` directories.
+- The signed packaged-2.2.4 Dark Vengeance route now extends to five timed
+  gameplay checkpoints over 419.755 seconds. It records 12,686 direct frames,
+  zero fallback, 1,602,243 accelerated draws, no queue or transport fault, a
+  clean QEMU exit, and an unchanged immutable source. Reviewed frames retain
+  coherent player, enemy, world, lighting, weapon, and effect textures.
+  Movement and animation are strongly asserted through minute two; minutes
+  three through five remain a coherent fixed-camera combat presentation and
+  are not described as continuously responsive movement. Escape, Command-Q,
+  and the classic Mac force-quit chord do not leave this fullscreen state, so
+  the canonical manifest ends at the soak and makes no clean-exit or same-boot
+  relaunch claim. Evidence is retained under
+  `context/gxmetal-games/evidence/gxmetal-dark-v2.2.4-packaged-five-minute-soak-final4-20260828/`.
 - Added independent post-release lifecycle routes rather than extending every
   game serially in one VM. Bugdom cleanly quits from its main menu and
   relaunches. Future Cop and Weekend Warrior each prove Finder recovery and a
@@ -662,9 +674,10 @@ VMs, each with an independent clone and unique local VNC and monitor sockets.
   custom input extension as the cause of the collision-static frames.
 - Reproduced the reported Carmageddon II black race on the user's read-only
   2.2.2 disk and original `CarmagedonII.toast`. The correct media route is the
-  in-guest Virtual DVD-ROM/CD Utility: launch it, choose its Toast virtual-DVD
-  action, and open the image from the utility rather than attaching the Toast
-  file directly to QEMU. The failure is a permanent host queue fault on a
+  in-guest Virtual DVD-ROM/CD Utility: launch the utility first, choose Open
+  inside it, and select the Toast image in its file dialog rather than opening
+  it from Finder or attaching it directly to QEMU. The failure is a permanent
+  host queue fault on a
   valid 320-byte, nine-vertex public Gouraud triangle: depth state caused the
   old-guest compatibility heuristic to interpret Carmageddon's unused zero
   reciprocal-W field as private homogeneous OpenGL data. The heuristic now

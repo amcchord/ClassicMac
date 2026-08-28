@@ -466,6 +466,18 @@ static TQABoolean GXMetalResetHostGeneration(void)
     return 1;
 }
 
+/* RAVE permits textures and bitmaps to be created before the first draw
+ * context.  Establish the host generation before publishing such a resource;
+ * otherwise DrawPrivateNew's first-generation reset would immediately erase
+ * valid resources owned by the current client. */
+static TQABoolean GXMetalPrepareResourceGeneration(void)
+{
+    GXMetalCaptureRenderCaller();
+    (void)GXMetalRetireExitedDrawStates();
+    return !GXMetalRenderGenerationMustReset() ||
+           GXMetalResetHostGeneration();
+}
+
 int32_t GXMetalProbeTransport(void)
 {
     (void)GXMetalTransportAvailable();
@@ -918,6 +930,11 @@ static TQAError GXMetalTextureNew(unsigned long flags,
                 return kQANotSupported;
             }
         }
+    }
+    if (!GXMetalPrepareResourceGeneration()) {
+        gDiagnostics.texture_reject_transport_count++;
+        gDiagnostics.last_texture_error = kQANotSupported;
+        return kQANotSupported;
     }
     texture = (TQATexture *)NewPtrClear(sizeof(*texture));
     if (texture == NULL) {
@@ -1479,6 +1496,10 @@ static TQAError GXMetalBitmapNew(unsigned long flags,
         (alpha1 ? uploadLength : sourceLength) > GXMETAL_UPLOAD_BYTES) {
         gDiagnostics.last_bitmap_error = kQAOutOfVideoMemory;
         return kQAOutOfVideoMemory;
+    }
+    if (!GXMetalPrepareResourceGeneration()) {
+        gDiagnostics.last_bitmap_error = kQANotSupported;
+        return kQANotSupported;
     }
     bitmap = (TQABitmap *)NewPtrClear(sizeof(*bitmap));
     if (bitmap == NULL) {

@@ -28,9 +28,10 @@ but the evidence still does not support a universal-compatibility claim.
   homogeneous OpenGL, permanently faulting the queue and leaving the race
   black. The corrected heuristic keeps unusable reciprocal-W data on the
   public path while retaining explicit protocol-1.25 provenance and the
-  mixed-sign old-guest fallback. A fresh-clone recipe mounts the original
-  Toast image through Virtual DVD-ROM/CD Utility and reaches a coherent
-  640×480 race; its two delayed near-black fractions are both 0.016491 and the
+  mixed-sign old-guest fallback. A fresh-clone recipe launches Virtual
+  DVD-ROM/CD Utility, chooses Open inside it, selects the original Toast image
+  in the utility's dialog, and reaches a coherent 640×480 race; its two delayed
+  near-black fractions are both 0.016491 and the
   QEMU log contains no queue or transport fault. The same patched host then
   passes the five-view Quake III regression plus parallel Bugdom, Future Cop,
   Combat Mission, and Weekend Warrior smokes without a queue/transport fault;
@@ -134,8 +135,19 @@ but the evidence still does not support a universal-compatibility claim.
   its synchronous `cscGetGamma` query. The rebuilt NDRV now returns a valid,
   persistent, normalized 3x256x8 table, initializes it to the identity ramp,
   and updates it whenever the guest sets gamma. HAVOC consequently reaches a
-  coherent first-person cockpit, terrain, pyramid, HUD, and radar; its input
-  probe changes 0.603298 of the frame and remains visually intact. Dark also
+  coherent first-person cockpit, terrain, pyramid, HUD, and radar; its original
+  input probe changes 0.603298 of the frame and remains visually intact. A
+  later saved-hardware restart exposed two independent lifecycle faults. HAVOC
+  creates 48 textures before its first draw context, but first-context setup
+  reset the still-unestablished generation and erased them. After generation
+  setup moved ahead of texture/bitmap publication, the hardware renderer
+  progressed to clipped public-RAVE triangle lists containing NaN/Inf sentinel
+  attributes. The host now drops only the affected unflagged independent
+  triangle, leaving flagged/homogeneous and non-list draws strict. The final
+  469.1-second lifecycle records six contexts, 45,094 direct/zero fallback
+  frames, 5,940,035 draws, no fault, QEMU 0, and an unchanged source. A separate
+  HUD-gated in-scene route changes 0.782257 after scripted input and records
+  24,385 direct/zero fallback frames plus 3,357,172 draws without fault. Dark also
   clears the `-49` boundary. Its next failure was an exact period-RAVE ABI
   mismatch: Dark asks `QAGetNoticeMethod` for the selector-4 callback while
   passing a null refCon output, but GXMetal incorrectly required both outputs.
@@ -278,8 +290,8 @@ but the evidence still does not support a universal-compatibility claim.
 | Combat Mission | Exact-2.2.1 setup pass; post-release full-turn and recovery passes | The 410-second current-driver route selects Rifle 45 Sqd, plots Move/Disembark, executes GO, and reaches DONE after the visible movement. A separate 242-second route proves the real Mac OS Force Quit dialog, Finder recovery, and a coherent second scenario selector | Clean application quit/relaunch and audio |
 | Weekend Warrior | Exact-2.2.1 short gameplay pass; post-release recovery pass | Published build renders Center Stage coherently and passes movement/fire at 0.798568; 24,707 direct/0 fallback frames and 1,517,694 draws. A 131-second post-release title-state recovery returns to Finder and reaches the second launch | Clean in-game quit/relaunch, collision-aware five-minute route, and audio |
 | Cro-Mag Rally | Gameplay smoke pass on current Q3 fix | Correct accelerated title/menu/loading and Practice/Desert gameplay at 640x480; acceleration and steering visibly alter position/heading; 24-28 fps, ~204 direct draws/frame, zero fallback; expected demo exit screen | Complete-lap/longer lifecycle soak and audio |
-| Dark Vengeance | Gameplay rendering/input/short-soak pass on gamma + notice candidate | Exact tracing proves `cscGetGamma` success-with-null caused `-49`; `DARKVENG.INI` opens correctly. Accepting independently optional `QAGetNoticeMethod` outputs and invoking selector 4 synchronously reaches a textured player/enemy/portal scene, responds to `w`, and remains animated for 15 seconds without advertising `kQAOptional_BufferComposite` | Qualify the mostly-black selection/menu transition, longer gameplay/lifecycle, and audio |
-| HAVOC | Gameplay rendering/input pass on gamma candidate | The `cscGetGamma` contract fix clears all prior memory dialogs. The reusable route separately gates first-run help, main screen, and cockpit; steering changes 0.171768, and the coherent terrain/HUD soak has only 0.000221 of the rejected solid-red range | Five-minute gameplay/lifecycle soak and audio |
+| Dark Vengeance | Packaged five-minute accelerated gameplay-soak pass | Exact tracing proves `cscGetGamma` success-with-null caused `-49`; `DARKVENG.INI` opens correctly. The packaged 419.755-second route reaches five reviewed gameplay checkpoints, proves movement/animation through minute two, and holds a coherent textured combat state through minute five with 12,686 direct/0 fallback frames, 1,602,243 draws, no faults, QEMU 0, and an unchanged source | Clean exit/same-boot relaunch; audio. Escape, Command-Q, and Command-Option-Escape are ignored in the tested fullscreen state, so the retained route makes no lifecycle claim |
+| HAVOC | Saved-hardware five-minute lifecycle and HUD-gated input pass | The gamma fix clears the memory dialog; pre-context resource generation preserves 48 textures across first context; invalid clipped unflagged triangles are isolated without faulting the queue. The 469.1-second lifecycle records 45,094 direct/0 fallback frames and 5,940,035 draws; the separate HUD-gated route changes 0.782257 after scripted input with 24,385 direct/0 fallback frames and 3,357,172 draws. Both are automation-complete, QEMU 0, fault-free, silent/offline, and source-immutable | Main-menu clean exit/same-boot relaunch on this exact build; audio |
 | Myth II | Battlefield rendering and broad-input pass on post-2.2.1 candidate | Coherent Into the Breach battlefield; unit selection/orders, Stop, ten paired camera direction/zoom/orbit actions, and 30-second soak | Effects-heavy long film, clean exit/relaunch, and audio |
 | Oni | Full two-process gameplay/input/lifecycle pass on post-2.2.1 candidate | Warehouse gameplay/input/F1, clean Quit/Yes, exact `-nosound` relaunch, upload-ID reset, active second Bink sequence, Escape, and stable four-pixel second-menu signature | Longer second-process gameplay and audio |
 | Unreal Tournament | Two-process rendering/input short-route pass | Process one renders Tempest and cleanly exits; process two renders another map. The exact read-only `CheckButtonKeys` probe observes Control in `LMKeyMap` and UT's stack-local modifier, hits the transition-emission instruction, and the reviewed final frame shows visible fire and lower ammunition | Five-minute bot match and audio; keep sound disabled under the current VM audio path |
@@ -628,7 +640,9 @@ signed candidate:
 - Dark Vengeance:
   `context/gxmetal-games/evidence/gxmetal-dark-title-menu-gameplay-final-20260827`
 - HAVOC:
-  `context/gxmetal-games/evidence/gxmetal-havoc-getgamma-gameplay-input-v3-20260827`
+  `context/gxmetal-games/evidence/gxmetal-havoc-v2.2.4-hardware-five-minute-final7-20260828`
+- HAVOC HUD-gated input proof:
+  `context/gxmetal-games/evidence/gxmetal-havoc-v2.2.4-hardware-input-proof-final-20260828`
 - Reality Bytes static startup trace:
   `context/gxmetal-games/evidence/reality-bytes-static-trace-20260827`
 - Myth II:
@@ -656,8 +670,9 @@ signed candidate:
    tests. Extend Dark beyond the mostly-black selection/loading transition,
    then run a longer gameplay and clean-relaunch gate while retaining the
    selector-4 callback trace and leaving `kQAOptional_BufferComposite`
-   unadvertised. Preserve HAVOC's first-run/main/cockpit/steering/color-range
-   assertions and add a longer cockpit/lifecycle soak.
+   unadvertised. Preserve HAVOC's generation, invalid-triangle, first-run,
+   main/vehicle/HUD, post-input frame-change, and five-minute lifecycle gates;
+   add a main-menu clean exit/same-boot relaunch route for this exact build.
 4. Require reviewed screenshots, direct presentation profiles with zero
    unexpected fallback, representative input, a longer soak, and clean
    lifecycle for every title advertised as supported.
