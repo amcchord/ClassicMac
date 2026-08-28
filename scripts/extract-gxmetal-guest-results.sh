@@ -8,6 +8,7 @@
 #   scripts/extract-gxmetal-guest-results.sh test RUN_DIRECTORY
 #   scripts/extract-gxmetal-guest-results.sh trace RUN_DIRECTORY
 #   scripts/extract-gxmetal-guest-results.sh input RUN_DIRECTORY
+#   scripts/extract-gxmetal-guest-results.sh selection RUN_DIRECTORY
 
 set -euo pipefail
 
@@ -30,8 +31,8 @@ cleanup() {
 trap cleanup EXIT
 
 case "$KIND" in
-  agl|test|trace|input) ;;
-  *) die "First argument must be 'agl', 'test', 'trace', or 'input'." ;;
+  agl|test|trace|input|selection) ;;
+  *) die "First argument must be 'agl', 'test', 'trace', 'input', or 'selection'." ;;
 esac
 [ -n "$RUN_DIR" ] || die "Pass a retained game-sweep run directory."
 [ -d "$RUN_DIR" ] || die "Run directory not found: $RUN_DIR"
@@ -63,6 +64,9 @@ if [ "$KIND" = "agl" ]; then
 elif [ "$KIND" = "test" ]; then
   SOURCE_RESULT="$PREFERENCES/GXMetal Test Results"
   RESULT_FILE="$RUN_DIR/gxmetal-test-results.txt"
+elif [ "$KIND" = "selection" ]; then
+  SOURCE_RESULT="$PREFERENCES/GXMetal RAVE Selection Results"
+  RESULT_FILE="$RUN_DIR/engine-selection-results.json"
 else
   SOURCE_RESULT=""
   RESULT_FILE=""

@@ -21,6 +21,11 @@ SWEEP_SPEC = importlib.util.spec_from_file_location(
 SWEEP = importlib.util.module_from_spec(SWEEP_SPEC)
 sys.modules[SWEEP_SPEC.name] = SWEEP
 SWEEP_SPEC.loader.exec_module(SWEEP)
+AUDIT_SPEC = importlib.util.spec_from_file_location(
+    "gxmetal_game_sweep_audit",
+    ROOT / "scripts" / "gxmetal-game-sweep-audit.py")
+AUDIT = importlib.util.module_from_spec(AUDIT_SPEC)
+AUDIT_SPEC.loader.exec_module(AUDIT)
 
 
 class FakeSocket:
@@ -258,6 +263,148 @@ class RFBClientTests(unittest.TestCase):
 
 
 class ManifestValidationTests(unittest.TestCase):
+    def test_qualification_audit_accepts_complete_muted_isolated_run(self):
+        with tempfile.TemporaryDirectory() as directory:
+            session_dir = Path(directory)
+            run_id = "complete__gxmetal"
+            run_dir = session_dir / run_id
+            run_dir.mkdir()
+            result = {
+                "run_id": run_id,
+                "game_id": "complete",
+                "evidence": str(run_dir),
+                "status": "automation-complete",
+                "qemu_exit_code": 0,
+                "audio_backend": "none",
+                "gxmetal_profile_observed": True,
+                "direct_frames": 120,
+                "fallback_frames": 0,
+                "queue_faults": 0,
+                "transport_failures": 0,
+                "render_resets": 2,
+                "context_creates": 2,
+                "context_destroys": 1,
+                "context_create_generations": [1, 2],
+                "context_destroy_generations": [1],
+                "max_render_generation": 2,
+            }
+            (run_dir / "result.json").write_text(
+                __import__("json").dumps(result), encoding="utf-8")
+            (run_dir / "qemu-command.json").write_text(
+                __import__("json").dumps([
+                    "/qemu", "-audiodev", "none,id=snd0", "-nic", "none",
+                ]), encoding="utf-8")
+            review = {field: True for field in AUDIT.TRUE_REVIEW_FIELDS}
+            review.update({
+                "schema": 2,
+                "review_status": "qualified",
+                "unexpected_fallback": False,
+                "audio": "disabled",
+                "network": "disabled",
+            })
+            (run_dir / "review.json").write_text(
+                __import__("json").dumps(review), encoding="utf-8")
+            (session_dir / "session.json").write_text(
+                __import__("json").dumps({
+                    "audio_backend": "none",
+                    "base_unchanged": True,
+                    "results": [result],
+                }), encoding="utf-8")
+
+            report = AUDIT.audit_session(session_dir)
+            self.assertTrue(report["qualified"])
+            review["second_launch"] = False
+            (run_dir / "review.json").write_text(
+                __import__("json").dumps(review), encoding="utf-8")
+            report = AUDIT.audit_session(session_dir)
+            self.assertFalse(report["qualified"])
+            self.assertIn(
+                "review field second_launch is not true",
+                report["runs"][0]["problems"])
+            review["second_launch"] = True
+            result["context_create_generations"] = [1, 1]
+            (run_dir / "result.json").write_text(
+                __import__("json").dumps(result), encoding="utf-8")
+            report = AUDIT.audit_session(session_dir)
+            self.assertFalse(report["qualified"])
+            self.assertIn(
+                "fresh renderer contexts in two generations were not observed",
+                report["runs"][0]["problems"])
+
+    def test_qemu_log_summary_extracts_profiles_and_faults(self):
+        log = """\
+GXMetal profile: t_ns=123 generation_draws=456 fps=60 frames=120 direct=120 fallback=0 present_ms=1
+GXMetal lifecycle: generation=1 event=reset previous_generation=0 released_contexts=0 released_resources=0 draws=0 writebacks=0 direct=0 fallback=0
+GXMetal lifecycle: generation=1 event=context-create context=1
+GXMetal lifecycle: generation=1 event=context-destroy context=1
+GXMetal lifecycle: generation=2 event=reset previous_generation=1 released_contexts=0 released_resources=0 draws=456 writebacks=120 direct=120 fallback=0
+GXMetal lifecycle: generation=2 event=context-create context=1
+GXMetal profile: t_ns=456 generation_draws=789 fps=30 frames=60 direct=58 fallback=2 present_ms=2
+GXMetal: queue fault 3 at consumer 0x20
+GXMetal: transport connection failed while presenting
+"""
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "qemu.log"
+            path.write_text(log, encoding="utf-8")
+            summary = SWEEP.qemu_log_summary(path)
+
+        self.assertEqual(summary["profile_reports"], 2)
+        self.assertEqual(summary["profile_frames"], 180)
+        self.assertEqual(summary["direct_frames"], 178)
+        self.assertEqual(summary["fallback_frames"], 2)
+        self.assertEqual(summary["queue_faults"], 1)
+        self.assertEqual(summary["transport_failures"], 1)
+        self.assertEqual(summary["render_resets"], 2)
+        self.assertEqual(summary["context_creates"], 2)
+        self.assertEqual(summary["context_destroys"], 1)
+        self.assertEqual(summary["context_create_generations"], [1, 2])
+        self.assertEqual(summary["context_destroy_generations"], [1])
+        self.assertEqual(summary["max_render_generation"], 2)
+        self.assertEqual(summary["lifecycle_summaries"], 2)
+        self.assertEqual(summary["accelerated_draws"], 1245)
+        self.assertEqual(summary["draw_buffer_writebacks"], 120)
+        self.assertEqual(summary["lifecycle_direct_frames"], 120)
+        self.assertEqual(summary["lifecycle_fallback_frames"], 0)
+        self.assertTrue(summary["gxmetal_profile_observed"])
+        self.assertFalse(summary["fault_free"])
+
+    def test_qualification_review_captures_full_campaign_contract(self):
+        spec = SWEEP.RunSpec(
+            game_id="qualification", name="Qualification", mode="gxmetal",
+            cdrom=None, source_url=None, source_sha256=None,
+            boot_wait_seconds=0, observation_seconds=0,
+            capture_interval_seconds=1, resolution="640x480x15", steps=())
+        summary = {
+            "profile_reports": 1,
+            "profile_frames": 120,
+            "direct_frames": 120,
+            "fallback_frames": 0,
+            "queue_faults": 0,
+            "transport_failures": 0,
+            "render_resets": 2,
+            "context_creates": 2,
+            "context_destroys": 1,
+            "context_create_generations": [1, 2],
+            "context_destroy_generations": [1],
+            "max_render_generation": 2,
+            "gxmetal_profile_observed": True,
+            "fault_free": True,
+        }
+
+        review = SWEEP.qualification_review_template(spec, "none", summary)
+
+        self.assertEqual(review["schema"], 2)
+        self.assertEqual(review["audio"], "disabled")
+        self.assertEqual(review["network"], "disabled")
+        self.assertTrue(review["gxmetal_profile_observed"])
+        self.assertTrue(review["fault_free"])
+        for field in (
+                "renderer_identified", "gameplay", "effects_heavy_scene",
+                "clean_exit", "second_launch", "source_provenance",
+                "context_teardown_observed", "fresh_context_observed",
+                "source_disk_unchanged", "unexpected_fallback"):
+            self.assertIn(field, review)
+
     def test_game_id_filter_is_validated_and_preserves_manifest_order(self):
         specs = [
             SWEEP.RunSpec(
@@ -431,6 +578,35 @@ class ManifestValidationTests(unittest.TestCase):
             path.write_text(__import__("json").dumps(manifest),
                             encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "leaves keys held"):
+                SWEEP.load_manifest(path, ("gxmetal",))
+
+    def test_manifest_allows_explicit_unheld_key_release_opt_in(self):
+        manifest = {
+            "schema": 1,
+            "games": [{
+                "id": "release-unheld-key",
+                "name": "Release unheld key",
+                "modes": ["gxmetal"],
+                "steps": [
+                    {"key_up": "Control_L", "allow_unheld": True},
+                    {"key_up": "Control_L", "allow_unheld": True},
+                ],
+            }],
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "manifest.json"
+            path.write_text(__import__("json").dumps(manifest),
+                            encoding="utf-8")
+            specs = SWEEP.load_manifest(path, ("gxmetal",))
+            self.assertEqual(
+                specs[0].steps,
+                ({"key_up": "Control_L", "allow_unheld": True},) * 2)
+
+            manifest["games"][0]["steps"][0]["allow_unheld"] = False
+            path.write_text(__import__("json").dumps(manifest),
+                            encoding="utf-8")
+            with self.assertRaisesRegex(
+                    ValueError, "allow_unheld=true is accepted only"):
                 SWEEP.load_manifest(path, ("gxmetal",))
 
     def test_named_keys_are_case_sensitive_and_checked_before_runtime(self):

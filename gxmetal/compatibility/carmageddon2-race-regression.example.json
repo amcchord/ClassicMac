@@ -34,13 +34,16 @@
         {"click": [534, 226], "delay_after": 1},
         {"click": [767, 316], "delay_after": 15},
         {"screenshot": "single-player-menu"},
-        {"key": "Return", "delay_after": 5},
+        {"key": "Return", "delay_after": 1},
+        {"wait_for_pixel": {"x": 435, "y": 237, "red": 16, "green": 176, "blue": 64, "tolerance": 16, "timeout_seconds": 15, "poll_interval_seconds": 0.25}},
         {"screenshot": "new-game-skill"},
-        {"click": [435, 237], "delay_after": 35},
+        {"double_click": [435, 237], "delay_after": 35},
         {"screenshot": "race-start"},
+        {"wait_for_pixels": {"pixels": [{"x": 133, "y": 16, "red": 88, "green": 88, "blue": 248}, {"x": 155, "y": 16, "red": 248, "green": 176, "blue": 88}, {"x": 416, "y": 16, "red": 88, "green": 88, "blue": 248}, {"x": 478, "y": 16, "red": 248, "green": 176, "blue": 88}, {"x": 35, "y": 441, "red": 88, "green": 88, "blue": 248}, {"x": 293, "y": 457, "red": 88, "green": 88, "blue": 248}], "tolerance": 16, "timeout_seconds": 5, "poll_interval_seconds": 0.25}},
         {"assert_color_range_fraction_below": {"minimum_rgb": [0, 0, 0], "maximum_rgb": [16, 16, 16], "maximum_fraction": 0.85}},
         {"wait": 20},
         {"screenshot": "race-soak"},
+        {"wait_for_pixels": {"pixels": [{"x": 133, "y": 16, "red": 88, "green": 88, "blue": 248}, {"x": 155, "y": 16, "red": 248, "green": 176, "blue": 88}, {"x": 416, "y": 16, "red": 88, "green": 88, "blue": 248}, {"x": 478, "y": 16, "red": 248, "green": 176, "blue": 88}, {"x": 35, "y": 441, "red": 88, "green": 88, "blue": 248}, {"x": 293, "y": 457, "red": 88, "green": 88, "blue": 248}], "tolerance": 16, "timeout_seconds": 5, "poll_interval_seconds": 0.25}},
         {"assert_color_range_fraction_below": {"minimum_rgb": [0, 0, 0], "maximum_rgb": [16, 16, 16], "maximum_fraction": 0.85}}
       ]
     }

@@ -77,6 +77,30 @@ For every game retain:
 5. A filled review record separating launch, menus, gameplay, visual
    correctness, input, audio, and sustained stability.
 
+The runner now extracts profile-frame, direct/fallback, queue-fault,
+transport-failure, and generation-numbered renderer reset/create/destroy facts
+into both `result.json` and the schema-2 `review.json`. Generation summaries
+retain draw, draw-buffer writeback, direct-present, and fallback-present totals
+even for early RAVE applications that never submit the modern present opcode.
+Review also records renderer identity, representative and
+effects-heavy gameplay, clean exit, second launch, source provenance, immutable
+source verification, observed renderer teardown/fresh-context creation, and
+the muted-audio/disabled-network contract. After the
+visual review is complete, mark every applicable boolean, set
+`unexpected_fallback` explicitly, and change `review_status` to `qualified`.
+Then mechanically verify one or more sessions with:
+
+```sh
+python3 scripts/gxmetal-game-sweep-audit.py \
+  context/gxmetal-games/evidence/<session> [<additional-session> ...]
+```
+
+The audit fails closed on missing evidence, unreviewed fields, source mutation,
+audio or networking, QEMU faults, missing GXMetal profiles, incomplete
+automation, an unclean QEMU exit, or an unproven second launch. In particular,
+the second-launch check requires context creation in two distinct renderer
+generations rather than merely counting two contexts from one process.
+
 Performance runs use one VM at a time. Correctness runs may use two concurrent
 VMs, each with an independent clone and unique local VNC and monitor sockets.
 
@@ -666,3 +690,21 @@ VMs, each with an independent clone and unique local VNC and monitor sockets.
   race gates report 0.015029, QEMU exits zero with no queue/transport fault,
   and the source remains unchanged. Packaged evidence is retained under
   `context/gxmetal-games/evidence/gxmetal-carmageddon2-v2.2.3-packaged-race-20260827/`.
+- A second Carmageddon II failure at the delayed skill dialog exposed a
+  distinct protocol validation bug: the `HOST_ATI_UV` draw flag identifies
+  the 64-byte ATI-private vertex convention, not the bound texture's storage
+  format. Requiring ATI ARGB4444 incorrectly faulted ordinary RAVE textures
+  before the race. The host now requires only the proven 64-byte stride for
+  this flag, with a focused Metal regression. The canonical Virtual CD/DVD
+  Utility route then reaches the race, passes the stable five-point HUD gate
+  twice, and records 3,618 direct frames, zero fallback, 1,075,097 draws, and
+  no queue or transport fault. Five post-collision frames remain coherent with
+  no red spike fan or missing textures. Evidence is retained under
+  `context/gxmetal-games/evidence/gxmetal-carmageddon2-dev-ati-uv-fix-race-20260828/`.
+- Added `GXMetal RAVE Selection`, a guest probe that inventories main-display
+  RAVE engines and records the engines selected by an untouched QuickDraw 3D
+  interactive renderer and a separate explicit best-choice renderer. It does
+  not call `QAEngineEnable` or `QAEngineDisable`. In the real Mac OS 9 VM,
+  GXMetal is inventory order zero, Apple Software is order one, and both
+  renderer paths choose GXMetal. The retained disk and JSON report are under
+  `context/gxmetal-games/evidence/gxmetal-engine-selection-dev-20260828/`.

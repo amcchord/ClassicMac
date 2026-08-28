@@ -1,0 +1,48 @@
+--- a/ui/cocoa.m
++++ b/ui/cocoa.m
+@@ -1633,6 +1633,7 @@
+ - (void)resumeQEMU:(id)sender;
+ - (void)displayPause;
+ - (void)removePause;
++- (void)forceQuitFrontmostGuestApp:(id)sender;
+ - (void)restartQEMU:(id)sender;
+ - (void)powerDownQEMU:(id)sender;
+ - (void)ejectDeviceMedia:(id)sender;
+@@ -2024,6 +2025,25 @@
+     [pauseLabel removeFromSuperview];
+ }
+ 
++/*
++ * Ask classic Mac OS to force-quit its frontmost application. A foreground
++ * program that stops yielding can make the cooperatively scheduled desktop
++ * look completely frozen even though the guest OS and emulator are alive.
++ * Keeping this action in the host menu makes that recovery path available
++ * even while the guest window is not processing ordinary keyboard events.
++ */
++- (void)forceQuitFrontmostGuestApp:(id)sender
++{
++    with_bql(^{
++        qkbd_state_key_event(kbd, Q_KEY_CODE_META_L, true);
++        qkbd_state_key_event(kbd, Q_KEY_CODE_ALT, true);
++        qkbd_state_key_event(kbd, Q_KEY_CODE_ESC, true);
++        qkbd_state_key_event(kbd, Q_KEY_CODE_ESC, false);
++        qkbd_state_key_event(kbd, Q_KEY_CODE_ALT, false);
++        qkbd_state_key_event(kbd, Q_KEY_CODE_META_L, false);
++    });
++}
++
+ /* Restarts QEMU */
+ - (void)restartQEMU:(id)sender
+ {
+@@ -2340,6 +2362,11 @@
+     [menu addItem: menuItem];
+     [menuItem setEnabled: NO];
+     [menu addItem: [NSMenuItem separatorItem]];
++    [menu addItem: [[[NSMenuItem alloc]
++        initWithTitle: @"Force Quit Frontmost App…"
++                action: @selector(forceQuitFrontmostGuestApp:)
++         keyEquivalent: @""] autorelease]];
++    [menu addItem: [NSMenuItem separatorItem]];
+     [menu addItem: [[[NSMenuItem alloc] initWithTitle: @"Restart" action: @selector(restartQEMU:) keyEquivalent: @""] autorelease]];
+     [menu addItem: [[[NSMenuItem alloc] initWithTitle: @"Shut Down" action: @selector(powerDownQEMU:) keyEquivalent: @""] autorelease]];
+     /* One stateful command for the bundled tools disc. Its title is refreshed

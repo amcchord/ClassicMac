@@ -31,6 +31,7 @@ from typing import Any
 
 
 SCHEMA_VERSION = 1
+REVIEW_SCHEMA_VERSION = 2
 VALID_MODES = ("gxmetal", "software")
 DEFAULT_AUDIO_BACKEND = "none"
 AUDIO_DEVICE_SPECS = {
@@ -118,6 +119,152 @@ def file_record(path: Path, include_hash: bool = True) -> dict[str, Any]:
     if include_hash:
         record["sha256"] = sha256_file(path)
     return record
+
+
+def qemu_log_summary(path: Path) -> dict[str, Any]:
+    """Return the renderer/fault facts needed by a qualification review.
+
+    Profiles are interval reports, so their frame counters can be summed. The
+    result intentionally leaves visual and lifecycle judgement to review.json;
+    it only extracts facts that should never require a human to re-read a large
+    QEMU log.
+    """
+    summary: dict[str, Any] = {
+        "profile_reports": 0,
+        "profile_frames": 0,
+        "direct_frames": 0,
+        "fallback_frames": 0,
+        "queue_faults": 0,
+        "transport_failures": 0,
+        "render_resets": 0,
+        "context_creates": 0,
+        "context_destroys": 0,
+        "context_create_generations": [],
+        "context_destroy_generations": [],
+        "max_render_generation": 0,
+        "lifecycle_summaries": 0,
+        "accelerated_draws": 0,
+        "draw_buffer_writebacks": 0,
+        "lifecycle_direct_frames": 0,
+        "lifecycle_fallback_frames": 0,
+    }
+    profile_pattern = re.compile(
+        r"GXMetal profile:.*?\bframes=(\d+)\s+direct=(\d+)\s+fallback=(\d+)\b")
+    lifecycle_pattern = re.compile(
+        r"GXMetal lifecycle: generation=(\d+) "
+        r"event=(reset|context-create|context-destroy)\b")
+    lifecycle_summary_pattern = re.compile(
+        r"GXMetal lifecycle: generation=\d+ event=reset "
+        r"previous_generation=(\d+) released_contexts=\d+ "
+        r"released_resources=\d+ draws=(\d+) writebacks=(\d+) "
+        r"direct=(\d+) fallback=(\d+)\b")
+    generation_draws_pattern = re.compile(
+        r"GXMetal profile:.*?\bgeneration_draws=(\d+)\b")
+    active_generation = 0
+    completed_generations: dict[int, tuple[int, int, int]] = {}
+    live_profiles: dict[int, dict[str, int]] = {}
+    if path.is_file():
+        with path.open("r", encoding="utf-8", errors="replace") as log:
+            for line in log:
+                lifecycle = lifecycle_pattern.search(line)
+                if lifecycle is not None:
+                    generation = int(lifecycle.group(1))
+                    event = lifecycle.group(2)
+                    summary["max_render_generation"] = max(
+                        summary["max_render_generation"], generation)
+                    if event == "reset":
+                        summary["render_resets"] += 1
+                        active_generation = generation
+                    elif event == "context-create":
+                        active_generation = generation
+                        summary["context_creates"] += 1
+                        if generation not in summary["context_create_generations"]:
+                            summary["context_create_generations"].append(generation)
+                    else:
+                        summary["context_destroys"] += 1
+                        generations = summary["context_destroy_generations"]
+                        if generation not in generations:
+                            generations.append(generation)
+                lifecycle_summary = lifecycle_summary_pattern.search(line)
+                if lifecycle_summary is not None:
+                    previous_generation = int(lifecycle_summary.group(1))
+                    draws = int(lifecycle_summary.group(2))
+                    direct = int(lifecycle_summary.group(4))
+                    fallback = int(lifecycle_summary.group(5))
+                    summary["lifecycle_summaries"] += 1
+                    summary["accelerated_draws"] += draws
+                    summary["draw_buffer_writebacks"] += int(
+                        lifecycle_summary.group(3))
+                    summary["lifecycle_direct_frames"] += direct
+                    summary["lifecycle_fallback_frames"] += fallback
+                    completed_generations[previous_generation] = (
+                        draws, direct, fallback)
+                profile = profile_pattern.search(line)
+                if profile is not None:
+                    frames = int(profile.group(1))
+                    direct = int(profile.group(2))
+                    fallback = int(profile.group(3))
+                    summary["profile_reports"] += 1
+                    summary["profile_frames"] += frames
+                    bucket = live_profiles.setdefault(active_generation, {
+                        "direct": 0, "fallback": 0, "draws": 0})
+                    bucket["direct"] += direct
+                    bucket["fallback"] += fallback
+                    generation_draws = generation_draws_pattern.search(line)
+                    if generation_draws is not None:
+                        bucket["draws"] = max(
+                            bucket["draws"], int(generation_draws.group(1)))
+                if "GXMetal: queue fault" in line:
+                    summary["queue_faults"] += 1
+                if "transport connection failed" in line.lower():
+                    summary["transport_failures"] += 1
+    summary["direct_frames"] = summary["lifecycle_direct_frames"]
+    summary["fallback_frames"] = summary["lifecycle_fallback_frames"]
+    for generation, profile in live_profiles.items():
+        if generation in completed_generations:
+            continue
+        summary["direct_frames"] += profile["direct"]
+        summary["fallback_frames"] += profile["fallback"]
+        summary["accelerated_draws"] += profile["draws"]
+    summary["gxmetal_profile_observed"] = (
+        summary["profile_reports"] > 0 or summary["lifecycle_summaries"] > 0)
+    summary["fault_free"] = (
+        summary["queue_faults"] == 0 and summary["transport_failures"] == 0)
+    return summary
+
+
+def qualification_review_template(
+    spec: RunSpec,
+    audio_backend: str,
+    log_summary: dict[str, Any],
+) -> dict[str, Any]:
+    """Create a review that mirrors the campaign's qualification contract."""
+    return {
+        "schema": REVIEW_SCHEMA_VERSION,
+        "run_id": spec.run_id,
+        "review_status": "not-reviewed",
+        "renderer_identified": None,
+        "launch": None,
+        "menus": None,
+        "gameplay": None,
+        "effects_heavy_scene": None,
+        "visual_correctness": None,
+        "input": None,
+        "clean_exit": None,
+        "second_launch": None,
+        "context_teardown_observed": None,
+        "fresh_context_observed": None,
+        "stability": None,
+        "source_provenance": None,
+        "source_disk_unchanged": None,
+        "gxmetal_profile_observed": log_summary["gxmetal_profile_observed"],
+        "unexpected_fallback": None,
+        "fault_free": log_summary["fault_free"],
+        "audio": "disabled" if audio_backend == "none" else None,
+        "network": "disabled",
+        "automated_evidence": log_summary,
+        "notes": "",
+    }
 
 
 def qemu_guest_name(name: str, mode: str) -> str:
@@ -521,7 +668,9 @@ def validate_step(step: Any, field: str) -> dict[str, Any]:
                 not (len(name) == 1 or name in VALID_NAMED_KEYS)
                 for name in names)):
             raise ValueError(f"{field}.chord has unknown or missing VNC key")
-    unknown = set(step) - {action, "delay_after", "hold_ms", "capture_after"}
+    unknown = set(step) - {
+        action, "delay_after", "hold_ms", "capture_after", "allow_unheld",
+    }
     if unknown:
         raise ValueError(f"{field} has unknown fields: {sorted(unknown)}")
     if "delay_after" in step:
@@ -530,6 +679,10 @@ def validate_step(step: Any, field: str) -> dict[str, Any]:
         number(step["hold_ms"], f"{field}.hold_ms", positive=True)
     if "capture_after" in step and not isinstance(step["capture_after"], bool):
         raise ValueError(f"{field}.capture_after must be a boolean")
+    if "allow_unheld" in step:
+        if action != "key_up" or step["allow_unheld"] is not True:
+            raise ValueError(
+                f"{field}.allow_unheld=true is accepted only for key_up")
     return dict(step)
 
 
@@ -630,10 +783,12 @@ def load_manifest(path: Path, selected_modes: tuple[str, ...]) -> list[RunSpec]:
             elif "key_up" in step:
                 key = step["key_up"]
                 if key not in held_keys:
-                    raise ValueError(
-                        f"{field}.steps[{step_index}] releases key that is "
-                        f"not held: {key}")
-                held_keys.remove(key)
+                    if not step.get("allow_unheld", False):
+                        raise ValueError(
+                            f"{field}.steps[{step_index}] releases key that "
+                            f"is not held: {key}")
+                else:
+                    held_keys.remove(key)
             elif "screenshot" in step:
                 named_screenshots.add(step["screenshot"])
             elif "assert_frame_changed_since" in step:
@@ -1497,6 +1652,7 @@ def execute_run(
 
     exit_code = process.returncode if process is not None else None
     elapsed = round(time.monotonic() - started, 3)
+    log_summary = qemu_log_summary(run_dir / "qemu.log")
     result = {
         "run_id": spec.run_id,
         "game_id": spec.game_id,
@@ -1511,22 +1667,27 @@ def execute_run(
         "qemu_exit_code": exit_code,
         "clone_method": clone_method,
         "screenshots": capture_count,
+        "gxmetal_profile_observed": log_summary["gxmetal_profile_observed"],
+        "direct_frames": log_summary["direct_frames"],
+        "fallback_frames": log_summary["fallback_frames"],
+        "queue_faults": log_summary["queue_faults"],
+        "transport_failures": log_summary["transport_failures"],
+        "render_resets": log_summary["render_resets"],
+        "context_creates": log_summary["context_creates"],
+        "context_destroys": log_summary["context_destroys"],
+        "context_create_generations":
+            log_summary["context_create_generations"],
+        "context_destroy_generations":
+            log_summary["context_destroy_generations"],
+        "max_render_generation": log_summary["max_render_generation"],
+        "accelerated_draws": log_summary["accelerated_draws"],
+        "draw_buffer_writebacks": log_summary["draw_buffer_writebacks"],
         "evidence": str(run_dir),
     }
     write_json(run_dir / "result.json", result)
-    write_json(run_dir / "review.json", {
-        "run_id": spec.run_id,
-        "review_status": "not-reviewed",
-        "launch": None,
-        "menus": None,
-        "gameplay": None,
-        "visual_correctness": None,
-        "input": None,
-        "audio": None,
-        "stability": None,
-        "gxmetal_profile_observed": None,
-        "notes": "",
-    })
+    write_json(
+        run_dir / "review.json",
+        qualification_review_template(spec, args.audio_backend, log_summary))
     events.write("finished", status=status, qemu_exit_code=exit_code)
     events.close()
     if clone.exists() and (not args.keep_disks and
@@ -1762,6 +1923,11 @@ def main() -> int:
         "base_unchanged": base_unchanged,
         "results": sorted(results, key=lambda item: item["run_id"]),
     })
+    for result in results:
+        review_path = Path(result["evidence"]) / "review.json"
+        review = json.loads(review_path.read_text(encoding="utf-8"))
+        review["source_disk_unchanged"] = base_unchanged
+        write_json(review_path, review)
     write_json(output / "session.json", session)
     write_json(output / "summary.json", session["results"])
     if not base_unchanged:

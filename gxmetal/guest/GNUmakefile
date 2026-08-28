@@ -30,7 +30,8 @@ INIT_CFLAGS := -std=gnu99 -Os -Wall -Wextra -Werror -Wno-multichar \
 INIT_LDFLAGS := -Wl,--mac-flat
 
 all: bin/GXMetal.bin bin/GXMetalInput.bin bin/GXMetalStartup.bin bin/GXMetalInstaller.bin \
-     bin/GXMetalTest.bin bin/GXMetalAGLProbe.bin
+     bin/GXMetalTest.bin bin/GXMetalAGLProbe.bin \
+     bin/GXMetalEngineSelectionProbe.bin
 
 bin/GXMetal.xcoff: src/GXMetalEngine.c src/GXMetalTransport.c \
                    src/GXMetalTransport.h src/GXMetalATICompatibility.h \
@@ -140,6 +141,27 @@ bin/GXMetalAGLProbe.bin: bin/GXMetalAGLProbe.pef apps/GXMetalAGLProbe.r \
 		--cc bin/GXMetalAGLProbe.dsk --cc 'bin/GXMetal AGL Probe' \
 		--cc bin/%GXMetalAGLProbe.ad -t APPL -c GXMA \
 		--data bin/GXMetalAGLProbe.pef
+	python3 ../tools/set_macbinary_flags.py $@ --set 0x2000 --clear 0x0100
+
+bin/GXMetalEngineSelectionProbe.xcoff: \
+        apps/GXMetalEngineSelectionProbe.c \
+        apps/GXMetalEngineSelectionProbeLogic.h \
+        include/GXMetalVersion.h GNUmakefile
+	@mkdir -p bin
+	$(CC) $(APP_CFLAGS) -Iapps $(APP_LDFLAGS) -o $@ $< \
+		-lQuickDraw3DLib -lQuickDraw3DRAVELib -lInterfaceLib
+
+bin/GXMetalEngineSelectionProbe.pef: bin/GXMetalEngineSelectionProbe.xcoff
+	$(MAKEPEF) -o $@ $<
+
+bin/GXMetalEngineSelectionProbe.bin: \
+        bin/GXMetalEngineSelectionProbe.pef \
+        apps/GXMetalEngineSelectionProbe.r src/GXMetalIcon.r
+	$(REZ) apps/GXMetalEngineSelectionProbe.r -I$(RINCLUDES) -Isrc -o $@ \
+		--cc bin/GXMetalEngineSelectionProbe.dsk \
+		--cc 'bin/GXMetal RAVE Selection' \
+		--cc bin/%GXMetalEngineSelectionProbe.ad -t APPL -c GXMS \
+		--data bin/GXMetalEngineSelectionProbe.pef
 	python3 ../tools/set_macbinary_flags.py $@ --set 0x2000 --clear 0x0100
 
 clean:

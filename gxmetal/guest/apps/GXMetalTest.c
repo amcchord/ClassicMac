@@ -43,6 +43,10 @@ static const unsigned char kGXMetalDiagnosticResultName[] = {
     26, 'G', 'X', 'M', 'e', 't', 'a', 'l', ' ', 'D', 'i', 'a', 'g', 'n',
     'o', 's', 't', 'i', 'c', ' ', 'R', 'e', 's', 'u', 'l', 't', 's'
 };
+static const unsigned char kGXMetalRAVEInventoryResultName[] = {
+    22, 'G', 'X', 'M', 'e', 't', 'a', 'l', ' ', 'R', 'A', 'V', 'E', ' ',
+    'I', 'n', 'v', 'e', 'n', 't', 'o', 'r', 'y'
+};
 static const unsigned char kGXMetalExtensionName[] = {
     7, 'G', 'X', 'M', 'e', 't', 'a', 'l'
 };
@@ -301,6 +305,80 @@ static void GXMetalAppendVersion(char **cursor, const char *end,
     GXMetalAppendDecimal(cursor, end, (revision >> 8) & 0xffu);
     GXMetalAppendText(cursor, end, ".");
     GXMetalAppendDecimal(cursor, end, revision & 0xffu);
+}
+
+/* Record the order RAVE presents its engines for the main display. Legacy
+ * games commonly select the first engine advertising textured drawing, so a
+ * complete inventory makes a silent software/hardware selection observable
+ * without changing the preferred-engine state. */
+static void GXMetalRecordRAVEInventory(const TQADevice *device)
+{
+    static char result[2048];
+    char *cursor = result;
+    const char *end = result + sizeof(result) - 1;
+    TQAEngine *engine;
+    unsigned long index = 0;
+
+    GXMetalAppendText(&cursor, end, "RAVE engine inventory for main display");
+    engine = QADeviceGetFirstEngine(device);
+    while (engine != NULL) {
+        char name[64];
+        unsigned long vendorID = 0;
+        unsigned long engineID = 0;
+        unsigned long revision = 0;
+        unsigned long optionalFeatures = 0;
+        unsigned long fastFeatures = 0;
+
+        GXMetalAppendText(&cursor, end, "\norder=");
+        GXMetalAppendDecimal(&cursor, end, index);
+        GXMetalAppendText(&cursor, end, " name=");
+        if (GXMetalGetEngineName(engine, name, sizeof(name))) {
+            GXMetalAppendText(&cursor, end, name);
+        } else {
+            GXMetalAppendText(&cursor, end, "<unknown>");
+        }
+        GXMetalAppendText(&cursor, end, " vendor=");
+        if (QAEngineGestalt(engine, kQAGestalt_VendorID,
+                            &vendorID) == kQANoErr) {
+            GXMetalAppendHex(&cursor, end, vendorID);
+        } else {
+            GXMetalAppendText(&cursor, end, "<unknown>");
+        }
+        GXMetalAppendText(&cursor, end, " engine=");
+        if (QAEngineGestalt(engine, kQAGestalt_EngineID,
+                            &engineID) == kQANoErr) {
+            GXMetalAppendHex(&cursor, end, engineID);
+        } else {
+            GXMetalAppendText(&cursor, end, "<unknown>");
+        }
+        GXMetalAppendText(&cursor, end, " revision=");
+        if (QAEngineGestalt(engine, kQAGestalt_Revision,
+                            &revision) == kQANoErr) {
+            GXMetalAppendVersion(&cursor, end, revision);
+        } else {
+            GXMetalAppendText(&cursor, end, "<unknown>");
+        }
+        GXMetalAppendText(&cursor, end, " optional=");
+        if (QAEngineGestalt(engine, kQAGestalt_OptionalFeatures,
+                            &optionalFeatures) == kQANoErr) {
+            GXMetalAppendHex(&cursor, end, optionalFeatures);
+        } else {
+            GXMetalAppendText(&cursor, end, "<unknown>");
+        }
+        GXMetalAppendText(&cursor, end, " fast=");
+        if (QAEngineGestalt(engine, kQAGestalt_FastFeatures,
+                            &fastFeatures) == kQANoErr) {
+            GXMetalAppendHex(&cursor, end, fastFeatures);
+        } else {
+            GXMetalAppendText(&cursor, end, "<unknown>");
+        }
+        index++;
+        engine = QADeviceGetNextEngine(device, engine);
+    }
+    GXMetalAppendText(&cursor, end, "\ncount=");
+    GXMetalAppendDecimal(&cursor, end, index);
+    *cursor = '\0';
+    GXMetalRecordNamedResult(kGXMetalRAVEInventoryResultName, result);
 }
 
 static void GXMetalRecordDiagnosticSnapshot(
@@ -2869,6 +2947,7 @@ int main(void)
     memset(&device, 0, sizeof(device));
     device.deviceType = kQADeviceGDevice;
     device.device.gDevice = GetMainDevice();
+    GXMetalRecordRAVEInventory(&device);
     engine = GXMetalFindEngine(&device);
     if (engine == NULL) {
         memset(&publishedSnapshot, 0, sizeof(publishedSnapshot));

@@ -235,6 +235,9 @@ git -C "$QEMU_DIR" apply "$ROOT_DIR/cocoaui/window-presentation.patch" || die "F
 # submenu and errors, focused View controls, and no raw emulator consoles or
 # removable-device identifiers in the menu bar.
 git -C "$QEMU_DIR" apply "$ROOT_DIR/cocoaui/mac-native-menus.patch" || die "Failed to apply ClassicMac native menus patch"
+# Host-side Command-Option-Escape recovery for classic applications that stop
+# yielding and make the cooperatively scheduled guest desktop appear frozen.
+git -C "$QEMU_DIR" apply "$ROOT_DIR/cocoaui/guest-force-quit-menu.patch" || die "Failed to apply ClassicMac guest Force Quit menu patch"
 # Quadra-only floppy image controls for the removable classicvirtio drive.
 git -C "$QEMU_DIR" apply "$ROOT_DIR/cocoaui/floppy-menu.patch" || die "Failed to apply ClassicMac floppy menu patch"
 # Faster 32-bit Power Mac scanout: let Cocoa consume a big-endian framebuffer

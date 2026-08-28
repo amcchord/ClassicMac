@@ -351,8 +351,9 @@ helper still recognizes and dismisses only a completed Disk First Aid message,
 so older/control images cannot silently prevent GXMetal Test from running as
 a Startup Item.
 
-For the fast per-build driver gate, run GXMetal Test and the accelerated AGL
-probe together from independent clones:
+For the fast per-build driver gate, run GXMetal Test, the accelerated AGL
+probe, and the non-mutating RAVE/QuickDraw 3D engine-selection probe from
+independent clones:
 
 ```sh
 python3 scripts/gxmetal-game-sweep.py BASE.img \
@@ -372,6 +373,8 @@ scripts/extract-gxmetal-guest-results.sh agl \
   /path/to/evidence/driver-smoke-YYYYMMDD/gxmetal-agl-probe__gxmetal
 scripts/extract-gxmetal-guest-results.sh input \
   /path/to/evidence/lifecycle-YYYYMMDD/game__gxmetal
+scripts/extract-gxmetal-guest-results.sh selection \
+  /path/to/evidence/driver-smoke-YYYYMMDD/gxmetal-engine-selection__gxmetal
 ```
 
 The `input` mode copies and decodes the fixed-format `GXMetal Input Trace`

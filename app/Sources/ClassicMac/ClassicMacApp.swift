@@ -108,6 +108,15 @@ private struct MachineCommands: View {
 
         Divider()
 
+        Button("Force Quit Frontmost App…") {
+            if let vm = vm {
+                manager.forceQuitFrontmostApp(vm.id)
+            }
+        }
+        .disabled(!running || paused)
+
+        Divider()
+
         Button("Reveal in Finder") {
             if let folder = vm?.folder {
                 NSWorkspace.shared.activateFileViewerSelecting([folder])

@@ -1270,8 +1270,12 @@ static void test_metal_texture_upload_and_sampling(void)
     /* QuickDraw 3D is allowed to leave RGB undefined unless Decal is active.
      * This mirrors the first textured triangle observed from Nanosaur. */
     poison_unused_texture_color(vertices + 1 * 64);
+    /* ATI UV provenance is independent of the bound texture's storage
+     * format. Carmageddon II's animated skill menu can submit this flag after
+     * binding a regular RAVE texture; accepting it must not fault the queue. */
     gxmetal_store_le32(payload + GXMETAL_DRAW_FLAGS_OFFSET,
-                       GXMETAL_DRAW_BACKFACING);
+                       GXMETAL_DRAW_BACKFACING |
+                       GXMETAL_DRAW_HOST_ATI_UV);
     CHECK(dispatch(renderer, packet, 416) == GXMETAL_ERROR_NONE);
     make_packet(control, GXMETAL_OP_END_FRAME, 32, 3);
     CHECK(dispatch(renderer, control, 32) == GXMETAL_ERROR_NONE);

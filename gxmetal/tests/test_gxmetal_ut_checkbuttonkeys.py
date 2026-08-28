@@ -117,6 +117,45 @@ class ProbeTests(unittest.TestCase):
         self.assertEqual(len(raised.exception.observations), 1)
         self.assertEqual(raised.exception.observations[0]["index"], 0)
 
+    def test_locator_stops_after_three_identical_non_pef_samples(self):
+        class Client:
+            running = False
+
+            def __init__(self):
+                self.continue_calls = 0
+                self.interrupt_calls = 0
+                self.breakpoint_calls = 0
+
+            def register(self, number):
+                return {64: 0xF2230C, 67: 0xF227EC}[number]
+
+            def memory(self, address, length):
+                return b"\xff" * length
+
+            def continue_guest(self):
+                self.continue_calls += 1
+                self.running = True
+
+            def interrupt(self):
+                self.interrupt_calls += 1
+                self.running = False
+
+            def breakpoint(self, address, insert):
+                self.breakpoint_calls += 1
+
+        client = Client()
+        with self.assertRaises(PROBE.LocatorInconclusive) as raised:
+            PROBE.locate_code_fragment(
+                client, bytes(range(128)), samples=320, interval=0,
+                verify_offsets=(4, 8, 12))
+
+        observations = raised.exception.observations
+        self.assertEqual(len(observations), 3)
+        self.assertEqual(observations[-1]["identical_non_pef_samples"], 3)
+        self.assertEqual(client.continue_calls, 2)
+        self.assertEqual(client.interrupt_calls, 2)
+        self.assertEqual(client.breakpoint_calls, 0)
+
     def test_main_writes_locator_failure_before_nonzero_exit(self):
         result = {
             "schema": 1,

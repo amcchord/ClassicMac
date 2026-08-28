@@ -1,4 +1,4 @@
-GXMetal 2.2.3 for Mac OS 9
+GXMetal 2.2.4 for Mac OS 9
 ==========================
 
 GXMetal is ClassicMac's host-accelerated QuickDraw 3D RAVE engine. It lets
@@ -23,7 +23,7 @@ INSTALL OR UPDATE
 7. Run GXMetal Test. Do not rely on the startup icon alone: the test confirms
    the installed GXMetal version, RAVE discovery, the host transport,
    rendering correctness, presentation, and software fallback. GXMetal Test
-   2.2.3 rejects a mismatched driver and tells you to reinstall and
+   2.2.4 rejects a mismatched driver and tells you to reinstall and
    restart.
 
 Keep the complete GXMetal folder together while the installer runs. GXMetal is
@@ -66,7 +66,7 @@ TESTED GAMES AND OPENGL
 
 Nanosaur, Carmageddon II, Quake III Arena Demo, and the repository's ten-game
 campaign exercise public RAVE, ATI-private RAVE/OpenGL, and Apple OpenGL paths.
-GXMetal 2.2.3 has reviewed gameplay evidence for Bugdom, Future Cop, Combat
+GXMetal 2.2.4 has reviewed gameplay evidence for Bugdom, Future Cop, Combat
 Mission, Weekend Warrior, Cro-Mag Rally, Dark Vengeance, Myth II, Oni, HAVOC,
 and sound-disabled Unreal Tournament. Those routes cover multitexturing,
 lightmaps, dynamic textures, depth, clipping, fog, water, alpha effects,

@@ -157,7 +157,7 @@ USB Overdrive 1.4  (Power Mac only, Mac OS 8.5 - 9.2)
 On a Quadra (System 7 through Mac OS 8.1), skip USB Overdrive -
 it needs a Power Mac running Mac OS 8.5 or later.
 
-GXMetal 2.2.3  (Power Mac only; tested on Mac OS 9.2.2)
+GXMetal 2.2.4  (Power Mac only; tested on Mac OS 9.2.2)
    Host-accelerated QuickDraw 3D RAVE for ClassicMac. Open the
    GXMetal folder and double-click "Install GXMetal". Restart,
    look for the puzzle-piece M icon in the startup extension row, then
@@ -237,6 +237,8 @@ hcopy -m "$GXMETAL_BIN_DIR/GXMetalStartup.bin" ":GXMetal:GXMetal Startup"
 hcopy -m "$GXMETAL_BIN_DIR/GXMetalInstaller.bin" ":GXMetal:Install GXMetal"
 hcopy -m "$GXMETAL_BIN_DIR/GXMetalTest.bin" ":GXMetal:GXMetal Test"
 hcopy -m "$GXMETAL_BIN_DIR/GXMetalAGLProbe.bin" ":GXMetal:GXMetal AGL Probe"
+hcopy -m "$GXMETAL_BIN_DIR/GXMetalEngineSelectionProbe.bin" \
+  ":GXMetal:GXMetal RAVE Selection"
 hcopy -t "$GXMETAL_README" ":GXMetal:Read Me"
 hattrib -t TEXT -c ttxt ":GXMetal:Read Me"
 

@@ -9,6 +9,7 @@
 
 #include "gxmetal_metal.h"
 
+#include <errno.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -33,6 +34,8 @@
 #define GXMETAL_METAL_MIN_FILTERS 2u
 #define GXMETAL_METAL_MAG_FILTERS 2u
 #define GXMETAL_METAL_MIP_FILTERS 3u
+#define GXMETAL_METAL_PROFILE_SUSPECT_WINDOW_LIMIT 8u
+#define GXMETAL_METAL_PROFILE_SUSPECT_LIMIT 96u
 
 enum GXMetalMetalMinMagFilter {
     GXMETAL_METAL_FILTER_NEAREST = 0,
@@ -237,6 +240,15 @@ struct GXMetalMetalRenderer {
     uint64_t direct_present_count;
     uint64_t fallback_present_count;
     int profile_enabled;
+    uint64_t profile_generation;
+    uint64_t profile_generation_draw_count;
+    uint64_t profile_generation_writeback_count;
+    uint64_t profile_generation_direct_present_count;
+    uint64_t profile_generation_fallback_present_count;
+    uint64_t profile_suspect_after_draws;
+    uint64_t profile_suspect_geometry_logged;
+    uint64_t profile_suspect_geometry_window_logged;
+    uint64_t profile_suspect_geometry_suppressed;
     uint64_t profile_window_start_ns;
     uint64_t profile_present_count;
     uint64_t profile_direct_present_count;
@@ -359,6 +371,7 @@ static void gxmetal_metal_profile_draw(GXMetalMetalRenderer *renderer,
     stride = gxmetal_load_le32(
         packet->payload + GXMETAL_DRAW_VERTEX_STRIDE_OFFSET);
     renderer->profile_draw_count++;
+    renderer->profile_generation_draw_count++;
     renderer->profile_draw_vertex_count += count;
     if (context != NULL && context->blend <= GXMETAL_BLEND_OPENGL) {
         renderer->profile_blend_draw_count[context->blend]++;
@@ -448,8 +461,10 @@ static void gxmetal_metal_profile_present(GXMetalMetalRenderer *renderer,
     renderer->profile_present_count++;
     if (direct) {
         renderer->profile_direct_present_count++;
+        renderer->profile_generation_direct_present_count++;
     } else {
         renderer->profile_fallback_present_count++;
+        renderer->profile_generation_fallback_present_count++;
     }
     if (present_start_ns != 0 && now_ns >= present_start_ns) {
         renderer->profile_present_ns += now_ns - present_start_ns;
@@ -508,7 +523,8 @@ static void gxmetal_metal_profile_present(GXMetalMetalRenderer *renderer,
         (double)renderer->profile_resource_lookup_probes /
             (double)renderer->profile_resource_lookup_count : 0.0;
     fprintf(stderr,
-            "GXMetal profile: fps=%.2f frames=%llu direct=%llu "
+            "GXMetal profile: t_ns=%llu generation_draws=%llu "
+            "fps=%.2f frames=%llu direct=%llu "
             "fallback=%llu present_ms=%.3f draws_per_frame=%.2f "
             "draw_ms_per_frame=%.3f vertices_per_draw=%.2f "
             "single_triangle_pct=%.2f triangle_fan_pct=%.2f "
@@ -520,7 +536,10 @@ static void gxmetal_metal_profile_present(GXMetalMetalRenderer *renderer,
             "zero_alpha_vertex_pct=%.2f "
             "clears_per_frame=%.2f depth_clears_per_frame=%.2f "
             "writebacks_per_frame=%.2f "
-            "depth_clear=%.6f resource_probes_per_lookup=%.2f\n",
+            "depth_clear=%.6f resource_probes_per_lookup=%.2f "
+            "suspect_logged=%llu suspect_skipped_draws=%llu\n",
+            (unsigned long long)now_ns,
+            (unsigned long long)renderer->profile_generation_draw_count,
             frames_per_second,
             (unsigned long long)renderer->profile_present_count,
             (unsigned long long)renderer->profile_direct_present_count,
@@ -544,7 +563,10 @@ static void gxmetal_metal_profile_present(GXMetalMetalRenderer *renderer,
             renderer->profile_present_count != 0 ?
                 (double)renderer->profile_draw_buffer_writeback_count /
                     (double)renderer->profile_present_count : 0.0,
-            renderer->profile_last_depth_clear, probes_per_lookup);
+            renderer->profile_last_depth_clear, probes_per_lookup,
+            (unsigned long long)renderer->profile_suspect_geometry_logged,
+            (unsigned long long)
+                renderer->profile_suspect_geometry_suppressed);
     renderer->profile_window_start_ns = now_ns;
     renderer->profile_present_count = 0;
     renderer->profile_direct_present_count = 0;
@@ -572,6 +594,7 @@ static void gxmetal_metal_profile_present(GXMetalMetalRenderer *renderer,
     renderer->profile_draw_buffer_writeback_count = 0;
     renderer->profile_resource_lookup_count = 0;
     renderer->profile_resource_lookup_probes = 0;
+    renderer->profile_suspect_geometry_window_logged = 0;
 }
 
 static NSString *const kGXMetalShaderSource = @
@@ -1239,6 +1262,13 @@ static uint32_t gxmetal_metal_context_create(
     context->fog.end = 1.0f;
     context->fog.max_depth = 1.0f;
     context->active = 1;
+    if (renderer->profile_enabled) {
+        fprintf(stderr,
+                "GXMetal lifecycle: generation=%llu "
+                "event=context-create context=%u\n",
+                (unsigned long long)renderer->profile_generation,
+                context->id);
+    }
     return GXMETAL_ERROR_NONE;
 }
 
@@ -1966,6 +1996,238 @@ static int gxmetal_metal_read_vertex(const GXMetalMetalContext *context,
     return 1;
 }
 
+typedef struct GXMetalMetalProfileVertex {
+    float x;
+    float y;
+    float z;
+    float inv_w;
+} GXMetalMetalProfileVertex;
+
+static void gxmetal_metal_profile_load_raw_vertex(
+    const uint8_t *source, uint32_t stride, uint32_t index,
+    GXMetalMetalProfileVertex *vertex)
+{
+    source += (uint64_t)index * stride;
+    vertex->x = gxmetal_metal_load_float(source + GXMETAL_VERTEX_X_OFFSET);
+    vertex->y = gxmetal_metal_load_float(source + GXMETAL_VERTEX_Y_OFFSET);
+    vertex->z = gxmetal_metal_load_float(source + GXMETAL_VERTEX_Z_OFFSET);
+    vertex->inv_w = gxmetal_metal_load_float(
+        source + GXMETAL_VERTEX_INV_W_OFFSET);
+}
+
+static void gxmetal_metal_profile_load_converted_vertex(
+    const uint8_t *vertices, size_t stride, uint32_t index,
+    GXMetalMetalProfileVertex *vertex)
+{
+    /* Both converted host vertex layouts begin with x/y/z/invW. Copy the
+     * common prefix rather than aliasing the two unrelated structure types. */
+    memcpy(vertex, vertices + (size_t)index * stride, sizeof(*vertex));
+}
+
+static float gxmetal_metal_profile_edge_squared(
+    const GXMetalMetalProfileVertex *a,
+    const GXMetalMetalProfileVertex *b)
+{
+    float x = b->x - a->x;
+    float y = b->y - a->y;
+
+    return x * x + y * y;
+}
+
+static int gxmetal_metal_profile_suspect_triangle(
+    const GXMetalMetalContext *context,
+    const GXMetalMetalProfileVertex converted[3], int line)
+{
+    float viewport_squared;
+    float max_edge_squared;
+    float min_x;
+    float max_x;
+    float min_y;
+    float max_y;
+    float cross;
+    uint32_t pass;
+    int visible = 0;
+
+    if (context->z_function == GXMETAL_Z_NONE ||
+        context->z_function == GXMETAL_Z_FALSE ||
+        context->color_write_mask == 0 ||
+        gxmetal_metal_clip_pass_count(context) == 0) {
+        return 0;
+    }
+    viewport_squared = (float)context->width * (float)context->width +
+                       (float)context->height * (float)context->height;
+    max_edge_squared = gxmetal_metal_profile_edge_squared(
+        &converted[0], &converted[1]);
+    if (!line) {
+        max_edge_squared = fmaxf(max_edge_squared,
+            gxmetal_metal_profile_edge_squared(
+                &converted[1], &converted[2]));
+        max_edge_squared = fmaxf(max_edge_squared,
+            gxmetal_metal_profile_edge_squared(
+                &converted[2], &converted[0]));
+    }
+    if (max_edge_squared < 0.25f * viewport_squared) {
+        return 0;
+    }
+    min_x = fminf(converted[0].x, converted[1].x);
+    max_x = fmaxf(converted[0].x, converted[1].x);
+    min_y = fminf(converted[0].y, converted[1].y);
+    max_y = fmaxf(converted[0].y, converted[1].y);
+    if (!line) {
+        min_x = fminf(min_x, converted[2].x);
+        max_x = fmaxf(max_x, converted[2].x);
+        min_y = fminf(min_y, converted[2].y);
+        max_y = fmaxf(max_y, converted[2].y);
+    }
+    for (pass = 0; pass < gxmetal_metal_clip_pass_count(context); pass++) {
+        MTLScissorRect scissor;
+
+        if (gxmetal_metal_effective_scissor_for_pass(
+                context, pass, &scissor) &&
+            max_x >= (float)scissor.x && max_y >= (float)scissor.y &&
+            min_x <= (float)(scissor.x + scissor.width) &&
+            min_y <= (float)(scissor.y + scissor.height)) {
+            visible = 1;
+            break;
+        }
+    }
+    if (!visible) {
+        return 0;
+    }
+    if (line) {
+        return 1;
+    }
+    cross = (converted[1].x - converted[0].x) *
+                (converted[2].y - converted[0].y) -
+            (converted[1].y - converted[0].y) *
+                (converted[2].x - converted[0].x);
+    return fabsf(cross) <= 0.02f * max_edge_squared;
+}
+
+/* A profile-only, explicitly armed trace for collision spikes and other long
+ * needle-like geometry. The trigger is a generation-relative draw serial so
+ * automation can begin near a known visual onset without logging an entire
+ * game session. */
+static void gxmetal_metal_profile_suspect_geometry(
+    GXMetalMetalRenderer *renderer, const GXMetalMetalContext *context,
+    const GXMetalPacketView *packet, const void *converted_vertices,
+    size_t converted_stride, int textured, int homogeneous_coordinates,
+    int host_ati_uv_transform)
+{
+    const uint8_t *source =
+        packet->payload + GXMETAL_DRAW_VERTICES_OFFSET;
+    const uint8_t *converted = converted_vertices;
+    uint32_t primitive = gxmetal_load_le32(
+        packet->payload + GXMETAL_DRAW_PRIMITIVE_OFFSET);
+    uint32_t count = gxmetal_load_le32(
+        packet->payload + GXMETAL_DRAW_VERTEX_COUNT_OFFSET);
+    uint32_t stride = gxmetal_load_le32(
+        packet->payload + GXMETAL_DRAW_VERTEX_STRIDE_OFFSET);
+    uint32_t draw_flags = gxmetal_load_le32(
+        packet->payload + GXMETAL_DRAW_FLAGS_OFFSET);
+    uint32_t element_count;
+    uint32_t element;
+
+    if (!renderer->profile_enabled ||
+        renderer->profile_generation_draw_count <
+            renderer->profile_suspect_after_draws ||
+        renderer->profile_suspect_after_draws == UINT64_MAX ||
+        converted == NULL || count < 2u) {
+        return;
+    }
+    if (renderer->profile_suspect_geometry_logged >=
+            GXMETAL_METAL_PROFILE_SUSPECT_LIMIT ||
+        renderer->profile_suspect_geometry_window_logged >=
+            GXMETAL_METAL_PROFILE_SUSPECT_WINDOW_LIMIT) {
+        renderer->profile_suspect_geometry_suppressed++;
+        return;
+    }
+    if (primitive == GXMETAL_PRIMITIVE_LINE) {
+        element_count = count / 2u;
+    } else if (primitive == GXMETAL_PRIMITIVE_TRIANGLE) {
+        element_count = count / 3u;
+    } else if (primitive == GXMETAL_PRIMITIVE_TRIANGLE_STRIP ||
+               primitive == GXMETAL_PRIMITIVE_TRIANGLE_FAN) {
+        element_count = count >= 3u ? count - 2u : 0u;
+    } else {
+        return;
+    }
+    for (element = 0; element < element_count; element++) {
+        GXMetalMetalProfileVertex raw[3];
+        GXMetalMetalProfileVertex cooked[3];
+        uint32_t indices[3];
+        uint32_t vertex_count = 3u;
+        uint32_t i;
+        int line = primitive == GXMETAL_PRIMITIVE_LINE;
+
+        if (line) {
+            indices[0] = element * 2u;
+            indices[1] = indices[0] + 1u;
+            indices[2] = indices[1];
+            vertex_count = 2u;
+        } else if (primitive == GXMETAL_PRIMITIVE_TRIANGLE) {
+            indices[0] = element * 3u;
+            indices[1] = indices[0] + 1u;
+            indices[2] = indices[0] + 2u;
+        } else if (primitive == GXMETAL_PRIMITIVE_TRIANGLE_STRIP) {
+            indices[0] = element + (element & 1u);
+            indices[1] = element + ((element & 1u) == 0u);
+            indices[2] = element + 2u;
+        } else {
+            indices[0] = 0u;
+            indices[1] = element + 1u;
+            indices[2] = element + 2u;
+        }
+        for (i = 0; i < vertex_count; i++) {
+            gxmetal_metal_profile_load_raw_vertex(
+                source, stride, indices[i], &raw[i]);
+            gxmetal_metal_profile_load_converted_vertex(
+                converted, converted_stride, indices[i], &cooked[i]);
+        }
+        if (line) {
+            raw[2] = raw[1];
+            cooked[2] = cooked[1];
+        }
+        if (!gxmetal_metal_profile_suspect_triangle(
+                context, cooked, line)) {
+            continue;
+        }
+        fprintf(stderr,
+                "GXMetal suspect geometry: t_ns=%llu generation=%llu "
+                "draw=%llu context=%u textured=%u primitive=%u element=%u "
+                "flags=%u homogeneous=%u host_ati_uv=%u texture=%u "
+                "secondary=%u op=%u z=%u blend=%u scissor=%u/%u/%u/%u "
+                "raw=%.4f/%.4f/%.6f/%.6f,%.4f/%.4f/%.6f/%.6f,"
+                "%.4f/%.4f/%.6f/%.6f "
+                "converted=%.4f/%.4f/%.6f/%.6f,"
+                "%.4f/%.4f/%.6f/%.6f,%.4f/%.4f/%.6f/%.6f\n",
+                (unsigned long long)gxmetal_metal_now_ns(),
+                (unsigned long long)renderer->profile_generation,
+                (unsigned long long)renderer->profile_generation_draw_count,
+                context->id, (unsigned)(textured != 0), primitive, element,
+                draw_flags, (unsigned)(homogeneous_coordinates != 0),
+                (unsigned)(host_ati_uv_transform != 0),
+                context->texture_id, context->secondary_texture_id,
+                context->texture_op, context->z_function, context->blend,
+                context->scissor_left, context->scissor_top,
+                context->scissor_right, context->scissor_bottom,
+                raw[0].x, raw[0].y, raw[0].z, raw[0].inv_w,
+                raw[1].x, raw[1].y, raw[1].z, raw[1].inv_w,
+                raw[2].x, raw[2].y, raw[2].z, raw[2].inv_w,
+                cooked[0].x, cooked[0].y, cooked[0].z, cooked[0].inv_w,
+                cooked[1].x, cooked[1].y, cooked[1].z, cooked[1].inv_w,
+                cooked[2].x, cooked[2].y, cooked[2].z, cooked[2].inv_w);
+        renderer->profile_suspect_geometry_logged++;
+        renderer->profile_suspect_geometry_window_logged++;
+        if (renderer->profile_suspect_geometry_logged >=
+                GXMETAL_METAL_PROFILE_SUSPECT_LIMIT ||
+            renderer->profile_suspect_geometry_window_logged >=
+                GXMETAL_METAL_PROFILE_SUSPECT_WINDOW_LIMIT) {
+            return;
+        }
+    }
+}
+
 static uint32_t gxmetal_metal_draw(GXMetalMetalRenderer *renderer,
                                    GXMetalMetalContext *context,
                                    const GXMetalPacketView *packet)
@@ -2005,6 +2267,9 @@ static uint32_t gxmetal_metal_draw(GXMetalMetalRenderer *renderer,
             return GXMETAL_ERROR_BAD_PACKET;
         }
     }
+    gxmetal_metal_profile_suspect_geometry(
+        renderer, context, packet, vertices, sizeof(*vertices), 0,
+        homogeneous_coordinates, 0);
     draw_vertices = vertices;
     switch (primitive) {
     case GXMETAL_PRIMITIVE_POINT:
@@ -2303,9 +2568,12 @@ static uint32_t gxmetal_metal_draw_textured(
                 active_count);
         return GXMETAL_ERROR_BAD_RESOURCE;
     }
+    /* HOST_ATI_UV describes the vertex coordinate convention, not the
+     * texture's storage format. Carmageddon II can retain that provenance
+     * while switching to a regular RAVE texture for an animated menu batch.
+     * The wire layout must still be the public 64-byte texture vertex. */
     if (host_ati_uv_transform &&
-        (resource->pixel_format != GXMETAL_PIXEL_ATI_ARGB4444 ||
-         stride != GXMETAL_TEXTURE_VERTEX_BYTES)) {
+        stride != GXMETAL_TEXTURE_VERTEX_BYTES) {
         return GXMETAL_ERROR_BAD_PACKET;
     }
     if (context->texture_op & GXMETAL_TEXTURE_SHRINK) {
@@ -2332,6 +2600,9 @@ static uint32_t gxmetal_metal_draw_textured(
             return GXMETAL_ERROR_BAD_PACKET;
         }
     }
+    gxmetal_metal_profile_suspect_geometry(
+        renderer, context, packet, vertices, sizeof(*vertices), 1,
+        homogeneous_coordinates, host_ati_uv_transform);
     if (renderer->profile_enabled && count != 0 &&
         !resource->profile_draw_logged) {
         float kd_min[3] = {
@@ -2731,6 +3002,7 @@ static uint32_t gxmetal_metal_draw_buffer_writeback(
 
     if (renderer->profile_enabled) {
         renderer->profile_draw_buffer_writeback_count++;
+        renderer->profile_generation_writeback_count++;
     }
 
     if (renderer->shared == NULL || bytes_per_pixel == 0 ||
@@ -3694,6 +3966,29 @@ GXMetalMetalRenderer *gxmetal_metal_create(void *framebuffer,
         renderer->profile_enabled = profile != NULL &&
                                     strcmp(profile, "0") != 0;
     }
+    renderer->profile_suspect_after_draws = UINT64_MAX;
+    if (renderer->profile_enabled) {
+        const char *geometry_after =
+            getenv("GXMETAL_PROFILE_GEOMETRY_AFTER_DRAWS");
+        char *end = NULL;
+
+        if (geometry_after != NULL &&
+            geometry_after[0] >= '0' && geometry_after[0] <= '9') {
+            errno = 0;
+            unsigned long long value = strtoull(geometry_after, &end, 10);
+
+            if (errno != ERANGE && end != geometry_after && *end == '\0' &&
+                value != UINT64_MAX) {
+                renderer->profile_suspect_after_draws = (uint64_t)value;
+                fprintf(stderr,
+                        "GXMetal suspect geometry armed: after_draws=%llu "
+                        "window_limit=%u limit=%u\n",
+                        value,
+                        GXMETAL_METAL_PROFILE_SUSPECT_WINDOW_LIMIT,
+                        GXMETAL_METAL_PROFILE_SUSPECT_LIMIT);
+            }
+        }
+    }
     renderer->device = [MTLCreateSystemDefaultDevice() retain];
     if (renderer->device == nil) {
         free(renderer);
@@ -3975,23 +4270,66 @@ void gxmetal_metal_set_gamma(GXMetalMetalRenderer *renderer,
 
 void gxmetal_metal_reset(GXMetalMetalRenderer *renderer)
 {
+    uint64_t completed_generation;
+    uint32_t active_contexts = 0;
+    uint32_t active_resources = 0;
     uint32_t i;
     if (renderer == NULL) {
         return;
     }
+    completed_generation = renderer->profile_generation;
+    renderer->profile_generation++;
     for (i = 0; i < GXMETAL_METAL_MAX_CONTEXTS; i++) {
         if (renderer->contexts[i].active) {
+            active_contexts++;
             gxmetal_metal_release_context(&renderer->contexts[i]);
         }
     }
     for (i = 0; i < GXMETAL_METAL_MAX_RESOURCES; i++) {
         if (renderer->resources[i].active) {
+            active_resources++;
             [renderer->resources[i].texture release];
             memset(&renderer->resources[i], 0,
                    sizeof(renderer->resources[i]));
         }
     }
     memset(renderer->resource_hash, 0, sizeof(renderer->resource_hash));
+    if (renderer->profile_enabled) {
+        fprintf(stderr,
+                "GXMetal lifecycle: generation=%llu event=reset "
+                "previous_generation=%llu released_contexts=%u "
+                "released_resources=%u draws=%llu writebacks=%llu "
+                "direct=%llu fallback=%llu\n",
+                (unsigned long long)renderer->profile_generation,
+                (unsigned long long)completed_generation,
+                active_contexts, active_resources,
+                (unsigned long long)renderer->profile_generation_draw_count,
+                (unsigned long long)
+                    renderer->profile_generation_writeback_count,
+                (unsigned long long)
+                    renderer->profile_generation_direct_present_count,
+                (unsigned long long)
+                    renderer->profile_generation_fallback_present_count);
+        if (renderer->profile_suspect_after_draws != UINT64_MAX) {
+            fprintf(stderr,
+                    "GXMetal suspect geometry summary: generation=%llu "
+                    "after_draws=%llu logged=%llu suppressed=%llu\n",
+                    (unsigned long long)completed_generation,
+                    (unsigned long long)
+                        renderer->profile_suspect_after_draws,
+                    (unsigned long long)
+                        renderer->profile_suspect_geometry_logged,
+                    (unsigned long long)
+                        renderer->profile_suspect_geometry_suppressed);
+        }
+    }
+    renderer->profile_generation_draw_count = 0;
+    renderer->profile_generation_writeback_count = 0;
+    renderer->profile_generation_direct_present_count = 0;
+    renderer->profile_generation_fallback_present_count = 0;
+    renderer->profile_suspect_geometry_logged = 0;
+    renderer->profile_suspect_geometry_window_logged = 0;
+    renderer->profile_suspect_geometry_suppressed = 0;
 }
 
 uint32_t gxmetal_metal_dispatch(void *opaque,
@@ -4019,6 +4357,13 @@ uint32_t gxmetal_metal_dispatch(void *opaque,
         }
         switch (packet->opcode) {
         case GXMETAL_OP_CONTEXT_DESTROY:
+            if (renderer->profile_enabled) {
+                fprintf(stderr,
+                        "GXMetal lifecycle: generation=%llu "
+                        "event=context-destroy context=%u\n",
+                        (unsigned long long)renderer->profile_generation,
+                        context->id);
+            }
             gxmetal_metal_release_context(context);
             return GXMETAL_ERROR_NONE;
         case GXMETAL_OP_BEGIN_FRAME:

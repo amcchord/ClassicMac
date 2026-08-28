@@ -14,7 +14,7 @@ resource 'FREF' (128, purgeable) {
 };
 
 resource 'BNDL' (128, purgeable) {
-    'GXMA',
+    'GXMS',
     0,
     {
         'ICN#', {
@@ -29,7 +29,7 @@ resource 'BNDL' (128, purgeable) {
 resource 'vers' (1) {
     2, 2, release, 4, verUS,
     "2.2.4",
-    "GXMetal AGL Probe 2.2.4"
+    "GXMetal RAVE Selection 2.2.4"
 };
 
 resource 'cfrg' (0) {
@@ -38,7 +38,7 @@ resource 'cfrg' (0) {
         kDefaultStackSize, kNoAppSubFolder,
         kApplicationCFrag, kDataForkCFragLocator,
         kZeroOffset, kCFragGoesToEOF,
-        "GXMetal AGL Probe"
+        "GXMetal RAVE Selection"
     }
 };
 
@@ -64,7 +64,7 @@ resource 'SIZE' (-1) {
 };
 
 resource 'ALRT' (128, purgeable) {
-    {42, 48, 260, 432},
+    {42, 48, 220, 432},
     128,
     {
         OK, visible, silent;
@@ -77,7 +77,7 @@ resource 'ALRT' (128, purgeable) {
 
 resource 'DITL' (128, purgeable) {
     {
-        {174, 292, 194, 368}, Button { enabled, "OK" };
-        {16, 32, 158, 352}, StaticText { disabled, "^0" };
+        {140, 292, 160, 368}, Button { enabled, "OK" };
+        {16, 48, 126, 368}, StaticText { disabled, "^0" };
     }
 };

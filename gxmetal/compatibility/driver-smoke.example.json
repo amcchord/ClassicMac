@@ -42,6 +42,24 @@
         {"chord": "Super_L+o", "delay_after": 15, "capture_after": true},
         {"screenshot": "agl-probe-result"}
       ]
+    },
+    {
+      "id": "gxmetal-engine-selection",
+      "name": "GXMetal RAVE and QuickDraw 3D engine-selection probe",
+      "modes": ["gxmetal"],
+      "steps": [
+        {"wait_for_pixel": {"x": 22, "y": 11, "red": 221, "green": 0, "blue": 0, "tolerance": 8, "timeout_seconds": 180, "poll_interval_seconds": 1}},
+        {"screenshot": "finder-ready"},
+        {"chord": "Super_L+Alt_L+w", "delay_after": 2},
+        {"click": [610, 450], "delay_after": 1},
+        {"text": "ClassicMac Tools", "delay_after": 1},
+        {"chord": "Super_L+o", "delay_after": 3, "capture_after": true},
+        {"text": "GXMetal", "delay_after": 1},
+        {"chord": "Super_L+o", "delay_after": 3, "capture_after": true},
+        {"text": "GXMetal RAVE Selection", "delay_after": 1},
+        {"chord": "Super_L+o", "delay_after": 15, "capture_after": true},
+        {"screenshot": "engine-selection-result"}
+      ]
     }
   ]
 }

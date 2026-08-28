@@ -31,6 +31,7 @@ LM_KEY_MAP_BYTES = 16
 LOCATOR_WINDOW_BEFORE = 16
 LOCATOR_WINDOW_BYTES = 64
 LOCATOR_MATCH_BYTES = 12
+LOCATOR_IDENTICAL_NON_PEF_LIMIT = 3
 LOCATOR_VERIFY_OFFSETS = (
     CHECK_BUTTON_KEYS_OFFSET,
     CONTROL_MASKED_OFFSET,
@@ -42,6 +43,10 @@ class CodeFragmentNotFound(RuntimeError):
     def __init__(self, message: str, observations: list[dict[str, object]]):
         super().__init__(message)
         self.observations = observations
+
+
+class LocatorInconclusive(CodeFragmentNotFound):
+    """The all-stop sampler repeatedly observed the same non-UT state."""
 
 
 class ProbeFailure(RuntimeError):
@@ -300,6 +305,8 @@ def locate_code_fragment(
 ) -> tuple[int, list[dict[str, object]]]:
     observations = []
     code_index = build_code_index(code)
+    last_non_pef_registers: Optional[tuple[int, int]] = None
+    identical_non_pef_samples = 0
     if client.running:
         client.interrupt()
     for index in range(samples):
@@ -334,6 +341,24 @@ def locate_code_fragment(
                 sample["code_offset"] = f"0x{match['code_offset']:x}"
                 sample["runtime_base"] = f"0x{base:x}"
                 return base, observations
+        registers = (candidates["pc"], candidates["lr"])
+        conclusive_non_pef = all(
+            f"{name}_candidate_count" in sample for name in candidates)
+        if conclusive_non_pef:
+            if registers == last_non_pef_registers:
+                identical_non_pef_samples += 1
+            else:
+                last_non_pef_registers = registers
+                identical_non_pef_samples = 1
+            sample["identical_non_pef_samples"] = identical_non_pef_samples
+            if identical_non_pef_samples >= LOCATOR_IDENTICAL_NON_PEF_LIMIT:
+                raise LocatorInconclusive(
+                    "UT code locator remained on identical non-PEF PC/LR "
+                    f"for {identical_non_pef_samples} samples",
+                    observations)
+        else:
+            last_non_pef_registers = None
+            identical_non_pef_samples = 0
         client.continue_guest()
         time.sleep(interval)
         client.interrupt()
@@ -444,6 +469,13 @@ def run(args: argparse.Namespace) -> dict[str, object]:
         try:
             runtime_base, samples = locate_code_fragment(
                 client, code, args.locator_samples, args.locator_interval)
+        except LocatorInconclusive as error:
+            result.update({
+                "outcome": "locator-inconclusive",
+                "error": str(error),
+                "locator_samples": error.observations,
+            })
+            raise ProbeFailure(result) from error
         except CodeFragmentNotFound as error:
             result.update({
                 "outcome": "locator-failed",

@@ -15,6 +15,7 @@ PIPELINE_TEST := $(BUILD_DIR)/test_pipeline
 ATI_COMPATIBILITY_TEST := $(BUILD_DIR)/test_ati_compatibility
 RAVE_COMPATIBILITY_TEST := $(BUILD_DIR)/test_rave_compatibility
 AGL_PROBE_TEST := $(BUILD_DIR)/test_agl_probe
+ENGINE_SELECTION_PROBE_TEST := $(BUILD_DIR)/test_engine_selection_probe
 HOST_OS := $(shell uname -s)
 ifeq ($(HOST_OS),Darwin)
 METAL_TEST := $(BUILD_DIR)/test_metal
@@ -100,6 +101,12 @@ $(AGL_PROBE_TEST): tests/test_agl_probe.c \
 	@mkdir -p $(BUILD_DIR)
 	$(HOST_CC) $(HOST_CFLAGS) -Iguest/apps -o $@ tests/test_agl_probe.c
 
+$(ENGINE_SELECTION_PROBE_TEST): tests/test_engine_selection_probe.c \
+        guest/apps/GXMetalEngineSelectionProbeLogic.h
+	@mkdir -p $(BUILD_DIR)
+	$(HOST_CC) $(HOST_CFLAGS) -Iguest/apps -o $@ \
+		tests/test_engine_selection_probe.c
+
 $(BUILD_DIR)/test_metal: tests/test_metal.m host/gxmetal_metal.m \
                          host/gxmetal_metal.h host/gxmetal_decode.c \
                          host/gxmetal_decode.h protocol/gxmetal_protocol.h
@@ -113,7 +120,7 @@ test: $(PROTOCOL_TEST) $(QUEUE_TEST) $(GUEST_TRANSPORT_TEST) \
       $(GENERATION_LIFECYCLE_TEST) \
       $(RENDERER_TEST) $(DIRTY_TEST) $(PIPELINE_TEST) \
       $(ATI_COMPATIBILITY_TEST) $(RAVE_COMPATIBILITY_TEST) \
-      $(AGL_PROBE_TEST) $(METAL_TEST)
+      $(AGL_PROBE_TEST) $(ENGINE_SELECTION_PROBE_TEST) $(METAL_TEST)
 	$(PROTOCOL_TEST)
 	$(QUEUE_TEST)
 	$(GUEST_TRANSPORT_TEST)
@@ -125,6 +132,7 @@ test: $(PROTOCOL_TEST) $(QUEUE_TEST) $(GUEST_TRANSPORT_TEST) \
 	$(ATI_COMPATIBILITY_TEST)
 	$(RAVE_COMPATIBILITY_TEST)
 	$(AGL_PROBE_TEST)
+	$(ENGINE_SELECTION_PROBE_TEST)
 	$(if $(METAL_TEST),$(METAL_TEST),@true)
 	python3 tests/test_gxmetal_vnc.py
 	python3 tests/test_gxmetal_ut_checkbuttonkeys.py

@@ -1,5 +1,45 @@
 # Changelog
 
+## 2.2.4 — 2026-08-28
+
+### Added
+
+- Added **Force Quit Frontmost App…** to the running Mac and library Machine
+  menus. It sends the classic Command-Option-Escape recovery chord from the
+  host, so one application that stops yielding no longer requires powering off
+  the whole virtual Mac.
+- Added **GXMetal RAVE Selection**, a non-mutating guest probe that records the
+  installed RAVE inventory and the engines selected by untouched and explicit
+  QuickDraw 3D interactive renderers.
+
+### Fixed
+
+- Fixed Carmageddon II's race-start black screen. ATI-private UV vertex
+  coordinates no longer incorrectly require the texture itself to use ATI's
+  ARGB4444 storage format; valid ordinary RAVE textures now reach Metal.
+- Made game-sweep profile aggregation generation-aware, so a still-running
+  renderer is combined with completed lifecycle generations instead of being
+  overwritten by an earlier zero-draw reset summary.
+
+### Changed
+
+- Hardened the Carmageddon II regression around the canonical media route:
+  launch Virtual CD/DVD Utility, choose its Toast mount command, and open the
+  Toast image from inside the utility. Stable skill-dialog and five-point race
+  HUD gates replace fixed-delay assumptions.
+
+### Validation
+
+- The exact signed-host Carmageddon II route reaches the race and remains
+  coherent across six reviewed frames, with 4,289 direct frames, zero
+  fallback, 1,015,895 accelerated draws, and no queue or transport fault.
+- The new engine-selection probe records GXMetal first and Apple Software
+  second; both an untouched interactive renderer and explicit best-choice
+  renderer select GXMetal without changing global engine enablement.
+- The complete native GXMetal suite passes, including 47 VNC harness tests,
+  7 Unreal Tournament input tests, 22 diagnostic decoder tests, and focused
+  Metal coverage for ATI-private UV vertices with ordinary RAVE textures.
+
 ## 2.2.3 — 2026-08-27
 
 ### Fixed

@@ -501,6 +501,16 @@ final class QEMUManager: ObservableObject {
         sendMonitor("system_reset", to: id, actionLabel: "Restart", onFailure: nil)
     }
 
+    func forceQuitFrontmostApp(_ id: UUID) {
+        guard runningIDs.contains(id), !pausedIDs.contains(id) else { return }
+        sendMonitor(
+            "sendkey meta_l-alt-esc 500",
+            to: id,
+            actionLabel: "Force Quit the Frontmost App",
+            onFailure: nil
+        )
+    }
+
     // Sends a control command to the running machine. Failures (a dead or
     // unresponsive control socket) surface as an alert instead of silently
     // doing nothing.
