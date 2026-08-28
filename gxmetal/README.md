@@ -133,6 +133,21 @@ opened directly, but the launcher silently returns to Finder. Restoring a copy
 with the launcher's exact filename fixes the handoff; GXMetal does not rename
 or modify game files.
 
+For the original Toast distribution, launch **Virtual DVD-ROM/CD Utility**,
+choose **Mount Toast .ati file as Virtual DVD-ROM**, and open the Toast image
+from that application's file dialog. Attaching the Toast file directly as a
+QEMU CD-ROM does not reproduce the classic virtual-disc driver path. The
+reusable `compatibility/carmageddon2-race-regression.example.json` recipe
+automates that exact mount, launcher, and race sequence with host audio and
+guest networking disabled.
+
+Public Gouraud RAVE vertices may leave reciprocal-W unused and set it to zero
+when perspective Z is disabled. GXMetal must keep those draws on the public
+screen-space path even if depth testing is active; only an explicit
+homogeneous-draw flag or usable old-guest OpenGL evidence selects the private
+clip-space path. A focused Metal test protects the distinction because
+misclassifying Carmageddon II's first race draw permanently faults the queue.
+
 The producer writes complete packets, performs a PowerPC I/O synchronization,
 publishes the producer offset, then rings the doorbell. The host validates the
 entire packet before dispatch and advances the consumer offset only after it

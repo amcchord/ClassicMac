@@ -22,6 +22,22 @@ but the evidence still does not support a universal-compatibility claim.
   and loader remain exact. A separate current-driver Quake III route passes
   five reviewed Q3DM1 arch/statue/passage views, four motion gates, and both
   missing-world rejection regions.
+- A post-2.2.2 Carmageddon II replay exposed one narrower public-RAVE
+  regression: a valid unflagged nine-vertex Gouraud triangle packet with depth
+  enabled and an unused zero reciprocal-W field was misclassified as legacy
+  homogeneous OpenGL, permanently faulting the queue and leaving the race
+  black. The corrected heuristic keeps unusable reciprocal-W data on the
+  public path while retaining explicit protocol-1.25 provenance and the
+  mixed-sign old-guest fallback. A fresh-clone recipe mounts the original
+  Toast image through Virtual DVD-ROM/CD Utility and reaches a coherent
+  640×480 race; its two delayed near-black fractions are both 0.016491 and the
+  QEMU log contains no queue or transport fault. The same patched host then
+  passes the five-view Quake III regression plus parallel Bugdom, Future Cop,
+  Combat Mission, and Weekend Warrior smokes without a queue/transport fault;
+  every immutable source digest remains unchanged. The exact signed and
+  notarized 2.2.3 Power Mac executable repeats the Carmageddon route at a
+  0.015029 near-black fraction for both race gates, again with no fault and an
+  unchanged source.
 - Bugdom, Future Cop, and Weekend Warrior all pass short semantic routes on
   the exact published 2.2.1 QEMU, loader, Tools CD, and installed guest stack.
   Their movement/action frame-change gates pass at 0.653301, 0.725452, and
@@ -253,7 +269,7 @@ but the evidence still does not support a universal-compatibility claim.
   Both cropped missing-surface thresholds pass, every camera transition is
   distinct, presentation stays direct, and fallback remains zero.
 
-## Current 2.2.1 and 2.2.2 candidate matrix
+## Current 2.2.1 through 2.2.3 candidate matrix
 
 | Game | Classification | Furthest qualified state | Important open item |
 |---|---|---|---|

@@ -146,6 +146,22 @@ def number(value: Any, field: str, *, positive: bool = False) -> float:
     return result
 
 
+def bounded_wait_slice(
+    now: float,
+    deadline: float,
+    next_event: float,
+    maximum: float = 0.2,
+) -> float:
+    """Return a nonnegative sleep interval bounded by both event times.
+
+    Monotonic time can advance past a deadline between a loop condition and
+    the eventual sleep call, especially when several VMs are capturing frames
+    concurrently.  Clamp the interval so an overdue event causes an immediate
+    loop re-check instead of passing a negative value to time.sleep().
+    """
+    return max(0.0, min(maximum, deadline - now, next_event - now))
+
+
 def validate_step(step: Any, field: str) -> dict[str, Any]:
     if not isinstance(step, dict):
         raise ValueError(f"{field} must be an object")
@@ -1058,7 +1074,9 @@ def execute_run(
                 capture(label)
                 next_capture += spec.capture_interval_seconds
                 continue
-            time.sleep(min(0.2, deadline - now, next_capture - now))
+            delay = bounded_wait_slice(now, deadline, next_capture)
+            if delay > 0:
+                time.sleep(delay)
 
     def wait_for_frame_change(settings: dict[str, Any], label: str) -> None:
         if client is None:

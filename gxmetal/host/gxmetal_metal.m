@@ -1895,6 +1895,7 @@ static int gxmetal_metal_draw_uses_homogeneous_coordinates(
     uint32_t draw_flags = gxmetal_load_le32(
         packet->payload + GXMETAL_DRAW_FLAGS_OFFSET);
     uint32_t i;
+    int saw_negative_inv_w = 0;
 
     /* New guests mark the private ATI/OpenGL geometry callback at its source,
      * which distinguishes it from Myth II's public RAVE draws even though
@@ -1908,17 +1909,26 @@ static int gxmetal_metal_draw_uses_homogeneous_coordinates(
     if (context->ati_private == 0 || context->perspective_z != 0) {
         return 0;
     }
-    if (context->z_function != GXMETAL_Z_NONE ||
-        context->fog.mode_and_padding[0] != GXMETAL_FOG_NONE) {
-        return 1;
-    }
     for (i = 0; i < count; i++) {
         float inv_w = gxmetal_metal_load_float(
             source + (uint64_t)i * stride + GXMETAL_VERTEX_INV_W_OFFSET);
 
-        if (isfinite(inv_w) && inv_w < 0.0f) {
-            return 1;
+        /* Public RAVE Gouraud vertices leave invW unused when perspective Z
+         * is disabled.  Carmageddon II zeroes that slot, so it must not be
+         * used as legacy OpenGL provenance merely because depth is active.
+         * New guests explicitly flag homogeneous draws and still reject a
+         * zero/non-finite reciprocal W in gxmetal_metal_read_vertex(). */
+        if (!isfinite(inv_w) || inv_w == 0.0f) {
+            return 0;
         }
+        if (inv_w < 0.0f) {
+            saw_negative_inv_w = 1;
+        }
+    }
+    if (saw_negative_inv_w ||
+        context->z_function != GXMETAL_Z_NONE ||
+        context->fog.mode_and_padding[0] != GXMETAL_FOG_NONE) {
+        return 1;
     }
     return 0;
 }

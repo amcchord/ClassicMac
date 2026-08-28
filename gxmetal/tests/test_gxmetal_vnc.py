@@ -43,6 +43,14 @@ def framebuffer_update(x, y, width, height, encoding, payload=b""):
 
 
 class RFBClientTests(unittest.TestCase):
+    def test_sweep_wait_slice_clamps_overdue_deadlines(self):
+        self.assertEqual(SWEEP.bounded_wait_slice(10.1, 10.0, 10.2), 0.0)
+        self.assertEqual(SWEEP.bounded_wait_slice(10.1, 11.0, 10.0), 0.0)
+        self.assertAlmostEqual(
+            SWEEP.bounded_wait_slice(10.0, 11.0, 10.125), 0.125)
+        self.assertEqual(
+            SWEEP.bounded_wait_slice(10.0, 11.0, 10.75), 0.2)
+
     def test_function_keysyms_cover_classic_game_controls(self):
         client = VNC.RFBClient(FakeSocket())
         self.assertEqual(client.keysym("F1"), 0xFFBE)

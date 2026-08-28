@@ -1,0 +1,48 @@
+{
+  "schema": 1,
+  "defaults": {
+    "boot_wait_seconds": 5,
+    "observation_seconds": 10,
+    "capture_interval_seconds": 5,
+    "resolution": "1024x768x16"
+  },
+  "games": [
+    {
+      "id": "carmageddon2-race-regression",
+      "name": "Carmageddon II virtual Toast race regression",
+      "modes": ["gxmetal"],
+      "steps": [
+        {"wait_for_pixel": {"x": 22, "y": 11, "red": 221, "green": 0, "blue": 0, "tolerance": 8, "timeout_seconds": 180, "poll_interval_seconds": 1}},
+        {"screenshot": "finder-ready"},
+        {"note": "The test disk contains CarmagedonII.toast. Mount it through Virtual DVD-ROM/CD Utility rather than attaching the Toast image as a QEMU CD drive."},
+        {"click": [350, 220], "delay_after": 1},
+        {"key": "v", "delay_after": 1, "capture_after": true},
+        {"chord": "Super_L+o", "delay_after": 4},
+        {"screenshot": "virtual-cd-utility"},
+        {"click": [221, 129], "delay_after": 3},
+        {"screenshot": "toast-open-dialog"},
+        {"click": [448, 279], "delay_after": 1},
+        {"click": [629, 278], "delay_after": 5},
+        {"screenshot": "virtual-cd-mounted"},
+        {"chord": "Super_L+q", "delay_after": 4},
+        {"screenshot": "finder-after-cd-mount"},
+        {"click": [350, 300], "delay_after": 1},
+        {"key": "Home", "delay_after": 2},
+        {"screenshot": "carmageddon2-installed-app"},
+        {"double_click": [160, 477], "delay_after": 8},
+        {"screenshot": "carmageddon2-launcher"},
+        {"click": [534, 226], "delay_after": 1},
+        {"click": [767, 316], "delay_after": 15},
+        {"screenshot": "single-player-menu"},
+        {"key": "Return", "delay_after": 5},
+        {"screenshot": "new-game-skill"},
+        {"click": [435, 237], "delay_after": 35},
+        {"screenshot": "race-start"},
+        {"assert_color_range_fraction_below": {"minimum_rgb": [0, 0, 0], "maximum_rgb": [16, 16, 16], "maximum_fraction": 0.85}},
+        {"wait": 20},
+        {"screenshot": "race-soak"},
+        {"assert_color_range_fraction_below": {"minimum_rgb": [0, 0, 0], "maximum_rgb": [16, 16, 16], "maximum_fraction": 0.85}}
+      ]
+    }
+  ]
+}

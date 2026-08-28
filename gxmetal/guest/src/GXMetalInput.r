@@ -6,8 +6,8 @@
 
 resource 'vers' (1) {
     2, 2, release, 2, verUS,
-    "2.2.2",
-    "GXMetal Input 2.2.2"
+    "2.2.3",
+    "GXMetal Input 2.2.3"
 };
 
 resource 'cfrg' (0) {

@@ -56,8 +56,10 @@ usage patterns and integration failures.
 - GXMetal Test: discovery, version agreement, exact capability gestalts,
   public RAVE 1.6 multitexture, rendering, fallback, and performance.
 - Nanosaur: public RAVE texture, fog, depth, and camera behavior.
-- Carmageddon II: large resource sets, CL8/ARGB4444 UI, blending, and long
-  high-draw-count sessions.
+- Carmageddon II: large resource sets, CL8/ARGB4444 UI, blending, public
+  depth-tested Gouraud draws with unused reciprocal-W, and long high-draw-count
+  sessions. The automated original-media route mounts its Toast image through
+  Virtual DVD-ROM/CD Utility before entering a 640×480 race.
 - Quake III Arena Demo: system GLD/ATI bridge, multitextured lightmaps,
   dynamic scenes, overlays, and captured relative mouse input.
 - Future Cop: ATI-private ARGB4444 drawing with nonnegative V coordinates,

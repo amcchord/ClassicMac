@@ -1,5 +1,37 @@
 # Changelog
 
+## 2.2.3 — 2026-08-27
+
+### Fixed
+
+- Prevented Carmageddon II from permanently faulting the GXMetal queue when a
+  public RAVE Gouraud draw leaves its unused reciprocal-W field at zero while
+  depth testing is active. The bounded old-guest OpenGL heuristic now requires
+  usable reciprocal-W data before inferring homogeneous coordinates; explicit
+  protocol-1.25 OpenGL draws remain strict, and mixed-sign legacy draws retain
+  their compatibility path.
+
+### Changed
+
+- Added a silent Carmageddon II race regression that mounts the original Toast
+  image through Virtual DVD-ROM/CD Utility, disables cutscenes, launches the
+  installed RAVE application, and applies two delayed non-black gameplay gates.
+- Clamped the game-sweep harness's final wait slice to the remaining deadline,
+  avoiding a timing race when an evidence capture lands at the end of a wait.
+
+### Validation
+
+- The exact packaged 2.2.3 Carmageddon II regression reaches a coherent
+  640×480 race from a fresh immutable clone. Both race gates report a 0.015029
+  near-black fraction, twenty seconds apart, with no GXMetal queue or
+  transport fault.
+- The complete five-view Quake III regression and the parallel Bugdom, Future
+  Cop, Combat Mission, and Weekend Warrior smokes all complete on the patched
+  host with no queue/transport fault and unchanged source images.
+- The complete native GXMetal suite, all 43 game-harness tests, and all 39
+  Swift app tests pass. The signed app and DMG are notarized, stapled,
+  Gatekeeper-approved, and pass mounted-image release verification.
+
 ## 2.2.2 — 2026-08-27
 
 ### Fixed

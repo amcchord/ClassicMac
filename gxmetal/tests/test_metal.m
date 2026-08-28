@@ -509,6 +509,42 @@ static void test_metal_homogeneous_gouraud_draw(void)
     CHECK(memcmp(framebuffer, explicit_mixed_frame,
                  sizeof(framebuffer)) == 0);
 
+    /* Public RAVE Gouraud draws may leave the unused reciprocal-W slot at
+     * zero.  Depth state alone must not misclassify those vertices as the
+     * old private OpenGL path and fault the transport, as Carmageddon II's
+     * first race frame does. */
+    set_int_state(renderer, control, 19,
+                  GXMETAL_STATE_Z_FUNCTION, GXMETAL_Z_LE);
+    make_packet(control, GXMETAL_OP_BEGIN_FRAME, 32, 19);
+    CHECK(dispatch(renderer, control, 32) == GXMETAL_ERROR_NONE);
+    make_packet(control, GXMETAL_OP_CLEAR, 64, 19);
+    payload = control + GXMETAL_PACKET_HEADER_BYTES;
+    gxmetal_store_le32(payload + GXMETAL_CLEAR_FLAGS_OFFSET,
+                       GXMETAL_CLEAR_COLOR | GXMETAL_CLEAR_DEPTH);
+    store_float(payload + GXMETAL_CLEAR_COLOR_A_OFFSET, 1.0f);
+    store_float(payload + GXMETAL_CLEAR_DEPTH_OFFSET, 1.0f);
+    gxmetal_store_le32(payload + GXMETAL_CLEAR_RECT_OFFSET +
+                       GXMETAL_RECT_RIGHT_OFFSET, 64);
+    gxmetal_store_le32(payload + GXMETAL_CLEAR_RECT_OFFSET +
+                       GXMETAL_RECT_BOTTOM_OFFSET, 64);
+    CHECK(dispatch(renderer, control, 64) == GXMETAL_ERROR_NONE);
+    gxmetal_store_le32(packet + GXMETAL_PACKET_HEADER_BYTES +
+                       GXMETAL_DRAW_FLAGS_OFFSET, GXMETAL_DRAW_NONE);
+    for (i = 0; i < 3; i++) {
+        uint8_t *vertex = vertices + i * GXMETAL_GOURAUD_VERTEX_BYTES;
+
+        store_float(vertex + GXMETAL_VERTEX_Z_OFFSET, 0.5f);
+        store_float(vertex + GXMETAL_VERTEX_INV_W_OFFSET, 0.0f);
+    }
+    CHECK(dispatch(renderer, packet, 128) == GXMETAL_ERROR_NONE);
+    make_packet(control, GXMETAL_OP_END_FRAME, 32, 19);
+    CHECK(dispatch(renderer, control, 32) == GXMETAL_ERROR_NONE);
+    present_rect(renderer, control, 19, 0, 0, 64, 64);
+    drawn_pixels = count_rgb555_pixels(framebuffer, 64, 64, 128);
+    CHECK(drawn_pixels != 0);
+    set_int_state(renderer, control, 19,
+                  GXMETAL_STATE_Z_FUNCTION, GXMETAL_Z_NONE);
+
     /* Positive-W private OpenGL geometry still carries clip-space Z when
      * depth and fog are disabled; it must not take Myth's legacy clamp. */
     make_packet(control, GXMETAL_OP_BEGIN_FRAME, 32, 19);

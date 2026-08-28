@@ -636,3 +636,33 @@ VMs, each with an independent clone and unique local VNC and monitor sockets.
   pause menu in both configurations, and records 20,399 successful host reads
   out of 20,399 with no stale callback or handoff faults. This rules out the
   custom input extension as the cause of the collision-static frames.
+- Reproduced the reported Carmageddon II black race on the user's read-only
+  2.2.2 disk and original `CarmagedonII.toast`. The correct media route is the
+  in-guest Virtual DVD-ROM/CD Utility: launch it, choose its Toast virtual-DVD
+  action, and open the image from the utility rather than attaching the Toast
+  file directly to QEMU. The failure is a permanent host queue fault on a
+  valid 320-byte, nine-vertex public Gouraud triangle: depth state caused the
+  old-guest compatibility heuristic to interpret Carmageddon's unused zero
+  reciprocal-W field as private homogeneous OpenGL data. The heuristic now
+  requires usable reciprocal-W values before inferring that legacy path while
+  retaining explicit protocol-1.25 provenance and mixed-sign legacy draws.
+  The focused native regression passes, as does the complete native suite.
+  A fresh immutable-clone run of
+  `carmageddon2-race-regression.example.json` automates the utility mount,
+  disables cutscenes, reaches the New Game screen and a coherent 640×480 race,
+  then passes two non-black gates twenty seconds apart at 0.016491. QEMU exits
+  cleanly with no queue/transport fault, and the source disk digest remains
+  unchanged. Evidence is retained under
+  `context/gxmetal-games/evidence/gxmetal-carmageddon2-dev-race-regression-20260827/`.
+  Cross-game replay on the same host also completes all five Quake III
+  courtyard/arch/statue/passage views and the parallel Bugdom, Future Cop,
+  Combat Mission, and Weekend Warrior smokes with no queue/transport fault and
+  unchanged sources. Those results are retained under
+  `context/gxmetal-games/evidence/gxmetal-carmageddon2-fix-q3-five-view-20260827/`
+  and
+  `context/gxmetal-games/evidence/gxmetal-carmageddon2-fix-four-game-20260827/`.
+  The exact signed and notarized 2.2.3 Power Mac executable and bundled loader
+  then repeat the full Virtual CD/race route from another fresh clone. Both
+  race gates report 0.015029, QEMU exits zero with no queue/transport fault,
+  and the source remains unchanged. Packaged evidence is retained under
+  `context/gxmetal-games/evidence/gxmetal-carmageddon2-v2.2.3-packaged-race-20260827/`.
