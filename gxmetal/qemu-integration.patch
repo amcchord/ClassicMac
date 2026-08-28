@@ -121,7 +121,7 @@ index e3519edd8a..a514168880 100644
          }
          break;
      default:
-@@ -455,11 +491,23 @@ static void pci_std_vga_realize(PCIDevice *dev, Error **errp)
+@@ -455,11 +491,28 @@ static void pci_std_vga_realize(PCIDevice *dev, Error **errp)
      VGACommonState *s = &d->vga;
      bool qext = false;
      bool edid = false;
@@ -130,6 +130,11 @@ index e3519edd8a..a514168880 100644
 +    if (d->gxmetal_enabled &&
 +        !(d->flags & (1 << PCI_VGA_FLAG_ENABLE_MMIO))) {
 +        error_setg(errp, "GXMetal requires the VGA MMIO BAR");
++        return;
++    }
++    if (d->gxmetal_enabled &&
++        !(d->flags & (1 << PCI_VGA_FLAG_ENABLE_QEXT))) {
++        error_setg(errp, "GXMetal requires the QEMU VGA extended registers");
 +        return;
 +    }
  
@@ -145,7 +150,7 @@ index e3519edd8a..a514168880 100644
      vga_init(s, OBJECT(dev), pci_address_space(dev), pci_address_space_io(dev),
               true);
  
-@@ -489,7 +537,20 @@ static void pci_std_vga_realize(PCIDevice *dev, Error **errp)
+@@ -489,7 +542,20 @@ static void pci_std_vga_realize(PCIDevice *dev, Error **errp)
          }
          pci_std_vga_mmio_region_init(s, OBJECT(dev), &d->mmio, d->mrs,
                                       qext, edid, d->host_resize,
@@ -167,7 +172,7 @@ index e3519edd8a..a514168880 100644
  
          pci_register_bar(&d->dev, 2, PCI_BASE_ADDRESS_SPACE_MEMORY, &d->mmio);
      }
-@@ -566,6 +627,7 @@ static const Property vga_pci_properties[] = {
+@@ -566,6 +632,7 @@ static const Property vga_pci_properties[] = {
      DEFINE_PROP_BOOL("packed-lowbpp", PCIVGAState, vga.packed_lowbpp, false),
      DEFINE_PROP_BOOL("untracked-vram", PCIVGAState, vga.untracked_vram, false),
      DEFINE_PROP_BOOL("hardware-cursor", PCIVGAState, hardware_cursor, false),

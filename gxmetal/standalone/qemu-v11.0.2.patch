@@ -1,0 +1,381 @@
+diff --git a/hw/display/meson.build b/hw/display/meson.build
+index e730c289b15..b062255fd8b 100644
+--- a/hw/display/meson.build
++++ b/hw/display/meson.build
+@@ -17,7 +17,17 @@ system_ss.add(when: 'CONFIG_SSD0303', if_true: files('ssd0303.c'))
+ system_ss.add(when: 'CONFIG_SSD0323', if_true: files('ssd0323.c'))
+ system_ss.add(when: 'CONFIG_XEN_BUS', if_true: files('xenfb.c'))
+ 
+-system_ss.add(when: 'CONFIG_VGA_PCI', if_true: files('vga-pci.c'))
++system_ss.add(when: 'CONFIG_VGA_PCI', if_true: files(
++  'vga-pci.c',
++  'gxmetal_decode.c',
++  'gxmetal_dirty.c',
++  'gxmetal_queue.c',
++  'gxmetal_renderer.c',
++  'gxmetal_qemu.c',
++))
++system_ss.add(when: ['CONFIG_VGA_PCI', gxmetal_metal],
++  if_true: [files('gxmetal_metal.m'), gxmetal_metal],
++  if_false: files('gxmetal_metal_stub.c'))
+ system_ss.add(when: 'CONFIG_VGA_ISA', if_true: files('vga-isa.c'))
+ system_ss.add(when: 'CONFIG_VGA_MMIO', if_true: files('vga-mmio.c'))
+ system_ss.add(when: 'CONFIG_VMWARE_VGA', if_true: files('vmware_vga.c'))
+diff --git a/hw/display/vga-pci.c b/hw/display/vga-pci.c
+index 4e68dd57a17..f3376e959f2 100644
+--- a/hw/display/vga-pci.c
++++ b/hw/display/vga-pci.c
+@@ -35,6 +35,7 @@
+ #include "qemu/timer.h"
+ #include "hw/core/loader.h"
+ #include "hw/display/edid.h"
++#include "gxmetal_qemu.h"
+ #include "qom/object.h"
+ #include "hw/acpi/acpi_aml_interface.h"
+ 
+@@ -52,6 +53,16 @@ struct PCIVGAState {
+     MemoryRegion mmio;
+     MemoryRegion mrs[4];
+     uint8_t edid[384];
++
++    /* Optional paravirtual QuickDraw 3D RAVE command transport. */
++    bool gxmetal_enabled;
++    GXMetalQemuState gxmetal;
++
++    /* Classic Mac cscSetGamma table staged through QEXT. */
++    uint32_t gamma_index;
++    uint8_t gamma_red[256];
++    uint8_t gamma_green[256];
++    uint8_t gamma_blue[256];
+ };
+ 
+ #define TYPE_PCI_VGA "pci-vga"
+@@ -150,13 +161,20 @@ static const MemoryRegionOps pci_vga_bochs_ops = {
+ static uint64_t pci_vga_qext_read(void *ptr, hwaddr addr, unsigned size)
+ {
+     VGACommonState *s = ptr;
++    PCIVGAState *d = container_of(s, PCIVGAState, vga);
+ 
+     switch (addr) {
+     case PCI_VGA_QEXT_REG_SIZE:
+-        return PCI_VGA_QEXT_SIZE;
++        return d->gxmetal_enabled ?
++            PCI_VGA_QEXT_SIZE_GXMETAL : PCI_VGA_QEXT_SIZE;
+     case PCI_VGA_QEXT_REG_BYTEORDER:
+         return s->big_endian_fb ?
+             PCI_VGA_QEXT_BIG_ENDIAN : PCI_VGA_QEXT_LITTLE_ENDIAN;
++    case PCI_VGA_QEXT_REG_FEATURES:
++        return d->gxmetal_enabled && d->gxmetal.metal != NULL ?
++            PCI_VGA_QEXT_FEATURE_GAMMA_LUT : 0;
++    case PCI_VGA_QEXT_REG_GAMMA_INDEX:
++        return d->gamma_index;
+     default:
+         return 0;
+     }
+@@ -166,6 +184,7 @@ static void pci_vga_qext_write(void *ptr, hwaddr addr,
+                                uint64_t val, unsigned size)
+ {
+     VGACommonState *s = ptr;
++    PCIVGAState *d = container_of(s, PCIVGAState, vga);
+ 
+     switch (addr) {
+     case PCI_VGA_QEXT_REG_BYTEORDER:
+@@ -176,6 +195,27 @@ static void pci_vga_qext_write(void *ptr, hwaddr addr,
+             s->big_endian_fb = false;
+         }
+         break;
++    case PCI_VGA_QEXT_REG_GAMMA_INDEX:
++        if (d->gxmetal_enabled) {
++            d->gamma_index = val & 255;
++        }
++        break;
++    case PCI_VGA_QEXT_REG_GAMMA_VALUE:
++        if (d->gxmetal_enabled) {
++            uint32_t index = d->gamma_index & 255;
++
++            d->gamma_red[index] = (val >> 16) & 255;
++            d->gamma_green[index] = (val >> 8) & 255;
++            d->gamma_blue[index] = val & 255;
++            d->gamma_index = (index + 1) & 255;
++        }
++        break;
++    case PCI_VGA_QEXT_REG_GAMMA_COMMAND:
++        if (d->gxmetal_enabled && (val & PCI_VGA_QEXT_GAMMA_APPLY)) {
++            gxmetal_metal_set_gamma(d->gxmetal.metal, d->gamma_red,
++                                    d->gamma_green, d->gamma_blue);
++        }
++        break;
+     }
+ }
+ 
+@@ -221,7 +261,9 @@ void pci_std_vga_mmio_region_init(VGACommonState *s,
+ 
+     if (qext) {
+         memory_region_init_io(&subs[2], owner, &pci_vga_qext_ops, s,
+-                              "qemu extended regs", PCI_VGA_QEXT_SIZE);
++                              "qemu extended regs", d->gxmetal_enabled ?
++                                  PCI_VGA_QEXT_SIZE_GXMETAL :
++                                  PCI_VGA_QEXT_SIZE);
+         memory_region_add_subregion(parent, PCI_VGA_QEXT_OFFSET,
+                                     &subs[2]);
+     }
+@@ -239,11 +281,28 @@ static void pci_std_vga_realize(PCIDevice *dev, Error **errp)
+     VGACommonState *s = &d->vga;
+     bool qext = false;
+     bool edid = false;
++    uint32_t i;
++
++    if (d->gxmetal_enabled &&
++        !(d->flags & (1 << PCI_VGA_FLAG_ENABLE_MMIO))) {
++        error_setg(errp, "GXMetal requires the VGA MMIO BAR");
++        return;
++    }
++    if (d->gxmetal_enabled &&
++        !(d->flags & (1 << PCI_VGA_FLAG_ENABLE_QEXT))) {
++        error_setg(errp, "GXMetal requires the QEMU VGA extended registers");
++        return;
++    }
+ 
+     /* vga + console init */
+     if (!vga_common_init(s, OBJECT(dev), errp)) {
+         return;
+     }
++    for (i = 0; i < 256; i++) {
++        d->gamma_red[i] = i;
++        d->gamma_green[i] = i;
++        d->gamma_blue[i] = i;
++    }
+     vga_init(s, OBJECT(dev), pci_address_space(dev), pci_address_space_io(dev),
+              true);
+ 
+@@ -267,6 +326,18 @@ static void pci_std_vga_realize(PCIDevice *dev, Error **errp)
+         pci_std_vga_mmio_region_init(s, OBJECT(dev), &d->mmio, d->mrs,
+                                      qext, edid);
+ 
++        if (d->gxmetal_enabled) {
++            if (!gxmetal_qemu_init(&d->gxmetal, OBJECT(dev), &s->vram,
++                                   s->vram_size, s->con, errp)) {
++                return;
++            }
++            memory_region_add_subregion(&d->mmio,
++                                        GXMETAL_BAR2_REGISTER_OFFSET,
++                                        &d->gxmetal.registers);
++            pci_register_bar(&d->dev, 4, PCI_BASE_ADDRESS_MEM_PREFETCH,
++                             &d->gxmetal.shared);
++        }
++
+         pci_register_bar(&d->dev, 2, PCI_BASE_ADDRESS_SPACE_MEMORY, &d->mmio);
+     }
+ }
+@@ -337,6 +408,7 @@ static const Property vga_pci_properties[] = {
+                     PCIVGAState, flags, PCI_VGA_FLAG_ENABLE_QEXT, true),
+     DEFINE_PROP_BIT("edid",
+                     PCIVGAState, flags, PCI_VGA_FLAG_ENABLE_EDID, true),
++    DEFINE_PROP_BOOL("gxmetal", PCIVGAState, gxmetal_enabled, false),
+     DEFINE_EDID_PROPERTIES(PCIVGAState, edid_info),
+ };
+ 
+diff --git a/include/hw/display/bochs-vbe.h b/include/hw/display/bochs-vbe.h
+index bc2f046eee7..32e45189bcf 100644
+--- a/include/hw/display/bochs-vbe.h
++++ b/include/hw/display/bochs-vbe.h
+@@ -66,4 +66,15 @@
+ #define  PCI_VGA_QEXT_LITTLE_ENDIAN   0x1e1e1e1e
+ #define  PCI_VGA_QEXT_BIG_ENDIAN      0xbebebebe
+ 
++/* Optional GXMetal display integration. The sparse register layout matches
++ * the ClassicMac PowerPC NDRV while leaving the stock QEXT ABI unchanged
++ * when the device property is disabled. */
++#define PCI_VGA_QEXT_REG_FEATURES      (5 * 4)
++#define  PCI_VGA_QEXT_FEATURE_GAMMA_LUT 0x4
++#define PCI_VGA_QEXT_REG_GAMMA_INDEX   (14 * 4)
++#define PCI_VGA_QEXT_REG_GAMMA_VALUE   (15 * 4)
++#define PCI_VGA_QEXT_REG_GAMMA_COMMAND (16 * 4)
++#define  PCI_VGA_QEXT_GAMMA_APPLY      0x1
++#define PCI_VGA_QEXT_SIZE_GXMETAL      0x500
++
+ #endif /* HW_DISPLAY_BOCHS_VBE_H */
+diff --git a/include/ui/input.h b/include/ui/input.h
+index 8f9aac562ed..c5f72feafc5 100644
+--- a/include/ui/input.h
++++ b/include/ui/input.h
+@@ -58,6 +58,11 @@ void qemu_input_update_buttons(QemuConsole *src, uint32_t *button_map,
+                                uint32_t button_old, uint32_t button_new);
+ 
+ bool qemu_input_is_absolute(QemuConsole *con);
++uint32_t qemu_input_get_button_state(void);
++uint32_t qemu_input_get_button_down_edges(void);
++uint32_t qemu_input_get_button_up_edges(void);
++int32_t qemu_input_get_relative_delta(InputAxis axis);
++void qemu_input_set_relative_mode(bool relative);
+ int qemu_input_scale_axis(int value,
+                           int min_in, int max_in,
+                           int min_out, int max_out);
+diff --git a/meson.build b/meson.build
+index 51f5f2851a0..5368ff9bd98 100644
+--- a/meson.build
++++ b/meson.build
+@@ -821,6 +821,7 @@ version_res = []
+ coref = []
+ iokit = []
+ pvg = not_found
++gxmetal_metal = not_found
+ emulator_link_args = []
+ midl = not_found
+ widl = not_found
+@@ -846,6 +847,8 @@ elif host_os == 'darwin'
+   coref = dependency('appleframeworks', modules: 'CoreFoundation')
+   iokit = dependency('appleframeworks', modules: 'IOKit', required: false)
+   host_dsosuf = '.dylib'
++  gxmetal_metal = dependency('appleframeworks', modules: 'Metal',
++                             required: false)
+   pvg = dependency('appleframeworks', modules: ['ParavirtualizedGraphics', 'Metal'],
+                    required: get_option('pvg'))
+ elif host_os == 'sunos'
+diff --git a/ui/input.c b/ui/input.c
+index 147e69c1c3c..1558573123a 100644
+--- a/ui/input.c
++++ b/ui/input.c
+@@ -38,6 +38,11 @@ static QTAILQ_HEAD(, QemuInputHandlerState) handlers =
+     QTAILQ_HEAD_INITIALIZER(handlers);
+ static NotifierList mouse_mode_notifiers =
+     NOTIFIER_LIST_INITIALIZER(mouse_mode_notifiers);
++static bool relative_mode_requested;
++static uint32_t input_button_state;
++static uint32_t input_button_down_edges;
++static uint32_t input_button_up_edges;
++static int32_t input_relative_delta[INPUT_AXIS__MAX];
+ 
+ static QemuInputEventQueueHead kbd_queue = QTAILQ_HEAD_INITIALIZER(kbd_queue);
+ static QEMUTimer *kbd_timer;
+@@ -303,12 +308,65 @@ static void qemu_input_queue_sync(QemuInputEventQueueHead *queue)
+     queue_count++;
+ }
+ 
++static uint32_t qemu_input_button_mask(InputButton button)
++{
++    switch (button) {
++    case INPUT_BUTTON_LEFT:
++        return 1u << 0;
++    case INPUT_BUTTON_RIGHT:
++        return 1u << 1;
++    case INPUT_BUTTON_MIDDLE:
++        return 1u << 2;
++    default:
++        return 0;
++    }
++}
++
++static void qemu_input_accumulate_relative(InputMoveEvent *move)
++{
++    int64_t accumulated;
++
++    if (move->axis >= INPUT_AXIS__MAX) {
++        return;
++    }
++    accumulated = (int64_t)input_relative_delta[move->axis] + move->value;
++    input_relative_delta[move->axis] =
++        accumulated > INT32_MAX ? INT32_MAX :
++        accumulated < INT32_MIN ? INT32_MIN : accumulated;
++}
++
+ void qemu_input_event_send_impl(QemuConsole *src, InputEvent *evt)
+ {
+     QemuInputHandlerState *s;
++    uint32_t button_mask;
+ 
+     qemu_input_event_trace(src, evt);
+ 
++    /* GXMetal's guest InputSprocket driver consumes host button state
++     * directly. Observe each event once here without duplicating it through
++     * both of classic Mac OS's emulated mouse drivers. */
++    if (evt->type == INPUT_EVENT_KIND_BTN) {
++        button_mask = qemu_input_button_mask(evt->u.btn.data->button);
++        if (relative_mode_requested && button_mask != 0 &&
++            evt->u.btn.data->down &&
++            (input_button_state & button_mask) == 0) {
++            input_button_down_edges |= button_mask;
++        } else if (relative_mode_requested && button_mask != 0 &&
++                   !evt->u.btn.data->down &&
++                   (input_button_state & button_mask) != 0) {
++            input_button_up_edges |= button_mask;
++        }
++        if (evt->u.btn.data->down) {
++            input_button_state |= button_mask;
++        } else {
++            input_button_state &= ~button_mask;
++        }
++    }
++    if (relative_mode_requested && evt->type == INPUT_EVENT_KIND_REL) {
++        qemu_input_accumulate_relative(evt->u.rel.data);
++        return;
++    }
++
+     /* send event */
+     s = qemu_input_find_handler(1 << evt->type, src);
+     if (!s) {
+@@ -462,11 +520,64 @@ bool qemu_input_is_absolute(QemuConsole *con)
+ {
+     QemuInputHandlerState *s;
+ 
++    if (relative_mode_requested) {
++        return false;
++    }
+     s = qemu_input_find_handler(INPUT_EVENT_MASK_REL | INPUT_EVENT_MASK_ABS,
+                                 con);
+     return (s != NULL) && (s->handler->mask & INPUT_EVENT_MASK_ABS);
+ }
+ 
++uint32_t qemu_input_get_button_state(void)
++{
++    return input_button_state;
++}
++
++uint32_t qemu_input_get_button_down_edges(void)
++{
++    uint32_t edges = input_button_down_edges;
++
++    input_button_down_edges = 0;
++    return edges;
++}
++
++uint32_t qemu_input_get_button_up_edges(void)
++{
++    uint32_t edges = input_button_up_edges;
++
++    input_button_up_edges = 0;
++    return edges;
++}
++
++int32_t qemu_input_get_relative_delta(InputAxis axis)
++{
++    int32_t delta;
++
++    if (axis >= INPUT_AXIS__MAX) {
++        return 0;
++    }
++    delta = input_relative_delta[axis];
++    input_relative_delta[axis] = 0;
++    return delta;
++}
++
++void qemu_input_set_relative_mode(bool relative)
++{
++    if (relative_mode_requested == relative) {
++        return;
++    }
++    relative_mode_requested = relative;
++    memset(input_relative_delta, 0, sizeof(input_relative_delta));
++    input_button_down_edges = 0;
++    input_button_up_edges = 0;
++
++    /* Captured deltas go directly to GXMetal's InputSprocket bridge instead
++     * of moving and repeatedly recentering the classic Mac OS cursor.
++     * Button events remain delivered once to the active emulated device and
++     * are also exposed as non-destructive state. */
++    notifier_list_notify(&mouse_mode_notifiers, NULL);
++}
++
+ int qemu_input_scale_axis(int value,
+                           int min_in, int max_in,
+                           int min_out, int max_out)

@@ -15,6 +15,7 @@
   <img src="https://img.shields.io/badge/guests-System%207.1%20–%20Mac%20OS%209.2.2-blueviolet" alt="Guest OS range">
   <img src="https://img.shields.io/badge/QEMU-11.0.2%20(custom)-orange" alt="QEMU">
   <img src="https://img.shields.io/badge/UI-SwiftUI-blue" alt="SwiftUI">
+  <img src="https://img.shields.io/badge/3D-GXMetal%20(experimental)-6e56cf" alt="GXMetal experimental 3D acceleration">
 </p>
 
 ---
@@ -27,6 +28,64 @@
   <img src="docs/screenshots/quadra800-macos81.png" width="410" alt="Mac OS 8.1 on the emulated Quadra 800">
   <img src="docs/screenshots/powermacg4-macos92.png" width="410" alt="Mac OS 9.2 on the emulated Power Mac G4">
 </p>
+
+## GXMetal: Mac OS 9 3D accelerated by Metal
+
+GXMetal is ClassicMac's experimental paravirtualized 3D stack for PowerPC Mac
+OS 9. It accelerates QuickDraw 3D RAVE and a growing ATI-era OpenGL/AGL
+compatibility path with the Apple Silicon Mac's GPU—without pretending to be a
+specific period 3D card. The one-click guest installer and matching host
+renderer are bundled with ClassicMac; a standalone package is also available
+for custom [QEMU and UTM builds](#standalone-gxmetal-for-qemu-and-utm).
+
+<p align="center">
+  <img src="docs/screenshots/gxmetal/quake3-arena.png" width="640" alt="Quake III Arena Q3DM1 rendered through GXMetal">
+</p>
+
+<p align="center"><strong>Quake III Arena</strong> — five distinct Q3DM1 views retained complete textured geometry, depth, and HUD rendering.</p>
+
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="docs/screenshots/gxmetal/cromag-rally.png" width="400" alt="Cro-Mag Rally running an accelerated desert race through GXMetal"><br>
+      <strong>Cro-Mag Rally</strong> — accelerated 640×480 Practice/Desert gameplay, with steering and acceleration verified.
+    </td>
+    <td width="50%" valign="top">
+      <img src="docs/screenshots/gxmetal/oni.png" width="400" alt="Oni warehouse gameplay rendered through GXMetal"><br>
+      <strong>Oni</strong> — warehouse gameplay with relative-look input and a clean two-process quit/relaunch route.
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="docs/screenshots/gxmetal/dark-vengeance.png" width="400" alt="Dark Vengeance gameplay rendered through GXMetal"><br>
+      <strong>Dark Vengeance</strong> — a five-minute packaged rendering soak held a coherent textured combat scene with direct presentation and zero fallback frames.
+    </td>
+    <td width="50%" valign="top">
+      <img src="docs/screenshots/gxmetal/conformance.png" width="400" alt="GXMetal Test reporting a passed RAVE conformance run on Mac OS 9"><br>
+      <strong>GXMetal Test</strong> — the advertised RAVE contract passed before game testing, including textures, blending, depth, clipping, and framebuffer access.
+    </td>
+  </tr>
+</table>
+
+### How it works
+
+`Mac OS 9 game → GXMetal guest driver → custom QEMU PCI device → macOS Metal`
+
+1. The guest RAVE engine and ATI compatibility layer collect geometry,
+   textures, render state, and presentation commands into batches.
+2. GXMetal's custom QEMU device validates the queue metadata and transports
+   those batches and shared resources to the host instead of emulating a
+   historical GPU instruction by instruction.
+3. The macOS backend translates the work into Metal pipelines and command
+   buffers, then presents completed frames directly. Unsupported contexts stay
+   on Apple's software renderer rather than being claimed as accelerated.
+
+The screenshots above are unedited frames captured by the automated harness
+on clean Mac OS 9 VM clones. See the evidence-backed
+[compatibility report](docs/gxmetal-ten-game-compatibility.md) for exact builds,
+routes, telemetry, verified behavior, and open gaps. GXMetal remains
+experimental; the report is the source of truth for what each run does—and
+does not—prove.
 
 ## What it is
 
@@ -160,6 +219,22 @@ Requirements: an Apple Silicon Mac (M1 or later) running a recent macOS.
 ```
 
 All scripts are idempotent and safe to re-run. Building needs the Xcode command line tools and [Homebrew](https://brew.sh).
+
+### Standalone GXMetal for QEMU and UTM
+
+GXMetal can also be packaged independently of the ClassicMac app. The
+standalone release includes a mountable HFS guest image, prebuilt MacBinary
+components, the matching Power Mac video NDRV, complete source, and a minimal
+patch for pristine QEMU 11.0.2:
+
+```bash
+./scripts/package-gxmetal-release.sh
+```
+
+This produces `dist/GXMetal-2.3.0.tar.gz`, a ZIP variant, checksums, and
+`dist/GXMetal-Guest.iso`. See
+[`gxmetal/standalone/README.md`](gxmetal/standalone/README.md) for QEMU build
+arguments, the UTM custom-QEMU rebuild path, installation, and limitations.
 
 The guest-side binaries are committed, so a normal build needs no cross toolchain. If you change them, rebuild with:
 

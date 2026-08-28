@@ -79,7 +79,7 @@ are never accepted by the host.
 
 The existing std-VGA BAR2 has an unused 256-byte range beginning at `0x0b00`.
 GXMetal places its discovery, queue, status, fence, and reset registers there.
-A separate 4 MiB PCI BAR contains a 1 MiB command ring and a bounded upload
+A separate 8 MiB PCI BAR contains a 1 MiB command ring and a bounded upload
 heap. The device is optional: a missing magic value, incompatible major
 version, faulted status, or failed device probe prevents GXMetal from claiming
 a RAVE draw context.
@@ -251,7 +251,7 @@ scripts/build-qemu.sh
 
 The build checks that the PowerPC VGA device accepts the `gxmetal` property,
 that BAR2 remains a 4 KiB register aperture, that the prefetchable GXMetal BAR4
-is 4 MiB, and that invalid configurations fail realization.
+is 8 MiB, and that invalid configurations fail realization.
 
 Set `GXMETAL_PROFILE=1` in QEMU's host environment to print a two-second
 rolling presentation profile to standard error. The profile reports actual

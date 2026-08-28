@@ -40,6 +40,17 @@ uint64_t gxmetal_metal_fallback_present_count(
     return 0;
 }
 
+void gxmetal_metal_set_gamma(GXMetalMetalRenderer *renderer,
+                             const uint8_t red[256],
+                             const uint8_t green[256],
+                             const uint8_t blue[256])
+{
+    (void)renderer;
+    (void)red;
+    (void)green;
+    (void)blue;
+}
+
 void gxmetal_metal_reset(GXMetalMetalRenderer *renderer)
 {
     (void)renderer;

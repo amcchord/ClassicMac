@@ -1,5 +1,24 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Added a standalone GXMetal 2.3.0 package for upstream QEMU 11.0.2 and
+  custom UTM builds. It includes a mountable HFS guest image, prebuilt
+  MacBinary components, the matching Power Mac video NDRV, source, checksums,
+  and a focused patch-and-copy helper.
+- Promoted GXMetal to the top of the repository README with evidence-backed
+  Quake III Arena, Cro-Mag Rally, Oni, Dark Vengeance, and conformance-test
+  screenshots plus a concise guest-driver-to-Metal architecture overview.
+
+### Changed
+
+- Made GXMetal's QEMU transport test explicitly use a null audio backend and
+  cover the portable non-ClassicMac relative-input path. GXMetal-enabled VGA
+  devices now fail realization when QEMU extended registers are disabled,
+  because the matching guest NDRV depends on that interface.
+
 ## 2.3.1 — 2026-08-28
 
 ### Fixed

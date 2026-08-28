@@ -39,10 +39,10 @@ QEXT_CURSOR_MOVE = 0x2
 def base_args(qemu):
     return [
         qemu,
-        "-M", "mac99,via=cuda,audiodev=audio0",
+        "-M", "mac99,via=cuda,audiodev=snd0",
+        "-audiodev", "none,id=snd0",
         "-nodefaults",
         "-display", "none",
-        "-audiodev", "none,id=audio0",
         "-S",
     ]
 
@@ -221,6 +221,107 @@ def test_requires_mmio(qemu):
         text=True, capture_output=True, timeout=10, check=False)
     assert result.returncode != 0
     assert "GXMetal requires the VGA MMIO BAR" in result.stderr
+
+
+def test_requires_qext(qemu):
+    result = subprocess.run(
+        base_args(qemu) + [
+            "-device", "VGA,gxmetal=on,qemu-extended-regs=off"],
+        text=True, capture_output=True, timeout=10, check=False)
+    assert result.returncode != 0
+    assert "GXMetal requires the QEMU VGA extended registers" in result.stderr
+
+
+def test_explicit_relative_input_handoff(qemu):
+    """Exercise portable InputSprocket capture without ClassicMac QEXT cursor."""
+    with tempfile.TemporaryDirectory(prefix="gxmetal-input-") as temporary:
+        vnc_path = os.path.join(temporary, "vnc.sock")
+        qmp_path = os.path.join(temporary, "qmp.sock")
+        qtest_path = os.path.join(temporary, "qtest.sock")
+        process = subprocess.Popen(
+            base_args(qemu) + [
+                "-device", "VGA,gxmetal=on",
+                "-device", "virtio-tablet-pci",
+                "-vnc", "unix:%s" % vnc_path,
+                "-qmp", "unix:%s,server=on,wait=off" % qmp_path,
+                "-qtest", "unix:%s,server=on,wait=off" % qtest_path,
+            ],
+            stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+        qmp = None
+        qtest = None
+        vnc = None
+        try:
+            for path in (qmp_path, qtest_path, vnc_path):
+                wait_for_socket(path, process)
+
+            qmp = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            qmp.connect(qmp_path)
+            qmp_stream = qmp.makefile("rwb", buffering=0)
+            assert "QMP" in json.loads(qmp_stream.readline())
+            qmp_execute(qmp_stream, "qmp_capabilities")
+            qmp_execute(qmp_stream, "cont")
+
+            register_address = None
+            deadline = time.monotonic() + 10
+            while time.monotonic() < deadline:
+                device = find_qemu_vga(qmp_execute(qmp_stream, "query-pci"))
+                register_region = next(
+                    (region for region in device["regions"]
+                     if region["bar"] == 2 and region["address"] >= 0), None)
+                if register_region is not None:
+                    register_address = register_region["address"]
+                    break
+                time.sleep(0.05)
+            assert register_address is not None, "OpenBIOS did not map VGA BAR2"
+
+            tablet = next(mouse for mouse in qmp_execute(
+                qmp_stream, "query-mice") if mouse["absolute"])
+            qmp_execute(qmp_stream, "human-monitor-command", {
+                "command-line": "mouse_set %d" % tablet["index"]})
+            vnc = connect_vnc_pointer_mode(vnc_path)
+            assert receive_vnc_pointer_mode(vnc) is True
+
+            qtest = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            qtest.connect(qtest_path)
+            gxmetal_registers = (register_address +
+                                 GXMETAL_BAR2_REGISTER_OFFSET)
+            relative_register = (gxmetal_registers +
+                                 GXMETAL_RELATIVE_INPUT_REGISTER)
+            qtest_writel_le(qtest, relative_register, 1)
+            assert receive_vnc_pointer_mode(vnc) is False
+
+            qmp_execute(qmp_stream, "input-send-event", {
+                "events": [
+                    {"type": "rel", "data": {"axis": "x", "value": 17}},
+                    {"type": "rel", "data": {"axis": "y", "value": -9}},
+                    {"type": "btn", "data": {
+                        "button": "left", "down": True}},
+                    {"type": "btn", "data": {
+                        "button": "left", "down": False}},
+                ]})
+            assert qtest_readl_le(
+                qtest, gxmetal_registers + GXMETAL_INPUT_RELATIVE_X_REGISTER
+            ) == 17
+            assert qtest_readl_le(
+                qtest, gxmetal_registers + GXMETAL_INPUT_RELATIVE_Y_REGISTER
+            ) == 0xFFFFFFF7
+            assert qtest_readl_le(
+                qtest, gxmetal_registers + GXMETAL_INPUT_BUTTONS_DOWN_REGISTER
+            ) == 1
+            assert qtest_readl_le(
+                qtest, gxmetal_registers + GXMETAL_INPUT_BUTTONS_UP_REGISTER
+            ) == 1
+
+            qtest_writel_le(qtest, relative_register, 0)
+            assert receive_vnc_pointer_mode(vnc) is True
+            qmp_execute(qmp_stream, "quit")
+        finally:
+            for connection in (vnc, qtest, qmp):
+                if connection is not None:
+                    connection.close()
+            if process.poll() is None:
+                process.terminate()
+            process.wait(timeout=10)
 
 
 def test_relative_input_handoff(qemu):
@@ -491,9 +592,17 @@ def test_relative_input_handoff(qemu):
 def main():
     if len(sys.argv) != 2:
         sys.exit("usage: test_qemu_transport.py /path/to/qemu-system-ppc")
-    test_bar_layout(sys.argv[1])
-    test_requires_mmio(sys.argv[1])
-    test_relative_input_handoff(sys.argv[1])
+    qemu = sys.argv[1]
+    device_help = subprocess.run(
+        [qemu, "-device", "VGA,help"], text=True,
+        capture_output=True, timeout=10, check=False)
+    test_bar_layout(qemu)
+    test_requires_mmio(qemu)
+    test_requires_qext(qemu)
+    if "hardware-cursor" in device_help.stdout + device_help.stderr:
+        test_relative_input_handoff(qemu)
+    else:
+        test_explicit_relative_input_handoff(qemu)
     print("GXMetal QEMU transport: realization and input handoff tests passed")
 
 
