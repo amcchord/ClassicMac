@@ -1,5 +1,37 @@
 # Changelog
 
+## 2.3.1 — 2026-08-28
+
+### Fixed
+
+- Preserved the accelerated Mac OS 9 hard-disk boot while making its Finder
+  clock handoff stable for long-running and idle VMs. After QEMU atomically
+  rebases instruction-counted startup time onto its real-time virtual clock,
+  PowerPC `TB` reads and the decrementer now remain on that same clock source;
+  the independent Apple-Silicon hardware-counter path that could drift into an
+  interrupt storm has been removed.
+
+### Changed
+
+- Extended the disposable Mac OS 9 boot benchmark with an idle-soak gate. It
+  verifies the architectural 25 MHz timebase across the idle interval, proves
+  Finder still accepts input afterward, and retains the existing pause/resume
+  continuity checks.
+- The QEMU build now rejects any PowerPC runtime patch that reintroduces a
+  direct host-counter timebase alongside QEMU's virtual-clock decrementer.
+
+### Validation
+
+- A fresh accelerated Mac OS 9.2 boot reached Finder in 26.321 seconds and had
+  already completed the automatic real-time handoff. After 180.005 seconds
+  idle, the measured timebase was 24,999,152 Hz and the Apple menu responded to
+  input; a three-second pause advanced zero ticks, followed by 25,089,127 ticks
+  during the first resumed second.
+- A matched 2.3.0 boot reached Finder in 26.470 seconds. The corrected 2.3.1
+  clock path therefore shows no measurable startup regression.
+- The rebuilt QEMU patch stack and transport realization tests pass, along with
+  all 39 Swift app tests.
+
 ## 2.3.0 — 2026-08-28
 
 ### Added

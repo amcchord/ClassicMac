@@ -500,6 +500,12 @@ if "$QEMU_PPC_BIN" -device VGA,help 2>&1 | grep -q "classicmac-boot-handoff" && 
 else
   die "Mac OS 9 automatic Finder clock handoff missing from the ppc build"
 fi
+if grep -Eq 'cntvct_el0|cpu_ppc_fast_tb|fast_tb_' \
+    "$QEMU_DIR/hw/ppc/ppc.c" "$QEMU_DIR/include/hw/ppc/ppc.h"; then
+  die "PowerPC timebase bypasses QEMU virtual time after the Finder handoff"
+else
+  printf '    OK  PowerPC timebase and decrementer share QEMU virtual time\n'
+fi
 if "$QEMU_PPC_BIN" -device VGA,help 2>&1 | grep -q "gxmetal"; then
   printf '    OK  GXMetal command transport (ppc)\n'
 else

@@ -122,6 +122,27 @@ def desktop_is_visible(width: int, rgb: bytes) -> bool:
     return blue > red + 20 and blue > green + 20
 
 
+def changed_pixel_fraction(
+    before: bytes,
+    after: bytes,
+    width: int,
+    height: int,
+    right: int,
+    bottom: int,
+) -> float:
+    changed = 0
+    pixels = min(width, right) * min(height, bottom)
+    for y in range(min(height, bottom)):
+        for x in range(min(width, right)):
+            offset = (y * width + x) * 3
+            if any(
+                abs(before[offset + channel] - after[offset + channel]) > 8
+                for channel in range(3)
+            ):
+                changed += 1
+    return changed / pixels if pixels else 0.0
+
+
 def clone_disk(source: Path, destination: Path) -> None:
     result = subprocess.run(
         ["cp", "-c", str(source), str(destination)],
@@ -303,6 +324,12 @@ def main() -> int:
         default=0.0,
         help="pause at Finder and verify the PowerPC timebase remains frozen",
     )
+    parser.add_argument(
+        "--idle-seconds",
+        type=float,
+        default=0.0,
+        help="idle at Finder, verify the 25 MHz timebase, and test input afterward",
+    )
     parser.add_argument("--shared-folder", type=Path)
     parser.add_argument("--icount")
     parser.add_argument(
@@ -351,7 +378,8 @@ def main() -> int:
     if args.dma_delay_ns < 0:
         parser.error("--dma-delay-ns must be nonnegative")
     if (args.poll_interval <= 0 or args.timeout <= 0 or
-            args.poll_start_delay < 0 or args.pause_resume_seconds < 0):
+            args.poll_start_delay < 0 or args.pause_resume_seconds < 0 or
+            args.idle_seconds < 0):
         parser.error(
             "timeout and poll interval must be positive; delays must be nonnegative"
         )
@@ -391,6 +419,7 @@ def main() -> int:
     milestones: dict[str, float] = {}
     pause_resume: dict[str, int | float] = {}
     handoff: dict[str, int | float | str] = {}
+    idle: dict[str, int | float] = {}
     failure: Exception | None = None
     monitor_path = scratch / "monitor.sock"
     frame_path = scratch / "frame.ppm"
@@ -453,6 +482,57 @@ def main() -> int:
                         1_000_000_000,
                         3,
                     )
+            if finder_seconds is not None and args.idle_seconds > 0:
+                before = timebase_from_registers(monitor)
+                idle_started = time.monotonic()
+                time.sleep(args.idle_seconds)
+                after = timebase_from_registers(monitor)
+                idle_elapsed = time.monotonic() - idle_started
+                timebase_delta = after - before
+                expected = 25_000_000 * idle_elapsed
+                if not expected * 0.95 <= timebase_delta <= expected * 1.05:
+                    raise RuntimeError(
+                        "PowerPC timebase did not remain at its 25 MHz guest "
+                        "rate while idle"
+                    )
+
+                width, height, before_input = capture_frame(monitor, frame_path)
+                input_result = subprocess.run(
+                    [
+                        str(root / "scripts/gxmetal-vnc.py"),
+                        "--unix-socket", str(scratch / "vnc.sock"),
+                        "--click", "12,10",
+                        "--delay", "0.5",
+                    ],
+                    cwd=root,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    check=False,
+                )
+                if input_result.returncode != 0:
+                    raise RuntimeError(
+                        "VNC input probe failed after idle: " + input_result.stdout
+                    )
+                after_width, after_height, after_input = capture_frame(
+                    monitor, frame_path
+                )
+                if (after_width, after_height) != (width, height):
+                    raise RuntimeError("framebuffer dimensions changed during input probe")
+                changed_fraction = changed_pixel_fraction(
+                    before_input, after_input, width, height, 240, 420
+                )
+                if changed_fraction < 0.01:
+                    raise RuntimeError(
+                        "Finder did not respond to the Apple-menu click after idle"
+                    )
+                shutil.copyfile(frame_path, scratch / "idle-input.ppm")
+                idle = {
+                    "idle_seconds": round(idle_elapsed, 3),
+                    "timebase_delta": timebase_delta,
+                    "timebase_hz": round(timebase_delta / idle_elapsed),
+                    "input_changed_fraction": round(changed_fraction, 6),
+                }
             if finder_seconds is not None and args.pause_resume_seconds > 0:
                 hmp_command(monitor, "stop")
                 before = timebase_from_registers(monitor)
@@ -555,6 +635,8 @@ def main() -> int:
         result["pause_resume"] = pause_resume
     if handoff:
         result["handoff"] = handoff
+    if idle:
+        result["idle"] = idle
     print(json.dumps(result, sort_keys=True))
     if not args.keep:
         shutil.rmtree(scratch)
