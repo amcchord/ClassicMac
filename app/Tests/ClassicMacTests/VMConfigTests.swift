@@ -2,6 +2,13 @@ import XCTest
 @testable import ClassicMac
 
 final class VMConfigTests: XCTestCase {
+    func testDiskSizeChoicesReach120GBForBothMachines() {
+        for family in MachineFamily.allCases {
+            XCTAssertEqual(family.diskSizePresets.last, 120)
+            XCTAssertTrue(family.diskSizePresets.contains(64))
+        }
+    }
+
     func testCustomResolutionIsClampedAndNameIsTrimmed() {
         let config = VMConfig(
             name: "  Studio Mac  ",

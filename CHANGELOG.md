@@ -2,8 +2,17 @@
 
 ## Unreleased
 
+## 2.3.2 — 2026-08-28
+
 ### Added
 
+- Added thin-provisioned raw hard disks with capacities through 120 GB. New
+  images reserve their virtual capacity without consuming it on the host until
+  the guest writes data.
+- Installer-CD startup is now one-shot once the destination HFS/HFS+ System
+  Folder is blessed. ClassicMac inspects Apple partition maps and volume Finder
+  metadata after a clean restart or shutdown, saves hard disk as the next boot
+  device, and leaves the installer disc inserted.
 - Added a standalone GXMetal 2.3.0 package for upstream QEMU 11.0.2 and
   custom UTM builds. It includes a mountable HFS guest image, prebuilt
   MacBinary components, the matching Power Mac video NDRV, source, checksums,

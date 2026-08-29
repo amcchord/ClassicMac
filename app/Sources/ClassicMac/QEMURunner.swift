@@ -112,9 +112,10 @@ final class QEMUManager: ObservableObject {
 
     // SHUTDOWN event reasons after which the VM should boot right back up:
     // a restart chosen inside the guest, or the app's own Restart command
-    // (system_reset over the monitor socket). Power Mac VMs run with
-    // -action reboot=shutdown, so both arrive as a clean exit + this reason
-    // instead of an in-place reset, which hangs the mac99 machine.
+    // (system_reset over the monitor socket). VMs run with
+    // -action reboot=shutdown, so both arrive as a clean exit + this reason.
+    // Besides avoiding mac99's broken in-place reset, that boundary lets the
+    // app inspect an installer-written disk before choosing the next boot.
     private static let relaunchReasons: Set<String> = ["guest-reset", "host-qmp-system-reset"]
 
     func start(_ config: VMConfig) {
@@ -200,6 +201,7 @@ final class QEMUManager: ObservableObject {
             let message = capturedError.string()
             Task { @MainActor in
                 guard let self = self else { return }
+                var nextConfig = config
                 let monitor = self.qmpMonitors.removeValue(forKey: config.id)
                 self.runningIDs.remove(config.id)
                 self.pausedIDs.remove(config.id)
@@ -226,6 +228,18 @@ final class QEMUManager: ObservableObject {
                     )
                     return
                 }
+                // An installer blesses the destination System Folder before
+                // asking the Mac to restart or shut down. Once a clean CD run
+                // reaches that point, make the saved startup choice follow the
+                // newly bootable hard disk while leaving the disc inserted.
+                if proc.terminationReason == .exit && proc.terminationStatus == 0 {
+                    nextConfig = QEMUManager.configurationForNextBoot(
+                        afterSuccessfulRun: config
+                    )
+                    if nextConfig != config {
+                        _ = VMStore.shared.save(nextConfig)
+                    }
+                }
                 guard let monitor = monitor else {
                     self.stopBrowserDisplay(for: config.id)
                     return
@@ -237,9 +251,9 @@ final class QEMUManager: ObservableObject {
                 monitor.cancel()
                 if let reason = reason, QEMUManager.relaunchReasons.contains(reason) {
                     self.start(
-                        config,
+                        nextConfig,
                         reusing: displayServer,
-                        openDisplay: !config.useBrowserDisplay
+                        openDisplay: !nextConfig.useBrowserDisplay
                     )
                 } else {
                     self.stopBrowserDisplay(for: config.id)
@@ -271,13 +285,13 @@ final class QEMUManager: ObservableObject {
         }
         runningIDs.insert(config.id)
 
-        // Power Mac VMs report shutdown/restart intent over QMP (see
+        // Both machine families report shutdown/restart intent over QMP (see
         // relaunchReasons above); watch the event stream for this run.
-        if config.machineFamily == .powerMacG4 {
-            let monitor = QMPEventMonitor(socketPath: QEMUManager.qmpSocketURL(for: config.id).path)
-            monitor.start()
-            qmpMonitors[config.id] = monitor
-        }
+        let monitor = QMPEventMonitor(
+            socketPath: QEMUManager.qmpSocketURL(for: config.id).path
+        )
+        monitor.start()
+        qmpMonitors[config.id] = monitor
 
         let bootingFromUserCD = config.bootFromCD &&
             config.cdImagePath?.isEmpty == false
@@ -304,6 +318,22 @@ final class QEMUManager: ObservableObject {
                 activate(config.id, afterDelay: 2.0)
             }
         }
+    }
+
+    // Returns the saved configuration that should be used on the next start.
+    // A selected installer disc remains authoritative until a successful run
+    // leaves a genuinely blessed HFS/HFS+ system on the hard disk.
+    static func configurationForNextBoot(
+        afterSuccessfulRun config: VMConfig
+    ) -> VMConfig {
+        guard config.bootFromCD,
+              config.cdImagePath?.isEmpty == false,
+              MacDiskImage.hasBlessedSystemFolder(at: config.diskImageURL) else {
+            return config
+        }
+        var next = config
+        next.bootFromCD = false
+        return next
     }
 
     // MARK: Machine display
@@ -942,6 +972,12 @@ final class QEMUManager: ObservableObject {
         // HMP monitor on a unix socket so the app can pause/resume/reboot.
         args += ["-monitor", "unix:\(QEMUManager.monitorSocketURL(for: config.id).path),server=on,wait=off"]
 
+        // End the process at the reset boundary so the app can inspect the
+        // hard disk's blessing and choose CD or disk for the relaunch. This is
+        // also used for ordinary Quadra restarts, mirroring the mac99 path.
+        args += ["-action", "reboot=shutdown"]
+        args += ["-qmp", "unix:\(QEMUManager.qmpSocketURL(for: config.id).path),server=on,wait=off"]
+
         // PRAM (stores screen resolution + boot order across reboots).
         args += ["-drive", "file=\(config.pramImageURL.path),format=raw,if=mtd"]
 
@@ -1017,7 +1053,13 @@ final class QEMUManager: ObservableObject {
         if FileManager.default.fileExists(atPath: url.path) {
             return .success("Image already exists")
         }
-        return runQemuImg(["create", "-f", "raw", url.path, sizeArgument])
+        // Raw images retain maximum compatibility with classic disk drivers.
+        // Explicitly disable preallocation so even a 120 GB virtual disk only
+        // consumes host storage as sectors are actually written.
+        return runQemuImg([
+            "create", "-f", "raw", "-o", "preallocation=off",
+            url.path, sizeArgument
+        ])
     }
 
     @discardableResult

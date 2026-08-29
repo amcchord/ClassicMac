@@ -166,7 +166,9 @@ struct NewVMSheet: View {
                 Label("Hardware", systemImage: "memorychip")
             } footer: {
                 if family == .powerMacG4 {
-                    Text("Mac OS 9 is most stable with less than 1 GB of memory, so presets stop at 896 MB.")
+                    Text("The disk is thin-provisioned, so it grows as data is written up to the selected capacity. Mac OS 9 is most stable with less than 1 GB of memory, so memory presets stop at 896 MB.")
+                } else {
+                    Text("The disk is thin-provisioned, so it grows as data is written up to the selected capacity. Drives over 2 GB require Mac OS 8.1 and HFS Plus.")
                 }
             }
 
@@ -631,7 +633,7 @@ struct PowerMacInstallGuide: View {
             InstallGuideStep(
                 number: 3,
                 title: "Start from the hard disk",
-                detail: "When installation finishes, shut down. In ClassicMac, turn off Start up from this disc, then start the Mac again."
+                detail: "When installation finishes, restart or shut down. Once the installer blesses the System Folder, ClassicMac automatically uses the hard disk for the next startup."
             )
             if includeGXMetal {
                 InstallGuideStep(

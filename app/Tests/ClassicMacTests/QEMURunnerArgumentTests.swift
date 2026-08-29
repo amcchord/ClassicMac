@@ -467,6 +467,19 @@ final class QEMURunnerArgumentTests: XCTestCase {
         )
     }
 
+    func testQuadraRestartsThroughInspectableProcessBoundary() {
+        let arguments = QEMUManager.buildArguments(
+            for: config(family: .quadra800)
+        )
+
+        XCTAssertEqual(
+            optionValues("-action", in: arguments),
+            ["reboot=shutdown"]
+        )
+        XCTAssertEqual(optionValues("-boot", in: arguments), ["d"])
+        XCTAssertEqual(optionValues("-qmp", in: arguments).count, 1)
+    }
+
     func testQuadraKeepsAnEmptyWritableFloppyDriveAvailable() {
         let arguments = QEMUManager.buildArguments(
             for: config(

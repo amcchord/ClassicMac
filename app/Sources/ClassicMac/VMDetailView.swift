@@ -20,6 +20,14 @@ struct VMDetailView: View {
             }
         }
         .onAppear(perform: load)
+        .onChange(of: store.vms) { _, machines in
+            // QEMU can update the saved startup device after an installer
+            // blesses the hard disk. Keep this view's editable copy in sync.
+            if let latest = machines.first(where: { $0.id == vmID }),
+               latest != config {
+                config = latest
+            }
+        }
     }
 
     private func load() {
@@ -542,7 +550,7 @@ struct VMDetailView: View {
                             vm.wrappedValue.machineFamily == .powerMacG4 &&
                             vm.wrappedValue.bootFromCD &&
                             vm.wrappedValue.cdImagePath?.isEmpty == false {
-                            Text("ClassicMac Tools waits while this Power Mac starts from an installer disc. Shut down, turn off Start from disc, and start again to mount Tools.")
+                            Text("ClassicMac Tools waits while this Power Mac starts from an installer disc. Once the installed System Folder is blessed, the next startup uses the hard disk and mounts Tools.")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         } else if vm.wrappedValue.machineFamily == .powerMacG4 {
@@ -588,7 +596,12 @@ struct VMDetailView: View {
         } header: {
             Label("Media", systemImage: "opticaldiscdrive")
         } footer: {
-            Text("Shut down the virtual Mac before changing removable media.")
+            if vm.wrappedValue.bootFromCD &&
+                vm.wrappedValue.cdImagePath?.isEmpty == false {
+                Text("Shut down the virtual Mac before changing removable media. After an installer blesses the hard disk, ClassicMac automatically uses it for the next startup.")
+            } else {
+                Text("Shut down the virtual Mac before changing removable media.")
+            }
         }
     }
 

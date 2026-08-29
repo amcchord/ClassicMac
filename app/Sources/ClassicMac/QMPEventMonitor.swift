@@ -3,10 +3,11 @@ import Darwin
 
 // Listens on QEMU's QMP socket for the SHUTDOWN event, which carries the
 // reason the emulator is exiting (e.g. "guest-shutdown" vs "guest-reset").
-// Power Mac VMs run with -action reboot=shutdown because an in-place mac99
-// reset hangs the guest, so a guest-initiated restart surfaces here as a
-// SHUTDOWN event with reason "guest-reset" followed by a clean process exit;
-// QEMUManager uses the recorded reason to relaunch the VM.
+// VMs run with -action reboot=shutdown, so a guest-initiated restart surfaces
+// here as a SHUTDOWN event with reason "guest-reset" followed by a clean
+// process exit. QEMUManager uses the recorded reason to relaunch the VM. This
+// avoids mac99's broken in-place reset and gives installer boots a safe point
+// at which to inspect the hard disk's blessing.
 final class QMPEventMonitor: @unchecked Sendable {
     private let socketPath: String
     private let lock = NSLock()

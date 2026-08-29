@@ -64,8 +64,8 @@ enum MachineFamily: String, Codable, CaseIterable, Identifiable {
 
     var diskSizePresets: [Int] {
         switch self {
-        case .quadra800: return [1, 2, 4, 8]
-        case .powerMacG4: return [2, 4, 8, 16]
+        case .quadra800: return [1, 2, 4, 8, 16, 32, 64, 120]
+        case .powerMacG4: return [2, 4, 8, 16, 32, 64, 120]
         }
     }
 
