@@ -197,3 +197,22 @@
 - Result: requested wizard and sparse-image work is complete. Next: use the
   signed 3.0.1 candidate; publish it as a new release if requested, without
   changing 3.0.0 assets or tag.
+
+## September 11 — 3.0.1 source pushed to GitHub
+
+- Austin explicitly requested pushing all completed changes to GitHub.
+  Preflight found the root and relevant feature worktrees clean, and remote
+  main at `b0828f0` with no conflicting commits. All agent changes were already
+  integrated in the seven reviewed local follow-up commits.
+- Fast-forwarded local main and integration to `f5a7960`, then atomically
+  pushed main, integration, and `codex/3.0.1-onboarding` to
+  `https://github.com/amcchord/ClassicMac`. A fresh remote-ref query confirmed
+  all three branches at `f5a7960af30ce8dc8b7fc03bafc990cef4b1b141`.
+- This documentation-only synchronization record follows the source push.
+  No runtime code changed; the existing 102-test and signed-build validation
+  remains applicable, so tests were not repeated for pushing the same commits.
+  The signed installer and template evidence remain local artifacts, with
+  the configured OS 9 image already hosted on mcchord.net.
+- No new release or tag was created, and no further hosting changes occurred.
+  GitHub 3.0.0 remains the public release. Next: use the 3.0.1 candidate or
+  publish it as a new release when requested.

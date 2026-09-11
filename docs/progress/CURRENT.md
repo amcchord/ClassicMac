@@ -12,8 +12,10 @@ The new 32 GiB OS 9 image is live on mcchord.net: 82.8 MB to download and about
 
 The final macOS candidate is signed, Apple-notarized, stapled, and verified:
 `artifacts/ClassicMac-3.0.1.dmg` (44.2 MB). A ZIP and checksums are retained
-alongside it. Runtime source ends at `fb8d629` on
-`codex/3.0.1-onboarding`; later changes record validation and hosting.
+alongside it. Runtime source ends at `fb8d629`; later changes record validation
+and hosting. All completed source and documentation are now pushed to GitHub
+`main`, `codex/3.0-integration`, and `codex/3.0.1-onboarding`. The root checkout
+is on `main`.
 
 ## Verification and limits
 
@@ -30,6 +32,6 @@ three original entries preserved. See [validation](../3.0.1-validation.md),
 
 ## Next safe action
 
-Use the signed 3.0.1 candidate. GitHub 3.0.0 remains the public release; no
-new push, tag, or GitHub release was made by this follow-up. Publish the
-candidate as a new release if requested. Do not alter 3.0.0's published assets.
+Use the signed 3.0.1 candidate. GitHub source is synchronized, while 3.0.0
+remains the public release. Publish the candidate as a new release if
+requested. Do not alter 3.0.0's published assets.
