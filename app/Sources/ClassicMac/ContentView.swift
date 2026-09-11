@@ -185,7 +185,11 @@ struct ContentView: View {
     @ViewBuilder
     private var detail: some View {
         if let id = store.selectedID, store.vms.contains(where: { $0.id == id }) {
-            VMDetailView(vmID: id)
+            VMDetailView(
+                vmID: id,
+                templateOSVersion: store.vms.first { $0.id == id }
+                    .flatMap { VMTemplateMetadata.load(from: $0.folder)?.osVersion }
+            )
                 .id(id)
         } else {
             EmptyStateView(

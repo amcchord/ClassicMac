@@ -1,5 +1,4 @@
 import SwiftUI
-import UniformTypeIdentifiers
 
 struct VMDetailView: View {
     let vmID: UUID
@@ -17,7 +16,7 @@ struct VMDetailView: View {
     private enum SettingsTab: String, CaseIterable, Identifiable {
         case general = "General"
         case display = "Display"
-        case media = "Media & Sharing"
+        case sharing = "Sharing"
         var id: Self { self }
     }
 
@@ -245,11 +244,8 @@ struct VMDetailView: View {
         .accessibilityElement(children: .combine)
     }
 
-    // One entry point for the Media quick action and toolbar. The dedicated
-    // media drawer can replace this destination without changing the home.
     private func showMedia() {
-        settingsTab = .media
-        showingSettings = true
+        MediaController.shared.present(for: vmID)
     }
 
     // MARK: Settings
@@ -294,8 +290,7 @@ struct VMDetailView: View {
                 case .display:
                     viewingSection(vm)
                     displaySection(vm)
-                case .media:
-                    mediaSection(vm)
+                case .sharing:
                     if vm.wrappedValue.machineFamily.supportsSharedFolder {
                         sharedFolderSection(vm)
                     }
@@ -629,109 +624,6 @@ struct VMDetailView: View {
         return choices
     }
 
-    // MARK: Removable media
-
-    @ViewBuilder
-    private func mediaSection(_ vm: Binding<VMConfig>) -> some View {
-        Section {
-            if let cd = vm.wrappedValue.cdImagePath, !cd.isEmpty {
-                LabeledContent("Disc") {
-                    Text(discDisplayName(cd))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                }
-                Toggle("Start up from this disc", isOn: vm.bootFromCD)
-                    .disabled(running)
-                Button("Eject Disc", role: .destructive) {
-                    vm.wrappedValue.cdImagePath = nil
-                    vm.wrappedValue.bootFromCD = false
-                }
-                .disabled(running)
-            } else {
-                LabeledContent("Disc") {
-                    Text("No disc inserted")
-                        .foregroundStyle(.secondary)
-                }
-                Button("Insert Disc\u{2026}") {
-                    chooseISO(vm)
-                }
-                .disabled(running)
-            }
-
-            if AppPaths.toolsCD != nil {
-                Toggle(isOn: vm.toolsCDInserted) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("ClassicMac Tools")
-                        if vm.wrappedValue.toolsCDInserted &&
-                            vm.wrappedValue.machineFamily == .powerMacG4 &&
-                            vm.wrappedValue.bootFromCD &&
-                            vm.wrappedValue.cdImagePath?.isEmpty == false {
-                            Text("ClassicMac Tools waits while this Power Mac starts from an installer disc. Once the installed System Folder is blessed, the next startup uses the hard disk and mounts Tools.")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        } else if vm.wrappedValue.machineFamily == .powerMacG4 {
-                            Text("Mounts automatically at startup. Open GXMetal, run Install GXMetal, restart, then run GXMetal Test before launching games.")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        } else {
-                            Text("Useful classic Mac apps, including StuffIt Expander, Disk Copy, a disc image mounter, and USB Overdrive for Power Macs.")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-                .accessibilityLabel("ClassicMac Tools")
-                .disabled(running)
-            }
-
-            if vm.wrappedValue.machineFamily.supportsFloppyDisk {
-                Divider()
-
-                if let floppy = vm.wrappedValue.floppyImagePath,
-                   !floppy.isEmpty {
-                    LabeledContent("Floppy disk") {
-                        Text(URL(fileURLWithPath: floppy).lastPathComponent)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                    }
-                    Button("Eject Floppy Disk", role: .destructive) {
-                        vm.wrappedValue.floppyImagePath = nil
-                    }
-                    .disabled(running)
-                } else {
-                    LabeledContent("Floppy disk") {
-                        Text("No floppy inserted")
-                            .foregroundStyle(.secondary)
-                    }
-                    Button("Insert Floppy Disk\u{2026}") {
-                        chooseFloppy(vm)
-                    }
-                    .disabled(running)
-                }
-            }
-        } header: {
-            Label("Media", systemImage: "opticaldiscdrive")
-        } footer: {
-            if vm.wrappedValue.bootFromCD &&
-                vm.wrappedValue.cdImagePath?.isEmpty == false {
-                Text("Shut down the virtual Mac before changing removable media. After an installer blesses the hard disk, ClassicMac automatically uses it for the next startup.")
-            } else {
-                Text("Shut down the virtual Mac before changing removable media.")
-            }
-        }
-    }
-
-    // Show the bundled Tools CD under a friendly name instead of a raw
-    // file name.
-    private func discDisplayName(_ path: String) -> String {
-        if let toolsCD = AppPaths.toolsCD, toolsCD.path == path {
-            return "ClassicMac Tools CD"
-        }
-        return URL(fileURLWithPath: path).lastPathComponent
-    }
-
     // MARK: Shared folder
 
     @ViewBuilder
@@ -790,6 +682,13 @@ struct VMDetailView: View {
 
     @ToolbarContentBuilder
     private func toolbar(_ vm: Binding<VMConfig>) -> some ToolbarContent {
+        if vm.wrappedValue.machineFamily == .powerMacG4 {
+            ToolbarItem {
+                GXMetalStatusMenu(config: vm.wrappedValue, isRunning: running,
+                                  isPaused: paused, showTools: showMedia)
+            }
+        }
+
         if running {
             ToolbarItemGroup {
                 Button {
@@ -980,41 +879,4 @@ struct VMDetailView: View {
         }
     }
 
-    private func chooseISO(_ vm: Binding<VMConfig>) {
-        let panel = NSOpenPanel()
-        panel.allowsMultipleSelection = false
-        panel.canChooseDirectories = false
-        panel.allowedContentTypes = isoContentTypes
-        panel.message = "Choose a CD image (.iso, .toast, or .cdr)"
-        if panel.runModal() == .OK, let url = panel.url {
-            vm.wrappedValue.cdImagePath = url.path
-            vm.wrappedValue.bootFromCD = true
-        }
-    }
-
-    private func chooseFloppy(_ vm: Binding<VMConfig>) {
-        let panel = NSOpenPanel()
-        panel.allowsMultipleSelection = false
-        panel.canChooseDirectories = false
-        panel.canChooseFiles = true
-        panel.message = "Choose a raw floppy disk image (.img, .dsk, .ima, or .raw)"
-        panel.prompt = "Insert"
-        if panel.runModal() == .OK, let url = panel.url {
-            vm.wrappedValue.floppyImagePath = url.path
-        }
-    }
-
-    private var isoContentTypes: [UTType] {
-        var types: [UTType] = [.diskImage]
-        if let iso = UTType(filenameExtension: "iso") {
-            types.append(iso)
-        }
-        if let toast = UTType(filenameExtension: "toast") {
-            types.append(toast)
-        }
-        if let cdr = UTType(filenameExtension: "cdr") {
-            types.append(cdr)
-        }
-        return types
-    }
 }

@@ -251,6 +251,7 @@ git -C "$QEMU_DIR" apply "$ROOT_DIR/cocoaui/game-input-handoff.patch" || die "Fa
 # Compact, live GXMetal status and explicit host-to-guest text entry.
 git -C "$QEMU_DIR" apply "$ROOT_DIR/cocoaui/gxmetal-status-menu.patch" || die "Failed to apply GXMetal status menu patch"
 git -C "$QEMU_DIR" apply "$ROOT_DIR/cocoaui/paste-text.patch" || die "Failed to apply paste text menu patch"
+git -C "$QEMU_DIR" apply "$ROOT_DIR/cocoaui/media-drawer.patch" || die "Failed to apply shared media drawer menu patch"
 # Allow a VirtIO block device to start empty, exchange raw media while running,
 # and report capacity changes to the guest driver.
 git -C "$QEMU_DIR" apply "$VIRTIO_DIR/virtio-blk-removable.patch" || die "Failed to apply removable VirtIO block patch"
@@ -389,6 +390,9 @@ git -C "$QEMU_DIR" apply "$GXMETAL_DIR/qemu-integration.patch" || die "Failed to
 # ends automatically even in headless/VNC sessions and at arbitrary supported
 # resolutions. The app keeps a conservative HMP fallback for custom themes.
 git -C "$QEMU_DIR" apply "$POWERMAC_DIR/classicmac-boot-handoff-display.patch" || die "Failed to apply ClassicMac Finder handoff detector"
+# Read actual media state and safely change Quadra removable media without
+# consuming the QMP connection reserved for shutdown/restart events.
+git -C "$QEMU_DIR" apply "$ROOT_DIR/monitor/media-control.patch" || die "Failed to apply ClassicMac media control bridge"
 if [ -f "$PPCVID_DIR/qemu_vga.ndrv" ]; then
   cp "$PPCVID_DIR/qemu_vga.ndrv" "$QEMU_DIR/pc-bios/qemu_vga.ndrv"
 else

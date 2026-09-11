@@ -164,7 +164,21 @@ for qemu in "$PPC_QEMU" "$QUADRA_QEMU"; do
     grep -Fq "$option" <<< "$QEMU_STRINGS" || \
       die "Bundled $(basename "$qemu") lacks Cocoa option $option"
   done
+  if [[ "$VERSION" == 3.* ]]; then
+    for marker in classicmac-media com.classicmac.paste-text com.classicmac.media; do
+      grep -Fq "$marker" <<< "$QEMU_STRINGS" || \
+        die "Bundled $(basename "$qemu") lacks ClassicMac 3 media/text bridge $marker"
+    done
+  fi
 done
+if [[ "$VERSION" == 3.* ]]; then
+  strings "$PPC_QEMU" | grep -F 'gxmetal-status' >/dev/null || \
+    die "Bundled Power Mac QEMU lacks live GXMetal status"
+  for action in /actions/paste-text /actions/media; do
+    grep -Fq "$action" "$APP/Contents/Resources/Browser/viewer.js" || \
+      die "Bundled browser controls lack $action"
+  done
+fi
 grep -q 'pseudoEncodingQEMUPointerTypeChange' "$BROWSER_RFB" || \
   die "Bundled browser client lacks QEMU relative-pointer support"
 grep -q 'Math.floor(fit)' "$BROWSER_SCALE" || \

@@ -21,17 +21,27 @@ struct ClassicMacApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var store = VMStore.shared
     @StateObject private var manager = QEMUManager.shared
+    @State private var showingDownload = false
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            ContentView(downloadMachine: { showingDownload = true })
                 .environmentObject(store)
                 .environmentObject(manager)
                 .frame(minWidth: 820, minHeight: 520)
+                .sheet(isPresented: $showingDownload) {
+                    DownloadMachineSheet { url in
+                        store.openBundle(at: url, autostart: false)
+                    }
+                }
         }
         .windowStyle(.titleBar)
         .commands {
             CommandGroup(replacing: .newItem) {
+                Button("Download Mac OS 9…") {
+                    showingDownload = true
+                }
+
                 Button("New Machine\u{2026}") {
                     store.isPresentingNewVM = true
                 }
