@@ -50,6 +50,10 @@ Start with one tested Mac OS 9 template, preferably 9.2.2, containing matching
 GXMetal components and working display/input defaults. Deliver a compressed
 portable `.classic` machine through a versioned HTTPS catalog.
 
+The implemented first template uses verified **Mac OS 9.2.1** with guest
+**GXMetal 2.3.0**. It is a 57.8 MB download hosted on the authorized mcchord.net
+server. See the [hosting record](operations/classicmac-downloads.md).
+
 Flow: **Download Mac OS 9 → Name your Mac → Start**.
 
 Each import needs a fresh machine identity. Remove source-machine shared-folder
