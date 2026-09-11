@@ -31,7 +31,8 @@
 
 ## New in ClassicMac 3.0
 
-- **Download a ready-to-run Mac OS 9.** Choose **File → Download Mac OS 9**
+- **Download a ready-to-run Mac OS 9.** Choose **File → New Machine** and
+  the recommended **Download Mac OS 9** option
   for a clean Mac OS 9.2.1 machine with GXMetal 2.3.0 already installed.
   Downloads support pause/resume, integrity checks, and a choice of name and
   save location. Each download creates its own independent machine.
@@ -185,9 +186,11 @@ ClassicMac exists because of years of brilliant work by other engineers. The pat
 ## Getting started
 
 1. Grab **ClassicMac.dmg** from the [latest release](../../releases/latest), drag ClassicMac to Applications, and launch it.
-2. For the quickest setup, choose **File → Download Mac OS 9**, name your Mac,
-   choose its location, and download it. The 57.8 MB archive is hosted on
-   mcchord.net and contains Mac OS 9.2.1 with GXMetal 2.3.0 already installed.
+2. Choose **File → New Machine** (⌘N) and continue with the recommended
+   **Download Mac OS 9** option. Name your Mac, choose its location, and
+   download it. The image is hosted on mcchord.net and contains Mac OS 9.2.1
+   with GXMetal 2.3.0 already installed. **File → Download Mac OS 9** also
+   opens the download directly.
 3. Click **Start Mac**. The Mac opens in a native window. To use your browser,
    enable **View in browser** in **Settings → Display** before startup.
 4. Use **Media** to attach discs, or **Settings → Sharing** to select a shared
@@ -195,11 +198,18 @@ ClassicMac exists because of years of brilliant work by other engineers. The pat
 5. On the downloaded Mac, open **ClassicMac Utilities** on Macintosh HD and
    run **GXMetal Test**. The compact GXMetal menu shows activity and guidance.
 
-For a manual installation, click **+ → New Machine** and choose a Quadra 800
+For a manual installation, choose **New Machine → Install from your own
+disc** and choose a Quadra 800
 (System 7.1–8.1) or Power Mac G4 (Mac OS 8.5–9.2.2), RAM, and a virtual disk up
 to 120 GB. Attach your Mac OS install CD image through **Media**, choose it as
 the startup disc, and start the Mac. You can also attach a raw floppy image to
 a Quadra.
+
+New Power Mac disks default to 32 GB. New disks use sparse storage: their
+capacity is available to the classic Mac, while the file on your modern Mac
+starts small and grows as data is written. The download screen shows the
+download size, virtual disk capacity, and initial storage separately. Existing
+machines keep their current disk sizes.
 
 To add GXMetal to a manually installed Mac OS 9 machine, open the automatically
 mounted **ClassicMac Tools** disk, then open **GXMetal**,

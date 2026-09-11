@@ -72,7 +72,7 @@ enum MachineFamily: String, Codable, CaseIterable, Identifiable {
     var defaultDiskSizeGB: Int {
         switch self {
         case .quadra800: return 2
-        case .powerMacG4: return 8
+        case .powerMacG4: return 32
         }
     }
 

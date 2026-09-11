@@ -2,6 +2,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct NewVMSheet: View {
+    var onChooseSetup: (() -> Void)? = nil
     var onCreate: (VMConfig) -> Bool
 
     @Environment(\.dismiss) private var dismiss
@@ -40,6 +41,7 @@ struct NewVMSheet: View {
             footer
         }
         .frame(width: 620, height: 620)
+        .interactiveDismissDisabled(working)
         .overlay {
             if working {
                 workingOverlay
@@ -166,9 +168,9 @@ struct NewVMSheet: View {
                 Label("Hardware", systemImage: "memorychip")
             } footer: {
                 if family == .powerMacG4 {
-                    Text("The disk is thin-provisioned, so it grows as data is written up to the selected capacity. Mac OS 9 is most stable with less than 1 GB of memory, so memory presets stop at 896 MB.")
+                    Text("The disk uses space on your Mac as you add files, up to the selected capacity. Mac OS 9 is most stable with less than 1 GB of memory, so memory presets stop at 896 MB.")
                 } else {
-                    Text("The disk is thin-provisioned, so it grows as data is written up to the selected capacity. Drives over 2 GB require Mac OS 8.1 and HFS Plus.")
+                    Text("The disk uses space on your Mac as you add files, up to the selected capacity. Drives over 2 GB require Mac OS 8.1 and HFS Plus.")
                 }
             }
 
@@ -370,6 +372,9 @@ struct NewVMSheet: View {
                     moveStep(by: -1)
                 }
                 .disabled(working)
+            } else if let onChooseSetup {
+                Button("Back", action: onChooseSetup)
+                    .disabled(working)
             }
 
             Spacer()

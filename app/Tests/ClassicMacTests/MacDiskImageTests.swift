@@ -3,7 +3,7 @@ import XCTest
 
 @MainActor
 final class MacDiskImageTests: XCTestCase {
-    func test120GBRawImageIsThinProvisioned() throws {
+    func testDefaultPowerMacAnd120GBRawImagesAreSparse() throws {
         guard FileManager.default.isExecutableFile(
             atPath: AppPaths.qemuImgBinary.path
         ) else {
@@ -13,20 +13,23 @@ final class MacDiskImageTests: XCTestCase {
             .appendingPathComponent("\(UUID().uuidString).img")
         defer { try? FileManager.default.removeItem(at: url) }
 
-        if case let .failure(message) = QEMUManager.createRawImage(
-            at: url,
-            sizeArgument: "120G"
-        ) {
-            XCTFail(message)
-            return
-        }
+        for capacity in [MachineFamily.powerMacG4.defaultDiskSizeGB, 120] {
+            if case let .failure(message) = QEMUManager.createRawImage(
+                at: url,
+                sizeArgument: "\(capacity)G"
+            ) {
+                XCTFail(message)
+                return
+            }
 
-        let values = try url.resourceValues(forKeys: [
-            .fileSizeKey,
-            .fileAllocatedSizeKey
-        ])
-        XCTAssertEqual(values.fileSize, 120 * 1_024 * 1_024 * 1_024)
-        XCTAssertLessThan(values.fileAllocatedSize ?? .max, 1_024 * 1_024)
+            let values = try url.resourceValues(forKeys: [
+                .fileSizeKey,
+                .fileAllocatedSizeKey
+            ])
+            XCTAssertEqual(values.fileSize, capacity * 1_024 * 1_024 * 1_024)
+            XCTAssertLessThan(values.fileAllocatedSize ?? .max, 1_024 * 1_024)
+            try FileManager.default.removeItem(at: url)
+        }
     }
 
     func testPartitionedHFSVolumeReportsItsBlessing() throws {

@@ -143,3 +143,18 @@
   is a documentation-only follow-up; the release tag remains immutable.
 - Result: requested release work complete. Next: use 3.0 and select further
   roadmap work as needed. Prior v2.3.2 and its assets remain available.
+
+## September 11 — easier setup and 32 GB sparse image follow-up
+
+- Austin requested the working-image download inside New Machine, highlighted
+  as easiest, and sparse new disks with a 32 GB default OS 9 installation.
+- Created root branch `codex/3.0.1-onboarding` from clean main `b0828f0`.
+  Two existing agents have separate contained branches for template geometry
+  and catalog/import storage accounting; root owns wizard integration.
+- Inspection confirmed blank raw disks and downloaded raw disks already use
+  sparse writes. The existing download space check still reserves the full
+  logical size, which needs a separate, enforced initial-allocation budget.
+- The next image needs a real 32 GB partition and filesystem, rather than
+  simply increasing the file length. Existing machines will not be resized.
+- Verification and publication are pending. Published 3.0.0 and the current
+  8 GB archive remain unchanged while the follow-up is prepared.

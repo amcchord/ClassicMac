@@ -13,13 +13,15 @@ struct ContentView: View {
             detail
         }
         .sheet(isPresented: $store.isPresentingNewVM) {
-            NewVMSheet { newConfig in
+            NewMachineWizard(onCreate: { newConfig in
                 if let created = store.createVM(newConfig) {
                     store.selectedID = created.id
                     return true
                 }
                 return false
-            }
+            }, onInstall: { url in
+                store.openBundle(at: url, autostart: false)
+            })
         }
         .alert(
             currentError?.title ?? "Something Went Wrong",
@@ -316,7 +318,7 @@ struct EmptyStateView: View {
         Button {
             showingNewVM = true
         } label: {
-            Label(downloadMachine == nil ? "New Machine" : "Create a Custom Mac", systemImage: "plus")
+            Label("New Machine", systemImage: "plus")
         }
     }
 
