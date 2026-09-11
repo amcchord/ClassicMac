@@ -11,6 +11,7 @@ and application files have been reviewed for distribution.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -34,6 +35,11 @@ APPLE_MENU_ITEMS = (
     "Key Caps", "Network Browser", "Sherlock 2", "Stickies",
 )
 APPLICATIONS = ("SimpleText", "Graphing Calculator")
+GRAPHICS_EXTENSIONS = (
+    "QuickDraw™ 3D", "QuickDraw™ 3D IR", "QuickDraw™ 3D RAVE",
+    "QuickDraw™ 3D Viewer", "QD3DCustomElements", "OpenGLEngine",
+    "OpenGLLibrary", "OpenGLMemory", "OpenGLRenderer", "OpenGLUtility",
+)
 
 
 def run(*args: str) -> str:
@@ -115,18 +121,78 @@ def bless_hfsplus(image: Path, start: int, size: int, folder_id: int) -> None:
         os.fsync(f.fileno())
 
 
+def retain_classic_wrapper(source: Path, image: Path) -> None:
+    """Keep the classic boot wrapper around the newly created filesystem.
+
+    OS 9's boot path needs the legacy wrapper supplied by Drive Setup. Only
+    its outer boot records are reused, never the embedded source filesystem.
+    """
+    source_start, _ = partition(source)
+    with source.open("rb") as original:
+        original.seek(source_start + 1024)
+        wrapper = original.read(512)
+        if wrapper[:2] != b"BD" or wrapper[124:126] != b"H+":
+            raise ValueError("Source must contain a classic HFS Plus boot wrapper")
+        block_size = struct.unpack_from(">I", wrapper, 20)[0]
+        allocation_start = struct.unpack_from(">H", wrapper, 28)[0] * 512
+        embedded_start, embedded_blocks = struct.unpack_from(">HH", wrapper, 126)
+        start = source_start + allocation_start + embedded_start * block_size
+        length = embedded_blocks * block_size
+        tail = start + length
+        if start > 16 * 1024 ** 2 or not 0 <= source.stat().st_size - tail < 16 * 1024 ** 2:
+            raise ValueError("Unexpectedly large classic wrapper")
+        payload_start, _ = partition(image)
+        with image.open("rb") as payload:
+            payload.seek(payload_start + 1024)
+            header = payload.read(512)
+            payload_size = struct.unpack_from(">I", header, 40)[0] * struct.unpack_from(">I", header, 44)[0]
+            if header[:2] != b"H+" or payload_size > length:
+                raise ValueError("New filesystem does not fit the classic wrapper")
+            temporary = image.with_name(".wrapped-disk.img")
+            with temporary.open("xb") as output:
+                original.seek(0)
+                output.write(original.read(start))
+                payload.seek(payload_start)
+                remaining = payload_size
+                while remaining:
+                    chunk = payload.read(min(1024 ** 2, remaining))
+                    if not chunk:
+                        raise ValueError("Truncated new filesystem")
+                    if chunk.count(0) == len(chunk):
+                        output.seek(len(chunk), 1)
+                    else:
+                        output.write(chunk)
+                    remaining -= len(chunk)
+                # The embedded extent defines where the classic driver looks
+                # for the alternate HFS+ header. The modern formatter's
+                # allocation-block count can be slightly shorter than its
+                # partition, and this fresh filesystem can be smaller than
+                # the retained wrapper's embedded extent. Copy the fresh,
+                # blessed header to that extent's actual final two sectors;
+                # copying only payload_size omits it and OS 9 stays black.
+                output.seek(tail - 1024)
+                output.write(header)
+                original.seek(tail)
+                output.seek(tail)
+                output.write(original.read())
+                output.truncate(source.stat().st_size)
+            temporary.replace(image)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("source", type=Path)
     parser.add_argument("output", type=Path, help="New .classic package")
     parser.add_argument("--guest-dir", type=Path, default=Path(__file__).resolve().parents[1] / "gxmetal/guest/bin")
+    parser.add_argument("--graphics-source", type=Path,
+                        help="Read-only OS 9 image containing the complete Apple QuickDraw 3D/OpenGL components")
     args = parser.parse_args()
     source, output = args.source.resolve(), args.output.resolve()
     if output.exists() or output.suffix != ".classic":
         parser.error("Output must be a new .classic package")
     start, size = partition(source)
     source_before = (source.stat().st_size, source.stat().st_mtime_ns)
-    source_device = target_device = None
+    source_device = target_device = graphics_device = None
     output.mkdir(parents=True)
     disk = output / "disk.img"
     inventory = []
@@ -174,6 +240,26 @@ def main() -> None:
         for name in ("Desktop Folder", "Documents", "Trash"):
             (target_root / name).mkdir(exist_ok=True)
 
+        graphics_root = source_root
+        if args.graphics_source:
+            graphics_device, graphics_volume = attach(args.graphics_source.resolve(), True)
+            run("diskutil", "mount", "readOnly", graphics_volume)
+            graphics_root = mounted_path(graphics_volume)
+        graphics_inventory = []
+        for name in GRAPHICS_EXTENSIONS:
+            origin = graphics_root / "System Folder/Extensions" / name
+            if not origin.is_file() or origin.is_symlink():
+                raise ValueError(f"Missing Apple graphics component {name}; supply a complete --graphics-source")
+            resource = Path(str(origin) + "/..namedfork/rsrc").read_bytes()
+            if b"Apple Computer" not in resource:
+                raise ValueError(f"Expected an Apple-supplied system component: {name}")
+            copy_item(origin, target_root / "System Folder/Extensions" / name)
+            graphics_inventory.append({
+                "name": name,
+                "dataSHA256": hashlib.sha256(origin.read_bytes()).hexdigest(),
+                "resourceSHA256": hashlib.sha256(resource).hexdigest(),
+            })
+
         guest = args.guest_dir.resolve()
         for source_name, destination_name in (
             ("GXMetal", "GXMetal"), ("GXMetal Input", "GXMetal Input"),
@@ -207,13 +293,14 @@ def main() -> None:
         target_device = None
         start, size = partition(disk)
         bless_hfsplus(disk, start, size, folder_id)
+        retain_classic_wrapper(source, disk)
         config = {
             "id": str(uuid.uuid4()), "name": f"Mac OS {os_version}",
             "machineFamily": "powerMacG4", "ramMB": 512,
             "diskImageName": "disk.img", "pramImageName": "pram.img",
             "diskSizeGB": source.stat().st_size // (1024 ** 3),
             "width": 1024, "height": 768, "depth": 16,
-            "useEnhancedFramebuffer": True, "customResolution": False,
+            "useEnhancedFramebuffer": False, "customResolution": False,
             "useBrowserDisplay": False, "bootFromCD": False,
             "toolsCDInserted": True, "toolsDeliveryVersion": 1,
             "networking": True, "sound": True, "useG4CPU": True,
@@ -225,10 +312,11 @@ def main() -> None:
             "copiedSystemItems": inventory, "systemFolderCNID": folder_id,
             "preferencesCopied": False, "documentsCopied": False,
             "sourceFreeSpaceCopied": False,
+            "appleGraphicsComponents": graphics_inventory,
         }, indent=2) + "\n")
         print(f"Prepared {output} (Mac OS {os_version}); runtime validation required.")
     finally:
-        for device in (target_device, source_device):
+        for device in (target_device, graphics_device, source_device):
             if device:
                 subprocess.run(["diskutil", "eject", device], check=False,
                                stdout=subprocess.DEVNULL)
