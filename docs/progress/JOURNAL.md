@@ -58,3 +58,43 @@
   mcchord.net document root. Server hash/size, HTTPS, and byte-range checks
   passed. Paths, hash, and rollback instructions are in the hosting record.
   No existing site files, server configuration, or DNS records changed.
+
+## September 10 — 3.0 build and validation complete
+
+- All five selected features are implemented on `codex/3.0-integration`.
+  Runtime source ends at `b24244d`; subsequent commits record publication and
+  validation. The roadmap preserves its original numbering and now marks the
+  five selected items implemented.
+- Final integrated Swift suite: 97 tests, zero failures/skips. GXMetal host
+  suite: 13 native executables, including actual Metal execution, and 83 Python
+  test cases passed. The earlier journal's "assertions grouped as test cases"
+  wording refers to these 83 test cases. Both QEMU engines rebuilt with their
+  transport checks; packaging/template helper tests and syntax checks passed.
+- Actual public HTTPS download, checksum, Swift import, sparse allocation,
+  identity/path sanitization, Finder startup, idle/input, clean guest shutdown,
+  and full GXMetal 2.3.0 conformance passed with the final bundle. Archived and
+  imported disk payloads remained identical. Final media repeat: 18 checks,
+  zero failures, including actual OS 8.1 floppy writes and safe acknowledged
+  eject; original source hashes were unchanged.
+- Final native/browser UI checks verified the live download flow, machine
+  home, provenance, settings, media/paste entry points, accented and multiline
+  text in SimpleText, cancellation, paused controls, and neutral paused/stopped
+  GXMetal status. Disposable UI machines were shut down and removed using
+  Remove from Library; evidence files and the three original entries remain.
+- Game qualification completed 13 bounded scenarios across 10 games, with
+  nonzero direct frames and no fallback, queue, or transport faults. Historical
+  HAVOC setup and input-timing assumptions required a controlled saved-hardware
+  fixture and settle delay; failed attempts and unchanged assertions remain in
+  evidence. Menu-only, existing visual, audio/network, and lifecycle limits
+  are explicit in `docs/3.0-validation.md`. No product source changed for the
+  final game qualification.
+- Apple accepted app and DMG notarization; stapling, Gatekeeper, mounted DMG
+  release checks, and genuine macOS 15 library minimums passed. Runtime tests
+  used this macOS 26 host; no physical macOS 15 execution claim. Retained
+  installer: `artifacts/ClassicMac-3.0.0.dmg`, SHA-256
+  `c86e40e20c6643f17d09fce0a7c7158228eb1bb246f5ee98a170ac1ee6ba8978`.
+- Production state: the configured OS 9 archive/catalog are live on mcchord.net;
+  no further server changes. GitHub main remains `f763917` (2.3.2), and 3.0 has
+  not been pushed or released there. The installed 2.3.1 app and pre-existing
+  iPad work were preserved. Next: try the notarized candidate and decide on
+  publication or the next roadmap items.

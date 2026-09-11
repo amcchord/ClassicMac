@@ -1,7 +1,7 @@
 # Paste Text into Mac
 
 ClassicMac 3.0 provides an explicit one-way text entry action in the app's
-Machine menu, the native guest window's Machine menu, and the browser toolbar.
+Machine menu, the native guest window's Mac menu, and the browser toolbar.
 The app shortcut is Command-Shift-V. The native guest menu has no shortcut, so
 the guest's Command-V and Command-Shift-V keep their existing behavior.
 
