@@ -4,6 +4,9 @@ import Darwin
 // Minimal client for QEMU's human monitor protocol (HMP) over a unix socket.
 // Used to send fire-and-forget control commands like stop / cont / system_reset.
 enum HMPClient {
+    // QEMU's character monitor accepts one connection at a time. Serialize
+    // status, preview, paste and lifecycle requests so they cannot collide.
+    private static let connectionLock = NSLock()
     private static let prompt = Data("(qemu) ".utf8)
 
     private static func connectedSocket(_ socketPath: String) -> Int32? {
@@ -69,6 +72,8 @@ enum HMPClient {
     // prompt. This is used for screendump, whose output file is complete when
     // the response arrives, and for the startup-clock handoff.
     static func command(_ command: String, socketPath: String) -> String? {
+        connectionLock.lock()
+        defer { connectionLock.unlock() }
         guard let fd = connectedSocket(socketPath) else { return nil }
         defer { close(fd) }
         guard receivePrompt(fd) != nil else { return nil }
@@ -94,6 +99,8 @@ enum HMPClient {
 
     @discardableResult
     static func send(_ command: String, socketPath: String) -> Bool {
+        connectionLock.lock()
+        defer { connectionLock.unlock() }
         guard let fd = connectedSocket(socketPath) else { return false }
         defer { close(fd) }
 

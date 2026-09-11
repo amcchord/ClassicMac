@@ -1,0 +1,68 @@
+--- a/ui/cocoa.m
++++ b/ui/cocoa.m
+@@ -134,6 +134,7 @@
+ static NSMenuItem *floppy_insert_menu_item;
+ static NSMenuItem *floppy_eject_menu_item;
+ static NSMenuItem *input_helpers_menu_item;
++static NSMenuItem *paste_text_menu_item;
+ static NSString *classicmac_disc_drive;
+ static NSString *classicmac_floppy_drive;
+ static bool classicmac_floppy_eject_pending;
+@@ -1634,6 +1635,7 @@
+ - (void)displayPause;
+ - (void)removePause;
+ - (void)forceQuitFrontmostGuestApp:(id)sender;
++- (void)pasteTextIntoGuest:(id)sender;
+ - (void)restartQEMU:(id)sender;
+ - (void)powerDownQEMU:(id)sender;
+ - (void)ejectDeviceMedia:(id)sender;
+@@ -2042,6 +2044,26 @@
+         qkbd_state_key_event(kbd, Q_KEY_CODE_ALT, false);
+         qkbd_state_key_event(kbd, Q_KEY_CODE_META_L, false);
+     });
++}
++
++/* Opens ClassicMac's review dialog; this never sends clipboard input itself.
++ * Keep this menu-only here so the guest retains every Command-V shortcut. */
++- (void)pasteTextIntoGuest:(id)sender
++{
++    const char *machineID = getenv("CLASSICMAC_VM_ID");
++    if (!machineID || !bool_with_bql(^{ return runstate_is_running(); })) {
++        return;
++    }
++    NSString *identifier = [NSString stringWithUTF8String:machineID];
++    if (![[[NSUUID alloc] initWithUUIDString:identifier] autorelease]) {
++        return;
++    }
++    [cocoaView ungrabMouse];
++    [cocoaView raiseAllKeys];
++    [cocoaView raiseAllButtons];
++    [[NSDistributedNotificationCenter defaultCenter]
++        postNotificationName:@"com.classicmac.paste-text"
++                      object:identifier userInfo:nil deliverImmediately:YES];
+ }
+ 
+ /* Restarts QEMU */
+@@ -2206,6 +2228,9 @@
+ 
+ - (void)refreshMediaMenuItems
+ {
++    const char *pasteMachineID = getenv("CLASSICMAC_VM_ID");
++    [paste_text_menu_item setEnabled:pasteMachineID && pasteMachineID[0] &&
++        bool_with_bql(^{ return runstate_is_running(); })];
+     __block bool toolsInserted = false;
+     __block bool discInserted = false;
+     __block bool floppyInserted = false;
+@@ -2360,6 +2385,12 @@
+     [menu addItem: menuItem];
+     [menuItem setEnabled: NO];
+     [menu addItem: [NSMenuItem separatorItem]];
++    paste_text_menu_item = [[[NSMenuItem alloc]
++        initWithTitle:@"Paste Text into Mac…"
++               action:@selector(pasteTextIntoGuest:)
++        keyEquivalent:@""] autorelease];
++    [paste_text_menu_item setToolTip:@"Review and type plain text from this Mac's clipboard"];
++    [menu addItem:paste_text_menu_item];
+     [menu addItem: [[[NSMenuItem alloc]
+         initWithTitle: @"Force Quit Frontmost App…"
+                 action: @selector(forceQuitFrontmostGuestApp:)

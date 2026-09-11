@@ -5,6 +5,10 @@ import AppKit
 // WindowGroup does not deliver these on its own, so we bridge through an AppKit
 // delegate that forwards to the shared store.
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        PasteTextController.shared.startListening()
+    }
+
     func application(_ application: NSApplication, open urls: [URL]) {
         for url in urls where url.pathExtension == VMConfig.packageExtension {
             VMStore.shared.openBundle(at: url, autostart: true)
@@ -107,6 +111,12 @@ private struct MachineCommands: View {
         .disabled(!running)
 
         Divider()
+
+        Button("Paste Text into Mac…") {
+            if let vm = vm { PasteTextController.shared.present(for: vm.id) }
+        }
+        .keyboardShortcut("v", modifiers: [.command, .shift])
+        .disabled(!running || paused)
 
         Button("Force Quit Frontmost App…") {
             if let vm = vm {

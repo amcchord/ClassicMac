@@ -70,6 +70,7 @@ final class BrowserDisplayServer: @unchecked Sendable {
     private let assetRoot: URL
     private let configurationData: Data
     private let indexData: Data
+    private let actionToken = UUID().uuidString
 
     static func start(for config: VMConfig) throws -> BrowserDisplayServer {
         let webSocketPort = try availableTCPPort()
@@ -127,6 +128,7 @@ final class BrowserDisplayServer: @unchecked Sendable {
                 of: "__CLASSICMAC_INPUT_HELPERS__",
                 with: classicInputHelpers ? "true" : "false"
             )
+            .replacingOccurrences(of: "__CLASSICMAC_ACTION_TOKEN__", with: actionToken)
         self.indexData = Data(renderedIndex.utf8)
 
         let parameters = NWParameters.tcp
@@ -205,6 +207,31 @@ final class BrowserDisplayServer: @unchecked Sendable {
         BrowserHTTPRequest(connection: connection, server: self).start(on: queue)
     }
 
+    /// This capability opens a local review window only. It never accepts text
+    /// or sends guest input. Require both the per-run token and exact origin;
+    /// a web page elsewhere must not be able to inspect the host clipboard.
+    fileprivate func pasteTextResponse(headers: [String: String], openWindow: Bool) async -> BrowserHTTPResponse {
+        let origin = "http://127.0.0.1:\(url.port!)"
+        guard headers["origin"] == origin,
+              headers["x-classicmac-action"] == actionToken else {
+            return textResponse(status: 403, reason: "Forbidden", text: "Reopen the display from ClassicMac.")
+        }
+        let opened = await MainActor.run {
+            guard QEMUManager.shared.isRunning(endpoint.vmID),
+                  !QEMUManager.shared.isPaused(endpoint.vmID) else { return false }
+            if openWindow { PasteTextController.shared.present(for: endpoint.vmID) }
+            return true
+        }
+        if !openWindow {
+            return BrowserHTTPResponse(status: 200, reason: "OK", contentType: "application/json",
+                                       body: Data("{\"canPaste\":\(opened)}".utf8),
+                                       contentSecurityPolicy: contentSecurityPolicy)
+        }
+        return opened
+            ? textResponse(status: 202, reason: "Accepted", text: "Review the text in ClassicMac, then choose Paste Text.")
+            : textResponse(status: 409, reason: "Conflict", text: "Resume or start the Mac in ClassicMac before pasting.")
+    }
+
     fileprivate func response(for method: String, target: String) -> BrowserHTTPResponse {
         guard method == "GET" || method == "HEAD" else {
             return textResponse(status: 405, reason: "Method Not Allowed", text: "Method not allowed")
@@ -253,7 +280,7 @@ final class BrowserDisplayServer: @unchecked Sendable {
 
     private var contentSecurityPolicy: String {
         "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; " +
-        "connect-src ws://127.0.0.1:\(endpoint.webSocketPort); " +
+        "connect-src 'self' ws://127.0.0.1:\(endpoint.webSocketPort); " +
         "img-src 'self' data: blob:; worker-src 'self' blob:; object-src 'none'; " +
         "base-uri 'none'; frame-ancestors 'none'"
     }
@@ -433,6 +460,22 @@ private final class BrowserHTTPRequest: @unchecked Sendable {
 
         guard let server else {
             connection.cancel()
+            return
+        }
+        if parts[0] == "POST", ["/actions/paste-text", "/actions/paste-text-state"].contains(parts[1]) {
+            var headers: [String: String] = [:]
+            for line in request.components(separatedBy: "\r\n").dropFirst() {
+                if line.isEmpty { break }
+                let pair = line.split(separator: ":", maxSplits: 1, omittingEmptySubsequences: false)
+                guard pair.count == 2 else { sendBadRequest(); return }
+                let key = pair[0].lowercased()
+                guard headers[key] == nil else { sendBadRequest(); return }
+                headers[key] = pair[1].trimmingCharacters(in: .whitespaces)
+            }
+            Task {
+                let response = await server.pasteTextResponse(headers: headers, openWindow: parts[1] == "/actions/paste-text")
+                send(response.serialized(headOnly: false))
+            }
             return
         }
         let response = server.response(for: parts[0], target: parts[1])

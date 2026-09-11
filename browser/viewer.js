@@ -10,6 +10,7 @@ const captureButton = document.getElementById("capture");
 const scaleButton = document.getElementById("scale");
 const fullScreenButton = document.getElementById("fullscreen");
 const escapeButton = document.getElementById("escape");
+const pasteTextButton = document.getElementById("paste-text");
 const modifierButtons = [...document.querySelectorAll("button.modifier")];
 const waitingTitle = "Waiting for the Mac…";
 const waitingDetail =
@@ -22,6 +23,24 @@ let relativePointer = false;
 let scaleViewport = true;
 let pageClosing = false;
 let connected = false;
+let pasteStateTimer;
+
+async function refreshPasteAvailability() {
+  clearTimeout(pasteStateTimer);
+  if (!connected || pageClosing) { pasteTextButton.disabled = true; return; }
+  try {
+    const response = await fetch("./actions/paste-text-state", {
+      method: "POST",
+      headers: { "X-ClassicMac-Action": configuration.actionToken },
+      credentials: "omit",
+    });
+    const state = response.ok ? await response.json() : {};
+    pasteTextButton.disabled = !connected || !state.canPaste;
+  } catch {
+    pasteTextButton.disabled = true;
+  }
+  if (connected && !pageClosing) pasteStateTimer = setTimeout(refreshPasteAvailability, 1500);
+}
 
 function setMessage(title, detail, visible = true) {
   if (messageTitle.textContent !== title) messageTitle.textContent = title;
@@ -110,6 +129,7 @@ function connect() {
 
     rfb.addEventListener("connect", () => {
       connected = true;
+      refreshPasteAvailability();
       setStatus("Connected", "connected");
       setMessage("", "", false);
       rfb.focus();
@@ -136,6 +156,8 @@ function connect() {
       }
       rfb = undefined;
       connected = false;
+      pasteTextButton.disabled = true;
+      clearTimeout(pasteStateTimer);
       relativePointer = false;
       updatePointerControls();
       if (!pageClosing) {
@@ -195,6 +217,27 @@ escapeButton.addEventListener("click", () => {
   rfb?.focus();
 });
 
+pasteTextButton.addEventListener("click", async () => {
+  if (!connected) return;
+  releaseToolbarModifiers();
+  rfb?.blur();
+  if (document.pointerLockElement) document.exitPointerLock();
+  pasteTextButton.disabled = true;
+  try {
+    const response = await fetch("./actions/paste-text", {
+      method: "POST",
+      headers: { "X-ClassicMac-Action": configuration.actionToken },
+      credentials: "omit",
+    });
+    const detail = await response.text();
+    setStatus(detail, response.ok ? "connected" : "attention");
+  } catch {
+    setStatus("Open Machine → Paste Text into Mac in ClassicMac.", "attention");
+  } finally {
+    refreshPasteAvailability();
+  }
+});
+
 for (const button of modifierButtons) {
   button.setAttribute("aria-pressed", "false");
   button.addEventListener("click", () => {
@@ -211,6 +254,7 @@ window.addEventListener("blur", releaseToolbarModifiers);
 window.addEventListener("beforeunload", () => {
   pageClosing = true;
   clearTimeout(reconnectTimer);
+  clearTimeout(pasteStateTimer);
   releaseToolbarModifiers();
   rfb?.disconnect();
 });
@@ -219,6 +263,7 @@ try {
   configuration = {
     machineName: document.querySelector('meta[name="classicmac-machine-name"]')?.content,
     webSocketURL: document.querySelector('meta[name="classicmac-websocket-url"]')?.content,
+    actionToken: document.querySelector('meta[name="classicmac-action-token"]')?.content,
     classicInputHelpers:
       document.querySelector('meta[name="classicmac-input-helpers"]')?.content === "true",
   };
