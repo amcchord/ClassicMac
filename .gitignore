@@ -34,6 +34,12 @@ DerivedData/
 __pycache__/
 tools/os9-install-harness/shots/
 
+# Contained parallel checkouts and local integration artifacts
+worktrees/
+output/
+scratch/
+tmp/
+
 # GXMetal native-test and cross-compiled intermediate products
 gxmetal/build/
 gxmetal/guest/bin/
