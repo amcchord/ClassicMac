@@ -17,10 +17,14 @@ and validate the integrated macOS 3.0 candidate.
 
 ## Current phase
 
-Feature implementation and hosting investigation. Three features can run
-alongside the coordinator; the remaining two will start as slots free up.
+Integration and runtime qualification. Download, GXMetal status, and paste
+text are committed on the integration branch. Home and media are finishing
+their independent checks. The existing static hosting location is verified.
 
 ## Next action
 
-Dispatch download, GXMetal status, and paste-text agents; confirm hosting
-paths and a suitable clean guest template while preparing integration.
+Connect the final UI hooks, rebuild both emulation engines, and validate the
+exact 3.0 app. Finish the fresh OS 9 filesystem's boot qualification before
+publishing its immutable archive and catalog. Run the app, host graphics,
+transport, guest conformance, media/paste/status, and packaging checks, then
+record any remaining limits.
