@@ -36,6 +36,7 @@ tools/os9-install-harness/shots/
 
 # Contained parallel checkouts and local integration artifacts
 worktrees/
+artifacts/
 output/
 scratch/
 tmp/
