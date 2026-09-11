@@ -19,6 +19,7 @@ import plistlib
 import re
 import struct
 import subprocess
+import tempfile
 import uuid
 
 
@@ -121,37 +122,156 @@ def bless_hfsplus(image: Path, start: int, size: int, folder_id: int) -> None:
         os.fsync(f.fileno())
 
 
-def retain_classic_wrapper(source: Path, image: Path) -> None:
-    """Keep the classic boot wrapper around the newly created filesystem.
+def wrapper_geometry(source: Path, capacity_bytes: int) -> dict[str, int]:
+    """Scale Drive Setup's HFS boot wrapper without changing its block IDs.
 
-    OS 9's boot path needs the legacy wrapper supplied by Drive Setup. Only
-    its outer boot records are reused, never the embedded source filesystem.
+    HFS uses 16-bit allocation block numbers. Keeping those IDs and scaling
+    the allocation block size preserves its boot files and bad-block extent,
+    while the independently formatted HFS+ volume gets the requested space.
+    See Apple TN1150, HFS Wrapper (drAlBlkSiz and drEmbedExtent).
     """
-    source_start, _ = partition(source)
+    source_start, source_size = partition(source)
     with source.open("rb") as original:
         original.seek(source_start + 1024)
         wrapper = original.read(512)
-        if wrapper[:2] != b"BD" or wrapper[124:126] != b"H+":
-            raise ValueError("Source must contain a classic HFS Plus boot wrapper")
-        block_size = struct.unpack_from(">I", wrapper, 20)[0]
-        allocation_start = struct.unpack_from(">H", wrapper, 28)[0] * 512
-        embedded_start, embedded_blocks = struct.unpack_from(">HH", wrapper, 126)
-        start = source_start + allocation_start + embedded_start * block_size
-        length = embedded_blocks * block_size
-        tail = start + length
-        if start > 16 * 1024 ** 2 or not 0 <= source.stat().st_size - tail < 16 * 1024 ** 2:
-            raise ValueError("Unexpectedly large classic wrapper")
+    if wrapper[:2] != b"BD" or wrapper[124:126] != b"H+":
+        raise ValueError("Source must contain a classic HFS Plus boot wrapper")
+    old_block_size = struct.unpack_from(">I", wrapper, 20)[0]
+    allocation_start = struct.unpack_from(">H", wrapper, 28)[0] * 512
+    total_blocks = struct.unpack_from(">H", wrapper, 18)[0]
+    embedded_start, embedded_blocks = struct.unpack_from(">HH", wrapper, 126)
+    trailing_sectors = (source.stat().st_size - source_start - source_size) // 512
+    if (not 0 < old_block_size <= 1024 ** 2 or old_block_size % 4096 or
+            not 0 < allocation_start <= 65536 or not 0 < embedded_start <= 16 or
+            embedded_start + embedded_blocks != total_blocks or
+            not 2 <= trailing_sectors <= 32768 or capacity_bytes % 512):
+        raise ValueError("Unsupported classic wrapper geometry")
+    partition_size = capacity_bytes - source_start - trailing_sectors * 512
+    # Leave room for the HFS alternate MDB and align HFS+ allocations to 4 KiB.
+    block_size = ((partition_size - allocation_start - 1024) // total_blocks) // 4096 * 4096
+    if block_size < old_block_size or block_size > 4 * 1024 ** 2:
+        raise ValueError("Requested capacity cannot preserve this boot wrapper")
+    start = source_start + allocation_start + embedded_start * block_size
+    length = embedded_blocks * block_size
+    return dict(source_start=source_start, partition_size=partition_size,
+                allocation_start=allocation_start, old_block_size=old_block_size,
+                block_size=block_size, embedded_start=embedded_start,
+                embedded_blocks=embedded_blocks, start=start, length=length,
+                capacity_bytes=capacity_bytes)
+
+
+def partition_prefix(source: Path, capacity_bytes: int, hfs_size: int) -> bytes:
+    """Copy only driver partitions, updating the APM and final free extent."""
+    start, _ = partition(source)
+    if not 4 * 1024 ** 2 <= hfs_size < capacity_bytes - start or hfs_size % 512:
+        raise ValueError("Invalid target HFS partition size")
+    with source.open("rb") as file:
+        prefix = bytearray(file.read(start))
+    struct.pack_into(">I", prefix, 4, capacity_bytes // 512)
+    count = struct.unpack_from(">I", prefix, 512 + 4)[0]
+    found_hfs = found_free = False
+    for index in range(1, count + 1):
+        offset = index * 512
+        kind = prefix[offset + 48:offset + 80].split(b"\0", 1)[0]
+        entry_start = struct.unpack_from(">I", prefix, offset + 8)[0] * 512
+        if kind == b"Apple_HFS":
+            if found_hfs or entry_start != start:
+                raise ValueError("Expected one HFS partition")
+            found_hfs = True
+            struct.pack_into(">I", prefix, offset + 12, hfs_size // 512)
+            struct.pack_into(">I", prefix, offset + 84, hfs_size // 512)
+        elif entry_start >= start:
+            if kind != b"Apple_Free" or found_free:
+                raise ValueError("Unexpected partition after source filesystem")
+            found_free = True
+            free_start = (start + hfs_size) // 512
+            free_blocks = capacity_bytes // 512 - free_start
+            struct.pack_into(">II", prefix, offset + 8, free_start, free_blocks)
+            struct.pack_into(">I", prefix, offset + 84, free_blocks)
+    if not found_hfs or not found_free:
+        raise ValueError("Expected an HFS partition and trailing free partition")
+    return bytes(prefix)
+
+
+def resize_wrapper_catalog(data: bytes, old_size: int, new_size: int) -> bytes:
+    """Update physical fork lengths after relocating the wrapper's blocks."""
+    result = bytearray(data)
+    node_size = struct.unpack_from(">H", data, 32)[0]
+    if node_size != 512 or len(data) % node_size:
+        raise ValueError("Unsupported HFS wrapper catalog")
+    allowed = {b"Finder", b"System", b"Where_have_all_my_files_gone?",
+               b"Desktop DB", b"Desktop DF"}
+    seen = set()
+    for offset in range(0, len(data), node_size):
+        if data[offset + 8] != 0xff:  # Leaf node.
+            continue
+        records = struct.unpack_from(">H", data, offset + 10)[0]
+        if records > 30:
+            raise ValueError("Invalid HFS wrapper catalog node")
+        for record in range(records):
+            relative = struct.unpack_from(">H", data, offset + node_size - 2 * (record + 1))[0]
+            key = offset + relative
+            if not 14 <= relative < node_size - 8:
+                raise ValueError("Invalid HFS wrapper catalog record")
+            body = (key + 1 + data[key] + 1) & ~1
+            if body + 102 > offset + node_size:
+                raise ValueError("Truncated HFS wrapper catalog record")
+            if data[body:body + 2] != b"\x02\x00":
+                continue
+            name = data[key + 7:key + 7 + data[key + 6]]
+            if name not in allowed or name in seen:
+                raise ValueError("Unexpected file in HFS boot wrapper")
+            seen.add(name)
+            for physical in (30, 40):
+                length = struct.unpack_from(">I", data, body + physical)[0]
+                if length % old_size:
+                    raise ValueError("Unaligned HFS wrapper physical fork length")
+                struct.pack_into(">I", result, body + physical, length // old_size * new_size)
+    if seen != allowed:
+        raise ValueError("Missing standard HFS boot wrapper files")
+    return bytes(result)
+
+
+def retain_classic_wrapper(source: Path, image: Path) -> None:
+    """Rebuild a resized boot wrapper around the new, sparse HFS+ filesystem."""
+    layout = wrapper_geometry(source, image.stat().st_size)
+    source_start = layout["source_start"]
+    old_block_size, block_size = layout["old_block_size"], layout["block_size"]
+    allocation = source_start + layout["allocation_start"]
+    start, length = layout["start"], layout["length"]
+    with source.open("rb") as original, image.open("rb") as payload:
+        original.seek(source_start)
+        wrapper_prefix = bytearray(original.read(layout["allocation_start"]))
+        wrapper = bytearray(wrapper_prefix[1024:1536])
+        for field in (20, 24, 74, 78):
+            old_value = struct.unpack_from(">I", wrapper, field)[0]
+            if old_value % old_block_size:
+                raise ValueError("Unexpected HFS wrapper clump size")
+            struct.pack_into(">I", wrapper, field, old_value // old_block_size * block_size)
+        wrapper_prefix[1024:1536] = wrapper
         payload_start, _ = partition(image)
-        with image.open("rb") as payload:
-            payload.seek(payload_start + 1024)
-            header = payload.read(512)
-            payload_size = struct.unpack_from(">I", header, 40)[0] * struct.unpack_from(">I", header, 44)[0]
-            if header[:2] != b"H+" or payload_size > length:
-                raise ValueError("New filesystem does not fit the classic wrapper")
-            temporary = image.with_name(".wrapped-disk.img")
-            with temporary.open("xb") as output:
-                original.seek(0)
-                output.write(original.read(start))
+        payload.seek(payload_start + 1024)
+        header = payload.read(512)
+        payload_size = struct.unpack_from(">I", header, 40)[0] * struct.unpack_from(">I", header, 44)[0]
+        if header[:2] != b"H+" or payload_size > length:
+            raise ValueError("New filesystem does not fit the classic wrapper")
+        catalog_start, catalog_blocks = struct.unpack_from(">HH", wrapper, 150)
+        if catalog_blocks != 1 or catalog_start >= layout["embedded_start"]:
+            raise ValueError("Unsupported HFS wrapper catalog extent")
+        descriptor, temporary_name = tempfile.mkstemp(prefix=".wrapped-disk-", suffix=".img", dir=image.parent)
+        temporary = Path(temporary_name)
+        try:
+            with os.fdopen(descriptor, "wb") as output:
+                output.write(partition_prefix(source, layout["capacity_bytes"], layout["partition_size"]))
+                output.write(wrapper_prefix)
+                for block in range(layout["embedded_start"]):
+                    original.seek(allocation + block * old_block_size)
+                    data = original.read(old_block_size)
+                    if block == catalog_start:
+                        data = resize_wrapper_catalog(data, old_block_size, block_size)
+                    output.seek(allocation + block * block_size)
+                    output.write(data)
+                output.seek(start)
                 payload.seek(payload_start)
                 remaining = payload_size
                 while remaining:
@@ -163,20 +283,18 @@ def retain_classic_wrapper(source: Path, image: Path) -> None:
                     else:
                         output.write(chunk)
                     remaining -= len(chunk)
-                # The embedded extent defines where the classic driver looks
-                # for the alternate HFS+ header. The modern formatter's
-                # allocation-block count can be slightly shorter than its
-                # partition, and this fresh filesystem can be smaller than
-                # the retained wrapper's embedded extent. Copy the fresh,
-                # blessed header to that extent's actual final two sectors;
-                # copying only payload_size omits it and OS 9 stays black.
-                output.seek(tail - 1024)
+                # Both alternate headers belong at their actual volume ends,
+                # including any gap after the formatter's allocation blocks.
+                output.seek(start + length - 1024)
                 output.write(header)
-                original.seek(tail)
-                output.seek(tail)
-                output.write(original.read())
-                output.truncate(source.stat().st_size)
+                output.seek(source_start + layout["partition_size"] - 1024)
+                output.write(wrapper)
+                output.truncate(layout["capacity_bytes"])
+                output.flush()
+                os.fsync(output.fileno())
             temporary.replace(image)
+        finally:
+            temporary.unlink(missing_ok=True)
 
 
 def main() -> None:
@@ -186,11 +304,13 @@ def main() -> None:
     parser.add_argument("--guest-dir", type=Path, default=Path(__file__).resolve().parents[1] / "gxmetal/guest/bin")
     parser.add_argument("--graphics-source", type=Path,
                         help="Read-only OS 9 image containing the complete Apple QuickDraw 3D/OpenGL components")
+    parser.add_argument("--capacity-gb", type=int, choices=(8, 16, 32, 64, 128), default=32,
+                        help="Sparse virtual disk capacity in GiB (default: 32)")
     args = parser.parse_args()
     source, output = args.source.resolve(), args.output.resolve()
     if output.exists() or output.suffix != ".classic":
         parser.error("Output must be a new .classic package")
-    start, size = partition(source)
+    layout = wrapper_geometry(source, args.capacity_gb * 1024 ** 3)
     source_before = (source.stat().st_size, source.stat().st_mtime_ns)
     source_device = target_device = graphics_device = None
     output.mkdir(parents=True)
@@ -198,9 +318,9 @@ def main() -> None:
     inventory = []
     try:
         # Fresh sparse zero-filled image, retaining only standard boot drivers.
-        with source.open("rb") as original, disk.open("xb") as target:
-            target.write(original.read(start))
-            target.truncate(source.stat().st_size)
+        with disk.open("xb") as target:
+            target.write(partition_prefix(source, layout["capacity_bytes"], layout["length"]))
+            target.truncate(layout["capacity_bytes"])
         source_device, source_volume = attach(source, True)
         run("diskutil", "mount", "readOnly", source_volume)
         source_root = mounted_path(source_volume)
@@ -215,9 +335,11 @@ def main() -> None:
 
         target_device, target_volume = attach(disk, False)
         # This device was just attached from the new output image above.
-        run("diskutil", "eraseVolume", "HFS+", "Macintosh HD", target_volume)
-        # Reformatting an HFS wrapper can renumber the APM slice.
-        target_volume = hfs_partition(target_device)
+        # Format the exact prepared extent. eraseVolume silently reserves an
+        # additional 128 MiB and rewrites the APM on current macOS versions.
+        raw_volume = target_volume.replace("/dev/disk", "/dev/rdisk", 1)
+        run("/sbin/newfs_hfs", "-v", "Macintosh HD", raw_volume)
+        run("diskutil", "mount", target_volume)
         target_root = mounted_path(target_volume)
         (target_root / ".metadata_never_index").touch()
         for name in SYSTEM_ITEMS:
@@ -298,7 +420,7 @@ def main() -> None:
             "id": str(uuid.uuid4()), "name": f"Mac OS {os_version}",
             "machineFamily": "powerMacG4", "ramMB": 512,
             "diskImageName": "disk.img", "pramImageName": "pram.img",
-            "diskSizeGB": source.stat().st_size // (1024 ** 3),
+            "diskSizeGB": args.capacity_gb,
             "width": 1024, "height": 768, "depth": 16,
             "useEnhancedFramebuffer": False, "customResolution": False,
             "useBrowserDisplay": False, "bootFromCD": False,
@@ -312,6 +434,9 @@ def main() -> None:
             "copiedSystemItems": inventory, "systemFolderCNID": folder_id,
             "preferencesCopied": False, "documentsCopied": False,
             "sourceFreeSpaceCopied": False,
+            "diskCapacityBytes": disk.stat().st_size,
+            "allocatedBytes": disk.stat().st_blocks * 512,
+            "hfsPlusCapacityBytes": layout["length"],
             "appleGraphicsComponents": graphics_inventory,
         }, indent=2) + "\n")
         print(f"Prepared {output} (Mac OS {os_version}); runtime validation required.")
