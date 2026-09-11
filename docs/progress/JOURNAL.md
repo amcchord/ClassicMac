@@ -120,3 +120,26 @@
   problem is found, withdraw 3.0 from latest status and restore 2.3.2 as latest;
   repair through a new version instead of rewriting published commits/tags or
   replacing immutable release bytes. The mcchord.net template is unchanged.
+
+## September 10 — ClassicMac 3.0.0 published
+
+- Release preparation commit: `2dc6e459d6f58716e839018441d64a0b946096cd`.
+  Main and `codex/3.0-integration` were fast-forwarded and pushed, together with
+  annotated tag `v3.0.0`, using one atomic push. The release uses the exact
+  previously built and tested macOS binaries; no runtime source changed.
+- Created a draft with the notarized DMG, stapled-app ZIP, and SHA256SUMS.txt;
+  verified all GitHub-reported sizes and SHA-256 digests before publishing as
+  the latest public release: <https://github.com/amcchord/ClassicMac/releases/tag/v3.0.0>.
+- An unauthenticated latest-release request confirmed v3.0.0 is public and
+  stable. Downloaded all three published assets again and verified their
+  bytes against the qualified originals. Remote main/integration and the
+  dereferenced tag matched the release commit. Evidence and rollback baseline
+  are retained under `output/3.0/publication/`.
+- DMG: `c86e40e20c6643f17d09fce0a7c7158228eb1bb246f5ee98a170ac1ee6ba8978`.
+  ZIP: `fe843a18e3318bc44614d9342cdb4b03494fd00da9888543dbaf9a1d0c401074`.
+- The iPad beta source is now committed/pushed; this release distributes
+  macOS binaries only. No further changes were made to mcchord.net or the
+  existing local Applications installation. This final publication record
+  is a documentation-only follow-up; the release tag remains immutable.
+- Result: requested release work complete. Next: use 3.0 and select further
+  roadmap work as needed. Prior v2.3.2 and its assets remain available.
