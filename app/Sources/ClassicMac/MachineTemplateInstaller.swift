@@ -66,7 +66,7 @@ enum MachineTemplateInstaller {
             diskSizeGB: diskSizeGB, width: source.width, height: source.height,
             depth: source.depth, useEnhancedFramebuffer: false,
             customResolution: source.customResolution, useBrowserDisplay: false,
-            bootFromCD: false, toolsCDInserted: false,
+            bootFromCD: false, toolsCDInserted: true,
             networking: source.networking, sound: source.sound,
             useG4CPU: source.useG4CPU, tabletInput: source.tabletInput,
             classicInputHelpers: source.classicInputHelpers

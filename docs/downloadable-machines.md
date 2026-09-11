@@ -78,3 +78,5 @@ new VM identity and config, writes provenance, and atomically moves the package
 to a unique name. External media/shared-folder paths and boot-from-CD settings
 are cleared. Cancellation or failure removes staging; existing machines are
 never replaced. The completed archive is removed after a successful import.
+The app's bundled ClassicMac Tools volume remains enabled for first startup,
+matching the normal Power Mac defaults and providing guest diagnostics/repair.

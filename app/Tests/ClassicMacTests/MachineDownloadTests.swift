@@ -85,7 +85,7 @@ final class MachineDownloadTests: XCTestCase {
         XCTAssertNil(fresh.floppyImagePath)
         XCTAssertFalse(fresh.bootFromCD)
         XCTAssertFalse(fresh.useBrowserDisplay)
-        XCTAssertFalse(fresh.toolsCDInserted)
+        XCTAssertTrue(fresh.toolsCDInserted)
         let metadata = try XCTUnwrap(VMTemplateMetadata.load(from: installed))
         XCTAssertEqual(metadata.osVersion, machine.osVersion)
         XCTAssertEqual(metadata.gxMetalVersion, machine.gxMetalVersion)

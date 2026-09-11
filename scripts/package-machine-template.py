@@ -96,7 +96,7 @@ def main():
     config.update(id="00000000-0000-0000-0000-000000000000", name=args.name,
                   machineFamily="powerMacG4", diskImageName="disk.img", pramImageName="pram.img",
                   useEnhancedFramebuffer=False, useBrowserDisplay=False, bootFromCD=False,
-                  toolsCDInserted=False, toolsDeliveryVersion=1)
+                  toolsCDInserted=True, toolsDeliveryVersion=1)
     config_bytes = json.dumps(config, indent=2, sort_keys=True).encode() + b"\n"
     installed_bytes = len(config_bytes)
     staged = None
