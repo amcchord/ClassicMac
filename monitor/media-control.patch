@@ -1,0 +1,143 @@
+--- a/monitor/hmp-cmds.c
++++ b/monitor/hmp-cmds.c
+@@ -35,6 +35,112 @@
+ #include "system/memory.h"
+ #include "system/system.h"
+ #include "disas/disas.h"
++#include "qapi/qapi-commands-block.h"
++#include "qobject/qlist.h"
++#include "qobject/qjson.h"
++#include "block/block_int-global-state.h"
++#include "system/block-backend-global-state.h"
++#include "system/block-backend-io.h"
++#include "system/runstate.h"
++
++/* ClassicMac's host media drawer uses HMP so the dedicated QMP connection
++ * remains available for lifecycle events. Responses are single-line JSON.
++ * Only the three user-facing drives are exposed. The Quadra's writable floppy
++ * must use the classicvirtio guest eject handshake; never force-replace it. */
++void hmp_classicmac_media(Monitor *mon, const QDict *args)
++{
++    const char *action = qdict_get_str(args, "action");
++    const char *device = qdict_get_try_str(args, "device");
++    const char *filename = qdict_get_try_str(args, "filename");
++    bool live = blk_by_name("fd0") != NULL;
++    Error *err = NULL;
++    QDict *result = qdict_new();
++    QList *drives = qlist_new();
++    BlockInfoList *blocks, *entry;
++    GString *json;
++
++    if (strcmp(action, "status")) {
++        if (!device || (strcmp(device, "cd0") && strcmp(device, "tools0") &&
++                        strcmp(device, "fd0"))) {
++            error_setg(&err, "Choose a ClassicMac removable drive.");
++        } else if (!live) {
++            error_setg(&err, "This Mac applies media changes at its next startup.");
++        } else if (!runstate_is_running()) {
++            error_setg(&err, "Resume the Mac before changing its media.");
++        } else {
++            BlockBackend *blk = blk_by_name(device);
++            if (!blk) {
++                error_setg(&err, "The selected drive is unavailable.");
++            } else if (!strcmp(action, "eject")) {
++                if (!strcmp(device, "fd0")) {
++                    if (blk_is_inserted(blk)) {
++                        blk_dev_eject_request(blk, false);
++                    }
++                } else {
++                    qmp_eject(device, NULL, true, true, &err);
++                }
++            } else if (!strcmp(action, "insert") && filename && filename[0]) {
++                if (!strcmp(device, "fd0") && blk_is_inserted(blk)) {
++                    error_setg(&err, "Eject the floppy and wait for the Mac before inserting another.");
++                } else {
++                    qmp_blockdev_change_medium(device, NULL, filename, "raw",
++                        true, true, true, !strcmp(device, "fd0")
++                            ? BLOCKDEV_CHANGE_READ_ONLY_MODE_READ_WRITE
++                            : BLOCKDEV_CHANGE_READ_ONLY_MODE_READ_ONLY, &err);
++                }
++            } else {
++                error_setg(&err, "Choose insert, eject, or status.");
++            }
++        }
++    }
++    qdict_put_bool(result, "liveChanges", live);
++    if (err) {
++        qdict_put_str(result, "error", error_get_pretty(err));
++        error_free(err);
++    }
++    blocks = qmp_query_block(false, false, NULL);
++    bool virtio_tools = false;
++    for (entry = blocks; entry; entry = entry->next) {
++        BlockDeviceInfo *inserted = entry->value->inserted;
++        if (inserted && inserted->node_name &&
++            !strcmp(inserted->node_name, "classicmac-tools")) {
++            virtio_tools = true;
++            break;
++        }
++    }
++    for (entry = blocks; entry; entry = entry->next) {
++        BlockInfo *info = entry->value;
++        const char *name = info->device;
++        if (!name) {
++            continue;
++        }
++        if (virtio_tools && !strcmp(name, "tools0")) {
++            continue;
++        }
++        /* -blockdev + virtio-blk-pci creates an unnamed BlockBackend;
++         * query-block exposes its stable identity as inserted.node-name. */
++        if (info->inserted && info->inserted->node_name &&
++            !strcmp(info->inserted->node_name, "classicmac-tools")) {
++            name = "tools0";
++        }
++        if (!strcmp(name, "cd0") || !strcmp(name, "tools0") ||
++            !strcmp(name, "fd0")) {
++            QDict *drive = qdict_new();
++            qdict_put_str(drive, "device", name);
++            qdict_put_bool(drive, "inserted", info->inserted != NULL);
++            if (info->inserted) {
++                qdict_put_str(drive, "path", info->inserted->file);
++            }
++            qlist_append(drives, drive);
++        }
++    }
++    qapi_free_BlockInfoList(blocks);
++    qdict_put(result, "drives", drives);
++    json = qobject_to_json(QOBJECT(result));
++    monitor_printf(mon, "CLASSICMAC_MEDIA %s\n", json->str);
++    g_string_free(json, true);
++    qobject_unref(result);
++}
+ 
+ bool hmp_handle_error(Monitor *mon, Error *err)
+ {
+--- a/include/monitor/hmp.h
++++ b/include/monitor/hmp.h
+@@ -16,6 +16,8 @@
+ 
+ #include "qemu/readline.h"
+ #include "qapi/qapi-types-common.h"
++
++void hmp_classicmac_media(Monitor *mon, const QDict *qdict);
+ 
+ bool hmp_handle_error(Monitor *mon, Error *err);
+ void hmp_help_cmd(Monitor *mon, const char *name);
+--- a/hmp-commands.hx
++++ b/hmp-commands.hx
+@@ -5,6 +5,14 @@
+ HXCOMM Text between SRST and ERST is rST format documentation.
+ HXCOMM HXCOMM can be used for comments, discarded from both rST and C.
+ 
++
++    {
++        .name       = "classicmac-media",
++        .args_type  = "action:s,device:s?,filename:s?",
++        .params     = "status | insert device filename | eject device",
++        .help       = "inspect or safely change ClassicMac removable media",
++        .cmd        = hmp_classicmac_media,
++    },
+ 
+     {
+         .name       = "help|?",

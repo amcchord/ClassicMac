@@ -232,6 +232,23 @@ final class BrowserDisplayServer: @unchecked Sendable {
             : textResponse(status: 409, reason: "Conflict", text: "Resume or start the Mac in ClassicMac before pasting.")
     }
 
+    // This endpoint only opens the app's drawer. File selection and media
+    // changes remain local, and source paths are never returned to the page.
+    fileprivate func mediaResponse(headers: [String: String]) async -> BrowserHTTPResponse {
+        guard headers["origin"] == "http://127.0.0.1:\(url.port!)",
+              headers["x-classicmac-action"] == actionToken else {
+            return textResponse(status: 403, reason: "Forbidden", text: "Reopen the display from ClassicMac.")
+        }
+        let opened = await MainActor.run {
+            guard VMStore.shared.vms.contains(where: { $0.id == endpoint.vmID }) else { return false }
+            MediaController.shared.present(for: endpoint.vmID)
+            return true
+        }
+        return opened
+            ? textResponse(status: 202, reason: "Accepted", text: "Manage this Mac's media in ClassicMac.")
+            : textResponse(status: 409, reason: "Conflict", text: "Open this machine in ClassicMac again.")
+    }
+
     fileprivate func response(for method: String, target: String) -> BrowserHTTPResponse {
         guard method == "GET" || method == "HEAD" else {
             return textResponse(status: 405, reason: "Method Not Allowed", text: "Method not allowed")
@@ -462,7 +479,7 @@ private final class BrowserHTTPRequest: @unchecked Sendable {
             connection.cancel()
             return
         }
-        if parts[0] == "POST", ["/actions/paste-text", "/actions/paste-text-state"].contains(parts[1]) {
+        if parts[0] == "POST", ["/actions/paste-text", "/actions/paste-text-state", "/actions/media"].contains(parts[1]) {
             var headers: [String: String] = [:]
             for line in request.components(separatedBy: "\r\n").dropFirst() {
                 if line.isEmpty { break }
@@ -473,7 +490,9 @@ private final class BrowserHTTPRequest: @unchecked Sendable {
                 headers[key] = pair[1].trimmingCharacters(in: .whitespaces)
             }
             Task {
-                let response = await server.pasteTextResponse(headers: headers, openWindow: parts[1] == "/actions/paste-text")
+                let response = parts[1] == "/actions/media"
+                    ? await server.mediaResponse(headers: headers)
+                    : await server.pasteTextResponse(headers: headers, openWindow: parts[1] == "/actions/paste-text")
                 send(response.serialized(headOnly: false))
             }
             return

@@ -7,6 +7,7 @@ import AppKit
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         PasteTextController.shared.startListening()
+        MediaController.shared.startListening()
     }
 
     func application(_ application: NSApplication, open urls: [URL]) {
@@ -121,6 +122,11 @@ private struct MachineCommands: View {
         .disabled(!running)
 
         Divider()
+
+        Button("Media…") {
+            if let vm = vm { MediaController.shared.present(for: vm.id) }
+        }
+        .disabled(vm == nil)
 
         Button("Paste Text into Mac…") {
             if let vm = vm { PasteTextController.shared.present(for: vm.id) }

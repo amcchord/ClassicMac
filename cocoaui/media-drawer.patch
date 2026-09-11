@@ -1,0 +1,64 @@
+--- a/ui/cocoa.m
++++ b/ui/cocoa.m
+@@ -1636,6 +1636,7 @@
+ - (void)removePause;
+ - (void)forceQuitFrontmostGuestApp:(id)sender;
+ - (void)pasteTextIntoGuest:(id)sender;
++- (void)openClassicMacMedia:(id)sender;
+ - (void)restartQEMU:(id)sender;
+ - (void)powerDownQEMU:(id)sender;
+ - (void)ejectDeviceMedia:(id)sender;
+@@ -2063,6 +2064,26 @@
+     [cocoaView raiseAllButtons];
+     [[NSDistributedNotificationCenter defaultCenter]
+         postNotificationName:@"com.classicmac.paste-text"
++                      object:identifier userInfo:nil deliverImmediately:YES];
++}
++
++/* Managed Macs route every media action to one host drawer so changes are
++ * saved and Power Mac IDE media is staged honestly for the next startup. */
++- (void)openClassicMacMedia:(id)sender
++{
++    const char *machineID = getenv("CLASSICMAC_VM_ID");
++    if (!machineID) {
++        return;
++    }
++    NSString *identifier = [NSString stringWithUTF8String:machineID];
++    if (![[[NSUUID alloc] initWithUUIDString:identifier] autorelease]) {
++        return;
++    }
++    [cocoaView ungrabMouse];
++    [cocoaView raiseAllKeys];
++    [cocoaView raiseAllButtons];
++    [[NSDistributedNotificationCenter defaultCenter]
++        postNotificationName:@"com.classicmac.media"
+                       object:identifier userInfo:nil deliverImmediately:YES];
+ }
+ 
+@@ -2400,7 +2421,8 @@
+     [menu addItem: [[[NSMenuItem alloc] initWithTitle: @"Shut Down" action: @selector(powerDownQEMU:) keyEquivalent: @""] autorelease]];
+     /* One stateful command for the bundled tools disc. Its title is refreshed
+      * from the real drive state each time the menu opens. */
+-    if (getenv(CLASSICMAC_TOOLS_CD_ENV) != NULL) {
++    if (getenv("CLASSICMAC_VM_ID") == NULL &&
++        getenv(CLASSICMAC_TOOLS_CD_ENV) != NULL) {
+         [menu addItem: [NSMenuItem separatorItem]];
+         tools_cd_menu_item = [[[NSMenuItem alloc]
+             initWithTitle: @"Insert “ClassicMac Tools”"
+@@ -2480,6 +2502,16 @@
+ static void addRemovableDevicesMenuItems(void)
+ {
+     NSMenu *menu = [[[NSApp mainMenu] itemWithTitle:@"Mac"] submenu];
++    if (getenv("CLASSICMAC_VM_ID") != NULL) {
++        NSMenuItem *item = [[[NSMenuItem alloc]
++            initWithTitle:@"Media…" action:@selector(openClassicMacMedia:)
++            keyEquivalent:@""] autorelease];
++        [item setToolTip:@"Manage discs, Tools, floppy disks, and the next startup"];
++        NSInteger inputIndex = [menu indexOfItem:input_helpers_menu_item];
++        [menu insertItem:item atIndex:inputIndex > 0 ? inputIndex - 1
++                                                    : [menu numberOfItems]];
++        return;
++    }
+     BlockInfoList *currentDevice = qmp_query_block(false, false, NULL);
+     BlockInfoList *pointerToFree = currentDevice;
+     NSMenuItem *discItem = nil;

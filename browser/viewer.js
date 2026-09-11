@@ -10,6 +10,7 @@ const captureButton = document.getElementById("capture");
 const scaleButton = document.getElementById("scale");
 const fullScreenButton = document.getElementById("fullscreen");
 const escapeButton = document.getElementById("escape");
+const mediaButton = document.getElementById("media");
 const pasteTextButton = document.getElementById("paste-text");
 const modifierButtons = [...document.querySelectorAll("button.modifier")];
 const waitingTitle = "Waiting for the Mac…";
@@ -215,6 +216,26 @@ document.addEventListener("fullscreenchange", () => {
 escapeButton.addEventListener("click", () => {
   rfb?.sendKey(0xff1b, "Escape");
   rfb?.focus();
+});
+
+mediaButton.addEventListener("click", async () => {
+  releaseToolbarModifiers();
+  if (document.pointerLockElement) document.exitPointerLock();
+  rfb?.blur();
+  mediaButton.disabled = true;
+  try {
+    const response = await fetch("./actions/media", {
+      method: "POST",
+      headers: { "X-ClassicMac-Action": configuration.actionToken },
+      credentials: "same-origin",
+    });
+    const detail = await response.text();
+    setStatus(detail, response.ok ? "connected" : "attention");
+  } catch {
+    setStatus("Open Media in ClassicMac's Machine menu.", "attention");
+  } finally {
+    mediaButton.disabled = false;
+  }
 });
 
 pasteTextButton.addEventListener("click", async () => {
