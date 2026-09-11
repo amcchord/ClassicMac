@@ -179,6 +179,7 @@ final class QEMUManager: ObservableObject {
         // to mount it, which made the old Insert command look successful while
         // doing nothing in the guest.
         var environment = ProcessInfo.processInfo.environment
+        environment["CLASSICMAC_VM_ID"] = config.id.uuidString
         if config.machineFamily == .quadra800, let toolsCD = AppPaths.toolsCD {
             environment["CLASSICMAC_TOOLS_CD"] = toolsCD.path
         } else {
@@ -201,7 +202,8 @@ final class QEMUManager: ObservableObject {
             let message = capturedError.string()
             Task { @MainActor in
                 guard let self = self else { return }
-                var nextConfig = config
+                let savedConfig = VMStore.shared.vms.first { $0.id == config.id } ?? config
+                var nextConfig = savedConfig
                 let monitor = self.qmpMonitors.removeValue(forKey: config.id)
                 self.runningIDs.remove(config.id)
                 self.pausedIDs.remove(config.id)
@@ -234,9 +236,10 @@ final class QEMUManager: ObservableObject {
                 // newly bootable hard disk while leaving the disc inserted.
                 if proc.terminationReason == .exit && proc.terminationStatus == 0 {
                     nextConfig = QEMUManager.configurationForNextBoot(
-                        afterSuccessfulRun: config
+                        afterSuccessfulRun: config,
+                        savedConfiguration: savedConfig
                     )
-                    if nextConfig != config {
+                    if nextConfig != savedConfig {
                         _ = VMStore.shared.save(nextConfig)
                     }
                 }
@@ -250,6 +253,9 @@ final class QEMUManager: ObservableObject {
                 let reason = await monitor.shutdownReasonAfterExit(timeout: 2)
                 monitor.cancel()
                 if let reason = reason, QEMUManager.relaunchReasons.contains(reason) {
+                    // Settings can change while the shutdown event arrives.
+                    // Always restart with the latest saved media and options.
+                    nextConfig = VMStore.shared.vms.first { $0.id == config.id } ?? nextConfig
                     self.start(
                         nextConfig,
                         reusing: displayServer,
@@ -324,14 +330,18 @@ final class QEMUManager: ObservableObject {
     // A selected installer disc remains authoritative until a successful run
     // leaves a genuinely blessed HFS/HFS+ system on the hard disk.
     static func configurationForNextBoot(
-        afterSuccessfulRun config: VMConfig
+        afterSuccessfulRun config: VMConfig,
+        savedConfiguration: VMConfig? = nil
     ) -> VMConfig {
+        let saved = savedConfiguration ?? config
         guard config.bootFromCD,
               config.cdImagePath?.isEmpty == false,
+              saved.bootFromCD == config.bootFromCD,
+              saved.cdImagePath == config.cdImagePath,
               MacDiskImage.hasBlessedSystemFolder(at: config.diskImageURL) else {
-            return config
+            return saved
         }
-        var next = config
+        var next = saved
         next.bootFromCD = false
         return next
     }

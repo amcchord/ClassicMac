@@ -124,6 +124,39 @@ final class MacDiskImageTests: XCTestCase {
         XCTAssertFalse(next.bootFromCD)
         XCTAssertEqual(next.cdImagePath, config.cdImagePath)
 
+        // A disc staged during a run must survive shutdown and remain the
+        // explicit startup choice, even if the old installer blessed the disk.
+        var staged = config
+        staged.cdImagePath = "/tmp/next-installer.iso"
+        staged.toolsCDInserted = false
+        staged.width = 1280
+        XCTAssertEqual(
+            QEMUManager.configurationForNextBoot(
+                afterSuccessfulRun: config, savedConfiguration: staged
+            ),
+            staged
+        )
+
+        // An ordinary installer handoff changes only the startup source;
+        // every setting saved while the guest was running is retained.
+        staged.cdImagePath = config.cdImagePath
+        next = QEMUManager.configurationForNextBoot(
+            afterSuccessfulRun: config, savedConfiguration: staged
+        )
+        XCTAssertFalse(next.bootFromCD)
+        XCTAssertFalse(next.toolsCDInserted)
+        XCTAssertEqual(next.width, 1280)
+
+        var hardDiskRun = config
+        hardDiskRun.bootFromCD = false
+        staged.bootFromCD = true
+        XCTAssertEqual(
+            QEMUManager.configurationForNextBoot(
+                afterSuccessfulRun: hardDiskRun, savedConfiguration: staged
+            ),
+            staged
+        )
+
         config.bootFromCD = false
         XCTAssertEqual(
             QEMUManager.configurationForNextBoot(afterSuccessfulRun: config),

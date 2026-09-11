@@ -248,6 +248,9 @@ git -C "$QEMU_DIR" apply "$ROOT_DIR/cocoaui/display-performance.patch" || die "F
 # the game releases input. This keeps first-person games from fighting a host
 # cursor that cannot follow the guest's recentering.
 git -C "$QEMU_DIR" apply "$ROOT_DIR/cocoaui/game-input-handoff.patch" || die "Failed to apply game input handoff patch"
+# Compact, live GXMetal status and explicit host-to-guest text entry.
+git -C "$QEMU_DIR" apply "$ROOT_DIR/cocoaui/gxmetal-status-menu.patch" || die "Failed to apply GXMetal status menu patch"
+git -C "$QEMU_DIR" apply "$ROOT_DIR/cocoaui/paste-text.patch" || die "Failed to apply paste text menu patch"
 # Allow a VirtIO block device to start empty, exchange raw media while running,
 # and report capacity changes to the guest driver.
 git -C "$QEMU_DIR" apply "$VIRTIO_DIR/virtio-blk-removable.patch" || die "Failed to apply removable VirtIO block patch"
