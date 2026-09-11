@@ -158,3 +158,42 @@
   simply increasing the file length. Existing machines will not be resized.
 - Verification and publication are pending. Published 3.0.0 and the current
   8 GB archive remain unchanged while the follow-up is prepared.
+
+## September 11 — sparse 32 GB wizard follow-up complete
+
+- Integrated recommended download/manual setup in one New Machine sheet,
+  a 32 GB new-Power-Mac default, sparse catalog/import accounting, and a fresh
+  32 GiB OS 9 filesystem. Root branch: `codex/3.0.1-onboarding`; app runtime
+  source ends at `fb8d629`. Existing machines were not resized.
+- Agent work was reviewed and integrated: storage `f0ff6f5`/`6cc1b9a`,
+  template builder `eb30967`. APFS close-time allocation required explicit
+  hole punching; a regression protects zero sector tails. Review also caught
+  unowned temporary-file cleanup in the template builder, which is fixed.
+- Final Swift suite passed 102 tests, plus three packaging and three template
+  helper tests. Actual public wizard download/import, exact disk hash, native
+  Finder startup, and app-requested clean shutdown passed. Both HFS+ headers
+  confirm clean unmount. The template also passed Tools-on/off boot/input and
+  full GXMetal conformance with the released engine/resources.
+- A vectorized empty-buffer comparison reduced the same local import-plus-
+  hash check from 124.20 to 30.63 seconds. The imported 32 GiB disk uses
+  124,780,544 host bytes, with 31.99 GB guest capacity and about 31.28 GB free.
+- Published the immutable `mac-os-9.2.1-gxmetal-2.3.0-32gb-v2.tar.gz` on the
+  already-authorized mcchord.net host and promoted its catalog atomically.
+  Archive: 82,844,731 bytes; SHA-256
+  `bc0290edf6e0eccba26738d14723d76d9b3acd9018463ce0c427f9152f77959d`.
+  HTTPS, HTTP 206, server checksum/size, catalog comparison, and app retrieval
+  passed. The v1 archive and private catalog backup are retained for rollback;
+  no DNS, Apache, or other site changes occurred.
+- Final 3.0.1 app/DMG are signed, Apple-notarized, and stapled. Gatekeeper and
+  mounted-DMG verification passed. Retained installer:
+  `artifacts/ClassicMac-3.0.1.dmg`, SHA-256
+  `a5dc24e43277bfa023ca925fbc4d6bede1d2d3cd4a155e31bdb2254ee209bd1c`.
+  Details and limits are in `docs/3.0.1-validation.md`; evidence is under
+  `output/3.0.1/`.
+- All test emulators stopped and temporary library entries were removed;
+  evidence machines remain on disk. Original entries and the Applications
+  installation are preserved. GitHub 3.0.0 remains the public release; no
+  GitHub push, tag, or new release was made in this follow-up.
+- Result: requested wizard and sparse-image work is complete. Next: use the
+  signed 3.0.1 candidate; publish it as a new release if requested, without
+  changing 3.0.0 assets or tag.

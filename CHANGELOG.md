@@ -20,7 +20,7 @@
   not yet include GXMetal or the custom `nubus-qfb` device. It runs without JIT
   to remain compatible with TestFlight distribution.
 
-## 3.0.1 — In progress
+## 3.0.1 — Unreleased
 
 - Start New Machine with a recommended, ready-to-run Mac OS 9 download;
   return to the setup choice from either the download or manual install path.
@@ -28,6 +28,8 @@
   files are written. Existing machines retain their disk capacity.
 - Separate virtual disk capacity from download size and initial host storage
   when importing configured machines.
+- Preserve empty APFS disk space explicitly and scan large empty regions
+  faster while enforcing both expanded-size and initial-allocation bounds.
 
 ## 3.0.0 — 2026-09-10
 

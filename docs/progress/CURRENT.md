@@ -1,25 +1,35 @@
-# ClassicMac 3.0.1 — easier setup and sparse 32 GB disks
+# ClassicMac 3.0.1 candidate ready
 
-## Active objective
+## Current state
 
-Make the configured OS 9 download the recommended path inside New Machine.
-Use a sparse, guest-usable 32 GB disk for the next hosted template, with clear
-download/capacity/storage figures. Existing machines keep their disk sizes.
+New Machine recommends downloading ready-to-run Mac OS 9 and retains manual
+setup in the same wizard. New Power Mac disks default to sparse 32 GB disks;
+existing machines keep their current capacities.
 
-## Baseline and owners
+The new 32 GiB OS 9 image is live on mcchord.net: 82.8 MB to download and about
+125 MB initially on an APFS host. Mac OS 9 reports 31.99 GB capacity and about
+31.28 GB free. The prior archive/catalog are retained for rollback.
 
-- Published 3.0.0 and its assets remain immutable. Main is `b0828f0`.
-- Root integration: `codex/3.0.1-onboarding`, wizard, defaults, combined
-  validation, packaging, and authorized hosting update.
-- Download agent: `codex/os9-32gb-template`, fresh filesystem capacity and
-  clean template qualification in `output/3.0.1/template/`.
-- Home agent: `codex/sparse-template-storage`, catalog storage metadata,
-  sparse import budget, download UI, and packaging metadata.
-- Guest graphics and emulator binaries remain the qualified 3.0 versions.
+The final macOS candidate is signed, Apple-notarized, stapled, and verified:
+`artifacts/ClassicMac-3.0.1.dmg` (44.2 MB). A ZIP and checksums are retained
+alongside it. Runtime source ends at `fb8d629` on
+`codex/3.0.1-onboarding`; later changes record validation and hosting.
+
+## Verification and limits
+
+102 app tests, three packaging tests, three template helper tests, real public
+wizard download/import, exact disk identity/allocation, Finder startup and
+clean shutdown passed. The template passed Tools-on/off boot/input and full
+GXMetal conformance. Emulator/guest sources are unchanged; the 3.0 full game
+sweep was not repeated. Physical macOS 15 runtime remains untested.
+
+All test emulators are stopped, temporary library entries removed, and the
+three original entries preserved. See [validation](../3.0.1-validation.md),
+[release notes](../releases/3.0.1.md), and
+[hosting/rollback](../operations/classicmac-downloads.md).
 
 ## Next safe action
 
-Integrate the bounded changes, run app/storage checks, inspect the wizard,
-and qualify the new template before publishing a new immutable archive and
-promoting the catalog. Retain the current catalog for rollback. New GitHub
-release publication is not part of the completed 3.0.0 action.
+Use the signed 3.0.1 candidate. GitHub 3.0.0 remains the public release; no
+new push, tag, or GitHub release was made by this follow-up. Publish the
+candidate as a new release if requested. Do not alter 3.0.0's published assets.
