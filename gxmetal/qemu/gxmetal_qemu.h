@@ -28,6 +28,9 @@ typedef struct GXMetalQemuState {
     GXMetalRenderer renderer;
     uint64_t features;
     uint32_t active_contexts;
+    /* Host-only evidence for the status menu; never persisted in the guest. */
+    uint64_t successful_draws;
+    int64_t last_draw_ns;
     bool relative_input;
     bool guest_cursor_visible;
     bool relative_input_effective;

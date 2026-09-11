@@ -1,0 +1,176 @@
+diff --git a/ui/cocoa.m b/ui/cocoa.m
+--- a/ui/cocoa.m
++++ b/ui/cocoa.m
+@@ -39,6 +39,7 @@
+ #include "system/runstate-action.h"
+ #include "system/cpu-throttle.h"
+ #include "qapi/error.h"
++#include "qom/object.h"
+ #include "qapi/qapi-commands-block.h"
+ #include "qapi/qapi-commands-machine.h"
+ #include "qapi/qapi-commands-misc.h"
+@@ -115,6 +116,9 @@
+  * "Enter Full Screen" and "Exit Full Screen" as the window transitions.
+  */
+ static NSMenuItem *fullscreen_menu_item;
++
++/* Kept in View so graphics status is also reachable in full screen. */
++static NSMenu *gxmetal_status_menu;
+ 
+ /* ClassicMac: borderless-window state and its dynamically retitled menu item. */
+ static NSMenuItem *titlebar_menu_item;
+@@ -1640,6 +1644,8 @@
+ - (void)changeDeviceMedia:(id)sender;
+ - (void)toggleToolsCD:(id)sender;
+ - (void)refreshMediaMenuItems;
++- (void)refreshGXMetalStatus;
++- (void)showGXMetalHelp:(id)sender;
+ - (BOOL)verifyQuit;
+ - (void)openDocumentation:(NSString *)filename;
+ - (IBAction) do_about_menu_item: (id) sender;
+@@ -2237,9 +2243,119 @@
+         floppyInserted && !classicmac_floppy_eject_pending];
+ }
+ 
++- (void)refreshGXMetalStatus
++{
++    if (!gxmetal_status_menu) {
++        return;
++    }
++
++    __block char *raw = NULL;
++    __block bool running = false;
++    with_bql(^{
++        Error *err = NULL;
++        running = runstate_is_running();
++        raw = object_property_get_str(object_get_root(), "gxmetal-status", &err);
++        error_free(err);
++    });
++    NSDictionary *status = nil;
++    if (raw) {
++        NSData *data = [[NSString stringWithUTF8String:raw]
++            dataUsingEncoding:NSUTF8StringEncoding];
++        id decoded = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
++        if ([decoded isKindOfClass:[NSDictionary class]] &&
++            [decoded[@"schema"] integerValue] == 1 &&
++            [@[@"metal", @"software"] containsObject:decoded[@"renderer"]]) {
++            status = decoded;
++        }
++        g_free(raw);
++    }
++
++    NSString *title = @"GXMetal status unavailable";
++    NSString *symbol = @"questionmark.circle";
++    BOOL contacted = [status[@"completedCommands"] unsignedLongLongValue] > 0;
++    BOOL recent = [status[@"activeContexts"] unsignedIntValue] > 0 &&
++        [status[@"successfulDraws"] unsignedLongLongValue] > 0 &&
++        [status[@"lastDrawAgeMs"] longLongValue] >= 0 &&
++        [status[@"lastDrawAgeMs"] longLongValue] < 2000;
++    if (!running) {
++        title = @"Mac is paused or starting up";
++        symbol = @"pause.circle";
++    } else if ([status[@"faulted"] boolValue] ||
++               [status[@"errorCode"] unsignedIntValue] != 0) {
++        title = @"GXMetal needs attention";
++        symbol = @"exclamationmark.triangle";
++    } else if ([status[@"renderer"] isEqualToString:@"software"]) {
++        title = @"Software renderer";
++        symbol = @"exclamationmark.triangle";
++    } else if (status && !contacted) {
++        title = @"Metal ready · waiting for guest";
++        symbol = @"bolt.slash";
++    } else if (status && recent) {
++        title = @"Rendering with Metal";
++        symbol = @"bolt.fill";
++    } else if (status) {
++        title = @"GXMetal connected · idle";
++        symbol = @"checkmark.circle";
++    }
++
++    [gxmetal_status_menu removeAllItems];
++    NSMenuItem *heading = [gxmetal_status_menu addItemWithTitle:title
++        action:nil keyEquivalent:@""];
++    [heading setImage:[NSImage imageWithSystemSymbolName:symbol
++        accessibilityDescription:title]];
++    [heading setEnabled:NO];
++    if (status) {
++        NSString *renderer = [status[@"renderer"] isEqualToString:@"metal"] ?
++            @"Host renderer: Metal" : @"Host renderer: software";
++        [gxmetal_status_menu addItemWithTitle:renderer action:nil keyEquivalent:@""];
++        [gxmetal_status_menu addItemWithTitle:(contacted ?
++            @"Guest: GXMetal commands received" : @"Guest: no GXMetal commands yet")
++            action:nil keyEquivalent:@""];
++        [gxmetal_status_menu addItemWithTitle:[NSString stringWithFormat:
++            @"Active 3D contexts: %@", status[@"activeContexts"]]
++            action:nil keyEquivalent:@""];
++        [gxmetal_status_menu addItemWithTitle:[NSString stringWithFormat:
++            @"Host protocol: %u.%u", [status[@"protocol"] unsignedIntValue] >> 16, [status[@"protocol"] unsignedIntValue] & 0xffff]
++            action:nil keyEquivalent:@""];
++        if ([status[@"errorCode"] unsignedIntValue] != 0) {
++            [gxmetal_status_menu addItemWithTitle:[NSString stringWithFormat:
++                @"Graphics error: %@", status[@"errorCode"]]
++                action:nil keyEquivalent:@""];
++        }
++    }
++    [gxmetal_status_menu addItem:[NSMenuItem separatorItem]];
++    [gxmetal_status_menu addItemWithTitle:@"How to Test or Repair GXMetal…"
++        action:@selector(showGXMetalHelp:) keyEquivalent:@""];
++}
++
++- (void)showGXMetalHelp:(id)sender
++{
++    [cocoaView ungrabMouse];
++    NSAlert *alert = [[[NSAlert alloc] init] autorelease];
++    [alert setMessageText:@"Test or Repair GXMetal"];
++    [alert setInformativeText:
++        @"Open ClassicMac Tools in the guest, then its GXMetal folder, and run "
++        @"GXMetal Test. It checks the installed driver version, rendering, "
++        @"and software fallback.\n\n"
++        @"To install or repair, run Install GXMetal from that same folder, "
++        @"restart the guest, then run GXMetal Test again.\n\n"
++        @"If Tools is missing, shut down the guest, enable ClassicMac Tools "
++        @"in this Mac’s media controls, and start it again.\n\n"
++        @"This status reports current host activity. Rendering with Metal "
++        @"means successful 3D draw commands in the last two seconds. It "
++        @"cannot confirm an installed extension version, a passing test, "
++        @"or whether a game selected Apple Software RAVE."];
++    [alert addButtonWithTitle:@"OK"];
++    [alert runModal];
++}
++
+ - (void)menuWillOpen:(NSMenu *)menu
+ {
+-    [self refreshMediaMenuItems];
++    if (menu == gxmetal_status_menu || [[menu title] isEqualToString:@"View"]) {
++        [self refreshGXMetalStatus];
++    } else {
++        [self refreshMediaMenuItems];
++    }
+ }
+ 
+ /* Verifies if the user really wants to quit */
+@@ -2395,6 +2511,7 @@
+ 
+     // View menu
+     menu = [[NSMenu alloc] initWithTitle:@"View"];
++    [menu setDelegate:(id<NSMenuDelegate>)[NSApp delegate]];
+     /*
+      * ClassicMac: Control-Option key equivalents, matching the combos
+      * handleEventLocked intercepts, so the commands keep working while the
+@@ -2421,6 +2538,16 @@
+     menuItem = [[[NSMenuItem alloc] initWithTitle:@"Smooth Scaling" action:@selector(toggleZoomInterpolation:) keyEquivalent:@""] autorelease];
+     [menuItem setState: zoom_interpolation == kCGInterpolationLow ? NSControlStateValueOn : NSControlStateValueOff];
+     [menu addItem: menuItem];
++    [menu addItem:[NSMenuItem separatorItem]];
++    gxmetal_status_menu = [[NSMenu alloc] initWithTitle:@"GXMetal"];
++    [gxmetal_status_menu setDelegate:(id<NSMenuDelegate>)[NSApp delegate]];
++    [gxmetal_status_menu addItemWithTitle:@"Checking GXMetal…"
++        action:nil keyEquivalent:@""];
++    NSMenuItem *graphicsItem = [menu addItemWithTitle:@"GXMetal"
++        action:nil keyEquivalent:@""];
++    [graphicsItem setImage:[NSImage imageWithSystemSymbolName:@"bolt"
++        accessibilityDescription:@"GXMetal graphics status"]];
++    [graphicsItem setSubmenu:gxmetal_status_menu];
+     menuItem = [[[NSMenuItem alloc] initWithTitle:@"View" action:nil keyEquivalent:@""] autorelease];
+     [menuItem setSubmenu:menu];
+     [[NSApp mainMenu] addItem:menuItem];

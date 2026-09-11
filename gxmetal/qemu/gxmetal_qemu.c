@@ -10,6 +10,7 @@
 #include "qemu/osdep.h"
 #include "qemu/log.h"
 #include "qemu/timer.h"
+#include "qapi/visitor.h"
 #include "system/reset.h"
 #include "ui/console.h"
 #include "ui/input.h"
@@ -19,6 +20,33 @@
 #define GXMETAL_CONSOLE_REFRESH_NS (NANOSECONDS_PER_SECOND / 60)
 
 static void gxmetal_qemu_render_reset(GXMetalQemuState *state);
+
+/* A read-only host interface shared by Cocoa and the library window. The
+ * counters prove guest traffic and recent successful renderer dispatch, not
+ * installed extension versions or conformance-test results. QOM access and
+ * device dispatch both hold the BQL. No guest ABI change is necessary. */
+static void gxmetal_status_get(Object *obj, Visitor *visitor,
+                               const char *name, void *opaque, Error **errp)
+{
+    GXMetalQemuState *state = opaque;
+    int64_t age_ms = state->successful_draws == 0 ? -1 :
+        MAX(0, qemu_clock_get_ns(QEMU_CLOCK_REALTIME) - state->last_draw_ns) /
+        SCALE_MS;
+    char *json = g_strdup_printf(
+        "{\"schema\":1,\"protocol\":%u,\"renderer\":\"%s\","
+        "\"completedCommands\":%u,\"activeContexts\":%u,"
+        "\"successfulDraws\":%" PRIu64 ",\"lastDrawAgeMs\":%" PRId64 ","
+        "\"faulted\":%s,\"errorCode\":%u}",
+        GXMETAL_PROTOCOL_VERSION, state->metal ? "metal" : "software",
+        state->queue.diagnostic, state->active_contexts,
+        state->successful_draws, age_ms,
+        (state->queue.status & (GXMETAL_STATUS_FAULTED |
+                                GXMETAL_STATUS_DEVICE_LOST)) ? "true" : "false",
+        state->queue.error);
+
+    visit_type_str(visitor, name, &json, errp);
+    g_free(json);
+}
 
 static void gxmetal_update_relative_input(GXMetalQemuState *state)
 {
@@ -76,6 +104,13 @@ static uint32_t gxmetal_render_dispatch(void *opaque,
     }
     if (error != GXMETAL_ERROR_NONE) {
         return error;
+    }
+
+    if (packet->opcode == GXMETAL_OP_DRAW_GOURAUD ||
+        packet->opcode == GXMETAL_OP_DRAW_TEXTURED ||
+        packet->opcode == GXMETAL_OP_DRAW_BITMAP) {
+        state->successful_draws++;
+        state->last_draw_ns = qemu_clock_get_ns(QEMU_CLOCK_REALTIME);
     }
 
     if (packet->opcode == GXMETAL_OP_CONTEXT_CREATE) {
@@ -323,6 +358,14 @@ bool gxmetal_qemu_init(GXMetalQemuState *state, Object *owner,
                           state, "gxmetal.registers",
                           GXMETAL_REGISTER_BYTES);
     qemu_register_reset(gxmetal_qemu_system_reset, state);
+    object_property_add(owner, "gxmetal-status", "str", gxmetal_status_get,
+                        NULL, NULL, state);
+    /* ClassicMac has one primary VGA device. Keep a stable query path without
+     * exposing QEMU's generated peripheral names to the host application. */
+    if (!object_property_find(object_get_root(), "gxmetal-status")) {
+        object_property_add_alias(object_get_root(), "gxmetal-status", owner,
+                                  "gxmetal-status");
+    }
     return true;
 }
 
@@ -350,6 +393,8 @@ static void gxmetal_qemu_render_reset(GXMetalQemuState *state)
      * cursor visibility and InputSprocket capture request which the new
      * application may already have established before RAVE connects. */
     state->active_contexts = 0;
+    state->successful_draws = 0;
+    state->last_draw_ns = 0;
     gxmetal_update_relative_input(state);
     timer_del(state->console_refresh_timer);
     state->last_console_refresh_ns = 0;
