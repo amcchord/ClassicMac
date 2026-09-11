@@ -28,6 +28,8 @@ final class MachineDownloadModel: ObservableObject {
         [.loadingCatalog, .downloading, .verifying, .installing].contains(phase)
     }
 
+    var canGoBack: Bool { phase == .idle || phase == .paused }
+
     var activityLabel: String {
         if isCancelling { return "Stopping…" }
         switch phase {
@@ -113,11 +115,12 @@ final class MachineDownloadModel: ObservableObject {
                 // download that leaves no room for extraction.
                 let cacheVolume = try cacheDirectory.resourceValues(forKeys: [.volumeURLKey]).volume
                 let targetVolume = try directory.resourceValues(forKeys: [.volumeURLKey]).volume
+                let storage = MachineTemplateInstaller.storagePlan(for: machine, at: directory)
                 let cacheNeeded = remaining + MachineTemplateInstaller.spaceReserve +
-                    (cacheVolume == targetVolume ? machine.installedBytes : 0)
+                    (cacheVolume == targetVolume ? storage.requiredBytes : 0)
                 try MachineTemplateInstaller.checkSpace(at: cacheDirectory, requiredBytes: cacheNeeded)
                 try MachineTemplateInstaller.checkSpace(at: directory,
-                    requiredBytes: machine.installedBytes + MachineTemplateInstaller.spaceReserve)
+                    requiredBytes: storage.requiredBytes + MachineTemplateInstaller.spaceReserve)
                 if savedBytes != machine.archiveBytes {
                     let reporter = reporter(for: id, phase: .downloading)
                     let transfer = MachineDownloadTransfer(
@@ -222,14 +225,18 @@ private final class MachineDownloadProgress: @unchecked Sendable {
 /// using `store.openBundle(at: url, autostart: false)`. The sheet dismisses itself.
 struct DownloadMachineSheet: View {
     var onInstall: (URL) -> Void
+    var onBack: (() -> Void)?
     @Environment(\.dismiss) private var dismiss
     @StateObject private var model: MachineDownloadModel
     @State private var selectedID: String?
     @State private var name = "Mac OS 9"
     @State private var saveFolder = AppPaths.defaultLibraryDir
+    @State private var supportsSparseStorage = false
 
-    init(catalogURL: URL = MachineCatalog.defaultURL, onInstall: @escaping (URL) -> Void) {
+    init(catalogURL: URL = MachineCatalog.defaultURL, onBack: (() -> Void)? = nil,
+         onInstall: @escaping (URL) -> Void) {
         self.onInstall = onInstall
+        self.onBack = onBack
         _model = StateObject(wrappedValue: MachineDownloadModel(catalogURL: catalogURL))
     }
 
@@ -286,6 +293,9 @@ struct DownloadMachineSheet: View {
                     Button(model.phase == .downloading ? "Pause" : "Cancel") { model.cancel() }
                         .disabled(model.isCancelling)
                 } else {
+                    if let onBack, model.canGoBack {
+                        Button("Back", action: onBack)
+                    }
                     Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
                     if let machine = selected, model.hasPartialDownload(machine) {
                         Button("Discard Download") { model.discardDownload(machine) }
@@ -311,8 +321,14 @@ struct DownloadMachineSheet: View {
             }
             .padding(20)
         }
-        .frame(width: 600, height: 610)
+        .frame(width: 620, height: 620)
         .task { model.loadCatalog() }
+        .task(id: saveFolder) {
+            let folder = saveFolder
+            supportsSparseStorage = await Task.detached(priority: .utility) {
+                MachineTemplateInstaller.supportsSparseFiles(at: folder)
+            }.value
+        }
         .onChange(of: selected?.id) { _, _ in
             if let selected {
                 selectedID = selected.id
@@ -340,8 +356,18 @@ struct DownloadMachineSheet: View {
                 Text("GXMetal \(machine.gxMetalVersion)")
             }
             .font(.subheadline)
-            Text("\(formatted(machine.archiveBytes)) download · \(formatted(machine.installedBytes + MachineTemplateInstaller.spaceReserve)) free space to install")
-                .font(.caption).foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("\(formatted(machine.archiveBytes)) download")
+                if let capacity = machine.diskCapacityBytes {
+                    Text("\(ByteCountFormatter.string(fromByteCount: capacity, countStyle: .memory)) disk inside your Mac")
+                }
+                let storage = MachineTemplateStoragePlan(machine: machine, supportsSparseFiles: supportsSparseStorage)
+                if storage.sparseWriteLimit != nil {
+                    Text("Starts with up to \(formatted(storage.requiredBytes)) on your computer. Grows as you add files.")
+                }
+                Text("\(formatted(storage.requiredBytes + MachineTemplateInstaller.spaceReserve)) free space needed in the selected folder")
+            }
+            .font(.caption).foregroundStyle(.secondary)
             if (try? machine.checkCompatibility()) == nil {
                 Text("Requires ClassicMac \(machine.minimumAppVersion) or later.")
                     .font(.callout).foregroundStyle(.orange)

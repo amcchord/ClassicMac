@@ -45,6 +45,95 @@ final class MachineDownloadTests: XCTestCase {
         }
     }
 
+    func testSparseCatalogMetadataBoundsAndLegacyFallback() throws {
+        let capacity: Int64 = 32 * 1_073_741_824
+        let machine = fixtureMachine(bytes: Data([1]), installedBytes: capacity + 1024,
+            diskCapacityBytes: capacity, requiredStorageBytes: 512 * 1_048_576)
+        XCTAssertNoThrow(try machine.validate())
+        XCTAssertNoThrow(try machine.checkCompatibility(appVersion: "3.0.0"))
+        let decoded = try MachineCatalog.decode(JSONEncoder().encode(MachineCatalog(schemaVersion: 1, machines: [machine])))
+        XCTAssertEqual(decoded.machines.first?.diskCapacityBytes, capacity)
+        XCTAssertEqual(MachineTemplateStoragePlan(machine: machine, supportsSparseFiles: true).requiredBytes, 512 * 1_048_576)
+        XCTAssertEqual(MachineTemplateStoragePlan(machine: machine, supportsSparseFiles: false).requiredBytes, capacity + 1024)
+        let legacy = fixtureMachine(bytes: Data([1]), installedBytes: capacity + 1024)
+        XCTAssertNil(try MachineCatalog.decode(JSONEncoder().encode(MachineCatalog(schemaVersion: 1, machines: [legacy]))).machines.first?.requiredStorageBytes)
+        XCTAssertEqual(MachineTemplateStoragePlan(machine: legacy, supportsSparseFiles: true).requiredBytes, capacity + 1024)
+        // A 3.0 decoder ignores the new fields and retains the full tar bound.
+        struct LegacyEntry: Decodable { let installedBytes: Int64 }
+        XCTAssertEqual(try JSONDecoder().decode(LegacyEntry.self, from: JSONEncoder().encode(machine)).installedBytes, capacity + 1024)
+        for replacement: [String: Any] in [
+            ["diskCapacityBytes": capacity - 1], ["diskCapacityBytes": capacity + 1024],
+            ["diskCapacityBytes": 512], ["diskCapacityBytes": NSNull()],
+            ["requiredStorageBytes": 0], ["requiredStorageBytes": -1],
+            ["requiredStorageBytes": 1_048_577], ["requiredStorageBytes": capacity + 4 * 1_048_576]
+        ] {
+            var object = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(machine)) as? [String: Any])
+            object.merge(replacement) { _, new in new }
+            let data = try JSONSerialization.data(withJSONObject: ["schemaVersion": 1, "machines": [object]])
+            XCTAssertThrowsError(try MachineCatalog.decode(data), "Should reject \(replacement.keys)")
+        }
+    }
+
+    func testSparseInstallPreservesBoundaryBytesAndLogicalCapacity() throws {
+        try XCTSkipUnless(MachineTemplateInstaller.supportsSparseFiles(at: directory), "Sparse filesystem required")
+        let chunk = Int(MachineTemplateInstaller.sparseChunkBytes)
+        var disk = Data(repeating: 0, count: 8 * chunk + 512)
+        for (offset, byte) in [(17, UInt8(71)), (chunk - 1, 83), (2 * chunk + 5, 97), (disk.count - 1, 109)] { disk[offset] = byte }
+        let config = try JSONEncoder().encode(VMConfig(name: "Template", machineFamily: .powerMacG4))
+        let archive = try makeArchive([Entry("config.json", data: config), Entry("disk.img", data: disk)])
+        let machine = fixtureMachine(bytes: try Data(contentsOf: archive), installedBytes: Int64(config.count + disk.count),
+            diskCapacityBytes: Int64(disk.count), requiredStorageBytes: 4 * Int64(chunk))
+        let installed = try MachineTemplateInstaller.installVerifiedArchive(archive, machine: machine, name: "Sparse", in: directory)
+        let file = installed.appendingPathComponent("disk.img")
+        XCTAssertEqual(try Data(contentsOf: file), disk)
+        let sizes = try file.resourceValues(forKeys: [.fileSizeKey, .fileAllocatedSizeKey])
+        XCTAssertEqual(sizes.fileSize, disk.count)
+        XCTAssertLessThanOrEqual(try XCTUnwrap(sizes.fileAllocatedSize), 3 * chunk)
+        XCTAssertGreaterThan(try XCTUnwrap(sizes.fileAllocatedSize), 0)
+        let imported = try JSONDecoder().decode(VMConfig.self, from: Data(contentsOf: installed.appendingPathComponent("config.json")))
+        XCTAssertEqual(imported.diskSizeGB, 1)
+    }
+
+    func testUnderstatedSparseBudgetStopsBeforeExcessWritesAndInstallCleansUp() throws {
+        try XCTSkipUnless(MachineTemplateInstaller.supportsSparseFiles(at: directory), "Sparse filesystem required")
+        let chunk = Int(MachineTemplateInstaller.sparseChunkBytes)
+        var disk = Data(repeating: 0, count: 2 * chunk)
+        disk[0] = 71; disk[disk.count - 1] = 83
+        let config = try JSONEncoder().encode(VMConfig(name: "Template", machineFamily: .powerMacG4))
+        let archive = try makeArchive([Entry("config.json", data: config), Entry("disk.img", data: disk)])
+        let target = directory.appendingPathComponent("partial")
+        try FileManager.default.createDirectory(at: target, withIntermediateDirectories: false)
+        XCTAssertThrowsError(try MachineTemplateInstaller.extract(archive, into: target,
+            expectedBytes: Int64(config.count + disk.count), expectedDiskBytes: Int64(disk.count),
+            maximumStorageBytes: 2 * Int64(chunk))) { error in
+                XCTAssertTrue(error.localizedDescription.contains("initial storage"))
+            }
+        // Config consumes one charged chunk; only the first disk chunk may be
+        // written before the second nonzero chunk exceeds the declared bound.
+        let partial = try Data(contentsOf: target.appendingPathComponent("disk.img"))
+        XCTAssertEqual(partial.count, disk.count)
+        XCTAssertEqual(partial.prefix(chunk), disk.prefix(chunk))
+        XCTAssertTrue(partial.suffix(chunk).allSatisfy { $0 == 0 })
+        let machine = fixtureMachine(bytes: try Data(contentsOf: archive), installedBytes: Int64(config.count + disk.count),
+            diskCapacityBytes: Int64(disk.count), requiredStorageBytes: 2 * Int64(chunk))
+        XCTAssertThrowsError(try MachineTemplateInstaller.installVerifiedArchive(archive, machine: machine, name: "Invalid budget", in: directory))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: directory.appendingPathComponent("Invalid budget.classic").path))
+        XCTAssertFalse(try FileManager.default.contentsOfDirectory(atPath: directory.path).contains { $0.hasPrefix(".classicmac-import-") })
+    }
+
+    func testSparseMetadataCannotRelaxExpansionOrChangeDiskCapacity() throws {
+        let config = try JSONEncoder().encode(VMConfig(name: "Template", machineFamily: .powerMacG4))
+        let disk = Data(repeating: 0, count: 2 * 1_048_576)
+        let archive = try makeArchive([Entry("config.json", data: config), Entry("disk.img", data: disk)])
+        for (expanded, capacity) in [(Int64(config.count + disk.count - 512), Int64(disk.count - 512)),
+                                     (Int64(config.count + disk.count), Int64(disk.count - 512))] {
+            let machine = fixtureMachine(bytes: try Data(contentsOf: archive), installedBytes: expanded,
+                diskCapacityBytes: capacity, requiredStorageBytes: 1_048_576)
+            XCTAssertNoThrow(try machine.validate())
+            XCTAssertThrowsError(try MachineTemplateInstaller.installVerifiedArchive(archive, machine: machine, name: "Wrong metadata", in: directory))
+        }
+    }
+
     func testStreamingIntegrityAndCancellation() throws {
         let data = Data(repeating: 91, count: 2_100_000)
         let machine = fixtureMachine(bytes: data)
@@ -301,6 +390,9 @@ final class MachineDownloadTests: XCTestCase {
         process.waitUntilExit()
         XCTAssertEqual(process.terminationStatus, 0)
         let machine = try XCTUnwrap(MachineCatalog.decode(Data(contentsOf: catalog)).machines.first)
+        XCTAssertEqual(machine.diskCapacityBytes, 512)
+        XCTAssertEqual(machine.requiredStorageBytes, 1_048_576)
+        XCTAssertEqual(machine.minimumAppVersion, "3.0.0")
         try MachineDownloadTransfer.verify(archive, machine: machine)
         let destination = try MachineTemplateInstaller.installVerifiedArchive(archive, machine: machine, name: "Packaged", in: directory)
         XCTAssertEqual(Set(try FileManager.default.contentsOfDirectory(atPath: destination.path)),
@@ -309,11 +401,13 @@ final class MachineDownloadTests: XCTestCase {
         XCTAssertFalse(try String(contentsOf: destination.appendingPathComponent("config.json"), encoding: .utf8).contains("/Users/source"))
     }
 
-    private func fixtureMachine(bytes: Data, installedBytes: Int64 = 1024) -> DownloadableMachine {
+    private func fixtureMachine(bytes: Data, installedBytes: Int64 = 1024,
+                                diskCapacityBytes: Int64? = nil, requiredStorageBytes: Int64? = nil) -> DownloadableMachine {
         DownloadableMachine(id: "mac-os-9-v1", name: "Mac OS 9", summary: "A ready-to-run Mac.",
             osVersion: "Mac OS 9.2.1", gxMetalVersion: "2.3.0", minimumAppVersion: "3.0.0",
             archiveURL: source, archiveBytes: Int64(bytes.count), installedBytes: installedBytes,
-            sha256: SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined())
+            sha256: SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined(),
+            diskCapacityBytes: diskCapacityBytes, requiredStorageBytes: requiredStorageBytes)
     }
 
     private func transfer(to file: URL, expected: Int64,

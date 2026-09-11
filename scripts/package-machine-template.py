@@ -20,6 +20,44 @@ import tempfile
 from urllib.parse import urlsplit
 
 
+# Storage accounting must match MachineTemplateInstaller.sparseChunkBytes.
+SPARSE_CHUNK_BYTES = 1_048_576
+
+
+def storage_charge(size):
+    return ((size + SPARSE_CHUNK_BYTES - 1) // SPARSE_CHUNK_BYTES) * SPARSE_CHUNK_BYTES
+
+
+class SparseAccountingReader:
+    """Account at Swift's 1 MiB chunk boundaries using the exact archived bytes."""
+    def __init__(self, source):
+        self.source = source
+        self.chunk_bytes = 0
+        self.chunk_nonzero = False
+        self.completed_storage = 0
+        self.bytes_read = 0
+
+    def read(self, size=-1):
+        data = self.source.read(size)
+        self.bytes_read += len(data)
+        offset = 0
+        while offset < len(data):
+            length = min(len(data) - offset, SPARSE_CHUNK_BYTES - self.chunk_bytes)
+            if not self.chunk_nonzero:
+                self.chunk_nonzero = data[offset:offset + length].count(0) != length
+            self.chunk_bytes += length
+            offset += length
+            if self.chunk_bytes == SPARSE_CHUNK_BYTES:
+                self.completed_storage += SPARSE_CHUNK_BYTES if self.chunk_nonzero else 0
+                self.chunk_bytes = 0
+                self.chunk_nonzero = False
+        return data
+
+    @property
+    def required_storage(self):
+        return self.completed_storage + (SPARSE_CHUNK_BYTES if self.chunk_nonzero else 0)
+
+
 def secure_url(value):
     url = urlsplit(value)
     if url.scheme != "https" or not url.hostname or url.username or url.password or url.fragment:
@@ -99,6 +137,8 @@ def main():
                   toolsCDInserted=True, toolsDeliveryVersion=1)
     config_bytes = json.dumps(config, indent=2, sort_keys=True).encode() + b"\n"
     installed_bytes = len(config_bytes)
+    required_storage_bytes = storage_charge(len(config_bytes))
+    disk_capacity_bytes = None
     staged = None
     try:
         with tempfile.NamedTemporaryFile(prefix=".classicmac-template-", dir=output.parent, delete=False) as temp:
@@ -116,7 +156,16 @@ def main():
                             installed_bytes += before.st_size
                             if installed_bytes > 140 * 1_073_741_824:
                                 raise ValueError("Template exceeds the supported 140 GB limit")
-                            archive.addfile(header(name, before.st_size), file)
+                            if name == "disk.img":
+                                disk_capacity_bytes = before.st_size
+                                reader = SparseAccountingReader(file)
+                                archive.addfile(header(name, before.st_size), reader)
+                                if reader.bytes_read != before.st_size:
+                                    raise ValueError("The source disk was truncated while packaging")
+                                required_storage_bytes += reader.required_storage
+                            else:
+                                archive.addfile(header(name, before.st_size), file)
+                                required_storage_bytes += storage_charge(before.st_size)
                             after = os.fstat(file.fileno())
                             if (before.st_size, before.st_mtime_ns, before.st_ctime_ns) != (after.st_size, after.st_mtime_ns, after.st_ctime_ns):
                                 raise ValueError("The source changed while packaging. Shut down the Mac and try again.")
@@ -129,7 +178,8 @@ def main():
         entry = dict(id=args.id, name=args.name, summary=args.summary, osVersion=args.os_version,
                      gxMetalVersion=args.gxmetal_version, minimumAppVersion=args.minimum_app_version,
                      archiveURL=args.archive_url, archiveBytes=staged.stat().st_size,
-                     installedBytes=installed_bytes, sha256=digest.hexdigest())
+                     installedBytes=installed_bytes, diskCapacityBytes=disk_capacity_bytes,
+                     requiredStorageBytes=required_storage_bytes, sha256=digest.hexdigest())
         os.chmod(staged, 0o644)
         publish_new_file(staged, output)
         try:
@@ -142,7 +192,8 @@ def main():
             raise
         print(f"Archive: {output}")
         print(f"Catalog: {catalog_output}")
-        print(f"Download: {entry['archiveBytes']:,} bytes; installed: {installed_bytes:,} bytes")
+        print(f"Download: {entry['archiveBytes']:,} bytes; expanded: {installed_bytes:,} bytes")
+        print(f"Guest disk: {disk_capacity_bytes:,} bytes; initial storage bound: {required_storage_bytes:,} bytes")
         print(f"SHA-256: {entry['sha256']}")
     finally:
         if staged is not None:

@@ -1,8 +1,65 @@
 import Foundation
 import Darwin
 
+// A catalog's smaller storage bound is usable only on a destination that
+// reports sparse-file support. Missing metadata retains the 3.0 space check.
+struct MachineTemplateStoragePlan {
+    let requiredBytes: Int64
+    let sparseWriteLimit: Int64?
+
+    init(machine: DownloadableMachine, supportsSparseFiles: Bool) {
+        sparseWriteLimit = supportsSparseFiles ? machine.requiredStorageBytes : nil
+        requiredBytes = sparseWriteLimit ?? machine.installedBytes
+    }
+}
+
 enum MachineTemplateInstaller {
     static let spaceReserve: Int64 = 256 * 1_048_576
+    // This is part of the schema-1 optional storage contract. The packager
+    // charges every nonzero disk chunk, even a partial last chunk, at this size.
+    static let sparseChunkBytes: Int64 = 1_048_576
+
+    static func supportsSparseFiles(at directory: URL) -> Bool {
+        guard (try? directory.resourceValues(forKeys: [.volumeSupportsSparseFilesKey]))?
+            .volumeSupportsSparseFiles == true else { return false }
+        var volume = statfs()
+        guard statfs(directory.path, &volume) == 0 else { return false }
+        // APFS supports explicit hole punching. Other filesystems retain the
+        // full-size requirement until their allocation behavior is qualified.
+        let fileSystem = withUnsafeBytes(of: volume.f_fstypename) {
+            String(decoding: $0.prefix(while: { $0 != 0 }), as: UTF8.self)
+        }
+        return fileSystem == "apfs" && volume.f_bsize > 0 && Int64(volume.f_bsize) <= sparseChunkBytes
+    }
+
+    static func storagePlan(for machine: DownloadableMachine, at directory: URL) -> MachineTemplateStoragePlan {
+        MachineTemplateStoragePlan(machine: machine, supportsSparseFiles: supportsSparseFiles(at: directory))
+    }
+
+    static func storageCharge(for bytes: Int64) -> Int64 {
+        ((bytes + sparseChunkBytes - 1) / sparseChunkBytes) * sparseChunkBytes
+    }
+
+    private static func allocatedBytes(_ descriptor: Int32) throws -> Int64 {
+        var info = stat()
+        guard fstat(descriptor, &info) == 0, info.st_blocks >= 0 else { throw invalidArchive() }
+        return Int64(info.st_blocks) * 512
+    }
+
+    private static func checkAllocatedStorage(in directory: URL, maximumBytes: Int64) throws {
+        var total: Int64 = 0
+        for name in ["disk.img", "config.json", "preview.png", VMTemplateMetadata.fileName] {
+            let path = directory.appendingPathComponent(name)
+            var info = stat()
+            if lstat(path.path, &info) != 0 {
+                if errno == ENOENT { continue }
+                throw invalidArchive()
+            }
+            guard info.st_blocks >= 0 else { throw invalidArchive() }
+            total += Int64(info.st_blocks) * 512
+            guard total <= maximumBytes else { throw storageBudgetExceeded() }
+        }
+    }
 
     static func checkSpace(at directory: URL, requiredBytes: Int64) throws {
         let values = try directory.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
@@ -36,12 +93,14 @@ enum MachineTemplateInstaller {
         guard try directory.resourceValues(forKeys: [.isDirectoryKey]).isDirectory == true else {
             throw MachineDownloadError.unsafeArchive("Choose an existing folder for the machine.")
         }
-        try checkSpace(at: directory, requiredBytes: machine.installedBytes + spaceReserve)
+        let plan = storagePlan(for: machine, at: directory)
+        try checkSpace(at: directory, requiredBytes: plan.requiredBytes + spaceReserve)
         let staging = directory.appendingPathComponent(".classicmac-import-\(UUID().uuidString)", isDirectory: true)
         try fm.createDirectory(at: staging, withIntermediateDirectories: false,
                                attributes: [.posixPermissions: 0o700])
         defer { try? fm.removeItem(at: staging) }
         try extract(archive, into: staging, expectedBytes: machine.installedBytes,
+                    expectedDiskBytes: machine.diskCapacityBytes, maximumStorageBytes: plan.sparseWriteLimit,
                     cancelled: cancelled, progress: progress)
         if cancelled() { throw CancellationError() }
 
@@ -77,6 +136,9 @@ enum MachineTemplateInstaller {
         try encoder.encode(VMTemplateMetadata(machine: machine)).write(
             to: staging.appendingPathComponent(VMTemplateMetadata.fileName), options: .atomic
         )
+        if let limit = plan.sparseWriteLimit {
+            try checkAllocatedStorage(in: staging, maximumBytes: limit)
+        }
         if cancelled() { throw CancellationError() }
 
         let base = name.replacingOccurrences(of: "/", with: "-")
@@ -103,6 +165,7 @@ enum MachineTemplateInstaller {
     // devices or sparse extents are interpreted. GNU's positive base-256 size
     // encoding supports raw disks larger than USTAR's 8 GB limit.
     static func extract(_ archive: URL, into directory: URL, expectedBytes: Int64,
+                        expectedDiskBytes: Int64? = nil, maximumStorageBytes: Int64? = nil,
                         cancelled: () -> Bool = { false },
                         progress: (Int64) -> Void = { _ in }) throws {
         let pipe = Pipe()
@@ -120,6 +183,8 @@ enum MachineTemplateInstaller {
             process.waitUntilExit()
         }
         var extracted: Int64 = 0
+        var chargedStorage: Int64 = 0
+        var previousAllocation: Int64 = 0
         var seen = Set<String>()
         while true {
             if cancelled() { throw CancellationError() }
@@ -154,27 +219,63 @@ enum MachineTemplateInstaller {
             if name == "config.json" && size > 65_536 { throw invalidArchive() }
             if name == "preview.png" && size > 16 * 1_048_576 { throw invalidArchive() }
             if name == "disk.img" && (size < 512 || size % 512 != 0) { throw invalidArchive() }
+            if name == "disk.img", let expectedDiskBytes, size != expectedDiskBytes {
+                throw MachineDownloadError.unsafeArchive("Its disk capacity does not match the catalog.")
+            }
+            if name != "disk.img", let maximumStorageBytes {
+                let charge = storageCharge(for: size)
+                guard charge <= maximumStorageBytes - chargedStorage else { throw storageBudgetExceeded() }
+                chargedStorage += charge
+            }
             let destination = directory.appendingPathComponent(name)
             let fd = open(destination.path, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0o600)
             guard fd >= 0 else { throw invalidArchive() }
             let output = FileHandle(fileDescriptor: fd, closeOnDealloc: true)
             do {
+                if name == "disk.img", maximumStorageBytes != nil {
+                    // Extending a raw APFS file does not allocate its contents.
+                    // Punching skipped ranges below prevents APFS from filling
+                    // small seek gaps with allocated zeros when it closes.
+                    try output.truncate(atOffset: UInt64(size))
+                    try output.seek(toOffset: 0)
+                }
                 var remaining = size
                 while remaining > 0 {
                     if cancelled() { throw CancellationError() }
-                    let data = try readExactly(Int(min(1_048_576, remaining)), from: input)
+                    let data = try readExactly(Int(min(sparseChunkBytes, remaining)), from: input)
                     if name == "disk.img" && data.allSatisfy({ $0 == 0 }) {
-                        // Preserve a sparse raw disk: a prepared 8 GB template
-                        // can contain only a few hundred MB of actual data.
+                        // Seek across whole zero chunks, preserving logical raw
+                        // capacity without allocating empty guest space.
+                        if maximumStorageBytes != nil {
+                            var hole = fpunchhole_t(fp_flags: 0, reserved: 0,
+                                fp_offset: off_t(size - remaining), fp_length: off_t(data.count))
+                            guard fcntl(fd, F_PUNCHHOLE, &hole) == 0 else {
+                                throw MachineDownloadError.unsafeArchive("This folder could not preserve the machine's empty disk space. Choose a folder on your Mac's APFS disk.")
+                            }
+                        }
                         try output.seek(toOffset: UInt64(size - remaining + Int64(data.count)))
                     } else {
+                        if name == "disk.img", let maximumStorageBytes {
+                            let charge = storageCharge(for: Int64(data.count))
+                            guard charge <= maximumStorageBytes - chargedStorage else { throw storageBudgetExceeded() }
+                            chargedStorage += charge
+                        }
                         try output.write(contentsOf: data)
+                        if let maximumStorageBytes {
+                            guard try allocatedBytes(fd) <= maximumStorageBytes - previousAllocation else {
+                                throw storageBudgetExceeded()
+                            }
+                        }
                     }
                     remaining -= Int64(data.count)
                     extracted += Int64(data.count)
                     progress(extracted)
                 }
                 try output.truncate(atOffset: UInt64(size))
+                if let maximumStorageBytes {
+                    previousAllocation += try allocatedBytes(fd)
+                    guard previousAllocation <= maximumStorageBytes else { throw storageBudgetExceeded() }
+                }
                 try output.close()
             } catch {
                 try? output.close()
@@ -215,6 +316,10 @@ enum MachineTemplateInstaller {
         guard !digits.isEmpty, digits.allSatisfy({ "01234567".contains($0) }),
               let value = Int64(digits, radix: 8) else { throw invalidArchive() }
         return value
+    }
+
+    private static func storageBudgetExceeded() -> MachineDownloadError {
+        .unsafeArchive("The machine needs more initial storage than its catalog allows. Contact the template publisher.")
     }
 
     private static func invalidArchive() -> MachineDownloadError {
