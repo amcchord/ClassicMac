@@ -102,7 +102,7 @@ struct MediaDrawerView: View {
         if !live { return "Changes here are saved for the next startup. Shut down and start the Mac to apply them." }
         if isPaused { return "Resume the Mac before changing media so it can finish disk activity safely." }
         if snapshot == nil { return "Waiting for the Mac's media controls. You can change media after startup finishes, or while the Mac is shut down." }
-        return "Disc changes appear in the running Mac. For a floppy, eject the current disk before inserting another."
+        return "Disc changes update the Mac’s drives. If a disc does not appear in Mac OS, restart the Mac. Eject a floppy before inserting another."
     }
 
     @ViewBuilder

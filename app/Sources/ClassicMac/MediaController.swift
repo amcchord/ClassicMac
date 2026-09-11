@@ -238,7 +238,13 @@ final class MediaController: NSObject, ObservableObject, NSWindowDelegate {
                 guard let drive = result[device], drive.inserted == (path != nil), path == nil || drive.path == path else {
                     throw MediaError(device == .floppy ? "The Mac is still using the floppy. Eject it from the Mac desktop, then try again. Nothing was forced out." : "The media change could not be confirmed. Wait a moment, then try again.")
                 }
-                messages[id] = path == nil ? "\(device.label) ejected." : "\(device.label) inserted."
+                if path == nil {
+                    messages[id] = "\(device.label) ejected."
+                } else if device == .floppy {
+                    messages[id] = "Floppy disk inserted."
+                } else {
+                    messages[id] = "\(device.label) inserted in its drive. If it does not appear in Mac OS, restart the Mac."
+                }
             } else {
                 messages[id] = running ? "Saved for the next startup. Shut down and start the Mac to apply this change." : "Media saved."
             }

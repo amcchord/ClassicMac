@@ -14,8 +14,10 @@ with the next startup choice and recent images.
   Mac OS 9 does not reliably notice IDE swaps, so the app never claims those
   changes have appeared in the guest. Tools is a startup-mounted Virtio disk.
 - On a running Quadra, the drawer reads actual drive state before each change
-  and confirms it afterward. Disc/Tools changes use the existing SCSI media
-  behavior. Floppy insertion is disabled until the current writable disk is
+  and confirms it afterward. Disc/Tools changes confirm host drive insertion;
+  whether Mac OS mounts a new CD also depends on its guest driver. The drawer
+  explains that a restart may be needed if a disc does not appear in Mac OS.
+  Floppy insertion is disabled until the current writable disk is
   ejected. Eject requests the classicvirtio guest flush/eject handshake and
   polls for completion for up to twelve seconds, with an actionable error if
   the Mac is still busy. It never force-ejects or force-replaces a floppy.
@@ -90,3 +92,20 @@ insert/replace/eject a SCSI CD; insert a writable floppy, write a guest file,
 eject through the drawer, and reinsert it to verify the write survived. Confirm
 that a busy/paused floppy is not force-removed. Check a missing recent image's
 Locate flow and source filenames containing spaces, quotes, and accents.
+
+### September 10, 2026 candidate runtime check
+
+The signed 3.0.0 candidate passed the Power Mac Tools identity/staging checks,
+Quadra pause/error checks, CD backend insertion/ejection checks, and preservation
+of the old image after a failed replacement. In an OS 8.1 Finder, a disposable
+floppy appeared, its volume was renamed to `Media QA`, and the guest completed
+the safe eject handshake. Reading the ejected image confirmed that the guest's
+rename was written to disk; all original source-image hashes were unchanged.
+
+This OS 8.1 boot-CD fixture did not demonstrate Tools mounting in Finder when
+inserted into an initially empty SCSI CD drive, or in the populated-at-start
+CD eject/reinsert case. The app therefore describes confirmed drive insertion
+and advises restarting if the disc does not appear in Mac OS. It does not claim
+that a monitor acknowledgment proves guest-visible mounting. Full evidence is
+retained under the integration checkout's
+`output/3.0/test-evidence/media-runtime/`.
