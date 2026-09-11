@@ -18,6 +18,18 @@ enum MachineTemplateInstaller {
     // This is part of the schema-1 optional storage contract. The packager
     // charges every nonzero disk chunk, even a partial last chunk, at this size.
     static let sparseChunkBytes: Int64 = 1_048_576
+    private static let zeroChunk = Data(repeating: 0, count: Int(sparseChunkBytes))
+
+    private static func isZeroChunk(_ data: Data) -> Bool {
+        // Most of a large raw template is empty. Compare whole buffers using
+        // the system's vectorized routine instead of iterating Data byte by byte.
+        guard !data.isEmpty else { return true }
+        return data.withUnsafeBytes { bytes in
+            zeroChunk.withUnsafeBytes { zeros in
+                memcmp(bytes.baseAddress!, zeros.baseAddress!, bytes.count) == 0
+            }
+        }
+    }
 
     static func supportsSparseFiles(at directory: URL) -> Bool {
         guard (try? directory.resourceValues(forKeys: [.volumeSupportsSparseFilesKey]))?
@@ -243,7 +255,7 @@ enum MachineTemplateInstaller {
                 while remaining > 0 {
                     if cancelled() { throw CancellationError() }
                     let data = try readExactly(Int(min(sparseChunkBytes, remaining)), from: input)
-                    if name == "disk.img" && data.allSatisfy({ $0 == 0 }) {
+                    if name == "disk.img" && isZeroChunk(data) {
                         // Seek across whole zero chunks, preserving logical raw
                         // capacity without allocating empty guest space.
                         if maximumStorageBytes != nil {
