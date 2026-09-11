@@ -451,6 +451,9 @@ for helper in "$QUADRA_APP" "$PPC_APP"; do
   python3 "$ROOT_DIR/scripts/bundle-release-libraries.py" \
     --frameworks "$helper/Contents/Frameworks" \
     --cache "$ROOT_DIR/vendor/release-libraries"
+  # Frameworks is a code-only signing location; provenance is bundle data.
+  mv "$helper/Contents/Frameworks/release-libraries.json" \
+    "$helper/Contents/Resources/release-libraries.json"
 done
 
 # ---------------------------------------------------------------------------

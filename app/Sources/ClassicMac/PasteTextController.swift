@@ -138,6 +138,7 @@ final class PasteTextSession: ObservableObject {
 private struct PasteTextView: View {
     @ObservedObject var session: PasteTextSession
     @ObservedObject private var manager = QEMUManager.shared
+    @FocusState private var editingText: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -145,6 +146,7 @@ private struct PasteTextView: View {
             Text("Place the text cursor in the Mac first. This types the text below using the Mac's US keyboard layout, with Caps Lock off. It supports English text and common accented letters; other characters must be edited first.")
                 .foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             TextEditor(text: $session.text)
+                .focused($editingText)
                 .font(.system(.body, design: .monospaced))
                 .scrollContentBackground(.hidden)
                 .padding(6)
@@ -178,5 +180,6 @@ private struct PasteTextView: View {
         }
         .padding(22)
         .frame(minWidth: 540, minHeight: 410)
+        .onAppear { editingText = true }
     }
 }

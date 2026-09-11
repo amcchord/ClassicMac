@@ -187,7 +187,7 @@ import sys
 app = Path(sys.argv[1])
 for helper in (app / "Contents/Helpers").glob("*.app"):
     frameworks = helper / "Contents/Frameworks"
-    if not (frameworks / "release-libraries.json").is_file():
+    if not (helper / "Contents/Resources/release-libraries.json").is_file():
         sys.exit(f"Missing runtime library provenance: {helper.name}")
     for library in frameworks.glob("*.dylib"):
         info = subprocess.check_output(["otool", "-l", str(library)], text=True)
