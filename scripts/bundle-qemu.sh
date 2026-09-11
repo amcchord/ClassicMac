@@ -443,6 +443,16 @@ dedupe_rpaths "$QUADRA_APP/Contents/MacOS/qemu-system-m68k"
 dedupe_rpaths "$QUADRA_APP/Contents/MacOS/qemu-img"
 dedupe_rpaths "$PPC_APP/Contents/MacOS/qemu-system-ppc"
 
+# A newer host's Homebrew libraries may require a newer OS than ClassicMac.
+# Replace them with verified, same-version official Sequoia bottles instead
+# of changing Mach-O minimum-version headers or dropping macOS 15 support.
+log "Staging verified macOS 15 runtime libraries"
+for helper in "$QUADRA_APP" "$PPC_APP"; do
+  python3 "$ROOT_DIR/scripts/bundle-release-libraries.py" \
+    --frameworks "$helper/Contents/Frameworks" \
+    --cache "$ROOT_DIR/vendor/release-libraries"
+done
+
 # ---------------------------------------------------------------------------
 # 5. Code signing. Sign inner items first, then outward.
 #

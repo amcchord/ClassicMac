@@ -178,6 +178,27 @@ if [[ "$VERSION" == 3.* ]]; then
     grep -Fq "$action" "$APP/Contents/Resources/Browser/viewer.js" || \
       die "Bundled browser controls lack $action"
   done
+  log "Checking every packaged runtime library supports macOS 15"
+  python3 - "$APP" <<'PY'
+from pathlib import Path
+import re
+import subprocess
+import sys
+app = Path(sys.argv[1])
+for helper in (app / "Contents/Helpers").glob("*.app"):
+    frameworks = helper / "Contents/Frameworks"
+    if not (frameworks / "release-libraries.json").is_file():
+        sys.exit(f"Missing runtime library provenance: {helper.name}")
+    for library in frameworks.glob("*.dylib"):
+        info = subprocess.check_output(["otool", "-l", str(library)], text=True)
+        minimums = re.findall(r"\bminos ([0-9.]+)", info)
+        if not minimums or any(tuple(map(int, (v + ".0.0").split(".")[:3])) > (15, 0, 0) for v in minimums):
+            sys.exit(f"Runtime library needs newer than macOS 15: {library.name}")
+        deps = subprocess.check_output(["otool", "-L", str(library)], text=True)
+        if "/opt/homebrew" in deps or "@@HOMEBREW" in deps or "/usr/local" in deps:
+            sys.exit(f"Unbundled runtime dependency: {library.name}")
+print("All packaged runtime libraries target macOS 15 or earlier.")
+PY
 fi
 grep -q 'pseudoEncodingQEMUPointerTypeChange' "$BROWSER_RFB" || \
   die "Bundled browser client lacks QEMU relative-pointer support"
