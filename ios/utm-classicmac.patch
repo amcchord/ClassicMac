@@ -1,0 +1,301 @@
+diff --git a/Platform/Shared/ContentView.swift b/Platform/Shared/ContentView.swift
+index 91d338d..c7d5136 100644
+--- a/Platform/Shared/ContentView.swift
++++ b/Platform/Shared/ContentView.swift
+@@ -21,8 +21,10 @@ import IQKeyboardManagerSwift
+ #endif
+ import TipKit
+ 
+-// on visionOS, there is no text to show more than UTM
+-#if WITH_QEMU_TCI && !os(visionOS)
++// ClassicMac ships a focused iPad experience on top of the UTM SE runtime.
++#if CLASSICMAC
++let productName = "ClassicMac"
++#elseif WITH_QEMU_TCI && !os(visionOS)
+ let productName = "UTM SE"
+ #elseif WITH_REMOTE && !os(visionOS)
+ let productName = "UTM Remote"
+@@ -85,7 +87,9 @@ struct ContentView: View {
+         .onAppear {
+             Task {
+                 await data.listRefresh()
++                #if !CLASSICMAC
+                 await releaseHelper.fetchReleaseNotes()
++                #endif
+                 if #available(iOS 17, macOS 14, *) {
+                     if !releaseHelper.isReleaseNotesShown {
+                         UTMTipCreateVM.isVMListEmpty = data.virtualMachines.count == 0
+diff --git a/Platform/Shared/VMNavigationListView.swift b/Platform/Shared/VMNavigationListView.swift
+index 83b0451..863e38d 100644
+--- a/Platform/Shared/VMNavigationListView.swift
++++ b/Platform/Shared/VMNavigationListView.swift
+@@ -184,7 +184,7 @@ private struct VMListModifier: ViewModifier {
+                 }
+             }
+             #endif
+-            #if !WITH_REMOTE
++            #if !WITH_REMOTE && !CLASSICMAC
+             ToolbarItem(placement: .navigationBarLeading) {
+                 if #available(iOS 17, visionOS 99, *) {
+                     Button {
+diff --git a/Platform/Shared/VMPlaceholderView.swift b/Platform/Shared/VMPlaceholderView.swift
+index 99df021..dfd1201 100644
+--- a/Platform/Shared/VMPlaceholderView.swift
++++ b/Platform/Shared/VMPlaceholderView.swift
+@@ -71,7 +71,11 @@ fileprivate struct VMPlaceholderViewNew: View {
+ fileprivate struct Title: View {
+     var body: some View {
+         HStack {
++            #if CLASSICMAC
++            Text("Welcome to ClassicMac").font(.title)
++            #else
+             Text("Welcome to UTM").font(.title)
++            #endif
+         }
+     }
+ }
+@@ -84,9 +88,15 @@ fileprivate struct FirstRow: View {
+         TileButton(Label(String.create, systemImage: "plus.circle")) {
+             data.newVM()
+         }
++        #if CLASSICMAC
++        TileButton(Label(String.browse, systemImage: "doc.badge.plus")) {
++            NotificationCenter.default.post(name: NSNotification.OpenVirtualMachine, object: nil)
++        }
++        #else
+         TileButton(Label(String.browse, systemImage: "arrow.down.circle")) {
+             openURL(URL(string: "https://mac.getutm.app/gallery/")!)
+         }
++        #endif
+     }
+ }
+ 
+@@ -95,19 +105,34 @@ fileprivate struct SecondRow: View {
+ 
+     var body: some View {
+         TileButton(Label(String.guide, systemImage: "book.circle")) {
++            #if CLASSICMAC
++            openURL(URL(string: "https://github.com/amcchord/ClassicMac#readme")!)
++            #else
+             openURL(URL(string: "https://docs.getutm.app/basics/basics/")!)
++            #endif
+         }
+         TileButton(Label(String.support, systemImage: "questionmark.circle")) {
++            #if CLASSICMAC
++            openURL(URL(string: "https://github.com/amcchord/ClassicMac/issues")!)
++            #else
+             openURL(URL(string: "https://docs.getutm.app/")!)
++            #endif
+         }
+     }
+ }
+ 
+ fileprivate extension String {
++    #if CLASSICMAC
++    static let create = NSLocalizedString("Create a Classic Mac", comment: "Welcome view")
++    static let browse = NSLocalizedString("Import a Machine", comment: "Welcome view")
++    static let guide = NSLocalizedString("Setup Guide", comment: "Welcome view")
++    static let support = NSLocalizedString("Report an Issue", comment: "Welcome view")
++    #else
+     static let create = NSLocalizedString("Create a New Virtual Machine", comment: "Welcome view")
+     static let browse = NSLocalizedString("Browse UTM Gallery", comment: "Welcome view")
+     static let guide = NSLocalizedString("User Guide", comment: "Welcome view")
+     static let support = NSLocalizedString("Support", comment: "Welcome view")
++    #endif
+     static let server = NSLocalizedString("Server", comment: "Server view")
+ }
+ 
+diff --git a/Platform/Shared/VMWizardOSView.swift b/Platform/Shared/VMWizardOSView.swift
+index 96bbb22..536c580 100644
+--- a/Platform/Shared/VMWizardOSView.swift
++++ b/Platform/Shared/VMWizardOSView.swift
+@@ -43,6 +43,7 @@ struct VMWizardOSView: View {
+                         OperatingSystem(imageName: "Logo-macOS", name: "Classic Mac OS")
+                     }
+                 }
++                #if !CLASSICMAC
+                 Button {
+                     wizardState.operatingSystem = .Windows
+                     wizardState.useAppleVirtualization = false
+@@ -58,9 +59,11 @@ struct VMWizardOSView: View {
+                 } label: {
+                     OperatingSystem(imageName: "Logo-Linux", name: "Linux")
+                 }
++                #endif
+             } header: {
+                 Text("Preconfigured")
+             }
++            #if !CLASSICMAC
+             Section {
+                 Button {
+                     wizardState.operatingSystem = .Other
+@@ -81,6 +84,7 @@ struct VMWizardOSView: View {
+             } header: {
+                 Text("Custom")
+             }
++            #endif
+ 
+         }
+         .buttonStyle(.inList)
+diff --git a/Platform/Shared/VMWizardStartViewTCI.swift b/Platform/Shared/VMWizardStartViewTCI.swift
+index cb231aa..f83e6f1 100644
+--- a/Platform/Shared/VMWizardStartViewTCI.swift
++++ b/Platform/Shared/VMWizardStartViewTCI.swift
+@@ -24,16 +24,27 @@ struct VMWizardStartViewTCI: View {
+             Section {
+                 Button {
+                     wizardState.useVirtualization = false
++                    #if CLASSICMAC
++                    wizardState.operatingSystem = .ClassicMacOS
++                    wizardState.next()
++                    #endif
+                     wizardState.next()
+                 } label: {
+                     HStack {
+                         Image(systemName: "pc")
+                             .font(.title)
+                         VStack(alignment: .leading, spacing: 10) {
++                            #if CLASSICMAC
++                            Text("New Classic Mac")
++                                .font(.title)
++                            Text("Create a Quadra 800 or Power Macintosh G4.")
++                                .font(.caption)
++                            #else
+                             Text("New Machine")
+                                 .font(.title)
+                             Text("Create a new emulated machine from scratch.")
+                                 .font(.caption)
++                            #endif
+                         }
+                         Spacer()
+                     }
+@@ -54,6 +65,7 @@ struct VMWizardStartViewTCI: View {
+                         Image(systemName: "doc")
+                     }
+                 }
++                #if !CLASSICMAC
+                 Link(destination: URL(string: "https://mac.getutm.app/gallery/")!) {
+                     Label {
+                         Text("Download prebuilt from UTM Gallery…")
+@@ -61,6 +73,7 @@ struct VMWizardStartViewTCI: View {
+                         Image(systemName: "arrow.down.doc")
+                     }
+                 }
++                #endif
+             } header: {
+                 Text("Existing")
+             }
+diff --git a/Platform/iOS/Info.plist b/Platform/iOS/Info.plist
+index 60a5f1e..fc627b6 100644
+--- a/Platform/iOS/Info.plist
++++ b/Platform/iOS/Info.plist
+@@ -6,11 +6,13 @@
+ 	<string>None</string>
+ 	<key>CFBundleDevelopmentRegion</key>
+ 	<string>$(DEVELOPMENT_LANGUAGE)</string>
++	<key>CFBundleDisplayName</key>
++	<string>ClassicMac</string>
+ 	<key>CFBundleDocumentTypes</key>
+ 	<array>
+ 		<dict>
+ 			<key>CFBundleTypeName</key>
+-			<string>UTM virtual machine</string>
++			<string>ClassicMac virtual machine</string>
+ 			<key>LSHandlerRank</key>
+ 			<string>Owner</string>
+ 			<key>LSItemContentTypes</key>
+@@ -39,10 +41,10 @@
+ 			<key>CFBundleTypeRole</key>
+ 			<string>Editor</string>
+ 			<key>CFBundleURLName</key>
+-			<string>com.utmapp.UTM</string>
++			<string>com.classicmac.emulator</string>
+ 			<key>CFBundleURLSchemes</key>
+ 			<array>
+-				<string>UTM</string>
++				<string>classicmac</string>
+ 			</array>
+ 		</dict>
+ 	</array>
+@@ -111,7 +113,7 @@
+ 				<string>com.apple.package</string>
+ 			</array>
+ 			<key>UTTypeDescription</key>
+-			<string>UTM virtual machine</string>
++			<string>ClassicMac virtual machine</string>
+ 			<key>UTTypeIconFiles</key>
+ 			<array/>
+ 			<key>UTTypeIdentifier</key>
+diff --git a/UTM.xcodeproj/project.pbxproj b/UTM.xcodeproj/project.pbxproj
+index 9b93eff..5af43e2 100644
+--- a/UTM.xcodeproj/project.pbxproj
++++ b/UTM.xcodeproj/project.pbxproj
+@@ -7,6 +7,7 @@
+ 	objects = {
+ 
+ /* Begin PBXBuildFile section */
++		C1A551CE30C1A551CE30C1A6 /* LICENSE in Resources */ = {isa = PBXBuildFile; fileRef = C1A551CE30C1A551CE30C1A5 /* LICENSE */; };
+ 		03FA9C722B9BBDB000C53A5A /* UTMConfigurationHostNetwork.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03FA9C712B9BBDB000C53A5A /* UTMConfigurationHostNetwork.swift */; };
+ 		03FA9C732B9BBDB000C53A5A /* UTMConfigurationHostNetwork.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03FA9C712B9BBDB000C53A5A /* UTMConfigurationHostNetwork.swift */; };
+ 		03FA9C742B9BBDB000C53A5A /* UTMConfigurationHostNetwork.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03FA9C712B9BBDB000C53A5A /* UTMConfigurationHostNetwork.swift */; };
+@@ -1554,7 +1555,6 @@
+ 			dstPath = "";
+ 			dstSubfolderSpec = 10;
+ 			files = (
+-				CE30F93630200C2000024DB2 /* dxmt-native.framework in Embed Libraries */,
+ 				CEA45F72263519B5002FA97D /* gpg-error.0.framework in Embed Libraries */,
+ 				CE63B0FD2F0EFB0700C59D13 /* vulkan_kosmickrisp.framework in Embed Libraries */,
+ 				CEA45F74263519B5002FA97D /* gstcontroller-1.0.0.framework in Embed Libraries */,
+@@ -1567,7 +1567,6 @@
+ 				CEA45F7B263519B5002FA97D /* png16.16.framework in Embed Libraries */,
+ 				CEA45F7C263519B5002FA97D /* gstnet-1.0.0.framework in Embed Libraries */,
+ 				CEA45F7E263519B5002FA97D /* crypto.1.1.framework in Embed Libraries */,
+-				CEA45F7F263519B5002FA97D /* qemu-riscv64-softmmu.framework in Embed Libraries */,
+ 				CED2971C2CE4263600F1E3EB /* soup-3.0.0.framework in Embed Libraries */,
+ 				CEA45F80263519B5002FA97D /* gstapp-1.0.0.framework in Embed Libraries */,
+ 				CEA45F84263519B5002FA97D /* gsttag-1.0.0.framework in Embed Libraries */,
+@@ -1577,12 +1576,9 @@
+ 				CEA45F89263519B5002FA97D /* phodav-3.0.0.framework in Embed Libraries */,
+ 				CEA45F8A263519B5002FA97D /* gthread-2.0.0.framework in Embed Libraries */,
+ 				84937F20289767F0003148F4 /* zstd.1.framework in Embed Libraries */,
+-				CEA45F8B263519B5002FA97D /* qemu-aarch64-softmmu.framework in Embed Libraries */,
+ 				CEA45F8F263519B5002FA97D /* gobject-2.0.0.framework in Embed Libraries */,
+ 				CEA45F90263519B5002FA97D /* gmodule-2.0.0.framework in Embed Libraries */,
+-				CEA45F97263519B5002FA97D /* qemu-ppc64-softmmu.framework in Embed Libraries */,
+ 				CEA45F9A263519B5002FA97D /* glib-2.0.0.framework in Embed Libraries */,
+-				CEA45F9B263519B5002FA97D /* qemu-x86_64-softmmu.framework in Embed Libraries */,
+ 				CE064C6C2A563F75003C833D /* swtpm.0.framework in Embed Libraries */,
+ 				CEA45F9F263519B5002FA97D /* intl.8.framework in Embed Libraries */,
+ 				CEA45FA0263519B5002FA97D /* gstreamer-1.0.0.framework in Embed Libraries */,
+@@ -1591,7 +1587,6 @@
+ 				CEA45FA2263519B5002FA97D /* json-glib-1.0.0.framework in Embed Libraries */,
+ 				CEA45FA3263519B5002FA97D /* pixman-1.0.framework in Embed Libraries */,
+ 				CEA45FA4263519B5002FA97D /* jpeg.62.framework in Embed Libraries */,
+-				CEA45FA7263519B5002FA97D /* qemu-i386-softmmu.framework in Embed Libraries */,
+ 				CEA45FA8263519B5002FA97D /* spice-client-glib-2.0.8.framework in Embed Libraries */,
+ 				CEA45FA9263519B5002FA97D /* opus.0.framework in Embed Libraries */,
+ 				CEA45FAA263519B5002FA97D /* gstsdp-1.0.0.framework in Embed Libraries */,
+@@ -1675,6 +1670,7 @@
+ /* End PBXCopyFilesBuildPhase section */
+ 
+ /* Begin PBXFileReference section */
++		C1A551CE30C1A551CE30C1A5 /* LICENSE */ = {isa = PBXFileReference; lastKnownFileType = text; path = LICENSE; sourceTree = "<group>"; };
+ 		037DAA1C2B0B92580061ACB3 /* it */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = it; path = it.lproj/VMDisplayWindow.strings; sourceTree = "<group>"; };
+ 		037DAA1D2B0B92580061ACB3 /* it */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = it; path = it.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+ 		037DAA1E2B0B92580061ACB3 /* it */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = it; path = it.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+@@ -2908,6 +2904,7 @@
+ 		CE550BC0225947990063E575 = {
+ 			isa = PBXGroup;
+ 			children = (
++				C1A551CE30C1A551CE30C1A5 /* LICENSE */,
+ 				FF0307532A84E3B70049979B /* QEMULauncher-InfoPlist.strings */,
+ 				CE50A41F2637BB200050430F /* Build.xcconfig */,
+ 				CE258ACC22715F8300E5A333 /* README.md */,
+@@ -3572,6 +3569,7 @@
+ 			isa = PBXResourcesBuildPhase;
+ 			buildActionMask = 2147483647;
+ 			files = (
++				C1A551CE30C1A551CE30C1A6 /* LICENSE in Resources */,
+ 				CEA45F64263519B5002FA97D /* Icons in Resources */,
+ 				FFB02A8D266CB09C006CD71A /* InfoPlist.strings in Resources */,
+ 				CEA45F67263519B5002FA97D /* Localizable.strings in Resources */,

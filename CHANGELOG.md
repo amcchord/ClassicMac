@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+### Added
+
+- Added an iPad-only ClassicMac beta built on UTM SE's App Store-compatible
+  QEMU threaded-code interpreter, with focused Quadra 800 and Power Macintosh
+  G4 creation, branded app metadata and icons, and only the required m68k and
+  PowerPC emulator frameworks.
+- Added reproducible iPad archive and TestFlight upload scripts. The upload
+  flow retrieves the App Store Connect Team API key from AustinLand into a
+  protected temporary file, signs and validates the IPA, then uploads it.
+
+### Changed
+
+- Removed UTM's unused DXMT framework from the iPad bundle after App Store
+  Connect flagged its private symbols during processing.
+- The first iPad beta uses upstream UTM Classic Mac display devices and does
+  not yet include GXMetal or the custom `nubus-qfb` device. It runs without JIT
+  to remain compatible with TestFlight distribution.
+
 ## 2.3.2 — 2026-08-28
 
 ### Added

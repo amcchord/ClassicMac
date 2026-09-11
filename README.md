@@ -29,6 +29,20 @@
   <img src="docs/screenshots/powermacg4-macos92.png" width="410" alt="Mac OS 9.2 on the emulated Power Mac G4">
 </p>
 
+## iPad beta
+
+ClassicMac now has an iPad-only beta for iPadOS 14 and newer. It can create and
+run both Quadra 800 and Power Macintosh G4 machines entirely on-device, import
+existing machine packages, and uses the same ClassicMac icon and focused
+Classic Mac OS setup flow.
+
+The iPad build uses UTM SE's App Store-compatible QEMU threaded-code
+interpreter because iPadOS cannot launch the macOS app's bundled emulator
+processes. That makes it slower than the Apple Silicon Mac build. This first
+beta also uses upstream UTM display hardware, so ClassicMac's GXMetal renderer
+and custom `nubus-qfb` display device are not included yet. See
+[`ios/README.md`](ios/README.md) for the pinned build and TestFlight workflow.
+
 ## GXMetal: Mac OS 9 3D accelerated by Metal
 
 GXMetal is ClassicMac's experimental paravirtualized 3D stack for PowerPC Mac

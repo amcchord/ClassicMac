@@ -1,8 +1,19 @@
 # Third-Party Notices
 
 ClassicMac includes and dynamically links third-party open-source software.
-The app bundle includes the applicable license texts in
-`Contents/Resources/Licenses`.
+The macOS bundle keeps applicable license texts in
+`Contents/Resources/Licenses`; the iPad bundle includes its UTM license and
+third-party settings notices as application resources.
+
+## UTM
+
+ClassicMac for iPad is built on the UTM SE application and its shared-framework
+QEMU runtime. UTM is licensed under the Apache License 2.0. The iPad build pins
+UTM commit `8e4de50817e76a83d6840212311627a78dd4f8b2`, applies the changes in
+`ios/utm-classicmac.patch`, and includes UTM's complete `LICENSE` file in the
+application bundle.
+
+Upstream source: <https://github.com/utmapp/UTM/tree/8e4de50817e76a83d6840212311627a78dd4f8b2>
 
 ## QEMU
 
