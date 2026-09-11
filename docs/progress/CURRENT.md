@@ -2,9 +2,9 @@
 
 ## Objective
 
-Implement roadmap items 1 (downloadable configured OS 9), 4 (machine home),
-7 (compact GXMetal status), 13 (paste text), and 10 (media drawer), then build
-and validate the integrated macOS 3.0 candidate.
+Publish the completed, signed and notarized ClassicMac 3.0 build to GitHub,
+including all remaining project source changes, as explicitly authorized by
+Austin after candidate validation.
 
 ## Baseline and ownership
 
@@ -12,7 +12,9 @@ and validate the integrated macOS 3.0 candidate.
   `codex/3.0-integration`, starting at `f763917`.
 - Feature agents work in contained `worktrees/3.0-*` checkouts and commit only
   their own scoped work. The coordinator owns shared records and final build.
-- Existing uncommitted iPad work remains unrelated and must be preserved.
+- Remaining iPad beta source and build scripts are committed in `46188af`
+  under the user's instruction to commit everything. The macOS release
+  artifacts are the previously qualified, byte-identical 3.0 build.
 - Hosting target: existing 50day.io server, under mcchord.net, via AustinLand.
 
 ## Current phase
@@ -35,6 +37,7 @@ integrated; contained worktrees and test evidence remain for reference.
 
 ## Next action
 
-Try the completed 3.0 candidate and decide whether to publish it. GitHub main
-remains at `f763917`; no 3.0 push or GitHub release has been authorized. The
-existing Applications installation and unrelated iPad work remain intact.
+Fast-forward GitHub main, tag `v3.0.0`, upload the verified DMG/ZIP/checksums,
+and publish the GitHub release. Prior release `v2.3.2` remains the rollback
+reference. Confirm remote artifact digests and latest-release selection, then
+record the final publication state.

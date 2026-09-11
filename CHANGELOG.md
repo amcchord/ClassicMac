@@ -20,6 +20,42 @@
   not yet include GXMetal or the custom `nubus-qfb` device. It runs without JIT
   to remain compatible with TestFlight distribution.
 
+## 3.0.0 — 2026-09-10
+
+### Added
+
+- Download a configured Mac OS 9.2.1 machine with GXMetal 2.3.0 from
+  mcchord.net, including resumable transfers, checksum/free-space checks,
+  safe import, and a fresh machine identity.
+- A simpler machine home with preview, Start/Show/Resume, known OS provenance,
+  quick actions, and separate General, Display, and Sharing settings.
+- A compact GXMetal status menu backed by real rendering activity, with
+  native guest menu access and test/repair guidance.
+- Explicit reviewed text paste from app, native guest, and browser controls,
+  with paced keyboard entry, progress, cancellation, and common accented text.
+- A shared media window for discs, Tools, Quadra floppies, recent images, and
+  startup choice, with clear next-startup staging and safe floppy eject.
+
+### Fixed
+
+- Preserve settings and media changes staged while a machine is running across
+  shutdown/restart, including explicit installer-disc and startup selections.
+- Bundle verified exact-version macOS 15 runtime libraries instead of newer
+  Homebrew builds that require a later macOS release.
+
+### Validation
+
+- 97 app tests, 13 native GXMetal tests, 83 Python graphics tests, and
+  18 final media checks passed, along with packaging/template helper tests.
+- Actual public download/import, OS 9 boot/input/clean shutdown, full guest
+  GXMetal conformance, and native/browser UI checks passed.
+- 13 bounded game scenarios across 10 titles completed with accelerated
+  frames and zero fallback, queue, or transport faults. Scenario limits and
+  retained historical quirks are detailed in `docs/3.0-validation.md`.
+- App and DMG are Developer ID signed, Apple-notarized, stapled, and accepted
+  by Gatekeeper. The release targets Apple Silicon and macOS 15 or newer;
+  execution on a physical macOS 15 host was not part of qualification.
+
 ## 2.3.2 — 2026-08-28
 
 ### Added

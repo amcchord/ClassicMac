@@ -29,6 +29,26 @@
   <img src="docs/screenshots/powermacg4-macos92.png" width="410" alt="Mac OS 9.2 on the emulated Power Mac G4">
 </p>
 
+## New in ClassicMac 3.0
+
+- **Download a ready-to-run Mac OS 9.** Choose **File → Download Mac OS 9**
+  for a clean Mac OS 9.2.1 machine with GXMetal 2.3.0 already installed.
+  Downloads support pause/resume, integrity checks, and a choice of name and
+  save location. Each download creates its own independent machine.
+- **A simpler machine home.** Start or return to your Mac from its preview;
+  hardware, display, and sharing options live in a separate Settings window.
+- **Compact GXMetal status.** A toolbar icon opens current graphics activity
+  and test/repair guidance. The native guest window also has **View → GXMetal**.
+- **Paste Text into Mac.** Review and edit text before typing it into the
+  guest, with progress and cancellation. Available from the app, native guest
+  menu, and browser toolbar; requires the guest's US keyboard layout.
+- **One media window.** Manage discs, Tools, recent images, and startup choice
+  from the library or guest. Power Mac changes are saved for the next startup;
+  Quadra floppy eject waits for the guest to finish its writes.
+
+See the [3.0 validation report](docs/3.0-validation.md) for test results and
+known limits, or the [numbered roadmap](docs/polish-roadmap.md) for future ideas.
+
 ## iPad beta
 
 ClassicMac now has an iPad-only beta for iPadOS 14 and newer. It can create and
@@ -165,13 +185,24 @@ ClassicMac exists because of years of brilliant work by other engineers. The pat
 ## Getting started
 
 1. Grab **ClassicMac.dmg** from the [latest release](../../releases/latest), drag ClassicMac to Applications, and launch it.
-2. Click **+** to create a machine — pick the Quadra 800 (System 7.1–8.1) or Power Mac G4 (Mac OS 8.5–9.2.2), choose a thin-provisioned disk up to 120 GB, RAM, and resolution.
-3. Attach a Mac OS install CD image and boot from it. Installation media is not bundled — download the classic Mac OS version you want from the [WinWorld operating system library](https://winworldpc.com/library/operating-systems).
-4. Optional: pick a shared folder, or attach a raw floppy image to a Quadra. Both appear on the emulated desktop as writable disks.
-5. Click **Start**. ClassicMac opens the VM in a native window by default. If
-   **View in browser (VNC)** is enabled for that machine, it opens the private
-   loopback display URL instead; the URL remains visible in machine details.
-6. To test GXMetal on Mac OS 9, open the automatically mounted **ClassicMac Tools** disk, then open **GXMetal**,
+2. For the quickest setup, choose **File → Download Mac OS 9**, name your Mac,
+   choose its location, and download it. The 57.8 MB archive is hosted on
+   mcchord.net and contains Mac OS 9.2.1 with GXMetal 2.3.0 already installed.
+3. Click **Start Mac**. The Mac opens in a native window. To use your browser,
+   enable **View in browser** in **Settings → Display** before startup.
+4. Use **Media** to attach discs, or **Settings → Sharing** to select a shared
+   folder. The shared folder appears in the guest as a writable disk.
+5. On the downloaded Mac, open **ClassicMac Utilities** on Macintosh HD and
+   run **GXMetal Test**. The compact GXMetal menu shows activity and guidance.
+
+For a manual installation, click **+ → New Machine** and choose a Quadra 800
+(System 7.1–8.1) or Power Mac G4 (Mac OS 8.5–9.2.2), RAM, and a virtual disk up
+to 120 GB. Attach your Mac OS install CD image through **Media**, choose it as
+the startup disc, and start the Mac. You can also attach a raw floppy image to
+a Quadra.
+
+To add GXMetal to a manually installed Mac OS 9 machine, open the automatically
+mounted **ClassicMac Tools** disk, then open **GXMetal**,
    run **Install GXMetal**, restart, and run **GXMetal Test**. Proceed to a RAVE
    game only after the test reports a pass; moving both GXMetal and GXMetal
    Startup out of Extensions and restarting restores the normal Apple software
@@ -193,12 +224,12 @@ ClassicMac exists because of years of brilliant work by other engineers. The pat
 
 New machines are created as `.classic` documents (default `~/Documents/ClassicMac/`). Double-click one in Finder to boot it.
 
-Requirements: an Apple Silicon Mac (M1 or later) running a recent macOS.
+Requirements: an Apple Silicon Mac (M1 or later) running macOS 15 or newer.
 
 ## Display & sound notes
 
 - The resolution you pick is the *boot* resolution and the depth is the *deepest available* mode; classic Mac OS chooses the active depth at startup (a fresh system comes up in B&W until you pick Thousands/Millions once in Monitors — it's remembered per machine).
-- Machines use the native window by default. The per-machine **View in browser (VNC)** toggle is available under Viewer and takes effect on the next start.
+- Machines use the native window by default. The per-machine **View in browser** toggle is available under **Settings → Display** and takes effect on the next start.
 - The browser's **Fit** mode prefers the largest whole-number scale that fits the tab and uses sharp nearest-neighbor edges when it must shrink the image. Choose **Actual Size** for one guest pixel per browser pixel, and use the page's **Fullscreen** button to enter or leave browser fullscreen.
 - The browser toolbar provides sticky Command, Option, and Control modifiers plus a dedicated Escape button, which makes host-reserved key combinations practical. Games using GXMetal Input automatically reveal a **Capture game mouse** control for relative movement; press Escape to leave pointer lock.
 - Power Mac widths snap down to a multiple of 8 (a VGA hardware constraint).
@@ -230,7 +261,7 @@ Requirements: an Apple Silicon Mac (M1 or later) running a recent macOS.
 
 # 5. Verify the exact signed/stapled artifact, including versions, Gatekeeper,
 #    the bundled Tools CD, and the GXMetal-enabled Power Mac executable
-./scripts/verify-release.sh dist/ClassicMac.dmg 2.3.2 2.3.2
+./scripts/verify-release.sh dist/ClassicMac.dmg 3.0.0 3.0.0
 ```
 
 All scripts are idempotent and safe to re-run. Building needs the Xcode command line tools and [Homebrew](https://brew.sh).

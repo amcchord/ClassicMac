@@ -98,3 +98,25 @@
   not been pushed or released there. The installed 2.3.1 app and pre-existing
   iPad work were preserved. Next: try the notarized candidate and decide on
   publication or the next roadmap items.
+
+## September 10 — 3.0 GitHub publication authorized
+
+- Austin explicitly requested a fully signed/notarized app, committing all
+  source to Git/GitHub, and a new 3.0 release. Added the remaining iPad beta
+  source/scripts and its existing README/changelog/notices in `46188af`.
+  iPad shell syntax, export plist, and patch structure checks passed; no iPad
+  binary is being built or uploaded by this macOS release action.
+- Rechecked the exact tested macOS artifacts: all six recorded identities
+  match, mounted DMG release verification passed, and the app extracted from
+  the ZIP passed strict signature, stapled ticket, and Gatekeeper checks.
+  Current host reports macOS 27.0 (26A5425a), correcting earlier journal wording
+  that called the development host macOS 26. macOS 15 runtime limits remain
+  unchanged. There are no new macOS runtime changes requiring a rebuild.
+- Added 3.0 README setup instructions, changelog, and release notes. Preflight
+  found GitHub main at `f763917`, with no existing `v3.0.0` tag/release. Planned
+  publication is a fast-forward of main and integration, an annotated tag,
+  draft upload, digest verification, then publication as the latest release.
+- Rollback reference: retain `v2.3.2` and its existing artifacts. If a release
+  problem is found, withdraw 3.0 from latest status and restore 2.3.2 as latest;
+  repair through a new version instead of rewriting published commits/tags or
+  replacing immutable release bytes. The mcchord.net template is unchanged.
