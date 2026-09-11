@@ -94,6 +94,21 @@ final class MachineDownloadTests: XCTestCase {
         XCTAssertEqual(imported.diskSizeGB, 1)
     }
 
+    func testSparseZeroSectorTailPreservesPrecedingChunk() throws {
+        try XCTSkipUnless(MachineTemplateInstaller.supportsSparseFiles(at: directory), "Sparse filesystem required")
+        let chunk = Int(MachineTemplateInstaller.sparseChunkBytes)
+        var disk = Data(repeating: 0, count: chunk + 512)
+        disk[0] = 71; disk[chunk - 1] = 83
+        let config = try JSONEncoder().encode(VMConfig(name: "Template", machineFamily: .powerMacG4))
+        let archive = try makeArchive([Entry("config.json", data: config), Entry("disk.img", data: disk)])
+        let machine = fixtureMachine(bytes: try Data(contentsOf: archive), installedBytes: Int64(config.count + disk.count),
+            diskCapacityBytes: Int64(disk.count), requiredStorageBytes: 2 * Int64(chunk))
+        let installed = try MachineTemplateInstaller.installVerifiedArchive(archive, machine: machine, name: "Zero tail", in: directory)
+        let file = installed.appendingPathComponent("disk.img")
+        XCTAssertEqual(try Data(contentsOf: file), disk)
+        XCTAssertLessThanOrEqual(try XCTUnwrap(file.resourceValues(forKeys: [.fileAllocatedSizeKey]).fileAllocatedSize), chunk)
+    }
+
     func testUnderstatedSparseBudgetStopsBeforeExcessWritesAndInstallCleansUp() throws {
         try XCTSkipUnless(MachineTemplateInstaller.supportsSparseFiles(at: directory), "Sparse filesystem required")
         let chunk = Int(MachineTemplateInstaller.sparseChunkBytes)
