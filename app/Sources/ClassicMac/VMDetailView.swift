@@ -3,12 +3,23 @@ import UniformTypeIdentifiers
 
 struct VMDetailView: View {
     let vmID: UUID
+    // The importer can supply the template OS without guessing from a name.
+    var templateOSVersion: String? = nil
     @EnvironmentObject var store: VMStore
     @EnvironmentObject var manager: QEMUManager
 
     @State private var config: VMConfig?
     @State private var showingDeleteConfirm = false
     @State private var savedPreview: NSImage?
+    @State private var showingSettings = false
+    @State private var settingsTab: SettingsTab = .general
+
+    private enum SettingsTab: String, CaseIterable, Identifiable {
+        case general = "General"
+        case display = "Display"
+        case media = "Media & Sharing"
+        var id: Self { self }
+    }
 
     var body: some View {
         Group {
@@ -20,6 +31,9 @@ struct VMDetailView: View {
             }
         }
         .onAppear(perform: load)
+        .onChange(of: manager.previews[vmID]) { _, image in
+            retainUsefulPreview(image)
+        }
         .onChange(of: store.vms) { _, machines in
             // QEMU can update the saved startup device after an installer
             // blesses the hard disk. Keep this view's editable copy in sync.
@@ -33,7 +47,8 @@ struct VMDetailView: View {
     private func load() {
         config = store.vms.first(where: { $0.id == vmID })
         if let config = config {
-            savedPreview = NSImage(contentsOf: config.previewURL)
+            retainUsefulPreview(NSImage(contentsOf: config.previewURL))
+            retainUsefulPreview(manager.previews[vmID])
         }
     }
 
@@ -53,35 +68,44 @@ struct VMDetailView: View {
 
     @ViewBuilder
     private func content(_ vm: Binding<VMConfig>) -> some View {
-        VStack(spacing: 0) {
-            header(vm)
-                .padding(.horizontal, 24)
-                .padding(.top, 20)
-                .padding(.bottom, 12)
-            Form {
-                if running && vm.wrappedValue.useBrowserDisplay {
-                    browserAccessSection
+        GeometryReader { geometry in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 22) {
+                    header(vm)
+                    MachineHomePreview(
+                        image: savedPreview,
+                        running: running,
+                        paused: paused,
+                        browserDisplay: vm.wrappedValue.useBrowserDisplay,
+                        showMac: { manager.activate(vmID) }
+                    )
+                    .frame(height: previewHeight(in: geometry.size))
+
+                    homeActions(vm)
+                    machineSummary(vm.wrappedValue)
+
+                    if running && vm.wrappedValue.useBrowserDisplay {
+                        GroupBox {
+                            browserAccessSection
+                        }
+                    }
+                    if vm.wrappedValue.machineFamily == .powerMacG4,
+                       vm.wrappedValue.bootFromCD,
+                       vm.wrappedValue.cdImagePath?.isEmpty == false {
+                        installationCard
+                    }
                 }
-                if previewImage != nil {
-                    screenSection
-                }
-                if vm.wrappedValue.machineFamily == .powerMacG4,
-                   vm.wrappedValue.bootFromCD,
-                   vm.wrappedValue.cdImagePath?.isEmpty == false {
-                    installationGuideSection
-                }
-                viewingSection(vm)
-                displaySection(vm)
-                hardwareSection(vm)
-                mediaSection(vm)
-                if vm.wrappedValue.machineFamily.supportsSharedFolder {
-                    sharedFolderSection(vm)
-                }
+                .frame(maxWidth: 840)
+                .padding(24)
+                .frame(maxWidth: .infinity)
             }
-            .formStyle(.grouped)
         }
+        .background(Color(nsColor: .windowBackgroundColor))
         .navigationTitle(vm.wrappedValue.name)
         .toolbar { toolbar(vm) }
+        .sheet(isPresented: $showingSettings) {
+            settingsSheet(vm)
+        }
         .confirmationDialog("Remove \(vm.wrappedValue.name)?", isPresented: $showingDeleteConfirm, titleVisibility: .visible) {
             Button("Move to Trash", role: .destructive) {
                 store.moveToTrash(vm.wrappedValue)
@@ -95,47 +119,201 @@ struct VMDetailView: View {
         }
     }
 
-    private var installationGuideSection: some View {
-        Section {
-            PowerMacInstallGuide(includeGXMetal: false)
-                .padding(.vertical, 4)
-        } header: {
+    private var installationCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
             Label("Installing Mac OS", systemImage: "list.number")
-        } footer: {
+                .font(.headline)
+            PowerMacInstallGuide(includeGXMetal: false)
             Text("After the first hard-disk boot, ClassicMac Tools mounts automatically so you can install and test GXMetal.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 12))
+    }
+
+    // MARK: Home
+
+    private func previewHeight(in size: CGSize) -> CGFloat {
+        // Keep useful actions within reach in a small window, while letting
+        // the desktop preview grow on larger displays. The home still scrolls.
+        min(360, max(200, size.height - 310), max(200, (size.width - 48) * 0.58))
+    }
+
+    private func header(_ vm: Binding<VMConfig>) -> some View {
+        VStack(alignment: .leading, spacing: 18) {
+            HStack(spacing: 14) {
+                MachineBadgeView(family: vm.wrappedValue.machineFamily, size: 48)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(vm.wrappedValue.name)
+                        .font(.title2.weight(.semibold))
+                        .lineLimit(2)
+                        .textSelection(.enabled)
+                    Text(vm.wrappedValue.machineFamily.label)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 8)
+                statusBadge
+            }
+            HStack(alignment: .center, spacing: 16) {
+                primaryAction(vm)
+                    .controlSize(.large)
+                    .buttonStyle(.borderedProminent)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(templateOSVersion == nil ? "Supports" : "Created with")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text(templateOSVersion ?? vm.wrappedValue.machineFamily.osSupportLabel)
+                        .font(.callout)
+                }
+                .accessibilityElement(children: .combine)
+                Spacer(minLength: 0)
+            }
         }
     }
 
-    // MARK: Header
+    private func primaryAction(_ vm: Binding<VMConfig>) -> some View {
+        Button {
+            if running {
+                if paused { manager.resume(vmID) }
+                manager.activate(vmID)
+            } else {
+                manager.start(vm.wrappedValue)
+            }
+        } label: {
+            Label(
+                running ? (paused ? "Resume Mac" : "Show Mac") : "Start Mac",
+                systemImage: running && !paused ? (vm.wrappedValue.useBrowserDisplay ? "safari" : "macwindow") : "play.fill"
+            )
+            .padding(.horizontal, 6)
+        }
+        .disabled(!running && !AppPaths.qemuIsAvailable(for: vm.wrappedValue.machineFamily))
+        .help(running ? "Open your Mac" : "Start this Mac (⌘R)")
+    }
 
-    @ViewBuilder
-    private func header(_ vm: Binding<VMConfig>) -> some View {
-        HStack(spacing: 16) {
-            MachineBadgeView(family: vm.wrappedValue.machineFamily, size: 64)
-            VStack(alignment: .leading, spacing: 4) {
-                TextField("Name", text: vm.name)
-                    .font(.title2.bold())
-                    .textFieldStyle(.plain)
-                    .disabled(running)
-                Text(vm.wrappedValue.machineFamily.hardwareLabel)
-                    .foregroundStyle(.secondary)
-                HStack(spacing: 14) {
-                    Label("\(vm.wrappedValue.ramMB) MB", systemImage: "memorychip")
-                    Label("\(vm.wrappedValue.diskSizeGB) GB", systemImage: "internaldrive")
-                    Label("\(vm.wrappedValue.width) \u{00D7} \(vm.wrappedValue.height)", systemImage: "display")
+    private func homeActions(_ vm: Binding<VMConfig>) -> some View {
+        HStack(spacing: 10) {
+            Button(action: showMedia) {
+                Label("Media", systemImage: "opticaldisc")
+            }
+            .help("Manage inserted discs and the startup disk")
+            if vm.wrappedValue.hasSharedFolder,
+               let path = vm.wrappedValue.sharedFolderPath {
+                Button {
+                    NSWorkspace.shared.open(URL(fileURLWithPath: path))
+                } label: {
+                    Label("Shared Folder", systemImage: "folder")
                 }
+                .help("Open the folder shared with this Mac")
+            }
+            Spacer(minLength: 0)
+            Button {
+                settingsTab = .general
+                showingSettings = true
+            } label: {
+                Label("Settings", systemImage: "slider.horizontal.3")
+            }
+            .help("Configure this Mac")
+        }
+        .controlSize(.large)
+        .buttonStyle(.bordered)
+    }
+
+    private func machineSummary(_ vm: VMConfig) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            summaryItem("Memory", value: "\(vm.ramMB) MB", symbol: "memorychip")
+            summaryItem("Hard disk", value: "\(vm.diskSizeGB) GB", symbol: "internaldrive")
+            summaryItem("Display", value: "\(vm.width) × \(vm.height)", symbol: "display")
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity)
+        .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 12))
+    }
+
+    private func summaryItem(_ title: String, value: String, symbol: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Label(title, systemImage: symbol)
                 .font(.caption)
                 .foregroundStyle(.secondary)
-                .padding(.top, 2)
-                if running {
-                    Text("Settings are locked while this Mac is running.")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
+            Text(value)
+                .font(.callout.weight(.medium))
+                .monospacedDigit()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
+    }
+
+    // One entry point for the Media quick action and toolbar. The dedicated
+    // media drawer can replace this destination without changing the home.
+    private func showMedia() {
+        settingsTab = .media
+        showingSettings = true
+    }
+
+    // MARK: Settings
+
+    private func settingsSheet(_ vm: Binding<VMConfig>) -> some View {
+        VStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Machine Settings")
+                            .font(.title2.weight(.semibold))
+                        Text(vm.wrappedValue.name)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                    Spacer()
+                    if running {
+                        Label("Shut down to edit", systemImage: "lock")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                Picker("Settings category", selection: $settingsTab) {
+                    ForEach(SettingsTab.allCases) { tab in
+                        Text(tab.rawValue).tag(tab)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+            }
+            .padding(20)
+            Divider()
+            Form {
+                switch settingsTab {
+                case .general:
+                    Section("Identity") {
+                        TextField("Name", text: vm.name)
+                            .disabled(running)
+                        LabeledContent("Model", value: vm.wrappedValue.machineFamily.hardwareLabel)
+                    }
+                    hardwareSection(vm)
+                case .display:
+                    viewingSection(vm)
+                    displaySection(vm)
+                case .media:
+                    mediaSection(vm)
+                    if vm.wrappedValue.machineFamily.supportsSharedFolder {
+                        sharedFolderSection(vm)
+                    }
                 }
             }
-            Spacer()
-            statusBadge
+            .formStyle(.grouped)
+            Divider()
+            HStack {
+                Text(running ? "Settings are locked while this Mac is running." : "Changes are saved automatically.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button("Done") { showingSettings = false }
+                    .keyboardShortcut(.defaultAction)
+            }
+            .padding(16)
         }
+        .frame(width: 570, height: 510)
     }
 
     private var statusBadge: some View {
@@ -176,29 +354,25 @@ struct VMDetailView: View {
     // MARK: Screen
 
     private var browserAccessSection: some View {
-        Section {
+        VStack(alignment: .leading, spacing: 12) {
+            Label("Browser Display", systemImage: "globe")
+                .font(.headline)
             if let url = manager.browserURLs[vmID] {
-                LabeledContent("Address") {
-                    Text(url.absoluteString)
-                        .font(.system(.caption, design: .monospaced))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                        .textSelection(.enabled)
-                }
+                Text(url.absoluteString)
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .textSelection(.enabled)
                 HStack {
                     Button {
                         manager.activate(vmID)
                     } label: {
                         Label("Open in Browser", systemImage: "safari")
                     }
-
                     Button {
                         NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString(
-                            url.absoluteString,
-                            forType: .string
-                        )
+                        NSPasteboard.general.setString(url.absoluteString, forType: .string)
                     } label: {
                         Label("Copy URL", systemImage: "doc.on.doc")
                     }
@@ -206,81 +380,17 @@ struct VMDetailView: View {
             } else {
                 ProgressView("Preparing the browser display…")
             }
-        } header: {
-            Label("Browser Display (VNC)", systemImage: "globe")
-        } footer: {
             Text("This private address works only on this Mac and disappears when the virtual Mac shuts down.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(10)
     }
 
-    // The live capture while running; the saved capture from the last run
-    // otherwise.
-    private var previewImage: NSImage? {
-        if let live = manager.previews[vmID] {
-            return live
-        }
-        return savedPreview
-    }
-
-    private var browserDisplaySelected: Bool {
-        config?.useBrowserDisplay == true
-    }
-
-    private var screenPreviewHelp: String {
-        guard running else {
-            return "The Mac's screen when it last shut down"
-        }
-        return browserDisplaySelected
-            ? "Click to open the Mac in your web browser"
-            : "Click to bring the virtual Mac window to the front"
-    }
-
-    @ViewBuilder
-    private var screenSection: some View {
-        if let image = previewImage {
-            Section {
-                Button {
-                    if running {
-                        manager.activate(vmID)
-                    }
-                } label: {
-                    Image(nsImage: image)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(maxWidth: .infinity)
-                        .frame(maxHeight: 210)
-                        .saturation(running ? 1 : 0.6)
-                        .opacity(running ? 1 : 0.75)
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8)
-                                .strokeBorder(.separator, lineWidth: 1)
-                        )
-                        .overlay(alignment: .bottomTrailing) {
-                            if running {
-                                Label(
-                                    browserDisplaySelected ? "Open in Browser" : "Show Window",
-                                    systemImage: "arrow.up.forward.app"
-                                )
-                                    .font(.caption.weight(.semibold))
-                                    .padding(.horizontal, 9)
-                                    .padding(.vertical, 6)
-                                    .background(.regularMaterial, in: Capsule())
-                                    .padding(10)
-                            }
-                        }
-                }
-                .buttonStyle(.plain)
-                .disabled(!running)
-                .help(screenPreviewHelp)
-                .listRowBackground(Color.clear)
-                .listRowInsets(EdgeInsets())
-            } footer: {
-                if !running {
-                    Text("The Mac's screen when it last shut down.")
-                }
-            }
-        }
+    private func retainUsefulPreview(_ image: NSImage?) {
+        guard let image, MachinePreviewQuality.isUseful(image) else { return }
+        savedPreview = image
     }
 
     // MARK: Display
@@ -295,6 +405,7 @@ struct VMDetailView: View {
                         .foregroundStyle(.secondary)
                 }
             }
+            .accessibilityLabel("View in browser")
             .disabled(running)
         } header: {
             Label("Viewer", systemImage: "macwindow")
@@ -357,6 +468,7 @@ struct VMDetailView: View {
                         .foregroundStyle(.secondary)
                 }
             }
+            .accessibilityLabel("Enhanced video card")
             .disabled(running)
 
             Toggle("Custom resolution", isOn: customResolutionSelection(vm))
@@ -453,6 +565,7 @@ struct VMDetailView: View {
                         .foregroundStyle(.secondary)
                 }
             }
+            .accessibilityLabel("Networking")
             .disabled(running)
 
             Toggle(isOn: vm.sound) {
@@ -463,6 +576,7 @@ struct VMDetailView: View {
                         .foregroundStyle(.secondary)
                 }
             }
+            .accessibilityLabel("Sound")
             .disabled(running)
 
             if vm.wrappedValue.machineFamily == .powerMacG4 {
@@ -474,6 +588,7 @@ struct VMDetailView: View {
                             .foregroundStyle(.secondary)
                     }
                 }
+                .accessibilityLabel("PowerPC G4 acceleration")
                 .disabled(running)
             }
 
@@ -485,6 +600,7 @@ struct VMDetailView: View {
                         .foregroundStyle(.secondary)
                 }
             }
+            .accessibilityLabel("Secondary click and scrolling")
             .disabled(running)
 
             Toggle(isOn: vm.tabletInput) {
@@ -495,6 +611,7 @@ struct VMDetailView: View {
                         .foregroundStyle(.secondary)
                 }
             }
+            .accessibilityLabel("Seamless mouse")
             .disabled(running)
         } header: {
             Label("Hardware", systemImage: "memorychip")
@@ -564,6 +681,7 @@ struct VMDetailView: View {
                         }
                     }
                 }
+                .accessibilityLabel("ClassicMac Tools")
                 .disabled(running)
             }
 
@@ -728,6 +846,20 @@ struct VMDetailView: View {
 
         if #available(macOS 26.0, *) {
             ToolbarSpacer(.fixed)
+        }
+
+        ToolbarItemGroup {
+            Button(action: showMedia) {
+                Label("Media", systemImage: "opticaldisc")
+            }
+            .help("Manage discs and the startup disk")
+            Button {
+                settingsTab = .general
+                showingSettings = true
+            } label: {
+                Label("Settings", systemImage: "slider.horizontal.3")
+            }
+            .help("Configure this Mac")
         }
 
         ToolbarItem {

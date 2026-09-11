@@ -1,6 +1,8 @@
 import SwiftUI
 
 struct ContentView: View {
+    // Supplied by the download flow when its catalog is available.
+    var downloadMachine: (() -> Void)? = nil
     @EnvironmentObject var store: VMStore
     @EnvironmentObject var manager: QEMUManager
 
@@ -96,7 +98,7 @@ struct ContentView: View {
             }
         }
         .listStyle(.sidebar)
-        .frame(minWidth: 220)
+        .navigationSplitViewColumnWidth(min: 190, ideal: 220, max: 300)
         .safeAreaInset(edge: .bottom) {
             // Development builds only: unbundled runs get a footer telling the
             // developer how to produce the emulator. Bundled builds show no
@@ -109,6 +111,12 @@ struct ContentView: View {
         .toolbar {
             ToolbarItem {
                 Menu {
+                    if let downloadMachine {
+                        Button(action: downloadMachine) {
+                            Label("Download Mac OS 9…", systemImage: "arrow.down.circle")
+                        }
+                        Divider()
+                    }
                     Button {
                         store.isPresentingNewVM = true
                     } label: {
@@ -133,6 +141,14 @@ struct ContentView: View {
     private func rowContextMenu(_ vm: VMConfig) -> some View {
         let running = manager.isRunning(vm.id)
         if running {
+            Button("Show Mac") {
+                manager.activate(vm.id)
+            }
+            if manager.isPaused(vm.id) {
+                Button("Resume") { manager.resume(vm.id) }
+            } else {
+                Button("Pause") { manager.pause(vm.id) }
+            }
             Button("Shut Down") {
                 manager.requestStop(vm.id)
             }
@@ -175,7 +191,8 @@ struct ContentView: View {
             EmptyStateView(
                 hasMachines: !store.vms.isEmpty,
                 showingNewVM: $store.isPresentingNewVM,
-                openExisting: store.presentOpenPanel
+                openExisting: store.presentOpenPanel,
+                downloadMachine: downloadMachine
             )
         }
     }
@@ -208,13 +225,17 @@ struct VMRow: View {
                 }
             VStack(alignment: .leading, spacing: 2) {
                 Text(vm.name)
-                Text(vm.machineFamily.label)
+                    .lineLimit(1)
+                    .fontWeight(running ? .medium : .regular)
+                Text(paused ? "Paused · \(vm.machineFamily.label)" : vm.machineFamily.label)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
             Spacer()
         }
-        .padding(.vertical, 3)
+        .padding(.vertical, 5)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(vm.name), \(vm.machineFamily.label), \(paused ? "paused" : running ? "running" : "shut down")")
     }
 
     private var statusDot: some View {
@@ -233,45 +254,75 @@ struct EmptyStateView: View {
     let hasMachines: Bool
     @Binding var showingNewVM: Bool
     let openExisting: () -> Void
+    var downloadMachine: (() -> Void)? = nil
 
     var body: some View {
-        VStack(spacing: 12) {
-            HStack(spacing: 16) {
-                MachineBadgeView(family: .quadra800, size: 76)
-                MachineBadgeView(family: .powerMacG4, size: 76)
-            }
-            .padding(.bottom, 12)
-            Text(hasMachines ? "Choose a Mac" : "Welcome to ClassicMac")
-                .font(.largeTitle.bold())
-            Text(description)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: 420)
-            HStack(spacing: 10) {
-                Button {
-                    showingNewVM = true
-                } label: {
-                    Label(hasMachines ? "New Machine" : "Create Your First Mac", systemImage: "plus")
-                        .padding(.horizontal, 4)
+        ScrollView {
+            VStack(spacing: 18) {
+                HStack(spacing: 20) {
+                    MachineBadgeView(family: .quadra800, size: 68)
+                        .rotationEffect(.degrees(-5))
+                    MachineBadgeView(family: .powerMacG4, size: 68)
+                        .rotationEffect(.degrees(5))
                 }
-                .buttonStyle(.borderedProminent)
+                .accessibilityHidden(true)
+                .padding(.bottom, 10)
 
-                Button(action: openExisting) {
-                    Label("Open Machine", systemImage: "folder")
+                VStack(spacing: 10) {
+                    Text(hasMachines ? "Choose a Mac" : "Welcome to ClassicMac")
+                        .font(.largeTitle.weight(.semibold))
+                    Text(description)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: 400)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                .buttonStyle(.bordered)
+
+                VStack(spacing: 12) {
+                    if let downloadMachine {
+                        Button(action: downloadMachine) {
+                            Label("Download Mac OS 9", systemImage: "arrow.down.circle")
+                                .padding(.horizontal, 8)
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
+                    HStack(spacing: 10) {
+                        if downloadMachine == nil {
+                            newMachineButton.buttonStyle(.borderedProminent)
+                        } else {
+                            newMachineButton.buttonStyle(.bordered)
+                        }
+                        Button(action: openExisting) {
+                            Label("Open Machine", systemImage: "folder")
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                }
+                .controlSize(.large)
+                .padding(.top, 6)
             }
-            .controlSize(.large)
-            .padding(.top, 8)
+            .padding(32)
+            .frame(maxWidth: .infinity)
         }
-        .padding(40)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .defaultScrollAnchor(.center)
+        .background(Color(nsColor: .windowBackgroundColor))
+    }
+
+    private var newMachineButton: some View {
+        Button {
+            showingNewVM = true
+        } label: {
+            Label(downloadMachine == nil ? "New Machine" : "Create a Custom Mac", systemImage: "plus")
+        }
     }
 
     private var description: String {
         if hasMachines {
-            return "Select a machine in the sidebar, or create another classic Macintosh."
+            return "Select a machine in the sidebar to pick up where you left off, or add another classic Macintosh."
         }
-        return "Run System 7 through Mac OS 9 on a Quadra 800 or Power Mac G4. Each machine is a portable file you can keep anywhere."
+        if downloadMachine != nil {
+            return "Start with a ready-to-run Mac OS 9 system, create a Mac of your own, or open an existing machine."
+        }
+        return "Run System 7 through Mac OS 9. Create a classic Macintosh, or open a portable .classic machine from anywhere on your Mac."
     }
 }
