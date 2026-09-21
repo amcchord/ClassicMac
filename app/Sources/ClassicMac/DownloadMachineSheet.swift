@@ -251,7 +251,7 @@ struct DownloadMachineSheet: View {
                     .font(.system(size: 36)).foregroundStyle(.tint)
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Download a Mac").font(.title2.bold())
-                    Text("A ready-to-run Mac with GXMetal already installed.")
+                    Text("Choose a complete system to download and explore.")
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
@@ -353,7 +353,7 @@ struct DownloadMachineSheet: View {
             HStack {
                 Label(machine.osVersion, systemImage: "desktopcomputer")
                 Spacer()
-                Text("GXMetal \(machine.gxMetalVersion)")
+                if machine.family == .powerMacG4 { Text("GXMetal \(machine.gxMetalVersion)") }
             }
             .font(.subheadline)
             VStack(alignment: .leading, spacing: 4) {

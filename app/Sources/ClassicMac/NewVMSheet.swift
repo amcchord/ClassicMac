@@ -105,7 +105,7 @@ struct NewVMSheet: View {
         Form {
             Section("Mac model") {
                 HStack(spacing: 12) {
-                    ForEach(MachineFamily.allCases) { candidate in
+                    ForEach(MachineFamily.allCases.filter { $0 != .powerMac7500 }) { candidate in
                         MachineTile(family: candidate, selected: family == candidate) {
                             family = candidate
                         }

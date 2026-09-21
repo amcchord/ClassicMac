@@ -39,7 +39,7 @@ struct ClassicMacApp: App {
         .windowStyle(.titleBar)
         .commands {
             CommandGroup(replacing: .newItem) {
-                Button("Download Mac OS 9…") {
+                Button("Download a Mac…") {
                     showingDownload = true
                 }
 
@@ -126,20 +126,20 @@ private struct MachineCommands: View {
         Button("Media…") {
             if let vm = vm { MediaController.shared.present(for: vm.id) }
         }
-        .disabled(vm == nil)
+        .disabled(vm == nil || vm?.machineFamily == .powerMac7500)
 
         Button("Paste Text into Mac…") {
             if let vm = vm { PasteTextController.shared.present(for: vm.id) }
         }
         .keyboardShortcut("v", modifiers: [.command, .shift])
-        .disabled(!running || paused)
+        .disabled(!running || paused || vm?.machineFamily == .powerMac7500)
 
         Button("Force Quit Frontmost App…") {
             if let vm = vm {
                 manager.forceQuitFrontmostApp(vm.id)
             }
         }
-        .disabled(!running || paused)
+        .disabled(!running || paused || vm?.machineFamily == .powerMac7500)
 
         Divider()
 
@@ -148,7 +148,7 @@ private struct MachineCommands: View {
                 NSWorkspace.shared.activateFileViewerSelecting([folder])
             }
         }
-        .disabled(vm == nil)
+        .disabled(vm == nil || vm?.machineFamily == .powerMac7500)
     }
 }
 

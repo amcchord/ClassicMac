@@ -1,0 +1,110 @@
+diff --git a/devices/common/viacuda.cpp b/devices/common/viacuda.cpp
+index cd91837b..9f1565c1 100644
+--- a/devices/common/viacuda.cpp
++++ b/devices/common/viacuda.cpp
+@@ -36,6 +36,10 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ #include <machines/machinebase.h>
+ 
+ #include <cinttypes>
++#include <cstdio>      // sscanf
++#include <cstdlib>     // getenv
++#include <cstring>     // strcmp
++#include <ctime>       // timegm
+ #include <string>
+ #include <vector>
+ 
+@@ -95,6 +99,8 @@ ViaCuda::ViaCuda() : I2CBus() {
+         .tm_isdst = 1 // -1 = Use DST value from local time zone; 0 = not summer; 1 = is summer time
+     };
+     mac_epoch = std::chrono::system_clock::from_time_t(std::mktime(&tm));
++
++    this->init_rtc_base();
+ }
+ 
+ ViaCuda::~ViaCuda()
+@@ -858,7 +864,63 @@ void ViaCuda::pseudo_command() {
+     }
+ }
+ 
++/** Choose the base value of the guest's real-time clock.
++ *
++ *  A Power Macintosh 7500 keeps the time of day in the Cuda's battery-backed RTC
++ *  counter: seconds since 1904-01-01, held IN the machine and advanced by the
++ *  machine's own tick.  Its value is MACHINE STATE.  When an epoch is named the
++ *  emulator behaves that way: the counter starts at that instant and advances on
++ *  EMULATED time (TimerManager, i.e. instruction count), never as a reading of any
++ *  clock outside the machine.
++ *
++ *  ★ WHY A BROWSER BUILD NEEDS IT: host time is the only uncontrolled input that
++ *    reaches the guest, and it arrives as an INTERRUPT -- autopoll_handler fires the
++ *    one-second packet when this function's value changes.  A guest that is sensitive
++ *    to when that packet lands boots differently depending on the host's clock.
++ *  ★ timegm() at BOTH ends, so a pinned epoch does not depend on the host's time
++ *    zone -- which would be the same class of uncontrolled input.
++ *  ★ A malformed value is REFUSED, not ignored: asking for a pinned clock and
++ *    silently getting host time is a fix that cannot be told from no fix.
++ */
++void ViaCuda::init_rtc_base() {
++    const char* env = getenv("DPPC_RTC");
++
++    if (!env || !*env || !strcmp(env, "host")) {
++        this->rtc_use_host = true;
++        LOG_F(INFO, "Cuda: RTC = HOST wall clock (%s)",
++              (env && *env) ? "DPPC_RTC=host, named explicitly"
++                            : "default; DPPC_RTC unset");
++        return;
++    }
++
++    int y, mo, d, h = 12, mi = 0, s = 0;
++    int n = sscanf(env, "%d-%d-%d%*c%d:%d:%d", &y, &mo, &d, &h, &mi, &s);
++    if (n < 3) {
++        LOG_F(ERROR, "Cuda: cannot parse DPPC_RTC=\"%s\"; expected \"host\" or "
++                     "YYYY-MM-DD[Thh:mm:ss]", env);
++        ABORT_F("Cuda: bad DPPC_RTC");
++    }
++    if (n < 4) { h = 12; mi = 0; s = 0; }   // date only -> noon
++
++    std::tm t = {};
++    t.tm_year = y - 1900; t.tm_mon = mo - 1; t.tm_mday = d;
++    t.tm_hour = h; t.tm_min = mi; t.tm_sec = s;
++
++    std::tm epoch = {};
++    epoch.tm_year = 1904 - 1900; epoch.tm_mon = 0; epoch.tm_mday = 1;
++
++    this->rtc_base_secs = uint32_t(timegm(&t) - timegm(&epoch));
++    LOG_F(INFO, "Cuda: RTC pinned to %04d-%02d-%02dT%02d:%02d:%02d "
++                "(%u s since 1904), advancing with emulated time (DPPC_RTC)",
++          y, mo, d, h, mi, s, this->rtc_base_secs);
++}
++
+ uint32_t ViaCuda::calc_real_time() {
++    if (!this->rtc_use_host) {
++        uint64_t ns = TimerManager::get_instance()->current_time_ns();
++        return this->rtc_base_secs + uint32_t(ns / NS_PER_SEC);
++    }
++
+     std::chrono::time_point<std::chrono::system_clock> end;
+     if (is_deterministic) {
+         // March 24, 2001 was the public release date of Mac OS X.
+diff --git a/devices/common/viacuda.h b/devices/common/viacuda.h
+index e37b0dee..f6c6dd13 100644
+--- a/devices/common/viacuda.h
++++ b/devices/common/viacuda.h
+@@ -236,6 +236,9 @@ private:
+     uint32_t last_time = 0;
+     uint32_t time_offset = 0;
+     std::chrono::time_point<std::chrono::system_clock> mac_epoch;
++    // the guest's RTC base.  See ViaCuda::init_rtc_base().
++    bool     rtc_use_host  = false;  // true = read the HOST wall clock
++    uint32_t rtc_base_secs = 0;      // seconds since 1904 at emulated time 0
+     uint8_t  one_sec_mode = 0;
+     bool     one_sec_first_pkt = true;   // ERS: first one-sec pkt always mode $01
+     bool     one_sec_missed    = false;  // ERS: missed pkt -> fallback to mode $01
+@@ -283,6 +286,7 @@ private:
+     void disable_async_packets();
+     void pseudo_command();
+     uint32_t calc_real_time();
++    void     init_rtc_base();
+ 
+     void null_out_handler(void);
+     void pram_out_handler(void);

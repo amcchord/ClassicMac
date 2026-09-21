@@ -60,7 +60,7 @@ enum MachineTemplateInstaller {
 
     private static func checkAllocatedStorage(in directory: URL, maximumBytes: Int64) throws {
         var total: Int64 = 0
-        for name in ["disk.img", "config.json", "preview.png", VMTemplateMetadata.fileName] {
+        for name in ["disk.img", "config.json", "preview.png", "bootrom.bin", "nvram.bin", VMTemplateMetadata.fileName] {
             let path = directory.appendingPathComponent(name)
             var info = stat()
             if lstat(path.path, &info) != 0 {
@@ -112,7 +112,7 @@ enum MachineTemplateInstaller {
                                attributes: [.posixPermissions: 0o700])
         defer { try? fm.removeItem(at: staging) }
         try extract(archive, into: staging, expectedBytes: machine.installedBytes,
-                    expectedDiskBytes: machine.diskCapacityBytes, maximumStorageBytes: plan.sparseWriteLimit,
+                    expectedDiskBytes: machine.diskCapacityBytes, maximumStorageBytes: plan.sparseWriteLimit, copland: machine.family == .powerMac7500,
                     cancelled: cancelled, progress: progress)
         if cancelled() { throw CancellationError() }
 
@@ -120,11 +120,12 @@ enum MachineTemplateInstaller {
         let source: VMConfig
         do { source = try JSONDecoder().decode(VMConfig.self, from: Data(contentsOf: configURL)) }
         catch { throw MachineDownloadError.unsafeArchive("The machine's settings are damaged.") }
-        guard source.machineFamily == .powerMacG4,
+        guard source.machineFamily == machine.family,
               source.diskImageName == "disk.img",
               source.pramImageName == "pram.img" else {
-            throw MachineDownloadError.unsafeArchive("This template is not a supported Power Mac machine.")
+            throw MachineDownloadError.unsafeArchive("This template does not match its catalog machine.")
         }
+        if source.machineFamily == .powerMac7500 { try CoplandMachine.validateFirmware(in: staging) }
         // Build a new config from supported hardware fields. Template paths,
         // IDs, mounted discs, browser mode and future unknown fields cannot be
         // carried into a new user's machine.
@@ -133,7 +134,7 @@ enum MachineTemplateInstaller {
         }
         let diskSizeGB = max(1, Int((Int64(diskBytes) + 1_073_741_823) / 1_073_741_824))
         let fresh = VMConfig(
-            name: name, machineFamily: .powerMacG4, ramMB: source.ramMB,
+            name: name, machineFamily: source.machineFamily, ramMB: source.ramMB,
             diskSizeGB: diskSizeGB, width: source.width, height: source.height,
             depth: source.depth, useEnhancedFramebuffer: false,
             customResolution: source.customResolution, useBrowserDisplay: false,
@@ -177,7 +178,7 @@ enum MachineTemplateInstaller {
     // devices or sparse extents are interpreted. GNU's positive base-256 size
     // encoding supports raw disks larger than USTAR's 8 GB limit.
     static func extract(_ archive: URL, into directory: URL, expectedBytes: Int64,
-                        expectedDiskBytes: Int64? = nil, maximumStorageBytes: Int64? = nil,
+                        expectedDiskBytes: Int64? = nil, maximumStorageBytes: Int64? = nil, copland: Bool = false,
                         cancelled: () -> Bool = { false },
                         progress: (Int64) -> Void = { _ in }) throws {
         let pipe = Pipe()
@@ -224,10 +225,12 @@ enum MachineTemplateInstaller {
                   header.subdata(in: 345..<500).allSatisfy({ $0 == 0 }) else { throw invalidArchive() }
             let nameBytes = header.prefix(100).prefix(while: { $0 != 0 })
             guard let name = String(data: nameBytes, encoding: .utf8),
-                  ["config.json", "disk.img", "preview.png"].contains(name),
+                  (["config.json", "disk.img", "preview.png"] + (copland ? ["bootrom.bin", "nvram.bin"] : [])).contains(name),
                   seen.insert(name).inserted else { throw invalidArchive() }
             let size = try number(header.subdata(in: 124..<136))
             guard size > 0, size <= expectedBytes - extracted else { throw invalidArchive() }
+            if name == "bootrom.bin" && size != 4_194_304 { throw invalidArchive() }
+            if name == "nvram.bin" && size != 8209 { throw invalidArchive() }
             if name == "config.json" && size > 65_536 { throw invalidArchive() }
             if name == "preview.png" && size > 16 * 1_048_576 { throw invalidArchive() }
             if name == "disk.img" && (size < 512 || size % 512 != 0) { throw invalidArchive() }
@@ -300,7 +303,8 @@ enum MachineTemplateInstaller {
         }
         process.waitUntilExit()
         guard process.terminationStatus == 0, extracted == expectedBytes,
-              seen.contains("config.json"), seen.contains("disk.img") else { throw invalidArchive() }
+              seen.contains("config.json"), seen.contains("disk.img"),
+              !copland || (seen.contains("bootrom.bin") && seen.contains("nvram.bin")) else { throw invalidArchive() }
     }
 
     private static func readExactly(_ count: Int, from input: FileHandle) throws -> Data {

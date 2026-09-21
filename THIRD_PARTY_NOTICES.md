@@ -22,8 +22,8 @@ QEMU emulator as a whole is licensed under the GNU General Public License,
 version 2. Individual source and firmware files may carry compatible licenses,
 as described by QEMU's `LICENSE` file and their source headers.
 
-The exact corresponding source is reproducible from the ClassicMac 1.6.1
-source at <https://github.com/amcchord/ClassicMac/tree/v1.6.1>. The repository's
+The exact corresponding source is reproducible from the ClassicMac 3.2.0
+source at <https://github.com/amcchord/ClassicMac/tree/v3.2.0>. The repository's
 `scripts/build-qemu.sh` retrieves the pinned upstream QEMU 11.0.2 source and
 applies every ClassicMac modification stored in the repository.
 
@@ -66,3 +66,24 @@ The pako license text is included with the browser source and in the
 application's Licenses directory.
 
 Upstream source: <https://github.com/nodeca/pako/tree/1.0.3>
+
+## Copland engine: DingusPPC and SDL2
+
+Copland uses a separate, modified DingusPPC helper, licensed under GPL-3.0-or-later.
+It pins Michael Steil's `copland-boot` fork at
+`8dcac6fb160adfd8860c2252fba321d412b2c8a6`, including eleven Copland hardware fixes.
+The RTC patch and debugger protocol derive from his `wasm-port` work. ClassicMac's
+patches, silent audio backend, build instructions and protocol tests are in
+`copland/` and `scripts/build-copland.sh`. This is an independent integration and
+is not an upstream DingusPPC release.
+
+Source: <https://github.com/mist64/dingusppc/tree/8dcac6fb160adfd8860c2252fba321d412b2c8a6>
+Research and working reference: <https://www.pagetable.com/300>
+
+The helper statically links SDL2 2.32.10 (zlib license) and Capstone (BSD license,
+with LLVM-derived portions under the included LLVM license). Cubeb's ISC license
+is also included for the pinned build dependencies. Full notices are bundled
+under `Contents/Resources/Licenses`. The corresponding DingusPPC, SDL2 and pinned
+submodule sources are supplied in the Copland source archive beside the release;
+ClassicMac's own source and build patches are in the release's tagged repository.
+Apple's guest software and ROM are separate from these open-source components.

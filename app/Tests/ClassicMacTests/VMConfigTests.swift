@@ -3,10 +3,27 @@ import XCTest
 
 final class VMConfigTests: XCTestCase {
     func testDiskSizeChoicesReach120GBForBothMachines() {
-        for family in MachineFamily.allCases {
+        for family in [MachineFamily.quadra800, .powerMacG4] {
             XCTAssertEqual(family.diskSizePresets.last, 120)
             XCTAssertTrue(family.diskSizePresets.contains(64))
         }
+    }
+
+    func testCoplandPinsHardwareAndClearsUnsupportedFeatures() throws {
+        let config = VMConfig(name: "Copland", machineFamily: .powerMac7500,
+                              ramMB: 1024, width: 1920, height: 1080, depth: 24,
+                              customResolution: true, useBrowserDisplay: true,
+                              cdImagePath: "/tmp/disc.iso", bootFromCD: true,
+                              toolsCDInserted: true, sharedFolderPath: "/tmp/shared")
+        let decoded = try JSONDecoder().decode(VMConfig.self, from: JSONEncoder().encode(config))
+        XCTAssertEqual(decoded.ramMB, 32)
+        XCTAssertEqual(decoded.width, 640); XCTAssertEqual(decoded.height, 480)
+        XCTAssertEqual(decoded.depth, 8)
+        XCTAssertFalse(decoded.networking); XCTAssertFalse(decoded.sound)
+        XCTAssertFalse(decoded.useBrowserDisplay); XCTAssertFalse(decoded.toolsCDInserted)
+        XCTAssertFalse(decoded.bootFromCD); XCTAssertFalse(decoded.tabletInput)
+        XCTAssertNil(decoded.cdImagePath); XCTAssertNil(decoded.sharedFolderPath)
+        XCTAssertNil(decoded.floppyImagePath)
     }
 
     func testCustomResolutionIsClampedAndNameIsTrimmed() {

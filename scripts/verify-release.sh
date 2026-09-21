@@ -70,6 +70,8 @@ PPC_HELPER="$APP/Contents/Helpers/Power Mac G4.app"
 PPC_QEMU="$PPC_HELPER/Contents/MacOS/qemu-system-ppc"
 QUADRA_HELPER="$APP/Contents/Helpers/Quadra 800.app"
 QUADRA_QEMU="$QUADRA_HELPER/Contents/MacOS/qemu-system-m68k"
+COPLAND_HELPER="$APP/Contents/Helpers/Power Mac 7500.app"
+COPLAND_ENGINE="$COPLAND_HELPER/Contents/MacOS/dingusppc"
 PPC_NDRV="$APP/Contents/Resources/qemu/pc-bios/qemu_vga.ndrv"
 TOOLS_CD="$APP/Contents/Resources/ClassicMacTools.iso"
 VNC_KEYMAP="$APP/Contents/Resources/qemu/pc-bios/keymaps/en-us"
@@ -79,7 +81,7 @@ BROWSER_SCALE="$APP/Contents/Resources/Browser/pixel-scale.js"
 BROWSER_LICENSE="$APP/Contents/Resources/Licenses/noVNC-MPL-2.0.txt"
 PAKO_LICENSE="$APP/Contents/Resources/Licenses/pako-MIT.txt"
 
-for required in "$PLIST" "$PPC_HELPER/Contents/Info.plist" \
+for required in "$COPLAND_HELPER/Contents/Info.plist" "$COPLAND_ENGINE" "$PLIST" "$PPC_HELPER/Contents/Info.plist" \
   "$QUADRA_HELPER/Contents/Info.plist" "$PPC_QEMU" "$QUADRA_QEMU" \
   "$PPC_NDRV" "$TOOLS_CD" "$VNC_KEYMAP" "$BROWSER_INDEX" "$BROWSER_SCALE" \
   "$BROWSER_RFB" "$BROWSER_LICENSE" "$PAKO_LICENSE"; do
@@ -189,7 +191,7 @@ for helper in (app / "Contents/Helpers").glob("*.app"):
     frameworks = helper / "Contents/Frameworks"
     if not (helper / "Contents/Resources/release-libraries.json").is_file():
         sys.exit(f"Missing runtime library provenance: {helper.name}")
-    for library in frameworks.glob("*.dylib"):
+    for library in list(frameworks.glob("*.dylib")) + list((helper / "Contents/MacOS").iterdir()):
         info = subprocess.check_output(["otool", "-l", str(library)], text=True)
         minimums = re.findall(r"\bminos ([0-9.]+)", info)
         if not minimums or any(tuple(map(int, (v + ".0.0").split(".")[:3])) > (15, 0, 0) for v in minimums):

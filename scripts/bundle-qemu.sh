@@ -32,8 +32,8 @@ BUNDLE_STAGE_DIR=""
 BUNDLE_PREVIOUS_APP=""
 BUNDLE_LOCK_HELD=0
 
-APP_VERSION="${APP_VERSION:-3.0.1}"
-APP_BUILD_VERSION="${APP_BUILD_VERSION:-3.0.1}"
+APP_VERSION="${APP_VERSION:-3.2.0}"
+APP_BUILD_VERSION="${APP_BUILD_VERSION:-3.2.0}"
 BUNDLE_ID="com.classicmac.emulator"
 
 log() { printf '\n==> %s\n' "$*"; }
@@ -105,10 +105,13 @@ HELPERS_DIR="$CONTENTS/Helpers"
 # "Power Mac G4" with a proper icon, not as a bare qemu-system executable.
 QUADRA_APP="$HELPERS_DIR/Quadra 800.app"
 PPC_APP="$HELPERS_DIR/Power Mac G4.app"
+COPLAND_APP="$HELPERS_DIR/Power Mac 7500.app"
+COPLAND_BIN="$ROOT_DIR/vendor/dingusppc/build/bin/dingusppc.app/Contents/MacOS/dingusppc"
 
 # ---------------------------------------------------------------------------
 # 0. Preconditions
 # ---------------------------------------------------------------------------
+[ -x "$COPLAND_BIN" ] || die "Copland engine missing. Run scripts/build-copland.sh first."
 [ -x "$QEMU_BUILD_DIR/qemu-system-m68k" ] || die "qemu-system-m68k not found. Run scripts/build-qemu.sh first."
 [ -x "$QEMU_BUILD_DIR/qemu-system-ppc" ] || die "qemu-system-ppc not found. Run scripts/build-qemu.sh first."
 [ -x "$QEMU_BUILD_DIR/qemu-img" ] || die "qemu-img not found. Run scripts/build-qemu.sh first."
@@ -159,6 +162,10 @@ mkdir -p "$MACOS_DIR" "$QEMU_DEST" "$PCBIOS_DEST"
 mkdir -p "$QUADRA_APP/Contents/MacOS" "$QUADRA_APP/Contents/Frameworks" "$QUADRA_APP/Contents/Resources"
 mkdir -p "$PPC_APP/Contents/MacOS" "$PPC_APP/Contents/Frameworks" "$PPC_APP/Contents/Resources"
 
+mkdir -p "$COPLAND_APP/Contents/MacOS" "$COPLAND_APP/Contents/Resources" "$COPLAND_APP/Contents/Frameworks"
+cp "$COPLAND_BIN" "$COPLAND_APP/Contents/MacOS/dingusppc"
+cp "$ROOT_DIR/Resources/MachineIcon.icns" "$COPLAND_APP/Contents/Resources/MachineIcon.icns"
+cp "$ROOT_DIR/copland/runtime-libraries.json" "$COPLAND_APP/Contents/Resources/release-libraries.json"
 cp "$APP_BIN" "$MACOS_DIR/ClassicMac"
 cp "$QEMU_BUILD_DIR/qemu-system-m68k" "$QUADRA_APP/Contents/MacOS/"
 cp "$QEMU_BUILD_DIR/qemu-img" "$QUADRA_APP/Contents/MacOS/"
@@ -238,6 +245,12 @@ cp -R "$BROWSER_SRC" "$RES_DIR/Browser"
 # Homebrew library copied into the self-contained helper apps below.
 LICENSES_DIR="$RES_DIR/Licenses"
 mkdir -p "$LICENSES_DIR"
+cp "$ROOT_DIR/copland/CLI11-LICENSE.txt" "$LICENSES_DIR/CLI11.txt"
+cp "$ROOT_DIR/vendor/dingusppc/LICENSE" "$LICENSES_DIR/DingusPPC-GPL-3.0.txt"
+cp "$ROOT_DIR/vendor/SDL2/LICENSE.txt" "$LICENSES_DIR/SDL2.txt"
+cp "$ROOT_DIR/vendor/dingusppc/thirdparty/capstone/LICENSE.TXT" "$LICENSES_DIR/Capstone.txt"
+cp "$ROOT_DIR/vendor/dingusppc/thirdparty/capstone/LICENSE_LLVM.TXT" "$LICENSES_DIR/Capstone-LLVM.txt"
+cp "$ROOT_DIR/vendor/dingusppc/thirdparty/cubeb/LICENSE" "$LICENSES_DIR/cubeb.txt"
 cp "$THIRD_PARTY_NOTICES" "$RES_DIR/ThirdPartyNotices.md"
 cp "$ROOT_DIR/vendor/qemu/LICENSE" "$LICENSES_DIR/QEMU-LICENSE.txt"
 cp "$ROOT_DIR/vendor/qemu/COPYING" "$LICENSES_DIR/GPL-2.0.txt"
@@ -402,6 +415,7 @@ PLIST
 
 write_helper_plist "$QUADRA_APP" "Quadra 800" "com.classicmac.machine.quadra800" "qemu-system-m68k"
 write_helper_plist "$PPC_APP" "Power Mac G4" "com.classicmac.machine.powermacg4" "qemu-system-ppc"
+write_helper_plist "$COPLAND_APP" "Power Mac 7500" "com.classicmac.machine.powermac7500" "dingusppc"
 
 # ---------------------------------------------------------------------------
 # 4. Relocate dynamic libraries into the helper bundles
@@ -504,6 +518,7 @@ codesign --force --sign "$SIGN_IDENTITY" "$TIMESTAMP_FLAG" \
   --options runtime --entitlements "$ENTITLEMENTS" \
   "$PPC_APP"
 
+codesign --force --sign "$SIGN_IDENTITY" "$TIMESTAMP_FLAG" --options runtime "$COPLAND_APP"
 codesign --force --sign "$SIGN_IDENTITY" "$TIMESTAMP_FLAG" --options runtime "$MACOS_DIR/ClassicMac"
 
 # Sign the whole bundle last.

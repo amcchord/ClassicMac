@@ -31,6 +31,7 @@ enum AppPaths {
         switch family {
         case .quadra800: return "Quadra 800"
         case .powerMacG4: return "Power Mac G4"
+        case .powerMac7500: return "Power Mac 7500"
         }
     }
 
@@ -62,6 +63,9 @@ enum AppPaths {
         switch family {
         case .quadra800: return qemuSystemBinary
         case .powerMacG4: return qemuSystemPPCBinary
+        case .powerMac7500:
+            return helperBinary(app: "Power Mac 7500", binary: "dingusppc") ??
+                developmentRepoRoot.appendingPathComponent("vendor/dingusppc/build/bin/dingusppc.app/Contents/MacOS/dingusppc")
         }
     }
 
@@ -228,6 +232,7 @@ enum AppPaths {
     // driver that OpenBIOS passes to the guest.
     static func requiredFirmware(for family: MachineFamily) -> [URL] {
         switch family {
+        case .powerMac7500: return [] // Its matched ROM travels inside the downloaded machine.
         case .quadra800:
             return [quadraROM, pcBiosDir.appendingPathComponent("mac_qfb.rom")]
         case .powerMacG4:

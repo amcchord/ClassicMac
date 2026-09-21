@@ -78,9 +78,11 @@ final class QEMUManager: ObservableObject {
     // The latest screen capture of each machine, refreshed while it runs and
     // kept after shutdown so the library shows what was last on screen.
     @Published private(set) var previews: [UUID: NSImage] = [:]
+    @Published private(set) var coplandHaltedIDs: Set<UUID> = []
     @Published var lastError: AppError?
     @Published private(set) var pendingStopID: UUID?
 
+    private var coplandControls: [UUID: Pipe] = [:]
     private var processes: [UUID: Process] = [:]
     private var browserServers: [UUID: BrowserDisplayServer] = [:]
     private var qmpMonitors: [UUID: QMPEventMonitor] = [:]
@@ -185,6 +187,18 @@ final class QEMUManager: ObservableObject {
         } else {
             environment.removeValue(forKey: "CLASSICMAC_TOOLS_CD")
         }
+        if config.machineFamily == .powerMac7500 {
+            let control = Pipe()
+            coplandControls[config.id] = control
+            process.standardInput = control
+            process.standardOutput = FileHandle.nullDevice
+            environment["CLASSICMAC_CONTROL"] = "1"
+            environment["CLASSICMAC_MACHINE_NAME"] = config.name
+            environment["CLASSICMAC_PREVIEW_PATH"] = Self.screenDumpURL(for: config.id).path
+            environment["CLASSICMAC_STATUS_PATH"] = CoplandMachine.statusURL(for: config.id).path
+            environment["DPPC_RTC"] = "2027-01-01T00:00:00"
+            try? FileManager.default.removeItem(at: CoplandMachine.statusURL(for: config.id))
+        }
         process.environment = environment
 
         let stderrPipe = Pipe()
@@ -211,6 +225,11 @@ final class QEMUManager: ObservableObject {
                     self.pendingStopID = nil
                 }
                 self.processes.removeValue(forKey: config.id)
+                if let pipe = self.coplandControls.removeValue(forKey: config.id) {
+                    try? pipe.fileHandleForWriting.close()
+                }
+                self.coplandHaltedIDs.remove(config.id)
+                try? FileManager.default.removeItem(at: CoplandMachine.statusURL(for: config.id))
                 self.forcedStopWorkItems.removeValue(forKey: config.id)?.cancel()
                 self.stopBootClockHandoff(for: config.id)
                 self.stopPreviewUpdates(for: config.id)
@@ -220,6 +239,11 @@ final class QEMUManager: ObservableObject {
                     )
                 }
                 self.persistPreview(config)
+                if config.machineFamily == .powerMac7500,
+                   proc.terminationReason == .exit, proc.terminationStatus == 75 {
+                    self.start(savedConfig, reusing: nil, openDisplay: true)
+                    return
+                }
                 if proc.terminationStatus != 0 && proc.terminationReason == .exit {
                     monitor?.cancel()
                     self.stopBrowserDisplay(for: config.id)
@@ -270,6 +294,7 @@ final class QEMUManager: ObservableObject {
         do {
             try process.run()
         } catch {
+            coplandControls.removeValue(forKey: config.id)
             if let displayServer {
                 if browserServers[config.id] === displayServer {
                     stopBrowserDisplay(for: config.id)
@@ -291,13 +316,15 @@ final class QEMUManager: ObservableObject {
         }
         runningIDs.insert(config.id)
 
-        // Both machine families report shutdown/restart intent over QMP (see
+        // The QEMU families report shutdown/restart intent over QMP (see
         // relaunchReasons above); watch the event stream for this run.
-        let monitor = QMPEventMonitor(
-            socketPath: QEMUManager.qmpSocketURL(for: config.id).path
-        )
-        monitor.start()
-        qmpMonitors[config.id] = monitor
+        if config.machineFamily != .powerMac7500 {
+            let monitor = QMPEventMonitor(
+                socketPath: QEMUManager.qmpSocketURL(for: config.id).path
+            )
+            monitor.start()
+            qmpMonitors[config.id] = monitor
+        }
 
         let bootingFromUserCD = config.bootFromCD &&
             config.cdImagePath?.isEmpty == false
@@ -380,7 +407,7 @@ final class QEMUManager: ObservableObject {
 
     // MARK: Screen previews
 
-    private static func screenDumpURL(for id: UUID) -> URL {
+    static func screenDumpURL(for id: UUID) -> URL {
         let dir = URL(fileURLWithPath: "/tmp/ClassicMac", isDirectory: true)
         AppPaths.ensureDirectory(dir)
         return dir.appendingPathComponent("\(id.uuidString).screen.ppm")
@@ -425,6 +452,15 @@ final class QEMUManager: ObservableObject {
     // Fire-and-forget: a failed or missed capture just keeps the previous one.
     private func capturePreview(_ config: VMConfig) {
         guard runningIDs.contains(config.id) else { return }
+        if config.machineFamily == .powerMac7500 {
+            if let image = PPMImage.load(Self.screenDumpURL(for: config.id)) {
+                previews[config.id] = image
+            }
+            let status = try? String(contentsOf: CoplandMachine.statusURL(for: config.id), encoding: .utf8)
+            if status == "halted\n" { coplandHaltedIDs.insert(config.id) }
+            else { coplandHaltedIDs.remove(config.id) }
+            return
+        }
         let socketPath = QEMUManager.monitorSocketURL(for: config.id).path
         let dumpURL = QEMUManager.screenDumpURL(for: config.id)
         DispatchQueue.global(qos: .utility).async { [weak self] in
@@ -468,6 +504,14 @@ final class QEMUManager: ObservableObject {
 
     private func stop(_ id: UUID) {
         guard let process = processes[id] else { return }
+        if coplandControls[id] != nil {
+            // Copland does not implement the ADB power-key dialog. Its own
+            // Spaz > Shut Down command is the graceful path; the host command
+            // is an explicitly confirmed power-off for a frozen preview.
+            pausedIDs.remove(id)
+            sendCopland("quit", to: id)
+            return
+        }
         let socketPath = QEMUManager.monitorSocketURL(for: id).path
         let wasPaused = pausedIDs.remove(id) != nil
 
@@ -521,6 +565,7 @@ final class QEMUManager: ObservableObject {
     func pause(_ id: UUID) {
         guard runningIDs.contains(id) else { return }
         pausedIDs.insert(id)
+        if coplandControls[id] != nil { sendCopland("pause", to: id); return }
         sendMonitor("stop", to: id, actionLabel: "Pause") { [weak self] in
             // Undo the optimistic state change so the UI matches reality.
             self?.pausedIDs.remove(id)
@@ -530,6 +575,7 @@ final class QEMUManager: ObservableObject {
     func resume(_ id: UUID) {
         guard runningIDs.contains(id) else { return }
         pausedIDs.remove(id)
+        if coplandControls[id] != nil { sendCopland("resume", to: id); return }
         sendMonitor("cont", to: id, actionLabel: "Resume") { [weak self] in
             self?.pausedIDs.insert(id)
         }
@@ -538,6 +584,7 @@ final class QEMUManager: ObservableObject {
     func reboot(_ id: UUID) {
         guard runningIDs.contains(id) else { return }
         pausedIDs.remove(id)
+        if coplandControls[id] != nil { sendCopland("restart", to: id); return }
         sendMonitor("system_reset", to: id, actionLabel: "Restart", onFailure: nil)
     }
 
@@ -549,6 +596,17 @@ final class QEMUManager: ObservableObject {
             actionLabel: "Force Quit the Frontmost App",
             onFailure: nil
         )
+    }
+
+    func continueCopland(_ id: UUID) {
+        guard coplandControls[id] != nil, !pausedIDs.contains(id) else { return }
+        sendCopland("continue", to: id)
+    }
+
+    private func sendCopland(_ command: String, to id: UUID) {
+        guard let pipe = coplandControls[id], processes[id]?.isRunning == true else { return }
+        do { try pipe.fileHandleForWriting.write(contentsOf: Data((command + "\n").utf8)) }
+        catch { lastError = AppError("Couldn't Control Copland", error.localizedDescription) }
     }
 
     // Sends a control command to the running machine. Failures (a dead or
@@ -581,6 +639,13 @@ final class QEMUManager: ObservableObject {
         let fm = FileManager.default
         let title = "Couldn't Start \u{201C}\(config.name)\u{201D}"
 
+        if config.machineFamily == .powerMac7500 {
+            guard config.diskImageName == "disk.img" else {
+                return AppError(title, "Copland requires disk.img inside its machine package.")
+            }
+            do { try CoplandMachine.validateFirmware(in: config.folder) }
+            catch { return AppError(title, error.localizedDescription) }
+        }
         let missing = AppPaths.missingFirmware(for: config.machineFamily)
         if !missing.isEmpty {
             return AppError(
@@ -645,6 +710,8 @@ final class QEMUManager: ObservableObject {
             return buildQuadraArguments(for: config, display: display)
         case .powerMacG4:
             return buildPowerMacArguments(for: config, display: display)
+        case .powerMac7500:
+            return CoplandMachine.arguments(for: config)
         }
     }
 
