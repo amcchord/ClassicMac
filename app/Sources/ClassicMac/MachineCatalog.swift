@@ -26,7 +26,7 @@ struct MachineCatalog: Codable {
     static let defaultURL = URL(string: "https://mcchord.net/classicmac/catalog.json")!
     static let maximumCatalogBytes: Int64 = 1_048_576
     static var currentAppVersion: String {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "3.0.1"
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "3.2.0"
     }
 
     let schemaVersion: Int
@@ -66,20 +66,26 @@ struct DownloadableMachine: Codable, Identifiable, Hashable {
     let sha256: String
     let diskCapacityBytes: Int64?
     let requiredStorageBytes: Int64?
+    let machineFamily: MachineFamily?
+    var family: MachineFamily { machineFamily ?? .powerMacG4 }
 
     init(id: String, name: String, summary: String, osVersion: String,
          gxMetalVersion: String, minimumAppVersion: String, archiveURL: URL,
          archiveBytes: Int64, installedBytes: Int64, sha256: String,
-         diskCapacityBytes: Int64? = nil, requiredStorageBytes: Int64? = nil) {
+         diskCapacityBytes: Int64? = nil, requiredStorageBytes: Int64? = nil, machineFamily: MachineFamily? = nil) {
         self.id = id; self.name = name; self.summary = summary
         self.osVersion = osVersion; self.gxMetalVersion = gxMetalVersion
         self.minimumAppVersion = minimumAppVersion; self.archiveURL = archiveURL
         self.archiveBytes = archiveBytes; self.installedBytes = installedBytes
         self.sha256 = sha256; self.diskCapacityBytes = diskCapacityBytes
         self.requiredStorageBytes = requiredStorageBytes
+        self.machineFamily = machineFamily
     }
 
     func validate() throws {
+        guard family == .powerMacG4 || family == .powerMac7500 else {
+            throw MachineDownloadError.invalidCatalog("This machine family is not supported by downloads.")
+        }
         let allowedID = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyz0123456789-._")
         guard !id.isEmpty, id.utf8.count <= 100,
               id.unicodeScalars.allSatisfy({ allowedID.contains($0) }),
@@ -98,7 +104,7 @@ struct DownloadableMachine: Codable, Identifiable, Hashable {
         }
         if let capacity = diskCapacityBytes {
             guard capacity >= 512, capacity % 512 == 0, capacity < installedBytes,
-                  installedBytes - capacity <= 16 * 1_048_576 + 65_536 else {
+                  installedBytes - capacity <= 16 * 1_048_576 + 65_536 + (family == .powerMac7500 ? 4_202_513 : 0) else {
                 throw MachineDownloadError.invalidCatalog("Its disk capacity does not match the expanded files.")
             }
         }
@@ -107,7 +113,7 @@ struct DownloadableMachine: Codable, Identifiable, Hashable {
             // accounting chunk. Metadata never relaxes the full expansion cap.
             guard diskCapacityBytes != nil, storage >= 1_048_576,
                   storage % 1_048_576 == 0,
-                  storage <= installedBytes + 3 * 1_048_576 else {
+                  storage <= installedBytes + (family == .powerMac7500 ? 5 : 3) * 1_048_576 else {
                 throw MachineDownloadError.invalidCatalog("Its initial storage requirement is not valid.")
             }
         }

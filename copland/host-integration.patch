@@ -1,0 +1,168 @@
+diff --git a/core/hostevents_sdl.cpp b/core/hostevents_sdl.cpp
+index 8c9ea07a..5251c166 100644
+--- a/core/hostevents_sdl.cpp
++++ b/core/hostevents_sdl.cpp
+@@ -25,6 +25,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ #include <devices/common/adb/adbkeyboard.h>
+ #include <loguru.hpp>
+ #include <SDL.h>
++#include <core/classicmac_control.h>
+ 
+ EventManager* EventManager::event_manager;
+ 
+@@ -51,6 +52,31 @@ void EventManager::set_keyboard_locale(uint32_t keyboard_id) {
+ }
+ 
+ void EventManager::poll_events() {
++    auto key = [this](int code, int down) {
++        KeyboardEvent event{}; event.key=code;
++        event.flags=down?KEYBOARD_EVENT_DOWN:KEYBOARD_EVENT_UP;
++        this->_keyboard_signal.emit(event);
++    };
++    auto mouse = [this](int x, int y, int button) {
++        MouseEvent event{}; event.xrel=x;event.yrel=y;
++        event.flags=MOUSE_EVENT_MOTION;
++        this->_mouse_signal.emit(event);
++        event.flags=MOUSE_EVENT_BUTTON; event.buttons_state=button;
++        this->_mouse_signal.emit(event);
++    };
++    classicmac_poll_control(key, mouse);
++    while(classicmac_paused && power_on) {
++        SDL_Event event;
++        while(SDL_PollEvent(&event)) {
++            if(event.type==SDL_QUIT) {classicmac_paused=false;power_off(po_quit);}
++            if(event.type==SDL_WINDOWEVENT) {
++                WindowEvent we{};we.sub_type=event.window.event;we.window_id=event.window.windowID;
++                this->_window_signal.emit(we);
++            }
++        }
++        SDL_Delay(10);
++        classicmac_poll_control(key, mouse);
++    }
+     SDL_Event event;
+ 
+     while (SDL_PollEvent(&event)) {
+diff --git a/devices/serial/escc.cpp b/devices/serial/escc.cpp
+index 2154c48a..92abcd21 100644
+--- a/devices/serial/escc.cpp
++++ b/devices/serial/escc.cpp
+@@ -24,6 +24,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ #include <core/timermanager.h>
+ #include <devices/deviceregistry.h>
+ #include <devices/serial/chario.h>
++#include <devices/serial/chario_copland.h>
+ #include <devices/serial/escc.h>
+ #include <devices/serial/z85c30.h>
+ #include <loguru.hpp>
+@@ -51,6 +52,7 @@ EsccController::EsccController()
+     std::string backend_name = GET_STR_PROP("serial_backend");
+ 
+     this->ch_a->attach_backend(
++        (backend_name == "copland") ? 3 :
+         (backend_name == "stdio") ? CHARIO_BE_STDIO :
+ #ifdef _WIN32
+ #else
+@@ -228,6 +230,9 @@ void EsccController::write_internal(EsccChannel *ch, uint8_t value)
+ void EsccChannel::attach_backend(int id)
+ {
+     switch(id) {
++    case 3:
++        this->chario = std::make_unique<CharIoCopland>();
++        break;
+     case CHARIO_BE_NULL:
+         this->chario = std::unique_ptr<CharIoBackEnd> (new CharIoNull);
+         break;
+@@ -466,7 +471,7 @@ int EsccChannel::xfer_to(DmaChannel *ch_obj, uint8_t *buf, int len) {
+     return bytes_moved;
+ }
+ 
+-static const std::vector<std::string> CharIoBackends = {"null", "stdio", "socket"};
++static const std::vector<std::string> CharIoBackends = {"null", "stdio", "socket", "copland"};
+ 
+ static const PropMap Escc_Properties = {
+     {"serial_backend", new StrProperty("null", CharIoBackends)},
+diff --git a/devices/video/display_sdl.cpp b/devices/video/display_sdl.cpp
+index e983a864..1e43ae21 100644
+--- a/devices/video/display_sdl.cpp
++++ b/devices/video/display_sdl.cpp
+@@ -22,6 +22,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ #include <devices/video/display.h>
+ #include <devices/video/videoctrl.h>
+ #include <SDL.h>
++#include <vector>
+ #include <loguru.hpp>
+ #include <cmath>
+ #include <string>
+@@ -448,7 +449,8 @@ void Display::update_window_title()
+     SDL_GetWindowSize(impl->display_wnd, &width, &height);
+     bool is_grabbed = SDL_GetRelativeMouseMode();
+ 
+-    std::string new_window_title = "DingusPPC Display " +
++    const char* machine_name = std::getenv("CLASSICMAC_MACHINE_NAME");
++    std::string new_window_title = std::string(machine_name ? machine_name : "DingusPPC Display") + " " +
+         std::to_string(impl->display_w) + "x" + std::to_string(impl->display_h)
+         + " " + std::to_string(int(std::round(impl->renderer_scale_x * 100))) + "%";
+     if (is_grabbed)
+@@ -482,6 +484,32 @@ void Display::update(std::function<void(uint8_t *dst_buf, int dst_pitch)> conver
+     if (cursor_ovl_cb != nullptr)
+         cursor_ovl_cb(dst_buf, dst_pitch);
+ 
++    // Optional guest framebuffer capture for ClassicMac previews and boot evidence.
++    if (const char* path = std::getenv("CLASSICMAC_PREVIEW_PATH")) {
++        static uint64_t last_capture = 0;
++        uint64_t now = SDL_GetTicks64();
++        if (now - last_capture >= 1000) {
++            last_capture = now;
++            std::string temporary = std::string(path) + ".tmp";
++            if (FILE* out = fopen(temporary.c_str(), "wb")) {
++                fprintf(out, "P6\n%d %d\n255\n", impl->display_w, impl->display_h);
++                bool ok = true;
++                std::vector<uint8_t> row(impl->display_w * 3);
++                for (int y=0; y<impl->display_h; ++y) {
++                    auto* pixels = reinterpret_cast<uint32_t*>(dst_buf + y * dst_pitch);
++                    for (int x=0; x<impl->display_w; ++x) {
++                        uint32_t pixel = pixels[x];
++                        row[x*3] = pixel >> 16; row[x*3+1] = pixel >> 8; row[x*3+2] = pixel;
++                    }
++                    if (fwrite(row.data(), 1, row.size(), out) != row.size()) { ok = false; break; }
++                }
++                if (fclose(out) != 0) ok = false;
++                if (ok) rename(temporary.c_str(), path);
++                else remove(temporary.c_str());
++            }
++        }
++    }
++
+     SDL_UnlockTexture(impl->disp_texture);
+     SDL_RenderClear(impl->renderer);
+     SDL_RenderCopy(impl->renderer, impl->disp_texture, NULL, &impl->dest_rect);
+diff --git a/main.cpp b/main.cpp
+index 1d2752e0..a3025691 100644
+--- a/main.cpp
++++ b/main.cpp
+@@ -338,6 +338,7 @@ int main(int argc, char** argv) {
+ 
+     keyboard_id = kbd_map.at(keyboard_string);
+ 
++    int classicmac_exit_status = 0;
+     while (true) {
+         run_machine(
+             machine_str,
+@@ -348,6 +349,8 @@ int main(int argc, char** argv) {
+             deterministic_interactive,
+             profiling_interval_ms);
+         if (power_off_reason == po_restarting) {
++            // ClassicMac restarts in a fresh process, resetting every device and timer.
++            if (getenv("CLASSICMAC_CONTROL")) { classicmac_exit_status = 75; break; }
+             LOG_F(INFO, "Restarting...");
+             power_on = true;
+             continue;
+@@ -369,7 +372,7 @@ int main(int argc, char** argv) {
+ 
+     cleanup();
+ 
+-    return 0;
++    return classicmac_exit_status;
+ }
+ 
+ void run_machine(std::string machine_str, char* rom_data,

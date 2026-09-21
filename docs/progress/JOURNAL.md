@@ -216,3 +216,22 @@
 - No new release or tag was created, and no further hosting changes occurred.
   GitHub 3.0.0 remains the public release. Next: use the 3.0.1 candidate or
   publish it as a new release when requested.
+
+## September 21 — Copland native engine and release qualification
+
+- Created contained `worktrees/copland` from GitHub main, preserving the root
+  iPad branch. Implemented a Power Mac 7500 family with a pinned DingusPPC engine,
+  native lifecycle controls/previews, verified downloadable firmware and disk,
+  and manual debugger Continue for Copland assertions. Details: [Copland record](COPLAND.md).
+- Native startup required the browser port's bounded sound DMA cadence; host
+  sound is deliberately unavailable. Upstream's eleven device fixes are credited.
+- 107 Swift tests passed (two opt-in asset tests skipped in the ordinary suite);
+  actual public-image import and signed-helper lifecycle tests passed separately,
+  including two manual Continue operations after hard restart. Three packaging,
+  eight release-library, and native serial tests passed. Exported corresponding
+  source rebuilt successfully. A locked host prevented final manual window QA;
+  real guest input was exercised through the emulator hardware/control API.
+- Source pushed in PR #20. The immutable Copland archive is on mcchord.net and
+  verified by a fresh download; catalog promotion and final release publication
+  follow artifact notarization and mounted-DMG validation. Prior release assets
+  and OS 9 downloads are retained for rollback.

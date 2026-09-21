@@ -82,6 +82,17 @@ struct VMDetailView: View {
 
                     homeActions(vm)
                     machineSummary(vm.wrappedValue)
+                    if vm.wrappedValue.machineFamily == .powerMac7500 {
+                        GroupBox("Copland D11E4 · Experimental") {
+                            VStack(alignment: .leading, spacing: 10) {
+                                Text("Explore Apple's unfinished Mac OS rewrite. Some actions trigger developer assertions or crashes. Sound, networking, shared folders, removable media, and browser viewing are unavailable.")
+                                Text("Control-G captures or releases the mouse. Control-+ and Control-− scale the window; Control-F toggles full screen.")
+                                if manager.coplandHaltedIDs.contains(vmID) {
+                                    Text("Copland stopped at a developer assertion. Continue asks its debugger to resume; the affected feature may still fail.").foregroundStyle(.orange)
+                                }
+                            }.font(.callout).frame(maxWidth: .infinity, alignment: .leading).padding(8)
+                        }
+                    }
 
                     if running && vm.wrappedValue.useBrowserDisplay {
                         GroupBox {
@@ -194,10 +205,12 @@ struct VMDetailView: View {
 
     private func homeActions(_ vm: Binding<VMConfig>) -> some View {
         HStack(spacing: 10) {
-            Button(action: showMedia) {
-                Label("Media", systemImage: "opticaldisc")
+            if vm.wrappedValue.machineFamily != .powerMac7500 {
+                Button(action: showMedia) {
+                    Label("Media", systemImage: "opticaldisc")
+                }
+                .help("Manage inserted discs and the startup disk")
             }
-            .help("Manage inserted discs and the startup disk")
             if vm.wrappedValue.hasSharedFolder,
                let path = vm.wrappedValue.sharedFolderPath {
                 Button {
@@ -206,6 +219,9 @@ struct VMDetailView: View {
                     Label("Shared Folder", systemImage: "folder")
                 }
                 .help("Open the folder shared with this Mac")
+            }
+            if manager.coplandHaltedIDs.contains(vmID) {
+                Button("Continue Copland") { manager.continueCopland(vmID) }.disabled(paused)
             }
             Spacer(minLength: 0)
             Button {
@@ -223,7 +239,7 @@ struct VMDetailView: View {
     private func machineSummary(_ vm: VMConfig) -> some View {
         HStack(alignment: .top, spacing: 12) {
             summaryItem("Memory", value: "\(vm.ramMB) MB", symbol: "memorychip")
-            summaryItem("Hard disk", value: "\(vm.diskSizeGB) GB", symbol: "internaldrive")
+            summaryItem("Hard disk", value: vm.machineFamily == .powerMac7500 ? ByteCountFormatter.string(fromByteCount: Int64((try? vm.diskImageURL.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0), countStyle: .memory) : "\(vm.diskSizeGB) GB", symbol: "internaldrive")
             summaryItem("Display", value: "\(vm.width) × \(vm.height)", symbol: "display")
         }
         .padding(16)
@@ -286,14 +302,25 @@ struct VMDetailView: View {
                             .disabled(running)
                         LabeledContent("Model", value: vm.wrappedValue.machineFamily.hardwareLabel)
                     }
-                    hardwareSection(vm)
+                    if vm.wrappedValue.machineFamily == .powerMac7500 {
+                        Section("Copland hardware") {
+                            LabeledContent("Memory", value: "32 MB")
+                            Text("Uses the tested Power Mac 7500 configuration. Copland's bundled startup disk and firmware are required.")
+                        }
+                    } else { hardwareSection(vm) }
                 case .display:
-                    viewingSection(vm)
-                    displaySection(vm)
+                    if vm.wrappedValue.machineFamily == .powerMac7500 {
+                        Section("Display") {
+                            Text("640 × 480, 256 colors in a native window. Use Control-+ and Control-− to scale the view.")
+                        }
+                    } else {
+                        viewingSection(vm)
+                        displaySection(vm)
+                    }
                 case .sharing:
                     if vm.wrappedValue.machineFamily.supportsSharedFolder {
                         sharedFolderSection(vm)
-                    }
+                    } else { Text("Shared folders are unavailable for Copland.") }
                 }
             }
             .formStyle(.grouped)
@@ -327,6 +354,7 @@ struct VMDetailView: View {
     }
 
     private var statusColor: Color {
+        if manager.coplandHaltedIDs.contains(vmID) { return .orange }
         if paused {
             return .orange
         }
@@ -337,6 +365,7 @@ struct VMDetailView: View {
     }
 
     private var statusText: String {
+        if manager.coplandHaltedIDs.contains(vmID) { return "Stopped at assertion" }
         if paused {
             return "Paused"
         }
@@ -748,10 +777,12 @@ struct VMDetailView: View {
         }
 
         ToolbarItemGroup {
-            Button(action: showMedia) {
-                Label("Media", systemImage: "opticaldisc")
+            if vm.wrappedValue.machineFamily != .powerMac7500 {
+                Button(action: showMedia) {
+                    Label("Media", systemImage: "opticaldisc")
+                }
+                .help("Manage discs and the startup disk")
             }
-            .help("Manage discs and the startup disk")
             Button {
                 settingsTab = .general
                 showingSettings = true

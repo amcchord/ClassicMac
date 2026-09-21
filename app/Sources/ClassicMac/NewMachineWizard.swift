@@ -44,9 +44,9 @@ struct NewMachineWizard: View {
             VStack(spacing: 16) {
                 setupOption(
                     .download,
-                    title: "Download Mac OS 9",
+                    title: "Download a Mac",
                     icon: "arrow.down.circle.fill",
-                    description: "The easiest way to get started. Mac OS 9 and GXMetal are already installed and ready to use.",
+                    description: "Choose a ready-to-run Mac OS 9 system with GXMetal, or explore the experimental Copland preview.",
                     detail: "No install discs or setup steps needed."
                 )
                 setupOption(
@@ -134,7 +134,7 @@ struct NewMachineWizard: View {
             .contentShape(RoundedRectangle(cornerRadius: 12))
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(method == .download ? "Download Mac OS 9, recommended" : title)
+        .accessibilityLabel(method == .download ? "Download a Mac, recommended" : title)
         .accessibilityValue(selection == method ? "Selected" : "Not selected")
         .accessibilityHint(description)
     }

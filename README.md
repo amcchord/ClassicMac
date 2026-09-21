@@ -29,10 +29,23 @@
   <img src="docs/screenshots/powermacg4-macos92.png" width="410" alt="Mac OS 9.2 on the emulated Power Mac G4">
 </p>
 
+## Copland preview
+
+ClassicMac 3.2 adds a downloadable **Copland D11E4** machine, Apple's unfinished
+Mac OS 8 rewrite. Choose **File → Download a Mac**, select Copland, and start it.
+A dedicated Power Mac 7500 engine boots the included disk with 32 MB RAM.
+
+![Copland D11E4 running in ClassicMac](docs/screenshots/copland-d11e4.png)
+
+This is experimental: some Finder actions trigger developer assertions or
+crashes. Use **Continue Copland** in ClassicMac when it reports an assertion.
+Sound, networking, shared folders, removable media and browser viewing are
+unavailable. See [Copland setup, controls and source credits](copland/README.md).
+
 ## New in ClassicMac 3.0
 
 - **Download a ready-to-run Mac OS 9.** Choose **File → New Machine** and
-  the recommended **Download Mac OS 9** option
+  the recommended **Download a Mac** option
   for a clean Mac OS 9.2.1 machine with GXMetal 2.3.0 already installed.
   Downloads support pause/resume, integrity checks, and a choice of name and
   save location. Each download creates its own independent machine.
@@ -187,9 +200,9 @@ ClassicMac exists because of years of brilliant work by other engineers. The pat
 
 1. Grab **ClassicMac.dmg** from the [latest release](../../releases/latest), drag ClassicMac to Applications, and launch it.
 2. Choose **File → New Machine** (⌘N) and continue with the recommended
-   **Download Mac OS 9** option. Name your Mac, choose its location, and
+   **Download a Mac** option. Name your Mac, choose its location, and
    download it. The image is hosted on mcchord.net and contains Mac OS 9.2.1
-   with GXMetal 2.3.0 already installed. **File → Download Mac OS 9** also
+   with GXMetal 2.3.0 already installed. **File → Download a Mac** also
    opens the download directly.
 3. Click **Start Mac**. The Mac opens in a native window. To use your browser,
    enable **View in browser** in **Settings → Display** before startup.
@@ -253,6 +266,7 @@ Requirements: an Apple Silicon Mac (M1 or later) running macOS 15 or newer.
 # 1. Build the emulator (clones mainline QEMU 11.0.2, applies the ClassicMac
 #    patch set, compiles qemu-system-m68k + qemu-system-ppc)
 ./scripts/build-qemu.sh
+./scripts/build-copland.sh
 
 # 2. Build the guest-additions Tools CD (cached downloads). This must precede
 #    app bundling so the exact GXMetal driver and installer enter the release.
@@ -271,7 +285,7 @@ Requirements: an Apple Silicon Mac (M1 or later) running macOS 15 or newer.
 
 # 5. Verify the exact signed/stapled artifact, including versions, Gatekeeper,
 #    the bundled Tools CD, and the GXMetal-enabled Power Mac executable
-./scripts/verify-release.sh dist/ClassicMac.dmg 3.0.1 3.0.1
+./scripts/verify-release.sh dist/ClassicMac.dmg 3.2.0 3.2.0
 ```
 
 All scripts are idempotent and safe to re-run. Building needs the Xcode command line tools and [Homebrew](https://brew.sh).

@@ -24,7 +24,8 @@ final class PasteTextController: NSObject, NSWindowDelegate {
     /// browser request; the person must press Paste Text in this window.
     func present(for id: UUID) {
         guard QEMUManager.shared.isRunning(id), !QEMUManager.shared.isPaused(id),
-              let vm = VMStore.shared.vms.first(where: { $0.id == id }) else { return }
+              let vm = VMStore.shared.vms.first(where: { $0.id == id }),
+              vm.machineFamily != .powerMac7500 else { return }
         if session?.isPasting == true {
             window?.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)

@@ -31,6 +31,7 @@ struct MachineBadgeView: View {
         switch family {
         case .quadra800: return "68k"
         case .powerMacG4: return "G4"
+        case .powerMac7500: return "601"
         }
     }
 
@@ -38,7 +39,7 @@ struct MachineBadgeView: View {
     // Power Mac: graphite, like the G4 tower.
     private var backgroundGradient: LinearGradient {
         switch family {
-        case .quadra800:
+        case .quadra800, .powerMac7500:
             return LinearGradient(
                 colors: [
                     Color(red: 0.94, green: 0.91, blue: 0.83),
@@ -61,7 +62,7 @@ struct MachineBadgeView: View {
 
     private var textColor: Color {
         switch family {
-        case .quadra800:
+        case .quadra800, .powerMac7500:
             return Color(red: 0.38, green: 0.33, blue: 0.24)
         case .powerMacG4:
             return .white

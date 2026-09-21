@@ -164,6 +164,7 @@ final class MediaController: NSObject, ObservableObject, NSWindowDelegate {
     }
 
     func present(for id: UUID) {
+        guard VMStore.shared.vms.first(where: { $0.id == id })?.machineFamily != .powerMac7500 else { return }
         guard let config = VMStore.shared.vms.first(where: { $0.id == id }) else { return }
         if let window = windows[id] {
             window.makeKeyAndOrderFront(nil)

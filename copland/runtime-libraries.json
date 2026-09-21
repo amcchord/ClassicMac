@@ -1,0 +1,6 @@
+{
+  "engine": "DingusPPC 8dcac6fb160adfd8860c2252fba321d412b2c8a6",
+  "sdl2": "2.32.10, statically linked",
+  "dynamicLibraries": "macOS system libraries only",
+  "deploymentTarget": "15.0"
+}

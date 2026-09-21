@@ -8,6 +8,8 @@ enum MachineFamily: String, Codable, CaseIterable, Identifiable {
     // PowerPC Power Mac G4 (qemu-system-ppc -M mac99). Mac OS 8.5 - 9.2.2.
     // Boots through OpenBIOS, so no Apple ROM file is needed.
     case powerMacG4
+    // Copland D11E4 on the DingusPPC Power Mac 7500 engine.
+    case powerMac7500
 
     var id: String { rawValue }
 
@@ -15,6 +17,7 @@ enum MachineFamily: String, Codable, CaseIterable, Identifiable {
         switch self {
         case .quadra800: return "Quadra 800"
         case .powerMacG4: return "Power Mac G4"
+        case .powerMac7500: return "Power Mac 7500"
         }
     }
 
@@ -22,6 +25,7 @@ enum MachineFamily: String, Codable, CaseIterable, Identifiable {
         switch self {
         case .quadra800: return "Motorola 68040"
         case .powerMacG4: return "PowerPC G4"
+        case .powerMac7500: return "PowerPC 601"
         }
     }
 
@@ -29,6 +33,7 @@ enum MachineFamily: String, Codable, CaseIterable, Identifiable {
         switch self {
         case .quadra800: return "Macintosh Quadra 800 - Motorola 68040"
         case .powerMacG4: return "Power Mac G4 - PowerPC"
+        case .powerMac7500: return "Power Mac 7500 - PowerPC 601"
         }
     }
 
@@ -36,6 +41,7 @@ enum MachineFamily: String, Codable, CaseIterable, Identifiable {
         switch self {
         case .quadra800: return "System 7.1 - Mac OS 8.1"
         case .powerMacG4: return "Mac OS 8.5 - 9.2.2"
+        case .powerMac7500: return "Copland D11E4 (experimental)"
         }
     }
 
@@ -43,6 +49,7 @@ enum MachineFamily: String, Codable, CaseIterable, Identifiable {
         switch self {
         case .quadra800: return "Mac OS 8.1"
         case .powerMacG4: return "Mac OS 9.2"
+        case .powerMac7500: return "Copland D11E4"
         }
     }
 
@@ -52,6 +59,7 @@ enum MachineFamily: String, Codable, CaseIterable, Identifiable {
         switch self {
         case .quadra800: return [64, 128, 256, 512, 1000]
         case .powerMacG4: return [128, 256, 512, 768, 896]
+        case .powerMac7500: return [32]
         }
     }
 
@@ -59,6 +67,7 @@ enum MachineFamily: String, Codable, CaseIterable, Identifiable {
         switch self {
         case .quadra800: return 128
         case .powerMacG4: return 512
+        case .powerMac7500: return 32
         }
     }
 
@@ -66,6 +75,7 @@ enum MachineFamily: String, Codable, CaseIterable, Identifiable {
         switch self {
         case .quadra800: return [1, 2, 4, 8, 16, 32, 64, 120]
         case .powerMacG4: return [2, 4, 8, 16, 32, 64, 120]
+        case .powerMac7500: return [1]
         }
     }
 
@@ -73,6 +83,7 @@ enum MachineFamily: String, Codable, CaseIterable, Identifiable {
         switch self {
         case .quadra800: return 2
         case .powerMacG4: return 32
+        case .powerMac7500: return 1
         }
     }
 
@@ -86,9 +97,9 @@ enum MachineFamily: String, Codable, CaseIterable, Identifiable {
     // Sound works on both: the Quadra has the Apple Sound Chip and the Power
     // Mac the screamer (AWACS) port.
     var supportsEnhancedFramebuffer: Bool { self == .quadra800 }
-    var supportsSharedFolder: Bool { true }
-    var supportsSound: Bool { true }
-    var supportsCustomResolution: Bool { true }
+    var supportsSharedFolder: Bool { self != .powerMac7500 }
+    var supportsSound: Bool { self != .powerMac7500 }
+    var supportsCustomResolution: Bool { self != .powerMac7500 }
     var supportsFloppyDisk: Bool { self == .quadra800 }
     var usesPRAMImage: Bool { self == .quadra800 }
 }
@@ -341,6 +352,15 @@ struct VMConfig: Codable, Identifiable, Hashable {
         }
         if !machineFamily.supportsFloppyDisk {
             floppyImagePath = nil
+        }
+        if machineFamily == .powerMac7500 {
+            ramMB = 32
+            width = 640; height = 480; depth = 8
+            useEnhancedFramebuffer = false; customResolution = false
+            useBrowserDisplay = false; useG4CPU = false
+            bootFromCD = false; cdImagePath = nil; toolsCDInserted = false
+            networking = false; sound = false
+            tabletInput = false; classicInputHelpers = false
         }
         if ramMB < 8 {
             ramMB = machineFamily.defaultRAMMB

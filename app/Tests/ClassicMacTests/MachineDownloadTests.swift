@@ -16,6 +16,24 @@ final class MachineDownloadTests: XCTestCase {
         try? FileManager.default.removeItem(at: directory)
     }
 
+    func testQualifiedCoplandArchiveImport() throws {
+        let env = ProcessInfo.processInfo.environment
+        guard let catalogPath = env["COPLAND_TEST_CATALOG"], let archivePath = env["COPLAND_TEST_ARCHIVE"] else {
+            throw XCTSkip("Set COPLAND_TEST_CATALOG and COPLAND_TEST_ARCHIVE to qualify a real template")
+        }
+        let machine = try XCTUnwrap(MachineCatalog.decode(Data(contentsOf: URL(fileURLWithPath: catalogPath))).machines.first { $0.family == .powerMac7500 })
+        let archive = URL(fileURLWithPath: archivePath)
+        try MachineDownloadTransfer.verify(archive, machine: machine)
+        let destination = env["COPLAND_TEST_DESTINATION"].map { URL(fileURLWithPath: $0) } ?? directory!
+        let bundle = try MachineTemplateInstaller.installVerifiedArchive(archive, machine: machine, name: "Copland Qualification", in: destination)
+        try CoplandMachine.validateFirmware(in: bundle)
+        let config = try JSONDecoder().decode(VMConfig.self, from: Data(contentsOf: bundle.appendingPathComponent("config.json")))
+        XCTAssertEqual(config.machineFamily, .powerMac7500)
+        XCTAssertEqual(config.ramMB, 32)
+        XCTAssertFalse(config.networking); XCTAssertFalse(config.toolsCDInserted)
+        XCTAssertEqual(try bundle.appendingPathComponent("disk.img").resourceValues(forKeys: [.fileSizeKey]).fileSize, Int(machine.diskCapacityBytes!))
+    }
+
     func testCatalogValidationAndVersionComparison() throws {
         let machine = fixtureMachine(bytes: Data("archive".utf8))
         let catalog = MachineCatalog(schemaVersion: 1, machines: [machine])
@@ -43,6 +61,34 @@ final class MachineDownloadTests: XCTestCase {
             let data = try JSONSerialization.data(withJSONObject: ["schemaVersion": 1, "machines": [object]])
             XCTAssertThrowsError(try MachineCatalog.decode(data), "Should reject \(replacement.keys)")
         }
+    }
+
+    func testCoplandCatalogAndFirmwareIsolation() throws {
+        let machine = DownloadableMachine(id: "copland-d11e4-v1", name: "Copland",
+            summary: "Experimental preview", osVersion: "D11E4", gxMetalVersion: "Unavailable",
+            minimumAppVersion: "3.2.0", archiveURL: source, archiveBytes: 1024,
+            installedBytes: 4_203_536, sha256: String(repeating: "0", count: 64),
+            diskCapacityBytes: 512, machineFamily: .powerMac7500)
+        XCTAssertNoThrow(try machine.validate())
+        XCTAssertThrowsError(try machine.checkCompatibility(appVersion: "3.0.1"))
+        XCTAssertNoThrow(try machine.checkCompatibility(appVersion: "3.2.0"))
+        XCTAssertEqual(try MachineCatalog.decode(JSONEncoder().encode(MachineCatalog(schemaVersion: 1, machines: [machine]))).machines[0].family, .powerMac7500)
+        XCTAssertEqual(fixtureMachine(bytes: Data([1])).family, .powerMacG4)
+        // Arbitrary firmware remains forbidden for legacy templates. A Copland
+        // entry also cannot import a wrong ROM, a truncated NVRAM, or mismatched config.
+        let config = try JSONEncoder().encode(VMConfig(name: "Copland", machineFamily: .powerMac7500))
+        let archive = try makeArchive([Entry("config.json", data: config),
+            Entry("disk.img", data: Data(repeating: 0, count: 512)),
+            Entry("bootrom.bin", data: Data(repeating: 0, count: 4_194_304)),
+            Entry("nvram.bin", data: Data(repeating: 0, count: 8209))])
+        let staging = directory.appendingPathComponent("extract", isDirectory: true)
+        try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: false)
+        let bytes = Int64(config.count + 512 + 4_194_304 + 8209)
+        XCTAssertThrowsError(try MachineTemplateInstaller.extract(archive, into: staging, expectedBytes: bytes))
+        try FileManager.default.removeItem(at: staging)
+        try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: false)
+        XCTAssertNoThrow(try MachineTemplateInstaller.extract(archive, into: staging, expectedBytes: bytes, copland: true))
+        XCTAssertThrowsError(try CoplandMachine.validateFirmware(in: staging))
     }
 
     func testSparseCatalogMetadataBoundsAndLegacyFallback() throws {

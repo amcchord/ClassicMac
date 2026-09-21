@@ -123,8 +123,23 @@ def main():
         if os.fstat(file.fileno()).st_size > 65_536:
             parser.error("config.json must be at most 64 KiB")
         source = json.load(file)
-    if source.get("machineFamily") != "powerMacG4" or source.get("diskImageName", "disk.img") != "disk.img":
+    if source.get("machineFamily") not in ("powerMacG4", "powerMac7500") or source.get("diskImageName", "disk.img") != "disk.img":
         parser.error("Only Power Mac templates with disk.img are supported")
+
+    copland = source.get("machineFamily") == "powerMac7500"
+    if copland:
+        version = tuple(map(int, args.minimum_app_version.split(".")))
+        if version < (3, 2, 0):
+            parser.error("Copland templates need ClassicMac 3.2.0 or later")
+        for filename, size in [("bootrom.bin", 4_194_304), ("nvram.bin", 8209)]:
+            with regular_file(bundle / filename) as file:
+                if os.fstat(file.fileno()).st_size != size:
+                    parser.error(f"Invalid {filename} size")
+                data = file.read()
+                if filename == "bootrom.bin" and hashlib.sha256(data).hexdigest() != "098b588dbe12fdfa3d388636e431ccae69cd1c6e984801267b9b2602babbfd22":
+                    parser.error("Copland needs the matched Power Mac 7500 ROM")
+                if filename == "nvram.bin" and data[:17] != b"DINGUSPPCNVRAM\x00\x00\x20":
+                    parser.error("Invalid Copland NVRAM header")
 
     # Persist known hardware settings only. No developer paths or mounted media
     # are copied to the downloadable config; import sanitizes these again.
@@ -132,9 +147,13 @@ def main():
                "networking", "sound", "useG4CPU", "tabletInput", "classicInputHelpers"}
     config = {key: value for key, value in source.items() if key in allowed}
     config.update(id="00000000-0000-0000-0000-000000000000", name=args.name,
-                  machineFamily="powerMacG4", diskImageName="disk.img", pramImageName="pram.img",
+                  machineFamily=source["machineFamily"], diskImageName="disk.img", pramImageName="pram.img",
                   useEnhancedFramebuffer=False, useBrowserDisplay=False, bootFromCD=False,
                   toolsCDInserted=True, toolsDeliveryVersion=1)
+    if copland:
+        config.update(ramMB=32, width=640, height=480, depth=8, customResolution=False,
+                      networking=False, sound=False, useG4CPU=False, tabletInput=False,
+                      classicInputHelpers=False, toolsCDInserted=False)
     config_bytes = json.dumps(config, indent=2, sort_keys=True).encode() + b"\n"
     installed_bytes = len(config_bytes)
     required_storage_bytes = storage_charge(len(config_bytes))
@@ -146,7 +165,7 @@ def main():
             with gzip.GzipFile(filename="", fileobj=temp, mode="wb", compresslevel=6, mtime=0) as compressed:
                 with tarfile.open(fileobj=compressed, mode="w|", format=tarfile.GNU_FORMAT) as archive:
                     archive.addfile(header("config.json", len(config_bytes)), io.BytesIO(config_bytes))
-                    for name in ["disk.img"] + (["preview.png"] if args.include_preview else []):
+                    for name in ["disk.img"] + (["bootrom.bin", "nvram.bin"] if copland else []) + (["preview.png"] if args.include_preview else []):
                         with regular_file(bundle / name) as file:
                             before = os.fstat(file.fileno())
                             if name == "disk.img" and (before.st_size < 512 or before.st_size % 512):
@@ -180,6 +199,8 @@ def main():
                      archiveURL=args.archive_url, archiveBytes=staged.stat().st_size,
                      installedBytes=installed_bytes, diskCapacityBytes=disk_capacity_bytes,
                      requiredStorageBytes=required_storage_bytes, sha256=digest.hexdigest())
+        if copland:
+            entry["machineFamily"] = "powerMac7500"
         os.chmod(staged, 0o644)
         publish_new_file(staged, output)
         try:

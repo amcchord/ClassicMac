@@ -52,7 +52,11 @@ struct ContentView: View {
                 manager.cancelStop()
             }
         } message: {
+            if store.vms.first(where: { $0.id == manager.pendingStopID })?.machineFamily == .powerMac7500 {
+                Text("This turns off Copland immediately and may lose unsaved work. For a clean shutdown, cancel and choose Shut Down from Copland's Spaz menu. Use Continue Copland if an assertion stops shutdown.")
+            } else {
             Text("ClassicMac will ask Mac OS to shut down safely so its disk stays healthy and the next startup is faster. If Mac OS does not respond, the machine will turn off after 15 seconds and unsaved work may be lost.")
+            }
         }
     }
 
@@ -115,7 +119,7 @@ struct ContentView: View {
                 Menu {
                     if let downloadMachine {
                         Button(action: downloadMachine) {
-                            Label("Download Mac OS 9…", systemImage: "arrow.down.circle")
+                            Label("Download a Mac…", systemImage: "arrow.down.circle")
                         }
                         Divider()
                     }
@@ -287,7 +291,7 @@ struct EmptyStateView: View {
                 VStack(spacing: 12) {
                     if let downloadMachine {
                         Button(action: downloadMachine) {
-                            Label("Download Mac OS 9", systemImage: "arrow.down.circle")
+                            Label("Download a Mac", systemImage: "arrow.down.circle")
                                 .padding(.horizontal, 8)
                         }
                         .buttonStyle(.borderedProminent)
@@ -327,7 +331,7 @@ struct EmptyStateView: View {
             return "Select a machine in the sidebar to pick up where you left off, or add another classic Macintosh."
         }
         if downloadMachine != nil {
-            return "Start with a ready-to-run Mac OS 9 system, create a Mac of your own, or open an existing machine."
+            return "Download Mac OS 9 or Copland, create a Mac of your own, or open an existing machine."
         }
         return "Run System 7 through Mac OS 9. Create a classic Macintosh, or open a portable .classic machine from anywhere on your Mac."
     }
