@@ -35,6 +35,8 @@ ClassicMac 3.2 adds a downloadable **Copland D11E4** machine, Apple's unfinished
 Mac OS 8 rewrite. Choose **File → Download a Mac**, select Copland, and start it.
 A dedicated Power Mac 7500 engine boots the included disk with 32 MB RAM.
 
+![Copland D11E4 running in ClassicMac](docs/screenshots/copland-d11e4.png)
+
 This is experimental: some Finder actions trigger developer assertions or
 crashes. Use **Continue Copland** in ClassicMac when it reports an assertion.
 Sound, networking, shared folders, removable media and browser viewing are

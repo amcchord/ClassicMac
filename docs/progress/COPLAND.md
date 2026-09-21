@@ -66,8 +66,16 @@ SHA256 `371f2c085a832e3af3cf510c36c2d41c6727af78a28290bb002f6c6871230c1e`.
 The template uses pristine reference assets plus a desktop preview, not a test
 machine's modified disk. Minimum app version is 3.2.0.
 
-The public catalog still contains only the existing OS 9 entry. No GitHub push,
-notarization, or release yet. Remaining: finish lifecycle and native window QA,
-review final diffs, rebuild final app, notarize app/DMG, package exact source,
-update catalog atomically while preserving OS 9, push/merge GitHub changes, and
-publish release artifacts. Evidence is under ignored `output/copland`.
+PR #20 contains the implementation and qualification records. The final signed
+app and DMG are notarized, stapled and pass mounted-image verification. The
+source archive rebuilt from scratch. 107 Swift tests pass (the two opt-in real
+image cases also pass separately). The signed helper passed public-image boot,
+pause/resume, restart with two manual Continue operations, and host power-off.
+Guest Spaz > Shut Down exited cleanly, although its next boot still needed the
+same catalog assertion recovery. Full record: `docs/3.2.0-validation.md`.
+
+The Mac remains locked, so no final manual window walkthrough was possible.
+That does not block the verified native framebuffer/input and app-manager tests.
+The public catalog still contains only OS 9. Next: commit release records, merge
+PR #20, publish the atomic catalog update and the notarized 3.2.0 release, then
+record external verification. No prior published assets will be overwritten.
