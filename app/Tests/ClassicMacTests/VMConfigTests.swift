@@ -1,4 +1,5 @@
 import XCTest
+import Darwin
 @testable import ClassicMac
 
 final class VMConfigTests: XCTestCase {
@@ -7,6 +8,14 @@ final class VMConfigTests: XCTestCase {
             XCTAssertEqual(family.diskSizePresets.last, 120)
             XCTAssertTrue(family.diskSizePresets.contains(64))
         }
+    }
+
+    func testCoplandControlWriteAfterGuestExitThrowsInsteadOfSignalling() throws {
+        let pipe = CoplandMachine.controlPipe()
+        XCTAssertEqual(fcntl(pipe.fileHandleForWriting.fileDescriptor, F_GETNOSIGPIPE), 1)
+        try pipe.fileHandleForReading.close()
+        XCTAssertThrowsError(try pipe.fileHandleForWriting.write(contentsOf: Data("continue\n".utf8)))
+        try pipe.fileHandleForWriting.close()
     }
 
     func testCoplandPinsHardwareAndClearsUnsupportedFeatures() throws {

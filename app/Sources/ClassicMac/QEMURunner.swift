@@ -188,7 +188,7 @@ final class QEMUManager: ObservableObject {
             environment.removeValue(forKey: "CLASSICMAC_TOOLS_CD")
         }
         if config.machineFamily == .powerMac7500 {
-            let control = Pipe()
+            let control = CoplandMachine.controlPipe()
             coplandControls[config.id] = control
             process.standardInput = control
             process.standardOutput = FileHandle.nullDevice

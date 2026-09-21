@@ -1,9 +1,18 @@
 import Foundation
 import CryptoKit
+import Darwin
 
 // Copland's loader, ROM and NVRAM must remain a matched set. Firmware lives in
 // the downloaded .classic package, never in the application's generic firmware.
 enum CoplandMachine {
+    static func controlPipe() -> Pipe {
+        let pipe = Pipe()
+        // The guest can exit between Process.isRunning and a control write.
+        // Report EPIPE to the caller instead of terminating the launcher.
+        _ = fcntl(pipe.fileHandleForWriting.fileDescriptor, F_SETNOSIGPIPE, 1)
+        return pipe
+    }
+
     static let romSHA256 = "098b588dbe12fdfa3d388636e431ccae69cd1c6e984801267b9b2602babbfd22"
 
     static func validateFirmware(in folder: URL) throws {
