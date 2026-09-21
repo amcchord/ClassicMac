@@ -122,3 +122,39 @@ To roll back, verify that backup, copy it to a new temporary filename under
 the download directory, set mode 0644, and atomically rename it to
 `catalog.json`; then verify public retrieval matches the backup. Retain both
 immutable archives. This does not change any already-created user machine.
+
+## Copland D11E4 — September 21, 2026
+
+ClassicMac 3.2.0 adds the `powerMac7500` family and the immutable Copland archive
+<https://mcchord.net/classicmac/copland-d11e4-v1.tar.gz>. It is a 36,782,765-byte
+archive with SHA-256
+`371f2c085a832e3af3cf510c36c2d41c6727af78a28290bb002f6c6871230c1e`.
+The raw disk is 173,948,928 bytes; the full expansion is 178,207,500 bytes and
+initial allocated storage is bounded by 93,323,264 bytes. The exact members are
+`config.json`, `disk.img`, `bootrom.bin`, `nvram.bin`, and `preview.png`.
+
+The template uses pristine reference assets from Michael Steil's Copland emulator
+and retains free space for its VM backing store. The ROM hash is pinned in both
+packager and importer. Firmware extraction is permitted only for this family,
+with exact sizes and the NVRAM header checked. The catalog requires app 3.2.0.
+Old applications still decode the catalog and reject this download by minimum
+version. The existing OS 9 entry and immutable archives are preserved.
+
+The archive was uploaded under a temporary name, checked on the server, and
+renamed without replacing an existing file. A complete fresh HTTPS download
+matches its hash and passed production Swift import and native boot qualification.
+Copland remains experimental: filesystem recovery and Finder operations can stop
+at developer assertions; the app exposes manual Continue. No automatic assertion
+skipping or promise of guest stability is made.
+
+Catalog promotion retains the existing OS 9 entry byte-for-value and appends
+Copland. Expected catalog SHA-256:
+`eb0cd8d736809ae2f2c8d463f4c974b9ec6da0563e480f8dc40ee5bf0d57b847`.
+The prior catalog SHA is
+`8a939ca347fcf809a4837314a900429572f372bb536cadb09c11aa9b6570abf6`.
+The release procedure saves it at
+`/root/classicmac-catalog-backups/pre-copland-20260921.json` (0600), verifies both
+hashes and the old live catalog, then atomically promotes the new catalog.
+Rollback uses a checked copy of that backup and an atomic rename to `catalog.json`;
+retain both OS 9 and Copland archives so existing users and cached downloads work.
+No Apache or DNS change is required. Local evidence is in `output/copland`.
