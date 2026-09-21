@@ -235,3 +235,18 @@
   verified by a fresh download; catalog promotion and final release publication
   follow artifact notarization and mounted-DMG validation. Prior release assets
   and OS 9 downloads are retained for rollback.
+
+## September 21 — Copland 3.2.0 published
+
+- PR #20 merged as `4ac4d62`; tag `v3.2.0` and the public GitHub release now
+  provide the notarized/stapled DMG and ZIP, exact engine source and checksums.
+- Final notary submissions: app `7dca76c4-dce4-4f55-8668-c694f3275191`,
+  DMG `6fda5760-ef90-40d4-96d8-fb721b7945b5`, both Accepted. A fresh GitHub DMG
+  download matched its checksum and passed the complete mounted-release check.
+  GitHub's asset digests match all three locally recorded artifact hashes.
+- Catalog promotion verified old/new hashes, saved the 0600 pre-Copland backup,
+  and atomically appended Copland while retaining the exact OS 9 entry. Public
+  retrieval matches; production import using the public combined catalog passes.
+- Runtime tests and source rebuild passed; limitations remain documented in
+  `docs/3.2.0-validation.md`. All task-owned emulators are stopped. Root checkout
+  remains unchanged. Task complete; no release action remains.

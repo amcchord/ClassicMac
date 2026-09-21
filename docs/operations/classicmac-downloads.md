@@ -158,3 +158,9 @@ hashes and the old live catalog, then atomically promotes the new catalog.
 Rollback uses a checked copy of that backup and an atomic rename to `catalog.json`;
 retain both OS 9 and Copland archives so existing users and cached downloads work.
 No Apache or DNS change is required. Local evidence is in `output/copland`.
+
+Promotion completed September 21, 2026. Public `catalog.json` matches the new
+hash above, the exact OS 9 entry is retained, and production Swift import using
+the public combined catalog passed. Copland's public archive supports HTTP 206
+range requests. Release v3.2.0 is published on GitHub with notarized/stapled app
+artifacts. The 0600 rollback backup exists at the recorded server path.

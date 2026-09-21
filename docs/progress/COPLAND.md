@@ -74,8 +74,13 @@ pause/resume, restart with two manual Continue operations, and host power-off.
 Guest Spaz > Shut Down exited cleanly, although its next boot still needed the
 same catalog assertion recovery. Full record: `docs/3.2.0-validation.md`.
 
-The Mac remains locked, so no final manual window walkthrough was possible.
-That does not block the verified native framebuffer/input and app-manager tests.
-The public catalog still contains only OS 9. Next: commit release records, merge
-PR #20, publish the atomic catalog update and the notarized 3.2.0 release, then
-record external verification. No prior published assets will be overwritten.
+The Mac remained locked during final manual window QA; real framebuffer/input
+and app-manager tests passed. PR #20 is merged as `4ac4d62`, tag v3.2.0 is pushed,
+and the notarized DMG, ZIP, corresponding-source archive and checksums are public:
+https://github.com/amcchord/ClassicMac/releases/tag/v3.2.0.
+
+The live catalog now includes Copland and preserves the exact OS 9 entry.
+Promotion verified old/new hashes and saved the 0600 pre-Copland server backup.
+Fresh public catalog import and GitHub DMG verification passed; GitHub asset
+digests match all recorded hashes. All task-owned emulators are stopped.
+The root iPad checkout remains unchanged. No requested release work remains.
