@@ -277,3 +277,24 @@
   remains v1 and the OS 9 entry is unchanged. GitHub publication and catalog
   promotion follow final public-archive qualification. Existing user machines,
   Apache and DNS are unchanged.
+
+## September 21 — Copland Activities 3.2.1 published
+
+- PR #21 merged as `cf39faf566b0325e036acaed45ff365a9f9dfd25` from runtime commit
+  `f3627cd`; tag v3.2.1 and the public GitHub release contain the notarized DMG,
+  ZIP, corresponding source and checksums. GitHub's asset digests match local
+  evidence. A fresh release DMG download passed the full mounted-release check.
+- Final app notary `b8993ccb-19a5-4b4c-900e-b59a7f8ccbc6` and DMG notary
+  `0d8d5f92-d8f4-45e0-a726-0163ef3ebb55` are Accepted, with valid staples.
+- The final v3 disk's fresh public download passed strict production import and
+  signed-helper lifecycle, including zero debugger continuations after restart.
+  Card movement, mine reveal/flag/new game, graphics-slide navigation and native
+  GX app quit were verified; text saved before restart reopened intact.
+- Promoted the catalog atomically after release publication, preserving OS 9
+  exactly and retaining prior archives. Final catalog SHA-256 is
+  `eaaa1b3a4bd9bd44f14765f498cd900e160fbd10af3ce86c6139e91cce50949d`.
+  The verified 0600 rollback backup is recorded in the hosting runbook. Fresh
+  public catalog retrieval and production import passed. No DNS/Apache changes.
+- All task-owned emulators are stopped. User library and root iPad checkout are
+  unchanged. Follow-up complete; further OS/control-panel compatibility remains
+  experimental, with D7 full boot not yet qualified.

@@ -164,3 +164,33 @@ hash above, the exact OS 9 entry is retained, and production Swift import using
 the public combined catalog passed. Copland's public archive supports HTTP 206
 range requests. Release v3.2.0 is published on GitHub with notarized/stapled app
 artifacts. The 0600 rollback backup exists at the recorded server path.
+
+## Copland Activities — September 21, 2026
+
+The catalog now selects
+<https://mcchord.net/classicmac/copland-d11e4-activities-v3.tar.gz>, requiring
+ClassicMac 3.2.1. It includes Anarcho, MineSweeper, surfaced Solitaire/GX demos,
+original activity guides and the precisely checked clipboard compatibility fix.
+Existing machines are unchanged. The older Copland v1 and unlisted Activities
+v2 candidate are retained as immutable archives; v3 corrects two guide sentences.
+No full developer manuals or local compatibility-research disks are published.
+
+- Compressed bytes: `37272935`; raw disk: `536870912` (512 MiB).
+- Archive SHA-256: `9edff56ec94e3dcd5a0804f327705e3f38ffca73ac701ac5a5ee3d581267af19`.
+- Expanded bound: `541138786`; initial storage bound: `98566144`.
+- Catalog SHA-256: `eaaa1b3a4bd9bd44f14765f498cd900e160fbd10af3ce86c6139e91cce50949d`.
+- Rollback catalog: `/root/classicmac-catalog-backups/pre-copland-activities-20260921.json`
+  (0600), SHA-256 `eb0cd8d736809ae2f2c8d463f4c974b9ec6da0563e480f8dc40ee5bf0d57b847`.
+
+The archive was uploaded to a temporary name, verified by size/hash on the server,
+and renamed without replacing an existing file. Fresh HTTPS download, HTTP 206,
+production import and signed-helper boot/pause/resume/restart/stop passed; restart
+needed zero debugger continuations. The exact OS 9 entry is preserved. Catalog
+promotion used an atomic rename after the notarized GitHub v3.2.1 release became
+available. Public retrieval matches the final catalog, and production import
+using that public catalog passed. No Apache or DNS changes were made.
+
+Rollback: verify the backup hash above, copy it to a new temporary name beside
+`catalog.json`, set mode 0644, and atomically rename it to `catalog.json`; verify
+public retrieval. Retain the immutable archives. This affects available downloads,
+not machines that users have already created. Local evidence: `output/3.2.1/hosting`.
