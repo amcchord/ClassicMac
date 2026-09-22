@@ -1,36 +1,31 @@
-# ClassicMac 3.2.0 released
+# Copland Activities — publishing 3.2.1
 
-Copland D11E4 boots natively in a dedicated Power Mac 7500 helper. Choose
-**File → Download a Mac → Copland D11E4**. The OS 9 download remains unchanged.
-Copland is experimental: later boots and Finder actions can assert or crash;
-ClassicMac exposes manual **Continue Copland**. Sound, networking, shared folders,
-removable media, GXMetal, text paste and browser viewing are unavailable for it.
+Follow-up work is in `worktrees/copland`, branch `codex/copland-apps` from GitHub
+main `d0d0ef3`; the root iPad checkout is preserved. Runtime, guide and disk work
+is complete. GitHub PR/release and final catalog promotion are next.
 
-PR [#20](https://github.com/amcchord/ClassicMac/pull/20) is merged. Release
-[v3.2.0](https://github.com/amcchord/ClassicMac/releases/tag/v3.2.0) points to
-`4ac4d62ff263cbdbb23177b9d71bf9986e3f1d3d`. The DMG and ZIP contain the signed,
-Apple-notarized, stapled app. Exact Copland engine source and checksums are
-published beside them. A fresh public DMG download matched its hash and passed
-mounted-image, Gatekeeper, signature, version and dependency verification.
+Implemented persistent guest RTC with migration from real HFS dates, release of
+the startup Caps Lock gesture on actual keyboard input, an activity guide in the
+app, and a repeatable 512 MiB image builder. A hash-pinned guest clipboard patch
+fixes two zero-byte operations without suppressing other assertions. Anarcho
+editing/saving/reopening, MineSweeper, Solitaire card movement and GXSlidemaster
+provide activities. Classic app quit paths remain unstable.
 
-The live mcchord.net catalog lists Copland and retains the original OS 9 entry.
-The new immutable disk archive passed a fresh HTTPS download and production
-import/boot. The former catalog is backed up for atomic rollback. Prior release
-assets and guest archives were not overwritten.
+Final disk: `output/copland/apps-research/activities-v3-final.img`, SHA-256
+`1028802601ccabc4fad5a2e31eac783b811d6092022de5f1ac17d76d219f8036`.
+It includes original guides and links to Apple documentation; local DDK/manual
+research images are not published. The builder verified 551 original/generated
+file forks and both added app forks. v3 corrects two game-guide sentences from
+the unlisted v2 candidate. Both immutable archives exist on mcchord.net, but the
+catalog still selects v1 until 3.2.1 is available.
 
-107 Swift tests passed, with two opt-in asset tests skipped in the ordinary
-suite and passed separately against the public image and signed helper. Native
-boot, pause/resume, restart, explicit assertion recovery, input, persistence and
-power-off were exercised. Guest Spaz > Shut Down exited cleanly; later boots can
-still need Continue. The source archive rebuilt and its protocol tests passed.
-Physical macOS 15 and a final manual window walkthrough were not tested (the host
-screen locked); final runtime tests used the real framebuffer/hardware APIs.
+110 Swift tests pass, plus opt-in production import and signed-helper lifecycle
+checks. Text survives restart, lowercase input works, and the native restart
+requires zero debugger continuations. The final app and DMG are notarized and
+stapled; exact mounted-DMG verification passed. Exported runtime sources rebuilt;
+the final source archive differs only in two guide texts. Evidence and artifacts
+are under `output/3.2.1`; see `docs/3.2.1-validation.md` for limits and hashes.
 
-Work is retained in `worktrees/copland` on `codex/copland`. The original root
-iPad checkout is preserved. All task-owned emulator processes are stopped.
-See [qualification](../3.2.0-validation.md), [release notes](../releases/3.2.0.md),
-[implementation record](COPLAND.md), and [hosting/rollback](../operations/classicmac-downloads.md).
-
-No release work remains. Further Copland compatibility improvements should use
-fresh disposable machines and preserve the existing download as a known bootable
-baseline.
+The host is locked; real guest framebuffer/input and app-manager tests were used.
+Physical macOS 15 execution was not tested. macOS 27's read-only fsck_hfs attempt
+terminated with SIGTRAP, so no fsck pass is claimed. No user machines were changed.

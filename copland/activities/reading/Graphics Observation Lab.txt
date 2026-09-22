@@ -1,0 +1,14 @@
+GRAPHICS OBSERVATION LAB
+An original ClassicMac activity
+
+Open GXSlidemaster and use the arrow keys to move through the demonstration.
+
+Record the differences between character forms, text positioning, justification and the interactive line-layout examples. Watch the changing samples long enough to distinguish a live effect from a static illustration.
+
+Questions for your notebook:
+- Which changes affect individual characters, and which affect an entire line?
+- What happens to spacing when the layout changes?
+- Which effects would have been useful in a word processor or page-layout program?
+- Which parts of the demonstration still feel familiar today?
+
+Quit GXSlidemaster when finished. If another classic app leaves Finder unresponsive on exit, use ClassicMac's Restart before the next activity.

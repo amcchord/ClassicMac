@@ -87,6 +87,8 @@ struct VMDetailView: View {
                             VStack(alignment: .leading, spacing: 10) {
                                 Text("Explore Apple's unfinished Mac OS rewrite. Some actions trigger developer assertions or crashes. Sound, networking, shared folders, removable media, and browser viewing are unavailable.")
                                 Text("Control-G captures or releases the mouse. Control-+ and Control-− scale the window; Control-F toggles full screen.")
+                                Text("The Activities download adds a desktop folder with games, graphics demos, a text editor and developer reading. Download a new Mac to get these files; existing disks are preserved.")
+                                Link("Copland activities and compatibility guide", destination: URL(string: "https://github.com/amcchord/ClassicMac/blob/main/copland/ACTIVITIES.md")!)
                                 if manager.coplandHaltedIDs.contains(vmID) {
                                     Text("Copland stopped at a developer assertion. Continue asks its debugger to resume; the affected feature may still fail.").foregroundStyle(.orange)
                                 }

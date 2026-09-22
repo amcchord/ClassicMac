@@ -1,0 +1,41 @@
+--- a/devices/common/viacuda.cpp
++++ b/devices/common/viacuda.cpp
+@@ -957,7 +957,8 @@
+     std::tm epoch = {};
+     epoch.tm_year = 1904 - 1900; epoch.tm_mon = 0; epoch.tm_mday = 1;
+ 
+-    this->rtc_base_secs = uint32_t(timegm(&t) - timegm(&epoch));
++    this->rtc_base_secs = classicmac_clock.start(
++        uint32_t(timegm(&t) - timegm(&epoch)), getenv("CLASSICMAC_RTC_PATH"));
+     LOG_F(INFO, "Cuda: RTC pinned to %04d-%02d-%02dT%02d:%02d:%02d "
+                 "(%u s since 1904), advancing with emulated time (DPPC_RTC)",
+           y, mo, d, h, mi, s, this->rtc_base_secs);
+@@ -966,7 +967,9 @@
+ uint32_t ViaCuda::calc_real_time() {
+     if (!this->rtc_use_host) {
+         uint64_t ns = TimerManager::get_instance()->current_time_ns();
+-        return this->rtc_base_secs + uint32_t(ns / NS_PER_SEC);
++        uint32_t now = this->rtc_base_secs + uint32_t(ns / NS_PER_SEC);
++        classicmac_clock.save(now);
++        return now;
+     }
+ 
+     std::chrono::time_point<std::chrono::system_clock> end;
+--- a/devices/common/viacuda.h
++++ b/devices/common/viacuda.h
+@@ -42,6 +42,7 @@
+ #ifndef VIACUDA_H
+ #define VIACUDA_H
+ 
++#include <devices/common/classicmac_clock.h>
+ #include <devices/common/i2c/i2c.h>
+ #include <devices/common/nvram.h>
+ 
+@@ -237,6 +238,7 @@
+     uint32_t time_offset = 0;
+     std::chrono::time_point<std::chrono::system_clock> mac_epoch;
+     // the guest's RTC base.  See ViaCuda::init_rtc_base().
++    CoplandClockState classicmac_clock;
+     bool     rtc_use_host  = false;  // true = read the HOST wall clock
+     uint32_t rtc_base_secs = 0;      // seconds since 1904 at emulated time 0
+     uint8_t  one_sec_mode = 0;

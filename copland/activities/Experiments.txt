@@ -1,0 +1,15 @@
+THINGS TO TRY IN COPLAND
+
+1. Open Anarcho and write a short observation about the desktop. Save it in My Documents, close it, and reopen it. Restart Copland and check that it is still there.
+
+2. Open GXSlidemaster. Use the arrow keys to compare character forms, positioning, justification and interactive line layout. The demos are live graphics, not screenshots.
+
+3. Deal a game in Eric's Solitaire. Try moving a card into an empty free cell at the bottom. Command-N gives you another board.
+
+4. Play a small MineSweeper board. Double-click opens a cell; a single click marks a suspected mine.
+
+5. Read Interface Field Notes in Reading. Compare the unfinished Finder with the apps on your screen. Record what is consistent and what is missing.
+
+6. Follow the links in Builds and Sources on your host Mac to study Apple's original developer documentation.
+
+Save before quitting. Some classic apps leave the preview in a bad state on exit; restart between activities if the Finder stops responding. Do not judge all historical apps by whether their first window appears: editing, saving and quitting can expose different bugs.

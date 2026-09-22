@@ -196,7 +196,8 @@ final class QEMUManager: ObservableObject {
             environment["CLASSICMAC_MACHINE_NAME"] = config.name
             environment["CLASSICMAC_PREVIEW_PATH"] = Self.screenDumpURL(for: config.id).path
             environment["CLASSICMAC_STATUS_PATH"] = CoplandMachine.statusURL(for: config.id).path
-            environment["DPPC_RTC"] = "2027-01-01T00:00:00"
+            environment["DPPC_RTC"] = CoplandClock.initialDate(disk: config.diskImageURL)
+            environment["CLASSICMAC_RTC_PATH"] = config.folder.appendingPathComponent("copland-rtc.bin").path
             try? FileManager.default.removeItem(at: CoplandMachine.statusURL(for: config.id))
         }
         process.environment = environment
