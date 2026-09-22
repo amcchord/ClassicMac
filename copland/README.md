@@ -21,8 +21,8 @@ viewing are unavailable in this machine.
 
 Run `scripts/build-copland.sh` before `scripts/bundle-qemu.sh`. CMake, Ninja and
 Apple's command-line tools are required. The script pins DingusPPC's Copland fork
-and SDL2, applies `rtc.patch` and `host-integration.patch`, installs the source
-overlays, and runs the serial protocol tests. The helper links only system dynamic
+and SDL2, applies `rtc.patch`, `host-integration.patch`, `clock-state.patch` and `keyboard-input.patch`,
+installs the source overlays, and runs the serial protocol and persistent-clock tests. The helper links only system dynamic
 libraries and targets macOS 15 on Apple Silicon.
 
 The eleven hardware fixes are Michael Steil's work in the pinned `copland-boot`
@@ -46,3 +46,22 @@ accepts fixed commands. It exposes no network listener. EOF stops the helper.
 Framebuffer previews and debugger state are published atomically. The debugger
 validates checksums and packet lengths, bounds its reply queue, and resumes only
 at the user's request.
+
+## Persistent guest clock (3.2.1)
+
+The guest still advances using emulated time, preserving the qualified device
+cadence. ClassicMac seeds older machines from their HFS catalog dates and the
+helper saves a battery-backed RTC checkpoint in `copland-rtc.bin` beside the
+disk. This prevents a restart from rewinding time and making directory creation
+dates newer than their modification dates, which Copland rejects. Keep this
+sidecar with the machine when copying it. Missing/corrupt state falls back to
+the bounded catalog scan and the original 2027 baseline. Failed writes are
+throttled and reported; no guest assertion is suppressed.
+
+The startup Caps Lock gesture remains latched until the first real keyboard
+input after the boot hold window. That input first releases the synthetic keys,
+so normal typing is not stuck in capitals. Releasing on a timer instead was
+rejected in testing because it selected System 7 rather than Copland.
+
+See [Activities](ACTIVITIES.md) for the expanded disk, compatible apps, the
+precisely pinned guest clipboard patch, sources and preparation instructions.

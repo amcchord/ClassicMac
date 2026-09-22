@@ -1,0 +1,19 @@
+COPLAND BUILDS AND SOURCES
+ClassicMac research notes, September 2026
+
+D11E4 is the Copland build on this disk. The original DDK CD contains developer manuals and sample source code; those are useful primary sources when studying the proposed architecture.
+
+The D7E1 archive contains a Scarecrow system, an AppearanceCP app, MacBrowser, and two themes. Its AppearanceCP cannot simply be moved into D11E4: it requires a different FileSystems library. A full D7E1 boot is not qualified in this release.
+
+The archive labeled Copland 8.0.B5 on WinWorld appears to be a different product: its nested contents are a 1997 Mac OS 8 installer with conventional control panels and 68040 support. A more complete shipping-Mac-OS beta does not establish a more complete Copland rewrite.
+
+More installed files do not implement missing OS APIs. Test an app's actual operations, not just its launch screen.
+
+Use your host browser for these links:
+https://www.pagetable.com/300
+https://winworldpc.com/product/mac-os-8/copland
+https://www.macintoshrepository.org/531-mac-os-8-0-copland-beta-builds-
+https://www.gryphel.com/c/sw/text/anarcho/index.html
+https://www.gryphel.com/c/sw/games/mineswee/index.html
+
+The complete author packages for Anarcho and MineSweeper accompany those apps. The reading activities and notebook on this disk were written for ClassicMac.

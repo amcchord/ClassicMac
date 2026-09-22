@@ -1,0 +1,37 @@
+diff --git a/devices/common/adb/adbkeyboard.cpp b/devices/common/adb/adbkeyboard.cpp
+index edb1d8c1..a5a2f75a 100644
+--- a/devices/common/adb/adbkeyboard.cpp
++++ b/devices/common/adb/adbkeyboard.cpp
+@@ -22,6 +22,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ /** @file Apple Desktop Bus Keyboard emulation. */
+ 
+ #include <devices/common/adb/adbkeyboard.h>
++#include <cstdlib>
+ #include <devices/common/adb/adbbus.h>
+ #include <devices/deviceregistry.h>
+ #include <core/hostevents.h>
+@@ -112,6 +113,24 @@ AdbKeyboard::AdbKeyboard(std::string name) : AdbDevice(name) {
+ }
+ 
+ void AdbKeyboard::event_handler(const KeyboardEvent& event) {
++    // ClassicMac holds Caps Lock through the boot chooser. Releasing it on a
++    // timer can boot System 7 instead; release the synthetic keys immediately
++    // before the first real keyboard event, once the initial hold window ends.
++    if (std::getenv("CLASSICMAC_CONTROL") && !this->hold_released &&
++        !this->held_keys.empty() && this->hold_until_ns &&
++        get_virt_time_ns() >= this->hold_until_ns) {
++        for (uint8_t code : this->held_keys) {
++            KeyboardEvent released{};
++            released.key = code;
++            released.flags = KEYBOARD_EVENT_UP;
++            this->pending_events.push_back(std::make_unique<KeyboardEvent>(released));
++        }
++        this->held_keys.clear();
++        this->hold_reports.clear();
++        this->hold_reporting = false;
++        this->hold_released = true;
++        this->srq_flag = 1;
++    }
+     // PSW is a wire, so it follows the key immediately; the data-line report below still
+     // waits its turn in the queue like every other key.
+     if ((event.key & 0x7F) == AdbKey_Power && this->host_obj != nullptr) {

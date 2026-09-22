@@ -1,0 +1,32 @@
+COPLAND ACTIVITIES
+ClassicMac - D11E4 Activities disk, September 2026
+
+This is Apple's unfinished Mac OS rewrite from 1996. It can do more than show a desktop, but it is still a developer preview.
+
+START HERE
+Open the Activities folder on the desktop. For text, open the Anarcho folder and launch the Anarcho application (not its old alias). Choose File > Open to read this guide, the files in Reading, or My Documents > Notebook. Launch Anarcho once before double-clicking its documents so Finder can register the new editor.
+
+WRITE SOMETHING
+Anarcho is Michael Love's small freeware editor from 1994. Type a note, choose File > Save, name it and click Save. File > Open reopens it. Short documents work best (under 30,000 characters). Our targeted clipboard fix handles empty clipboard operations so opening/saving does not require first copying some text. Some other clipboard operations and app shutdown can still fail.
+
+PLAY CARDS
+Open Solitaire, then Eric's Solitaire Sample. Command-N deals a new game. Try moving a card between the free cells at the bottom. Build the foundations at the right by suit. The author's original Read Me is retained in the same folder.
+
+PLAY MINESWEEPER
+Open MineSweeper, then its application. Double-click a square to uncover it; a single click marks a mine. Command-N starts a new board. The original Japanese documentation is preserved with the freeware game.
+
+EXPLORE APPLE'S GRAPHICS DEMO
+Open GXSlidemaster. The left/right arrow keys move through Apple's slides. Look at the typography and line-layout demonstrations. This native Copland app is one of the most useful demonstrations of what Apple was building.
+
+READ AND EXPERIMENT
+Reading contains original ClassicMac field notes, a boot-and-save lab, graphics observations, and a guide to the different Copland builds. Read them in Anarcho and record your own results in the Notebook. Links point to the original Apple DDK and manuals for further reading on your host Mac.
+
+RECOVERY AND CONTROLS
+Save before leaving an app. Classic apps can assert or freeze when quitting; use ClassicMac's Restart to start the next activity if necessary. Continue Copland requests a debugger continuation, but cannot repair every failure. This is not a reliable place for important documents.
+
+Control-G captures/releases the mouse. Control-+ / Control-minus change window size; Control-F is full screen. For a clean shutdown use Spaz > Shut Down from the Copland desktop. ClassicMac's Shut Down forcibly powers it off. The persistent guest clock prevents the repeated-startup date errors seen with a clock that reset on every launch.
+
+Sound, networking, shared folders, removable media and host text paste are unavailable. Some Control Panels and many old Mac apps do not work. Use a fresh downloaded Mac if experimentation damages its disk; existing machines are never overwritten by a new download.
+
+PROVENANCE
+D11E4 reference image and matched firmware: Michael Steil's pagetable.com Copland emulator. Anarcho 1.6 and MineSweeper 1.0: Gryphel preservation archive. Original author documentation remains with both apps. ClassicMac adds this guide, original reading activities, a 512 MiB disk layout and the precisely checked clipboard compatibility patch.

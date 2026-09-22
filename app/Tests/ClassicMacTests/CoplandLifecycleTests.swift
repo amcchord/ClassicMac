@@ -41,9 +41,8 @@ import AppKit
         manager.reboot(config.id)
         // Restart exits the helper with 75 and relaunches a fresh process.
         var continuedAssertions = 0
-        // A hard reset leaves Copland's unfinished filesystem recovery path
-        // capable of asserting. Exercise the same explicit Continue operation
-        // exposed to users, with a strict bound so a regression still fails.
+        // The battery-backed clock must prevent the two catalog assertions
+        // previously caused by rewinding guest time on every restart.
         try await Task.sleep(for: .seconds(15))
         for _ in 0..<60 {
             if manager.coplandHaltedIDs.contains(config.id), continuedAssertions < 5 {
@@ -55,6 +54,7 @@ import AppKit
             try await Task.sleep(for: .seconds(1))
         }
         print("Copland restart required \(continuedAssertions) explicit debugger continuations")
+        XCTAssertEqual(continuedAssertions, 0, "Guest time went backwards across restart")
         XCTAssertNil(manager.lastError)
         XCTAssertTrue(manager.isRunning(config.id))
         XCTAssertTrue(reachedDesktop())

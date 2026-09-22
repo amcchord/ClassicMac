@@ -250,3 +250,30 @@
 - Runtime tests and source rebuild passed; limitations remain documented in
   `docs/3.2.0-validation.md`. All task-owned emulators are stopped. Root checkout
   remains unchanged. Task complete; no release action remains.
+
+## September 21 — Copland Activities qualification
+
+- Continued in `codex/copland-apps` from published main `d0d0ef3`, preserving the
+  root iPad checkout. Inspected WinWorld D7E1 and B5 contents: D7 has different
+  Appearance/MacBrowser pieces but its control panel requires an incompatible
+  FileSystems fragment; B5 appears to be a 1997 conventional Mac OS 8 installer.
+  No more complete working Copland system was established.
+- Added Anarcho 1.6, MineSweeper, a notebook and original reading/experiment
+  guides; surfaced the existing Solitaire/GX demos on a new 512 MiB disk.
+  Preserved both forks, original catalog IDs/blessings and author documentation.
+  Full developer manuals and unsuccessful app experiments remain local only.
+- Fixed empty clipboard writes with a narrowly checked guest PEF patch; normal
+  positive transfers and negative error handling remain. Persisted emulated RTC
+  state and migrated old disks from actual catalog dates. Released startup Caps
+  Lock on first real input after timer-based release selected the wrong OS.
+- 110 Swift tests passed; production import and signed-helper manager lifecycle
+  passed separately, with zero Continue operations across restart. Final text
+  save/reopen after restart and Solitaire card movement passed. Native tests,
+  source rebuild and mounted/notarized DMG checks passed. Details and limitations
+  are recorded in `docs/3.2.1-validation.md`; all evidence is under `output/3.2.1`.
+- Uploaded immutable Activities candidates v2 and v3 after server hash/size
+  verification. v3 corrects two guide sentences; it is the intended catalog
+  artifact. Fresh HTTPS downloads match and support HTTP 206. Current catalog
+  remains v1 and the OS 9 entry is unchanged. GitHub publication and catalog
+  promotion follow final public-archive qualification. Existing user machines,
+  Apache and DNS are unchanged.

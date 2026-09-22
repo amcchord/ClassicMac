@@ -1,0 +1,17 @@
+INTERFACE FIELD NOTES
+An original ClassicMac activity
+
+Apple's preliminary Human Interface Guidelines for Mac OS 8 describes a richer set of window frames, utility windows, dialog designs, buttons, sliders, disclosure controls and menu layouts. It is a design proposal for developers; the appearance of a control in that document does not establish that every corresponding feature works in D11E4.
+
+Compare the preview on your screen with a familiar classic Mac:
+- How are active and inactive windows distinguished?
+- Which controls are discoverable without instructions?
+- Does the file dialog tell you where you are and what action is available?
+- What happens when you open, move, collapse and close a window?
+- Does the same action behave consistently in Finder, Anarcho and GXSlidemaster?
+
+Make a small table in a new Anarcho document: action, expected behavior, actual behavior. Save before testing an operation that might crash.
+
+Further reading: Apple, Human Interface Guidelines for Mac OS 8 (WWDC draft, May 1996). The original manual is part of the DDK archived at:
+https://www.macintoshrepository.org/531-mac-os-8-0-copland-beta-builds-
+Open web links on the host Mac; networking is unavailable in this guest.

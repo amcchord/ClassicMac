@@ -1,0 +1,18 @@
+BOOT AND SAVE LAB
+An original ClassicMac activity
+
+A desktop screenshot proves that a system started. It does not prove that its applications can save work or recover from a restart.
+
+1. Launch Anarcho from Activities.
+2. Write three short lines describing the desktop.
+3. Save the document in My Documents with a unique name.
+4. Close the document, choose File > Open and reopen it.
+5. Add another line and save again.
+6. Restart Copland through ClassicMac, launch Anarcho and reopen your document.
+7. Compare the result with your expectations.
+
+The emulator now keeps guest time across runs. Before that change, a restarted machine could create directory modification dates earlier than their creation dates. Copland rejected those records. This is an example of a virtual machine needing persistent hardware state as well as a disk image.
+
+The clipboard compatibility fix handles zero-byte operations. Ordinary positive-length copy/paste still follows the original implementation. Try copying a line, pasting it and saving the result.
+
+Keep important work on your host Mac. A successful experiment does not make this unfinished OS dependable.

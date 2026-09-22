@@ -22,9 +22,10 @@ with tarfile.open(output,'x:gz') as archive:
             source=repo/raw.decode()
             if source.is_file():archive.add(source,arcname=f'ClassicMac-Copland-source/vendor/{name}/{raw.decode()}',recursive=False)
     for relative in ('copland','scripts/build-copland.sh','scripts/package-copland-source.sh'):
-        archive.add(root/relative,arcname='ClassicMac-Copland-source/'+relative)
-    # The two overlays are untracked in the pinned vendor checkout.
-    for relative in ('devices/serial/chario_copland.h','core/classicmac_control.h'):
+        archive.add(root/relative,arcname='ClassicMac-Copland-source/'+relative,
+                    filter=lambda info: None if '__pycache__' in Path(info.name).parts or info.name.endswith('.pyc') else info)
+    # The overlays are untracked in the pinned vendor checkout.
+    for relative in ('devices/serial/chario_copland.h','core/classicmac_control.h','devices/common/classicmac_clock.h'):
         archive.add(root/'vendor/dingusppc'/relative,arcname='ClassicMac-Copland-source/vendor/dingusppc/'+relative)
 print(output)
 PY

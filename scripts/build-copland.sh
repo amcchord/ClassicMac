@@ -28,8 +28,10 @@ else
 fi
 # Exported corresponding-source archives already contain the applied patches.
 if [ -d "$ENGINE/.git" ]; then
-for patch in rtc.patch host-integration.patch; do
-    if git -C "$ENGINE" apply --reverse --check "$ROOT_DIR/copland/$patch" 2>/dev/null; then
+for patch in rtc.patch host-integration.patch clock-state.patch keyboard-input.patch; do
+    if [ "$patch" = rtc.patch ] && git -C "$ENGINE" apply --reverse --check "$ROOT_DIR/copland/clock-state.patch" 2>/dev/null; then
+        : # clock-state.patch modifies two lines added by rtc.patch.
+    elif git -C "$ENGINE" apply --reverse --check "$ROOT_DIR/copland/$patch" 2>/dev/null; then
         : # Already applied.
     else
         git -C "$ENGINE" apply --check "$ROOT_DIR/copland/$patch"
@@ -39,6 +41,7 @@ done
 fi
 cp "$ROOT_DIR/copland/chario_copland.h" "$ENGINE/devices/serial/chario_copland.h"
 cp "$ROOT_DIR/copland/host_control.h" "$ENGINE/core/classicmac_control.h"
+cp "$ROOT_DIR/copland/clock_state.h" "$ENGINE/devices/common/classicmac_clock.h"
 cp "$ROOT_DIR/copland/soundserver_silent.cpp" "$ENGINE/devices/sound/soundserver_cubeb.cpp"
 cmake -S "$SDL" -B "$SDL/build" -G Ninja -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_OSX_DEPLOYMENT_TARGET=15.0 -DSDL_SHARED=OFF -DSDL_STATIC=ON \
@@ -51,3 +54,5 @@ cmake -S "$ENGINE" -B "$ENGINE/build" -G Ninja -DCMAKE_BUILD_TYPE=Release \
 cmake --build "$ENGINE/build" -j "$(sysctl -n hw.ncpu)"
 "${CXX:-c++}" -std=c++17 -I"$ENGINE" "$ROOT_DIR/copland/test_serial.cpp" -o "$ENGINE/build/test-copland-serial"
 "$ENGINE/build/test-copland-serial"
+"${CXX:-c++}" -std=c++17 "$ROOT_DIR/copland/test_clock.cpp" -o "$ENGINE/build/test-copland-clock"
+"$ENGINE/build/test-copland-clock"
