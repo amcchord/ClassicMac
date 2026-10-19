@@ -1,0 +1,166 @@
+diff --git a/hw/audio/screamer.c b/hw/audio/screamer.c
+--- a/hw/audio/screamer.c
++++ b/hw/audio/screamer.c
+@@ -136,6 +136,27 @@ static const char *s_spk = "screamer";
+  * (371 ms) behind, the oldest audio is dropped: the guest keeps its
+  * real-time pace (QuickTime's clock runs from it) instead of waiting.
+  */
++/*
++ * RetroBoot: no merged half-buffer interrupts on a slow guest.
++ *
++ * Mac OS's sound driver takes one half-done interrupt per buffer half and
++ * reads the channel status at once.  On a slow host (vCPU of an N5105 or
++ * N4100, or the lab's vCPU cap) its interrupt latency reaches tens of ms
++ * (lab, vCPU capped at 40 %: median 2.5 ms, 99th percentile 48 ms); when
++ * the next half completes first, the edge-triggered OpenPIC source is
++ * still pending and the two interrupts merge (129 of 1457 in a 20 s run).
++ * The driver then misses a half: its DBDMA program runs out and it
++ * restarts it 10-23 ms later, and QuickTime's next 1536-frame sound buffer
++ * is played as silence - every other buffer, 35 ms of silence every 70 ms,
++ * as fleet2 measured on the N5105 and N4100.
++ *
++ * With irq-hold-ms (default 100) an output command does not complete while
++ * the channel's last interrupt has not been serviced (no status read yet),
++ * for at most that long, and only once the guest has been seen to read the
++ * status after an interrupt.  The DMA then waits for the guest instead of
++ * overrunning it; the codec timeline above lets it catch up afterwards.
++ */
++#define SCREAMER_HOLD_POLL_NS   (250 * SCALE_US)
+ #define SCREAMER_LEAD_STEP_MS   20
+ #define SCREAMER_IDLE_NS        (2 * SCALE_MS)  /* longer: the DMA was idle */
+ #define SCREAMER_LEAD_DECAY_S   20
+@@ -200,7 +221,25 @@ static void screamer_dma_done(void *opaque)
+     ScreamerState *s = opaque;
+     DBDMA_io *io = s->dma_pending;
+ 
+-    trace_screamer_dma_done((qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) - s->codec_ns) / 1000);
++    int64_t now = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
++
++    trace_screamer_dma_done((now - s->codec_ns) / 1000);
++    if (io && s->irq_hold_ms) {
++        DBDMA_channel *ch = io->channel;
++
++        if (ch->irq_serviced && ch->irq_raised_ns &&
++            now - ch->irq_raised_ns < (int64_t)s->irq_hold_ms * SCALE_MS) {
++            /* Mac OS has not serviced the last half-done interrupt yet */
++            if (!s->holding) {
++                s->holding = true;
++                s->holds++;
++                trace_screamer_hold(s->holds, (now - ch->irq_raised_ns) / 1000);
++            }
++            timer_mod(s->dma_timer, now + SCREAMER_HOLD_POLL_NS);
++            return;
++        }
++        s->holding = false;
++    }
+     if (io) {
+         s->dma_pending = NULL;
+         io->dma_end(io);
+@@ -714,6 +753,7 @@ static const Property screamer_properties[] = {
+     DEFINE_PROP_UINT32("resync-ms", ScreamerState, resync_ms, 200),
+     DEFINE_PROP_UINT32("host-lead-ms", ScreamerState, host_lead_ms, 40),
+     DEFINE_PROP_UINT32("host-lead-max-ms", ScreamerState, host_lead_max_ms, 120),
++    DEFINE_PROP_UINT32("irq-hold-ms", ScreamerState, irq_hold_ms, 100),
+ };
+ 
+ static void screamer_class_init(ObjectClass *oc, const void *data)
+diff --git a/hw/audio/trace-events b/hw/audio/trace-events
+--- a/hw/audio/trace-events
++++ b/hw/audio/trace-events
+@@ -69,3 +69,4 @@ screamer_dma_done(int64_t late_us) "late_us %" PRId64
+ screamer_host(int avail, uint32_t queued, uint32_t written) "avail %d queued %u written %u"
+ screamer_underrun(uint32_t count, uint32_t lead_ms, uint32_t queued) "host ran dry (%u): lead now %u ms, %u bytes queued"
+ screamer_drop(uint32_t bytes, uint32_t total) "host a buffer behind: dropped %u bytes (%u in all)"
++screamer_hold(uint32_t count, int64_t unserviced_us) "output waits for the guest (%u): interrupt unserviced for %" PRId64 " us"
+diff --git a/hw/misc/macio/mac_dbdma.c b/hw/misc/macio/mac_dbdma.c
+--- a/hw/misc/macio/mac_dbdma.c
++++ b/hw/misc/macio/mac_dbdma.c
+@@ -118,6 +118,12 @@ static void kill_channel(DBDMA_channel *ch)
+     qemu_irq_raise(ch->irq);
+ }
+ 
++static void dbdma_raise(DBDMA_channel *ch)
++{
++    ch->irq_raised_ns = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
++    qemu_irq_raise(ch->irq);
++}
++
+ static void conditional_interrupt(DBDMA_channel *ch)
+ {
+     dbdma_cmd *current = &ch->current;
+@@ -134,7 +140,7 @@ static void conditional_interrupt(DBDMA_channel *ch)
+     case INTR_NEVER:  /* don't interrupt */
+         return;
+     case INTR_ALWAYS: /* always interrupt */
+-        qemu_irq_raise(ch->irq);
++        dbdma_raise(ch);
+         DBDMA_DPRINTFCH(ch, "%s: raise\n", __func__);
+         return;
+     }
+@@ -149,13 +155,13 @@ static void conditional_interrupt(DBDMA_channel *ch)
+     switch(intr) {
+     case INTR_IFSET:  /* intr if condition bit is 1 */
+         if (cond) {
+-            qemu_irq_raise(ch->irq);
++            dbdma_raise(ch);
+             DBDMA_DPRINTFCH(ch, "%s: raise\n", __func__);
+         }
+         return;
+     case INTR_IFCLR:  /* intr if condition bit is 0 */
+         if (!cond) {
+-            qemu_irq_raise(ch->irq);
++            dbdma_raise(ch);
+             DBDMA_DPRINTFCH(ch, "%s: raise\n", __func__);
+         }
+         return;
+@@ -773,6 +779,10 @@ static uint64_t dbdma_read(void *opaque, hwaddr addr,
+ 
+     value = ch->regs[reg];
+ 
++    if ((reg == DBDMA_STATUS || reg == DBDMA_CONTROL) && ch->irq_raised_ns) {
++        ch->irq_raised_ns = 0;                  /* the guest services it */
++        ch->irq_serviced = true;
++    }
+     switch(reg) {
+     case DBDMA_CONTROL:
+         value = ch->regs[DBDMA_STATUS];
+@@ -878,6 +888,8 @@ static void mac_dbdma_reset(DeviceState *d)
+ 
+     for (i = 0; i < DBDMA_CHANNELS; i++) {
+         memset(s->channels[i].regs, 0, DBDMA_SIZE);
++        s->channels[i].irq_raised_ns = 0;
++        s->channels[i].irq_serviced = false;
+     }
+ }
+ 
+diff --git a/include/hw/audio/screamer.h b/include/hw/audio/screamer.h
+--- a/include/hw/audio/screamer.h
++++ b/include/hw/audio/screamer.h
+@@ -80,6 +80,9 @@ struct ScreamerState {
+     int64_t host_t0_ns;         /* host stream (re)started */
+     uint64_t host_frames;       /* frames handed to the host since then */
+     int64_t underrun_ns;        /* last host underrun (or lead decay step) */
++    uint32_t irq_hold_ms;       /* property irq-hold-ms: wait for the guest */
++    bool holding;
++    uint32_t holds;
+     uint32_t underruns;         /* statistics (trace) */
+     uint32_t dropped;
+ 
+diff --git a/include/hw/ppc/mac_dbdma.h b/include/hw/ppc/mac_dbdma.h
+--- a/include/hw/ppc/mac_dbdma.h
++++ b/include/hw/ppc/mac_dbdma.h
+@@ -155,6 +155,14 @@ typedef struct DBDMA_channel {
+     DBDMA_rw rw;
+     DBDMA_flush flush;
+     dbdma_cmd current;
++    /*
++     * RetroBoot: the guest services a channel interrupt by reading the
++     * channel's status (Mac OS's sound driver does at once).  irq_raised_ns:
++     * when an interrupt was raised that no status read has followed yet (0:
++     * none); irq_serviced: the guest has been seen to do so.
++     */
++    int64_t irq_raised_ns;
++    bool irq_serviced;
+ } DBDMA_channel;
+ 
+ struct DBDMAState {

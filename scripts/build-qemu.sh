@@ -50,6 +50,7 @@ PATCHED_FILES=(
   pc-bios/meson.build
   ui/cocoa.m
   ui/input.c
+  hw/usb/dev-hid.c
   include/ui/input.h
   qapi/ui.json
   hw/audio/asc.c
@@ -64,6 +65,8 @@ PATCHED_FILES=(
   hw/ide/macio.c
   hw/ide/trace-events
   hw/misc/macio/mac_dbdma.c
+  hw/audio/trace-events
+  include/hw/ppc/mac_dbdma.h
   hw/misc/macio/trace-events
   pc-bios/openbios-ppc
   hw/display/vga.c
@@ -334,6 +337,9 @@ cp "$SCREAMER_DIR/screamer.c" "$QEMU_DIR/hw/audio/screamer.c"
 cp "$SCREAMER_DIR/screamer.h" "$QEMU_DIR/include/hw/audio/screamer.h"
 cp "$SCREAMER_DIR/openbios-ppc" "$QEMU_DIR/pc-bios/openbios-ppc"
 git -C "$QEMU_DIR" apply "$SCREAMER_DIR/integration.patch" || die "Failed to apply screamer integration patch"
+for patch in volume idle-stop paced-dma realtime irq-hold; do
+  git -C "$QEMU_DIR" apply "$SCREAMER_DIR/patches/retroboot-screamer-$patch.patch" || die "Failed to apply screamer $patch patch"
+done
 
 # CUDA timing/one-second messages and classic New World NVRAM partitions used
 # by Mac OS 8.5 and 8.6 during early startup.
@@ -496,6 +502,8 @@ done
 log "Installing the emulated ATI Radeon R100 (ati-vga,model=r100)"
 git -C "$QEMU_DIR" apply "$ATI_DIR/retroboot-ati-r100.patch" || die "Failed to apply ATI Radeon R100 patch"
 git -C "$QEMU_DIR" apply "$ATI_DIR/classicmac-ati-macos.patch" || die "Failed to apply ATI Radeon macOS GL patch"
+git -C "$QEMU_DIR" apply "$ROOT_DIR/input/classicmac-game-mouse.patch" || die "Failed to apply game mouse routing patch"
+git -C "$QEMU_DIR" apply "$ATI_DIR/classicmac-radeon-idle.patch" || die "Failed to apply Radeon initial idle state patch"
 if [ -f "$PPCVID_DIR/qemu_vga.ndrv" ]; then
   cp "$PPCVID_DIR/qemu_vga.ndrv" "$QEMU_DIR/pc-bios/qemu_vga.ndrv"
 else

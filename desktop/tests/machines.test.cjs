@@ -13,6 +13,7 @@ test('Power Mac ATI uses real time, Windows audio and authenticated loopback dis
   assert(!a.includes('-icount')); assert(a.includes('dsound,id=snd0'));
   assert(a.some(x => x.includes('ati-vga,id=ati0,model=r100')));
   assert(a.some(x => x.includes('websocket=127.0.0.1:61001,password=on')));
+  assert(a.includes('usb-mouse,id=classicmac-game-mouse'));
   assert(a.includes('stdio')); assert(!a.some(x => x.startsWith('tcp:')));
   assert(a.some(x => x.includes('Mac,, One.classic')));
 });

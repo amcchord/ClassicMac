@@ -347,4 +347,5 @@ class QMP:
         return self.cmd("human-monitor-command", **{"command-line": line})
 
     def close(self):
+        self.f.close()
         self.s.close()

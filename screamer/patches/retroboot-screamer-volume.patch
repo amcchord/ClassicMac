@@ -1,0 +1,59 @@
+diff --git a/hw/audio/screamer.c b/hw/audio/screamer.c
+index a70237e..92a712c 100644
+--- a/hw/audio/screamer.c
++++ b/hw/audio/screamer.c
+@@ -37,6 +37,7 @@
+ #include "qemu/timer.h"
+ #include "hw/ppc/mac_dbdma.h"
+ #include "system/dma.h"
++#include "trace.h"
+ #include "system/address-spaces.h"
+ #include "qemu/cutils.h"
+ #include "qemu/log.h"
+@@ -222,6 +223,7 @@ static void screamer_update_volume(ScreamerState *s)
+ 
+     SCREAMER_DPRINTF("setting mute: %d, attenuation L: %d R: %d\n",
+                      muted, att_left, att_right);
++    trace_screamer_volume(muted, att_left, att_right);
+ 
+     if (!s->voice) {
+         return;
+@@ -302,18 +304,19 @@ static void screamer_codec_write(ScreamerState *s, hwaddr addr, uint64_t val)
+     case 0x1:
+         /* Clear recalibrate if set */
+         val = val & ~CODEC_CTRL1_RECALIBRATE;
+-
+-        /* Update volume in case mute set */
+-        screamer_update_volume(s);
+-        break;
+-
+-    case 0x4:
+-        /* Speaker attenuation */
+-        screamer_update_volume(s);
+         break;
+     }
+ 
+     s->codec_ctrl_regs[addr] = val;
++
++    /*
++     * RetroBoot: apply mute (register 1) and the attenuation (register 4)
++     * Mac OS has just written; updating before the store applied the
++     * previous value, one volume step late.
++     */
++    if (addr == 0x1 || addr == 0x4) {
++        screamer_update_volume(s);
++    }
+ }
+ 
+ static uint64_t screamer_read(void *opaque, hwaddr addr, unsigned size)
+diff --git a/hw/audio/trace-events b/hw/audio/trace-events
+index 30f5921..87e1244 100644
+--- a/hw/audio/trace-events
++++ b/hw/audio/trace-events
+@@ -61,3 +61,6 @@ virtio_snd_handle_event(void) "event queue callback called"
+ virtio_snd_pcm_stream_flush(uint32_t stream) "flushing stream %"PRIu32
+ virtio_snd_handle_tx_xfer(void) "tx queue callback called"
+ virtio_snd_handle_rx_xfer(void) "rx queue callback called"
++
++# screamer.c
++screamer_volume(int muted, int att_left, int att_right) "mute %d attenuation L %d R %d"

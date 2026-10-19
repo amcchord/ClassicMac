@@ -4,3 +4,6 @@
 *.patch text eol=lf
 *.sh text eol=lf
 *.py text eol=lf
+
+# Copland patch hunks intentionally preserve the upstream mixed CRLF bytes.
+copland/*.patch -text

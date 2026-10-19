@@ -1,0 +1,249 @@
+--- a/ui/input.c
++++ b/ui/input.c
+@@ -13,6 +13,8 @@
+     const QemuInputHandler *handler;
+     int               id;
+     int               events;
++    bool              classicmac_active;
++    bool              classicmac_game_mouse;
+     QemuConsole       *con;
+     QTAILQ_ENTRY(QemuInputHandlerState) node;
+ };
+@@ -39,6 +41,8 @@
+ static NotifierList mouse_mode_notifiers =
+     NOTIFIER_LIST_INITIALIZER(mouse_mode_notifiers);
+ 
++static bool classicmac_game_mode;
++
+ static QemuInputEventQueueHead kbd_queue = QTAILQ_HEAD_INITIALIZER(kbd_queue);
+ static QEMUTimer *kbd_timer;
+ static uint32_t kbd_default_delay_ms = 10;
+@@ -62,6 +66,7 @@
+ 
+ void qemu_input_handler_activate(QemuInputHandlerState *s)
+ {
++    s->classicmac_active = true;
+     QTAILQ_REMOVE(&handlers, s, node);
+     QTAILQ_INSERT_HEAD(&handlers, s, node);
+     notifier_list_notify(&mouse_mode_notifiers, NULL);
+@@ -69,6 +74,7 @@
+ 
+ void qemu_input_handler_deactivate(QemuInputHandlerState *s)
+ {
++    s->classicmac_active = false;
+     QTAILQ_REMOVE(&handlers, s, node);
+     QTAILQ_INSERT_TAIL(&handlers, s, node);
+     notifier_list_notify(&mouse_mode_notifiers, NULL);
+@@ -100,7 +106,32 @@
+ static QemuInputHandlerState*
+ qemu_input_find_handler(uint32_t mask, QemuConsole *con)
+ {
+-    QemuInputHandlerState *s;
++    QemuInputHandlerState *s, *game = NULL, *tablet = NULL;
++
++    /* ClassicMac supplies a real USB HID mouse for InputSprocket. Keep the
++     * seamless tablet in charge of Finder, even when USB starts polling later.
++     * In a game both motion and buttons must reach the same USB device. */
++    QTAILQ_FOREACH(s, &handlers, node) {
++        if (!s->classicmac_active || (s->con && s->con != con)) {
++            continue;
++        }
++        if (s->classicmac_game_mouse) {
++            game = s;
++        }
++        if (s->handler->mask & INPUT_EVENT_MASK_ABS) {
++            tablet = s;
++        }
++    }
++    if (game) {
++        if ((classicmac_game_mode || !tablet) &&
++            (mask & game->handler->mask)) {
++            return game;
++        }
++        if (!classicmac_game_mode && tablet &&
++            (mask & tablet->handler->mask)) {
++            return tablet;
++        }
++    }
+ 
+     QTAILQ_FOREACH(s, &handlers, node) {
+         if (s->con == NULL || s->con != con) {
+@@ -308,7 +339,6 @@
+     QemuInputHandlerState *s;
+ 
+     qemu_input_event_trace(src, evt);
+-
+     /* send event */
+     s = qemu_input_find_handler(1 << evt->type, src);
+     if (!s) {
+@@ -467,6 +497,37 @@
+     return (s != NULL) && (s->handler->mask & INPUT_EVENT_MASK_ABS);
+ }
+ 
++void qemu_input_handler_set_classicmac_game_mouse(QemuInputHandlerState *s)
++{
++    s->classicmac_game_mouse = true;
++}
++
++void qemu_input_set_classicmac_game_mode(bool enabled)
++{
++    QemuInputHandlerState *s;
++    bool present = false;
++
++    QTAILQ_FOREACH(s, &handlers, node) {
++        if (s->classicmac_game_mouse) {
++            present = true;
++            break;
++        }
++    }
++    if (!present) {
++        return;
++    }
++    if (classicmac_game_mode != enabled) {
++        /* A game can quit on mouse-down, before the matching mouse-up. Do
++         * not strand a held button on the device that is losing ownership. */
++        qemu_input_queue_btn(NULL, INPUT_BUTTON_LEFT, false);
++        qemu_input_queue_btn(NULL, INPUT_BUTTON_RIGHT, false);
++        qemu_input_queue_btn(NULL, INPUT_BUTTON_MIDDLE, false);
++        qemu_input_event_sync();
++        classicmac_game_mode = enabled;
++        notifier_list_notify(&mouse_mode_notifiers, NULL);
++    }
++}
++
+ int qemu_input_scale_axis(int value,
+                           int min_in, int max_in,
+                           int min_out, int max_out)
+--- a/include/ui/input.h
++++ b/include/ui/input.h
+@@ -58,6 +58,8 @@
+                                uint32_t button_old, uint32_t button_new);
+ 
+ bool qemu_input_is_absolute(QemuConsole *con);
++void qemu_input_set_classicmac_game_mode(bool enabled);
++void qemu_input_handler_set_classicmac_game_mouse(QemuInputHandlerState *s);
+ int qemu_input_scale_axis(int value,
+                           int min_in, int max_in,
+                           int min_out, int max_out);
+--- a/hw/display/ati.c
++++ b/hw/display/ati.c
+@@ -17,6 +17,7 @@
+  */
+ 
+ #include "qemu/osdep.h"
++#include "ui/input.h"
+ #include "ati_int.h"
+ #include "ati_regs.h"
+ #include "vga-access.h"
+@@ -139,6 +140,18 @@
+     }
+ }
+ 
++bool ati_cursor_visible(const ATIVGAState *s)
++{
++    unsigned width = ((s->regs.crtc_h_total_disp >> 16) + 1) * 8;
++    unsigned height = (s->regs.crtc_v_total_disp >> 16) + 1;
++
++    /* ATI's Mac driver hides a cursor by parking it at (2047, 2047),
++     * leaving CUR_EN set. Test its actual position as well as the enable bit. */
++    return (s->regs.crtc_gen_cntl & CRTC2_CUR_EN) &&
++           (s->regs.cur_hv_pos >> 16) < width &&
++           (s->regs.cur_hv_pos & 0xffff) < height;
++}
++
+ /* Used by host side hardware cursor */
+ static void ati_cursor_define(ATIVGAState *s)
+ {
+@@ -726,6 +739,9 @@
+                            addr - CRTC_GEN_CNTL, data, size);
+         if ((val & CRTC2_CUR_EN) != (s->regs.crtc_gen_cntl & CRTC2_CUR_EN)) {
+             ati_vga_switch_mode(s);
++            if (ati_cursor_visible(s)) {
++                qemu_input_set_classicmac_game_mode(false);
++            }
+             if (s->cursor_guest_mode) {
+                 s->vga.force_shadow = !!(s->regs.crtc_gen_cntl & CRTC2_CUR_EN);
+             } else {
+@@ -910,6 +926,9 @@
+         } else if (s->regs.cur_offset & BIT(31)) {
+             s->regs.cur_offset &= ~BIT(31);
+             ati_cursor_define(s);
++        }
++        if (!(t & BIT(31)) && ati_cursor_visible(s)) {
++            qemu_input_set_classicmac_game_mode(false);
+         }
+         if (!s->cursor_guest_mode &&
+             (s->regs.crtc_gen_cntl & CRTC2_CUR_EN) && !(t & BIT(31))) {
+@@ -1399,6 +1418,7 @@
+ 
+ static void ati_vga_reset(DeviceState *dev)
+ {
++    qemu_input_set_classicmac_game_mode(false);
+     ATIVGAState *s = ATI_VGA(dev);
+ 
+     timer_del(&s->vblank_timer);
+@@ -1480,12 +1500,21 @@
+     return g_strdup(ati_3d_gl_info(s));
+ }
+ 
++static char *ati_get_cursor_state(Object *o, Error **errp)
++{
++    ATIVGAState *s = ATI_VGA(o);
++    return g_strdup_printf("cntl=%08x off=%08x pos=%08x hv_off=%08x color0=%08x color1=%08x",
++        s->regs.crtc_gen_cntl, s->regs.cur_offset, s->regs.cur_hv_pos,
++        s->regs.cur_hv_offs, s->regs.cur_color0, s->regs.cur_color1);
++}
++
+ static void ati_vga_init(Object *o)
+ {
+     ATIVGAState *s = ATI_VGA(o);
+ 
+     object_property_add_str(o, "x-accel-stats", ati_get_accel_stats, NULL);
+     object_property_add_str(o, "x-gl-renderer", ati_get_gl_renderer, NULL);
++    object_property_add_str(o, "x-cursor-state", ati_get_cursor_state, NULL);
+ 
+     object_initialize_child(o, "edid", &s->i2cddc, TYPE_I2CDDC);
+     object_property_set_description(o, "x-pixman", "Use pixman for: "
+--- a/hw/display/ati_3d.c
++++ b/hw/display/ati_3d.c
+@@ -19,6 +19,7 @@
+  */
+ 
+ #include "qemu/osdep.h"
++#include "ui/input.h"
+ #include "qemu/log.h"
+ #include "qemu/error-report.h"
+ #include "qemu/bswap.h"
+@@ -1123,6 +1124,9 @@
+     if (en) {
+         track_acquire(s, &st.color)->gen++;
+         ati_glr_draw(t->r, &st, glprim, ev, en);
++        /* A 3D application drawing its own pointer needs unbounded HID
++         * motion. Showing the hardware cursor returns control to the tablet. */
++        qemu_input_set_classicmac_game_mode(!ati_cursor_visible(s));
+         t->draws++;
+         t->verts += en;
+     }
+--- a/hw/display/ati_int.h
++++ b/hw/display/ati_int.h
+@@ -178,6 +178,7 @@
+ };
+ 
+ const char *ati_reg_name(int num);
++bool ati_cursor_visible(const ATIVGAState *s);
+ 
+ static inline bool ati_is_radeon(const ATIVGAState *s)
+ {
+--- a/hw/usb/dev-hid.c
++++ b/hw/usb/dev-hid.c
+@@ -720,6 +720,10 @@
+     usb_desc_init(dev);
+     us->intr = usb_ep_get(dev, USB_TOKEN_IN, 1);
+     hid_init(&us->hid, kind, usb_hid_changed);
++    if (kind == HID_MOUSE && DEVICE(dev)->id &&
++        !strcmp(DEVICE(dev)->id, "classicmac-game-mouse")) {
++        qemu_input_handler_set_classicmac_game_mouse(us->hid.s);
++    }
+     if (us->display && us->hid.s) {
+         qemu_input_handler_bind(us->hid.s, us->display, us->head, NULL);
+     }

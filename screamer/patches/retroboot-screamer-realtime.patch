@@ -1,0 +1,232 @@
+diff --git a/hw/audio/screamer.c b/hw/audio/screamer.c
+--- a/hw/audio/screamer.c
++++ b/hw/audio/screamer.c
+@@ -90,9 +90,8 @@ static const char *s_spk = "screamer";
+  * command starts, as the DBDMA engine would, and the command completes when
+  * the codec has played it, on QEMU's virtual clock at the selected sample
+  * rate, so the guest sees its interrupts and frame-counter stamps one
+- * buffer apart as on the hardware.  The host stream starts once
+- * SCREAMER_PREROLL_MS of audio has been taken, which keeps the backend a
+- * little ahead of the codec clock.  FRAME_CNT_REG counts the frames the
++ * buffer apart as on the hardware (the codec clock and the host stream's
++ * pre-roll are described below).  FRAME_CNT_REG counts the frames the
+  * output DMA has taken (frame-count, default on).
+  *
+  * Codec volume and mute changes take effect at the point of the stream
+@@ -103,7 +102,43 @@ static const char *s_spk = "screamer";
+  * DMA, nearly every alert, and the Sound control panel and volume-key
+  * feedback sounds entirely).
+  */
+-#define SCREAMER_PREROLL_MS 30
++/*
++ * RetroBoot: the codec's clock runs in real time, whatever QEMU's or the
++ * guest's latency (package r12 let it slip).
++ *
++ * Each output command used to complete one play time after the moment it
++ * started, so every delay before the next command started was lost for
++ * good: the main loop's timer latency (some 15 us per 1 ms command on an
++ * idle host, more under load), and above all the time Mac OS takes to
++ * re-arm its DBDMA program when its sound interrupt is serviced late (on a
++ * slow host the program ran out every 70 ms and sat 10-23 ms until Mac OS
++ * restarted it).  The DMA delivered 4.6 s of a QuickTime soundtrack in 5.1 s
++ * on the lab builder and in 9.4 s with its vCPU at 30 % of a core, so the
++ * host stream, consumed in real time, ran dry over and over (ALSA
++ * underruns on the N5105 and N4100 laptops: sound in bursts).
++ *
++ * Now the codec keeps a continuous timeline: a command completes when the
++ * codec, counting from where the previous one ended, has played it, less
++ * dma-lead-us (the DMA engine runs that far ahead of the codec, like the
++ * hardware's FIFO).  Behind that timeline the DMA catches up at up to
++ * twice real time, spaced on its own schedule (timer latency does not slow
++ * it) or, after it sat idle, from the moment it starts again; twice real
++ * time keeps the guest's half-buffer interrupts apart (all at once, they
++ * merge: package r11).  A pause longer than resync-ms ends the stream: the
++ * next sound starts a new timeline.
++ *
++ * The host stream starts once the current lead (host-lead-ms at first) is
++ * queued.  If it then runs dry while the DMA is running (QEMU handed the
++ * host less than it has played since the stream started) the lead grows by
++ * SCREAMER_LEAD_STEP_MS up to host-lead-max-ms and the stream pre-rolls
++ * again; the lead shrinks one step per SCREAMER_LEAD_DECAY_S without an
++ * underrun, when a stream starts.  When the host falls a whole buffer
++ * (371 ms) behind, the oldest audio is dropped: the guest keeps its
++ * real-time pace (QuickTime's clock runs from it) instead of waiting.
++ */
++#define SCREAMER_LEAD_STEP_MS   20
++#define SCREAMER_IDLE_NS        (2 * SCALE_MS)  /* longer: the DMA was idle */
++#define SCREAMER_LEAD_DECAY_S   20
+ 
+ static void screamer_update_volume(ScreamerState *s);
+ 
+@@ -165,6 +200,7 @@ static void screamer_dma_done(void *opaque)
+     ScreamerState *s = opaque;
+     DBDMA_io *io = s->dma_pending;
+ 
++    trace_screamer_dma_done((qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) - s->codec_ns) / 1000);
+     if (io) {
+         s->dma_pending = NULL;
+         io->dma_end(io);
+@@ -202,12 +238,21 @@ static void pmac_screamer_tx_transfer(DBDMA_io *io)
+     if (s->paced_dma) {
+         /* complete when the codec has played this command */
+         int64_t now = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
++        int64_t play = muldiv64(io->len / 4, NANOSECONDS_PER_SECOND, s->rate);
++        int64_t due;
+ 
+-        s->codec_ns = MAX(s->codec_ns, now) +
+-                      muldiv64(io->len / 4, NANOSECONDS_PER_SECOND, s->rate);
++        trace_screamer_out(io->len, (now - s->codec_ns) / 1000, s->bpos - s->ppos, s->frames);
++        if (now - s->codec_ns > (int64_t)s->resync_ms * SCALE_MS) {
++            s->codec_ns = now;                  /* a new stream */
++        }
++        s->codec_ns += play;                    /* continuous timeline */
++        /* behind the codec: catch up at up to twice real time (see above) */
++        due = now - s->dma_ns > SCREAMER_IDLE_NS ? now : s->dma_ns;
++        s->dma_ns = MAX(s->codec_ns - (int64_t)s->dma_lead_us * SCALE_US,
++                        due + play / 2);
+         io->len = 0;
+         s->dma_pending = io;
+-        timer_mod(s->dma_timer, s->codec_ns);
++        timer_mod(s->dma_timer, s->dma_ns);
+         return;
+     }
+ 
+@@ -222,9 +267,25 @@ static void pmac_screamer_tx(DBDMA_io *io)
+ {
+     ScreamerState *s = io->opaque;
+ 
++    if (!s->host_started && s->bpos == s->ppos && s->lead_ms > s->host_lead_ms &&
++        qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) - s->underrun_ns >
++        SCREAMER_LEAD_DECAY_S * NANOSECONDS_PER_SECOND) {
++        s->lead_ms = MAX(s->lead_ms - SCREAMER_LEAD_STEP_MS, s->host_lead_ms);
++        s->underrun_ns = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);  /* next step later */
++    }
+     screamer_voice_active(s, true);
+ 
+-    if (s->paced_dma && screamer_make_room(s, io->len)) {
++    if (s->paced_dma && io->len <= SCREAMER_BUFFER_SIZE) {
++        if (!screamer_make_room(s, io->len)) {
++            /* the host is a whole buffer behind: drop its oldest audio */
++            uint32_t queued = s->bpos - s->ppos;
++            uint32_t drop = MIN(queued, queued + io->len - SCREAMER_BUFFER_SIZE);
++
++            s->ppos += drop;
++            s->dropped += drop;
++            trace_screamer_drop(drop, s->dropped);
++            screamer_make_room(s, io->len);
++        }
+         pmac_screamer_tx_transfer(io);
+         return;
+     }
+@@ -328,6 +389,7 @@ static void screamerspk_callback(void *opaque, int avail)
+     int n, len;
+ 
+     if (s->paced_dma) {
++        int64_t now = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
+         uint32_t queued;
+ 
+         if (s->io.len && !s->dma_pending && screamer_make_room(s, s->io.len)) {
+@@ -335,15 +397,35 @@ static void screamerspk_callback(void *opaque, int avail)
+         }
+         queued = s->bpos - s->ppos;
+ 
++        if (s->host_started && s->dma_pending &&
++            muldiv64(now - s->host_t0_ns, s->rate, NANOSECONDS_PER_SECOND) >
++            s->host_frames + s->rate / 500) {
++            /* the host has played more than it got (2 ms slack): it ran dry */
++            s->underruns++;
++            s->underrun_ns = now;
++            s->lead_ms = MIN(s->lead_ms + SCREAMER_LEAD_STEP_MS,
++                             MAX(s->host_lead_max_ms, s->host_lead_ms));
++            s->host_started = false;            /* pre-roll the larger lead */
++            trace_screamer_underrun(s->underruns, s->lead_ms, queued);
++        }
+         if (!queued) {
+-            if (!s->dma_pending) {
++            if (!s->dma_pending &&
++                now - s->dma_ns > (int64_t)s->resync_ms * SCALE_MS) {
+                 s->host_started = false;        /* stream ended */
+             }
+         } else if (s->host_started ||
+-                   queued >= SCREAMER_PREROLL_MS * screamer_bytes_per_ms(s) ||
++                   queued >= s->lead_ms * screamer_bytes_per_ms(s) ||
+                    !s->dma_pending) {
+-            s->host_started = true;
++            uint32_t before = s->ppos;
++
++            if (!s->host_started) {
++                s->host_started = true;
++                s->host_t0_ns = now;
++                s->host_frames = 0;
++            }
+             screamer_host_write(s, avail);
++            s->host_frames += (s->ppos - before) / 4;
++            trace_screamer_host(avail, queued, s->ppos - before);
+             return;
+         } else {
+             return;                             /* pre-roll */
+@@ -429,6 +511,9 @@ static void screamer_reset(DeviceState *dev)
+     s->codec_ns = 0;
+     s->host_started = false;
+     s->vol_pending = false;
++    s->lead_ms = s->host_lead_ms;
++    s->underrun_ns = 0;
++    s->dma_ns = 0;
+     if (s->dma_pending) {
+         timer_del(s->dma_timer);
+         s->dma_pending = NULL;
+@@ -625,6 +710,10 @@ static const Property screamer_properties[] = {
+     DEFINE_PROP_UINT32("idle-stop-ms", ScreamerState, idle_stop_ms, 1000),
+     DEFINE_PROP_BOOL("paced-dma", ScreamerState, paced_dma, true),
+     DEFINE_PROP_BOOL("frame-count", ScreamerState, frame_count, true),
++    DEFINE_PROP_UINT32("dma-lead-us", ScreamerState, dma_lead_us, 5000),
++    DEFINE_PROP_UINT32("resync-ms", ScreamerState, resync_ms, 200),
++    DEFINE_PROP_UINT32("host-lead-ms", ScreamerState, host_lead_ms, 40),
++    DEFINE_PROP_UINT32("host-lead-max-ms", ScreamerState, host_lead_max_ms, 120),
+ };
+ 
+ static void screamer_class_init(ObjectClass *oc, const void *data)
+diff --git a/hw/audio/trace-events b/hw/audio/trace-events
+--- a/hw/audio/trace-events
++++ b/hw/audio/trace-events
+@@ -64,3 +64,8 @@ virtio_snd_handle_rx_xfer(void) "rx queue callback called"
+ 
+ # screamer.c
+ screamer_volume(int muted, int att_left, int att_right) "mute %d attenuation L %d R %d"
++screamer_out(uint32_t len, int64_t late_us, uint32_t queued, uint32_t frames) "len %u late_us %" PRId64 " queued %u frames %u"
++screamer_dma_done(int64_t late_us) "late_us %" PRId64
++screamer_host(int avail, uint32_t queued, uint32_t written) "avail %d queued %u written %u"
++screamer_underrun(uint32_t count, uint32_t lead_ms, uint32_t queued) "host ran dry (%u): lead now %u ms, %u bytes queued"
++screamer_drop(uint32_t bytes, uint32_t total) "host a buffer behind: dropped %u bytes (%u in all)"
+diff --git a/include/hw/audio/screamer.h b/include/hw/audio/screamer.h
+--- a/include/hw/audio/screamer.h
++++ b/include/hw/audio/screamer.h
+@@ -35,7 +35,7 @@
+ #define TYPE_SCREAMER "screamer"
+ OBJECT_DECLARE_SIMPLE_TYPE(ScreamerState, SCREAMER)
+ 
+-#define SCREAMER_BUFFER_SIZE 0x4000
++#define SCREAMER_BUFFER_SIZE 0x10000  /* RetroBoot: 371 ms at 44.1 kHz (was 16 KB) */
+ 
+ struct ScreamerState {
+     /*< private >*/
+@@ -70,6 +70,19 @@ struct ScreamerState {
+     bool vol_pending;           /* codec volume change waiting for vol_pos */
+     uint32_t vol_pos;           /* ring offset the change applies from */
+ 
++    /* RetroBoot: real-time codec clock and host lead (screamer.c) */
++    uint32_t dma_lead_us;       /* property dma-lead-us: DMA ahead of the codec */
++    uint32_t resync_ms;         /* property resync-ms: longer pauses restart the clock */
++    uint32_t host_lead_ms;      /* property host-lead-ms: pre-roll floor */
++    uint32_t host_lead_max_ms;  /* property host-lead-max-ms: pre-roll ceiling */
++    uint32_t lead_ms;           /* current pre-roll */
++    int64_t dma_ns;             /* when the last output command completes */
++    int64_t host_t0_ns;         /* host stream (re)started */
++    uint64_t host_frames;       /* frames handed to the host since then */
++    int64_t underrun_ns;        /* last host underrun (or lead decay step) */
++    uint32_t underruns;         /* statistics (trace) */
++    uint32_t dropped;
++
+     uint32_t idle_stop_ms;      /* stop the host stream after this long */
+     bool voice_active;
+     int64_t last_audio_ns;      /* last guest output (QEMU_CLOCK_VIRTUAL) */

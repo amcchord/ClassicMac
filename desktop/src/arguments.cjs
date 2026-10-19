@@ -17,7 +17,7 @@ function argumentsFor(machine, resources, endpoint, platform = process.platform)
     '-display', `vnc=127.0.0.1:${endpoint.vncPort - 5900},websocket=127.0.0.1:${endpoint.webSocketPort},password=on,share=force-shared`,
     '-qmp', 'stdio', '-monitor', 'none', '-serial', 'none', '-action', 'reboot=shutdown'];
   if (ppc) {
-    a.push('-accel', 'tcg,tb-size=512', '-M', 'mac99,via=cuda,audiodev=snd0', '-cpu', c.useG4CPU ? '7400' : 'g3',
+    a.push('-device', 'usb-mouse,id=classicmac-game-mouse', '-accel', 'tcg,tb-size=512', '-M', 'mac99,via=cuda,audiodev=snd0', '-cpu', c.useG4CPU ? '7400' : 'g3',
       '-global', `macio-ide.dma-completion-delay-ns=${cdBoot ? 1000000 : 0}`, '-prom-env', 'output-device=ttya',
       '-drive', `file=${disk},format=raw,media=disk`);
     if (ati) {

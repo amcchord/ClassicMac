@@ -1,29 +1,26 @@
-# ClassicMac 4.1.0 shipped
+# Quake III fixes — 4.1.1 qualification
 
-Stable GitHub Latest: https://github.com/amcchord/ClassicMac/releases/tag/v4.1.0
-Source/tag `a6922db84952d8ec5522b469d264bc297db7e1cf`, integrated through PR #24.
-Mac DMG/ZIP, Windows x64 ZIP and Linux x64 DEB/tar.gz are public, with matching
-QEMU/Copland sources and checksums. Fresh public downloads match every hash;
-the public Mac DMG passes notary/staple/Gatekeeper/package verification.
+Task checkout: worktrees/q3-input-cinematic; branch codex/q3-input-cinematic.
+Integration main remains 11a4c61. Root gxmetal work is preserved. User confirmed
+macOS and authorized fixes and publication of a stable release.
 
-Integration: 122 Swift tests, two Copland fixture skips, zero failures; all
-12 desktop tests pass. Native Windows/Linux packaged CI passes. Exact CI ZIP
-and DEB also pass OS9 Finder/pause/clean-restart/reconnect/native accented
-input/normal shutdown on the dedicated Proxmox hosts. Linux 9p host-read and
-guest-write passes. Both hosts also pass real Library interrupted/resumed
-import and Quadra MacOS8.1 CD boot/shutdown. Screenshots are refreshed.
+Verified standard USB HID input fixes the unchanged SuperDeluxe v2 Quake III
+menu, camera and fire controls. Position-aware ATI cursor detection handles
+the driver's offscreen cursor and restores the Finder tablet on exit.
 
-Evidence: docs/4.1.0-validation.md, docs/desktop-release-validation.md,
-docs/evidence/4.1.0 and docs/screenshots/desktop. Windows is unsigned;
-Copland is Mac-only; Windows 9p sharing is unavailable. Physical GPU/audio,
-Internet browsing and a game suite remain unqualified on the virtual hosts.
-The Platinum pixel gate covers its documented Mac controls/fonts, not the
-whole interface or CSS desktop.
+Intro diagnosis is now isolated: WAIT_UNTIL's zero initial idle-clean mask
+makes the Mac OpenGL driver's glFinish retry for ~150 ms. In one running
+unchanged guest, 0 -> 0x30000 restores ~30 texture uploads/s; writing 0 again
+restores ~3/s. Sound/video reset experiments were diagnostic, not the fix.
+A Radeon reset/handoff initialization is undergoing fresh-launch testing.
 
-Dedicated SazProx QA VMs 170/171 are retained for future work. Windows auto-login
-and its registry password were removed after testing; host shutdown requested.
-No unrelated VM/template, user machine or root gxmetal files were changed.
-Prior releases/assets remain available; Library catalog unchanged.
+Screamer's upstream paced DMA, continuous sample clock, interrupt separation,
+and queued volume fixes pass the synthetic double-buffer timing test. Source
+patches are pinned verbatim from RetroBoot 1860881. No guest files are changed.
+All runtime tests use private disposable clones of the SHA-verified public
+SuperDeluxe v2 fixture; the source remains read-only.
 
-Next: hardware GPU/audio/game qualification and remaining Platinum UI states
-when that follow-up work is requested. No release action remains pending.
+Next: require first-launch and replay cadence/audio plus menu/aim/fire/Finder
+return against fresh prepared/package engines; freeze source; run consolidated
+checks, native host builds, sign/notarize, and publish stable 4.1.1. Nothing has
+been pushed or published yet.

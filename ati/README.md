@@ -69,3 +69,17 @@ without host GL.
 - QOM `x-accel-stats` (string): `ops2d=… draws3d=… verts3d=… flips=… gl=on|off`.
 - QOM `x-gl-renderer` (string): e.g. `CGL; GL 4.1 Metal - 91.7; Apple M5 Max`,
   empty when 3D is off.
+
+## Classic Mac OpenGL idle handoff
+
+`classicmac-radeon-idle.patch` initializes the Radeon WAIT_UNTIL mask with the
+2D/3D idle-clean waits at card reset. The renderer is idle at this handoff.
+The Mac driver polls this mask in `glFinish`; a zero mask leaves it retrying
+for about 150 ms per finish, reducing the Quake III id intro to about 3 fps.
+The mask remains writable and reads continue to return the programmed value.
+Rage 128 behavior is unchanged.
+
+On the same guest without restarting Quake or sound, changing only the mask
+from zero to `0x30000` restores 30 uploads/s and clearing it restores the
+slowdown. Fresh-launch, replay and game-input checks use
+`input/tests/superdeluxe-quake3.py`; no game executable or preferences change.

@@ -29,6 +29,16 @@
   <img src="docs/screenshots/powermacg4-macos92.png" width="410" alt="Mac OS 9.2 on the emulated Power Mac G4">
 </p>
 
+## New in ClassicMac 4.1.1
+
+- **Quake III mouse controls.** Power Macs provide a USB mouse for
+  InputSprocket games. Click the game screen to capture; Control–Option on
+  macOS or Escape on Windows/Linux releases it. Finder keeps seamless input.
+- **Smooth id intro playback.** Radeon startup initializes the synchronization
+  state expected by the classic Mac OpenGL driver, avoiding repeated waits.
+- **Reliable Power Mac audio.** DMA completion follows the sample clock and
+  keeps the guest's sound-buffer interrupts separate.
+
 ## New in ClassicMac 4.1
 
 - **Windows and Linux desktop editions.** Native x64 QEMU runtimes and a shared

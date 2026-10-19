@@ -130,18 +130,19 @@ class QMP:
         json.loads(self.f.readline())
         self.cmd("qmp_capabilities")
 
-    def cmd(self, name, **args):
-        self.f.write(json.dumps({"execute": name, "arguments": args}) + "\n")
+    def cmd(self, execute, **args):
+        self.f.write(json.dumps({"execute": execute, "arguments": args}) + "\n")
         self.f.flush()
         while True:
             msg = json.loads(self.f.readline())
             if "event" in msg:
                 continue
             if "error" in msg:
-                raise RuntimeError(f"{name}: {msg['error']}")
+                raise RuntimeError(f"{execute}: {msg['error']}")
             return msg.get("return")
 
     def close(self):
+        self.f.close()
         self.s.close()
 
 

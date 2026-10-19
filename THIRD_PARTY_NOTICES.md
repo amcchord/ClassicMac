@@ -126,3 +126,11 @@ Distribution library sources are available from the matching Ubuntu/MSYS2
 source-package repositories, identified by the bundled notices. Contact the
 ClassicMac maintainer for the corresponding library sources under the terms
 of those licenses. The application contains no additional guest OS disk.
+
+## RetroBoot Power Mac sound timing
+
+The Screamer timing patches in `screamer/patches/` and their device-level test
+are from RetroBoot commit `1860881266449ca2575061e0bd4055c1265cf217`.
+The patches are GPL-2.0-or-later, matching the modified QEMU integration.
+Original source notices are retained; provenance and hashes are in
+`screamer/README.md`. Corresponding prepared engine sources accompany releases.

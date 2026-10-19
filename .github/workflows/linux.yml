@@ -45,6 +45,8 @@ jobs:
           key: ${{ steps.engine.outputs.cache-primary-key }}
       - name: Check Linux display devices
         run: python3 ati/tests/test_qemu_ati.py --gl-api gles --gl-optional output/desktop/runtime/bin/qemu-system-ppc output/desktop/runtime/qemu/pc-bios
+      - name: Check Power Mac sound DMA timing
+        run: python3 screamer/tests/qtest_screamer.py --qemu output/desktop/runtime/bin/qemu-system-ppc --share output/desktop/runtime/qemu/pc-bios --run output/desktop/screamer-timing
       - uses: actions/setup-node@v4
         with:
           node-version: 24

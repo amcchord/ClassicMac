@@ -26,6 +26,7 @@ final class GuestScreenNSView: NSView {
     private var surfaceSize = CGSize.zero
     private var heldModifiers: Set<UInt16> = []
     private var captured = false
+    private var motion = RelativePointerMotion()
     private var scrollRemainder: CGFloat = 0
     private var rightButtonAsControl = false
     private var relative = false
@@ -209,8 +210,8 @@ final class GuestScreenNSView: NSView {
 
     private func move(_ event: NSEvent) {
         if captured {
-            session.pointerDelta(dx: Int((event.deltaX / max(scale, 1)).rounded()),
-                                 dy: Int((event.deltaY / max(scale, 1)).rounded()))
+            let delta = motion.take(dx: event.deltaX, dy: event.deltaY, scale: scale)
+            session.pointerDelta(dx: delta.x, dy: delta.y)
         } else if !relative, let (x, y) = guestPoint(event) {
             session.pointer(x: x, y: y)
         }
@@ -236,7 +237,7 @@ final class GuestScreenNSView: NSView {
     override func rightMouseDown(with event: NSEvent) {
         window?.makeFirstResponder(self)
         move(event)
-        if inputHelpers {
+        if inputHelpers && !relative {
             rightButtonAsControl = true
             session.key(GuestKeymap.ctrl, down: true)
             session.button(0, down: true)
@@ -264,7 +265,7 @@ final class GuestScreenNSView: NSView {
         while abs(scrollRemainder) >= 1 {
             let up = scrollRemainder > 0
             scrollRemainder += up ? -1 : 1
-            if inputHelpers {
+            if inputHelpers && !relative {
                 let key = up ? GuestKeymap.up : GuestKeymap.down
                 session.key(key, down: true)
                 session.key(key, down: false)
@@ -280,6 +281,7 @@ final class GuestScreenNSView: NSView {
     private func capture() {
         guard !captured else { return }
         captured = true
+        motion = RelativePointerMotion()
         NSCursor.hide()
         CGAssociateMouseAndMouseCursorPosition(0)
         onCaptureChanged?(true)
@@ -288,6 +290,7 @@ final class GuestScreenNSView: NSView {
     func releaseCapture() {
         guard captured else { return }
         captured = false
+        motion = RelativePointerMotion()
         CGAssociateMouseAndMouseCursorPosition(1)
         NSCursor.unhide()
         onCaptureChanged?(false)

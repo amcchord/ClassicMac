@@ -1132,7 +1132,7 @@ export default class RFB extends EventTargetMixin {
         }
 
         let bmask = RFB._convertButtonMask(ev.buttons);
-        const classicRightDown = this._classicInputHelpers && (bmask & 0x4) !== 0;
+        const classicRightDown = this._classicInputHelpers && !this._relativePointer && (bmask & 0x4) !== 0;
         if (classicRightDown && !this._classicRightClickActive) {
             this.sendKey(KeyTable.XK_Control_L, "ControlLeft", true);
             this._classicRightClickActive = true;
@@ -1299,7 +1299,7 @@ export default class RFB extends EventTargetMixin {
         this._accumulatedWheelDeltaX += dX;
         this._accumulatedWheelDeltaY += dY;
 
-        if (this._classicInputHelpers) {
+        if (this._classicInputHelpers && !this._relativePointer) {
             if (Math.abs(this._accumulatedWheelDeltaY) >= WHEEL_STEP) {
                 if (this._accumulatedWheelDeltaY < 0) {
                     this.sendKey(KeyTable.XK_Up, "ArrowUp");

@@ -1,0 +1,87 @@
+diff --git a/hw/audio/screamer.c b/hw/audio/screamer.c
+--- a/hw/audio/screamer.c
++++ b/hw/audio/screamer.c
+@@ -69,6 +69,21 @@
+ /* Audio */
+ static const char *s_spk = "screamer";
+ 
++/*
++ * Mac OS stops the output DMA when it has nothing to play.  After
++ * idle_stop_ms without guest output the voice is made inactive, which stops
++ * QEMU's audio timer and the host stream (an idle sound device can power
++ * down); the next output DMA starts it again.
++ */
++static void screamer_voice_active(ScreamerState *s, bool on)
++{
++    s->last_audio_ns = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
++    if (s->voice && s->voice_active != on) {
++        audio_be_set_active_out(s->audio_be, s->voice, on);
++        s->voice_active = on;
++    }
++}
++
+ static void pmac_screamer_tx_transfer(DBDMA_io *io)
+ {
+     ScreamerState *s = io->opaque;
+@@ -92,6 +107,8 @@ static void pmac_screamer_tx(DBDMA_io *io)
+ {
+     ScreamerState *s = io->opaque;
+ 
++    screamer_voice_active(s, true);
++
+     if (s->bpos + io->len > SCREAMER_BUFFER_SIZE) {
+         /* Not enough space in the buffer, so defer IRQ */
+         memcpy(&s->io, io, sizeof(DBDMA_io));
+@@ -181,6 +198,7 @@ static void screamerspk_callback(void *opaque, int avail)
+             SCREAMER_DPRINTF("########### AUDIO WRITE! %d / %d - %d\n", s->ppos, s->bpos, n);
+             len = audio_be_write(s->audio_be, s->voice, &s->buf[s->ppos], n);
+             s->ppos += len;
++            s->last_audio_ns = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
+             return;
+         }
+     }
+@@ -192,6 +210,13 @@ static void screamerspk_callback(void *opaque, int avail)
+ 
+         SCREAMER_DPRINTF("Processing deferred buffer\n");
+         pmac_screamer_tx_transfer(&s->io);
++        s->last_audio_ns = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
++        return;
++    }
++    if (s->idle_stop_ms &&
++        qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) - s->last_audio_ns >=
++        (int64_t)s->idle_stop_ms * SCALE_MS) {
++        screamer_voice_active(s, false);
+     }
+ }
+ 
+@@ -212,6 +237,8 @@ static void screamer_update_settings(ScreamerState *s)
+     }
+ 
+     audio_be_set_active_out(s->audio_be, s->voice, true);
++    s->voice_active = true;
++    s->last_audio_ns = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
+ }
+ 
+ static void screamer_update_volume(ScreamerState *s)
+@@ -418,6 +445,7 @@ static void screamer_initfn(Object *obj)
+ 
+ static const Property screamer_properties[] = {
+     DEFINE_AUDIO_PROPERTIES(ScreamerState, audio_be),
++    DEFINE_PROP_UINT32("idle-stop-ms", ScreamerState, idle_stop_ms, 1000),
+ };
+ 
+ static void screamer_class_init(ObjectClass *oc, const void *data)
+diff --git a/include/hw/audio/screamer.h b/include/hw/audio/screamer.h
+--- a/include/hw/audio/screamer.h
++++ b/include/hw/audio/screamer.h
+@@ -58,6 +58,10 @@ struct ScreamerState {
+ 
+     uint32_t regs[6];
+     uint32_t codec_ctrl_regs[8];
++
++    uint32_t idle_stop_ms;      /* stop the host stream after this long */
++    bool voice_active;
++    int64_t last_audio_ns;      /* last guest output (QEMU_CLOCK_VIRTUAL) */
+ };
+ 
+ void macio_screamer_register_dma(ScreamerState *s, void *dbdma,

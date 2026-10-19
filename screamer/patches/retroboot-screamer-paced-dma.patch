@@ -1,0 +1,284 @@
+diff --git a/hw/audio/screamer.c b/hw/audio/screamer.c
+--- a/hw/audio/screamer.c
++++ b/hw/audio/screamer.c
+@@ -70,6 +70,107 @@
+ /* Audio */
+ static const char *s_spk = "screamer";
+ 
++/*
++ * RetroBoot: output DMA at the codec's pace.
++ *
++ * Mac OS's sound driver double-buffers: its DBDMA program loads the frame
++ * counter (LOAD_WORD of FRAME_CNT_REG), outputs one half of a ring buffer,
++ * stores a "half done" flag with an interrupt, does the same for the other
++ * half and stops; the interrupt handler refills the half that has played
++ * and restarts or extends the program.  QEMU completed every OUTPUT command
++ * at once while its 16 KB staging buffer had room, so both halves (and up
++ * to four whole programs) "played" within microseconds: the two half-done
++ * interrupts merged into one, the frame-counter stamps were all equal (the
++ * register read a constant), and the Sound Manager's play position stopped
++ * advancing.  QuickTime runs a movie's clock from that position, so movies
++ * with sound froze at 00:00:00 with a silent sound channel; whether a
++ * given boot got through depended on host and guest timing.
++ *
++ * With paced-dma (default) each OUTPUT command's data is taken when the
++ * command starts, as the DBDMA engine would, and the command completes when
++ * the codec has played it, on QEMU's virtual clock at the selected sample
++ * rate, so the guest sees its interrupts and frame-counter stamps one
++ * buffer apart as on the hardware.  The host stream starts once
++ * SCREAMER_PREROLL_MS of audio has been taken, which keeps the backend a
++ * little ahead of the codec clock.  FRAME_CNT_REG counts the frames the
++ * output DMA has taken (frame-count, default on).
++ *
++ * Codec volume and mute changes take effect at the point of the stream
++ * where the guest made them: audio already taken by the DMA but not yet
++ * handed to the host keeps the old setting.  Mac OS mutes the codec as soon
++ * as a sound's last buffer has played; applied to the host voice at once,
++ * that cut off whatever QEMU still had queued (with the old instantaneous
++ * DMA, nearly every alert, and the Sound control panel and volume-key
++ * feedback sounds entirely).
++ */
++#define SCREAMER_PREROLL_MS 30
++
++static void screamer_update_volume(ScreamerState *s);
++
++static uint32_t screamer_bytes_per_ms(ScreamerState *s)
++{
++    return s->rate * 4 / 1000;                  /* 16-bit stereo */
++}
++
++/* Room for @len more bytes: drop what the host has already played. */
++static bool screamer_make_room(ScreamerState *s, uint32_t len)
++{
++    if (s->vol_pending && s->ppos >= s->vol_pos) {
++        s->vol_pending = false;
++        screamer_update_volume(s);
++    }
++    if (s->ppos >= s->bpos) {
++        s->bpos = s->ppos = 0;
++    } else if (s->bpos + len > SCREAMER_BUFFER_SIZE && s->ppos) {
++        memmove(s->buf, &s->buf[s->ppos], s->bpos - s->ppos);
++        s->bpos -= s->ppos;
++        s->vol_pos -= MIN(s->vol_pos, s->ppos);
++        s->ppos = 0;
++    }
++    return s->bpos + len <= SCREAMER_BUFFER_SIZE;
++}
++
++/* Hand queued audio to the host, applying a volume change where it was made. */
++static void screamer_host_write(ScreamerState *s, int avail)
++{
++    while (avail > 0 && s->ppos < s->bpos) {
++        uint32_t end = s->bpos;
++        int len;
++
++        if (s->vol_pending) {
++            if (s->ppos >= s->vol_pos) {
++                s->vol_pending = false;
++                screamer_update_volume(s);
++            } else {
++                end = s->vol_pos;
++            }
++        }
++        len = audio_be_write(s->audio_be, s->voice, &s->buf[s->ppos],
++                             MIN(end - s->ppos, (uint32_t)avail));
++        if (len <= 0) {
++            break;
++        }
++        s->ppos += len;
++        avail -= len;
++    }
++    if (s->vol_pending && s->ppos >= s->vol_pos) {
++        s->vol_pending = false;
++        screamer_update_volume(s);
++    }
++    s->last_audio_ns = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
++}
++
++static void screamer_dma_done(void *opaque)
++{
++    ScreamerState *s = opaque;
++    DBDMA_io *io = s->dma_pending;
++
++    if (io) {
++        s->dma_pending = NULL;
++        io->dma_end(io);
++    }
++}
++
+ /*
+  * Mac OS stops the output DMA when it has nothing to play.  After
+  * idle_stop_ms without guest output the voice is made inactive, which stops
+@@ -96,6 +197,19 @@ static void pmac_screamer_tx_transfer(DBDMA_io *io)
+                     MEMTXATTRS_UNSPECIFIED);
+ 
+     s->bpos += io->len;
++    s->frames += io->len / 4;                   /* 16-bit stereo */
++
++    if (s->paced_dma) {
++        /* complete when the codec has played this command */
++        int64_t now = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
++
++        s->codec_ns = MAX(s->codec_ns, now) +
++                      muldiv64(io->len / 4, NANOSECONDS_PER_SECOND, s->rate);
++        io->len = 0;
++        s->dma_pending = io;
++        timer_mod(s->dma_timer, s->codec_ns);
++        return;
++    }
+ 
+     /* Indicate success */
+     io->len = 0;
+@@ -110,6 +224,10 @@ static void pmac_screamer_tx(DBDMA_io *io)
+ 
+     screamer_voice_active(s, true);
+ 
++    if (s->paced_dma && screamer_make_room(s, io->len)) {
++        pmac_screamer_tx_transfer(io);
++        return;
++    }
+     if (s->bpos + io->len > SCREAMER_BUFFER_SIZE) {
+         /* Not enough space in the buffer, so defer IRQ */
+         memcpy(&s->io, io, sizeof(DBDMA_io));
+@@ -126,12 +244,28 @@ static void pmac_screamer_tx(DBDMA_io *io)
+ 
+ static void pmac_screamer_tx_flush(DBDMA_io *io)
+ {
++    ScreamerState *s = io->opaque;
+     DBDMA_channel *ch = io->channel;
+     dbdma_cmd *current = &ch->current;
+     uint16_t cmd;
+ 
+     SCREAMER_DPRINTF("DMA TX flush!\n");
+ 
++    if (s->dma_pending && s->dma_pending->channel == io->channel) {
++        uint32_t ctrl = ch->regs[DBDMA_CONTROL];
++
++        io = s->dma_pending;
++        timer_del(s->dma_timer);
++        s->dma_pending = NULL;
++        if (((ctrl >> 16) & RUN) && !(ctrl & RUN)) {
++            /* stopped: the command ends here, no interrupt or branch */
++            io->processing = false;
++        } else {
++            io->dma_end(io);                    /* FLUSH while running */
++            return;
++        }
++    }
++
+     cmd = le16_to_cpu(current->command) & COMMAND_MASK;
+     if (cmd == OUTPUT_MORE || cmd == OUTPUT_LAST ||
+         cmd == INPUT_MORE || cmd == INPUT_LAST) {
+@@ -193,7 +327,28 @@ static void screamerspk_callback(void *opaque, int avail)
+     ScreamerState *s = opaque;
+     int n, len;
+ 
+-    if (s->bpos) {
++    if (s->paced_dma) {
++        uint32_t queued;
++
++        if (s->io.len && !s->dma_pending && screamer_make_room(s, s->io.len)) {
++            pmac_screamer_tx_transfer(&s->io);  /* a command that found no room */
++        }
++        queued = s->bpos - s->ppos;
++
++        if (!queued) {
++            if (!s->dma_pending) {
++                s->host_started = false;        /* stream ended */
++            }
++        } else if (s->host_started ||
++                   queued >= SCREAMER_PREROLL_MS * screamer_bytes_per_ms(s) ||
++                   !s->dma_pending) {
++            s->host_started = true;
++            screamer_host_write(s, avail);
++            return;
++        } else {
++            return;                             /* pre-roll */
++        }
++    } else if (s->bpos) {
+         if (s->ppos < s->bpos) {
+             n = MIN(s->bpos - s->ppos, (unsigned int)avail);
+             SCREAMER_DPRINTF("########### AUDIO WRITE! %d / %d - %d\n", s->ppos, s->bpos, n);
+@@ -270,6 +425,14 @@ static void screamer_reset(DeviceState *dev)
+     s->rate = 44100;
+     s->bpos = 0;
+     s->ppos = 0;
++    s->frames = 0;
++    s->codec_ns = 0;
++    s->host_started = false;
++    s->vol_pending = false;
++    if (s->dma_pending) {
++        timer_del(s->dma_timer);
++        s->dma_pending = NULL;
++    }
+ 
+     screamer_update_settings(s);
+ 
+@@ -283,6 +446,7 @@ static void screamer_realizefn(DeviceState *dev, Error **errp)
+     if (!audio_be_check(&s->audio_be, errp)) {
+         return;
+     }
++    s->dma_timer = timer_new_ns(QEMU_CLOCK_VIRTUAL, screamer_dma_done, s);
+ }
+ 
+ static void screamer_control_write(ScreamerState *s, uint32_t val)
+@@ -342,7 +506,14 @@ static void screamer_codec_write(ScreamerState *s, hwaddr addr, uint64_t val)
+      * previous value, one volume step late.
+      */
+     if (addr == 0x1 || addr == 0x4) {
+-        screamer_update_volume(s);
++        if (s->paced_dma && s->ppos < s->bpos) {
++            /* at the stream position of the write (see the top of the file) */
++            s->vol_pending = true;
++            s->vol_pos = s->bpos;
++        } else {
++            s->vol_pending = false;
++            screamer_update_volume(s);
++        }
+     }
+ }
+ 
+@@ -372,9 +543,12 @@ static uint64_t screamer_read(void *opaque, hwaddr addr, unsigned size)
+         break;
+     case CLIP_CNT_REG:
+     case BYTE_SWAP_REG:
+-    case FRAME_CNT_REG:
+         val = s->regs[addr];
+         break;
++    case FRAME_CNT_REG:
++        /* frames the output DMA has taken (the driver stamps its buffers) */
++        val = s->frame_count ? s->frames : s->regs[addr];
++        break;
+     default:
+         qemu_log_mask(LOG_UNIMP,
+                   "screamer: Unimplemented register read "
+@@ -449,6 +623,8 @@ static void screamer_initfn(Object *obj)
+ static const Property screamer_properties[] = {
+     DEFINE_AUDIO_PROPERTIES(ScreamerState, audio_be),
+     DEFINE_PROP_UINT32("idle-stop-ms", ScreamerState, idle_stop_ms, 1000),
++    DEFINE_PROP_BOOL("paced-dma", ScreamerState, paced_dma, true),
++    DEFINE_PROP_BOOL("frame-count", ScreamerState, frame_count, true),
+ };
+ 
+ static void screamer_class_init(ObjectClass *oc, const void *data)
+diff --git a/include/hw/audio/screamer.h b/include/hw/audio/screamer.h
+--- a/include/hw/audio/screamer.h
++++ b/include/hw/audio/screamer.h
+@@ -59,6 +59,17 @@ struct ScreamerState {
+     uint32_t regs[6];
+     uint32_t codec_ctrl_regs[8];
+ 
++    /* RetroBoot: output DMA at the codec's pace, frame counter (screamer.c) */
++    bool paced_dma;             /* property paced-dma */
++    bool frame_count;           /* property frame-count */
++    uint32_t frames;            /* frames taken by the output DMA */
++    QEMUTimer *dma_timer;
++    DBDMA_io *dma_pending;      /* OUTPUT command waiting for its play time */
++    int64_t codec_ns;           /* when the codec has played what it holds */
++    bool host_started;          /* pre-roll reached since the stream began */
++    bool vol_pending;           /* codec volume change waiting for vol_pos */
++    uint32_t vol_pos;           /* ring offset the change applies from */
++
+     uint32_t idle_stop_ms;      /* stop the host stream after this long */
+     bool voice_active;
+     int64_t last_audio_ns;      /* last guest output (QEMU_CLOCK_VIRTUAL) */

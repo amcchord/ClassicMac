@@ -38,6 +38,15 @@ final class QEMURunnerArgumentTests: XCTestCase {
         )
     }
 
+    func testPowerMacIncludesInputSprocketHIDMouseWithAndWithoutTablet() {
+        for tablet in [true, false] {
+            let args = QEMUManager.buildArguments(for: config(tabletInput: tablet))
+            XCTAssertTrue(optionValues("-device", in: args).contains("usb-mouse,id=classicmac-game-mouse"))
+        }
+        let quadra = QEMUManager.buildArguments(for: config(family: .quadra800))
+        XCTAssertFalse(quadra.contains("usb-mouse,id=classicmac-game-mouse"))
+    }
+
     func testPowerMacGraphicsAccelerationOptionsAndBootDepth() {
         let thousands = QEMUManager.buildArguments(for: config())
         let millions = QEMUManager.buildArguments(

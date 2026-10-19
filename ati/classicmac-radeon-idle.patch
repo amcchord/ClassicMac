@@ -1,0 +1,15 @@
+--- a/hw/display/ati.c
++++ b/hw/display/ati.c
+@@ -1433,6 +1433,12 @@
+     s->host_data.row = 0;
+     s->host_data.col = 0;
+     ati_cp_reset(s);
++    if (ati_is_radeon(s)) {
++        /* The classic Mac OpenGL driver polls the idle-clean mask during
++         * glFinish. Hand off an idle engine with both cache-clean waits
++         * selected; a zero mask makes every finish reach its retry timeout. */
++        s->regfile[WAIT_UNTIL / 4] = BIT(16) | BIT(17);
++    }
+ }
+ 
+ static void ati_vga_exit(PCIDevice *dev)

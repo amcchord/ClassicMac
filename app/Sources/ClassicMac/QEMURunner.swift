@@ -936,6 +936,10 @@ final class QEMUManager: ObservableObject {
         let needsNdrvLoader = sharing || tablet || bootingG3CompatibilityCD ||
             toolsViaVirtio
 
+        // InputSprocket needs a real HID mouse; the seamless Virtio tablet only
+        // updates the classic cursor. The engine selects HID for 3D games.
+        args += ["-device", "usb-mouse,id=classicmac-game-mouse"]
+
         // Input configuration. QEMU treats whichever pointing device the guest
         // touched last as "the mouse", and the cocoa display only releases the
         // cursor while that device is absolute.

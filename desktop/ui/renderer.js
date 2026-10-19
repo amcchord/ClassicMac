@@ -3,12 +3,34 @@ const api = window.classicmac;
 const $ = id => document.getElementById(id);
 const model = { powerMacG4: 'Power Mac G4', quadra800: 'Quadra 800', powerMac7500: 'Power Mac 7500' };
 const icon = { powerMacG4: 'powermac_g4', quadra800: 'quadra_800', powerMac7500: 'powermac_7500' };
+let relativePointer = false;
 let machines = [], selected, rfb, displayID, displayKey, connectTimer, creating = false, connectionGeneration = 0;
 const current = () => machines.find(m => m.id === selected);
 function message(text) { $('message-text').textContent = text; if (!$('message').open) $('message').showModal(); }
 async function action(fn) { try { await fn(); } catch (error) { message(error.message); } }
 $('message-ok').onclick = () => $('message').close();
+function updateGameMouse() {
+  const captured = document.pointerLockElement === $('display').querySelector('canvas');
+  $('capture').hidden = !relativePointer;
+  $('capture').textContent = captured ? 'Release game mouse' : 'Capture game mouse';
+  $('capture').setAttribute('aria-pressed', String(captured));
+  if (relativePointer) $('notice').textContent = captured ? 'Mouse captured. Press Escape to release it.' : 'Click the Mac screen to capture the mouse for this game. Press Escape to release it.';
+}
+function captureGameMouse() {
+  const canvas = $('display').querySelector('canvas');
+  if (relativePointer && canvas) canvas.requestPointerLock();
+}
+$('capture').onclick = () => document.pointerLockElement ? document.exitPointerLock() : captureGameMouse();
+document.addEventListener('pointerlockchange', updateGameMouse);
+document.addEventListener('pointerlockerror', () => message('Mouse capture failed. Click the Mac screen to try again.'));
+$('display').addEventListener('mousedown', event => {
+  if (relativePointer && document.pointerLockElement !== $('display').querySelector('canvas')) {
+    event.preventDefault(); event.stopPropagation(); captureGameMouse();
+  }
+}, true);
 function connect(m) {
+  if (document.pointerLockElement) document.exitPointerLock();
+  relativePointer = false; updateGameMouse();
   const generation = ++connectionGeneration;
   clearTimeout(connectTimer);
   if (rfb) { rfb.disconnect(); rfb = null; }
@@ -21,6 +43,12 @@ function connect(m) {
   rfb.classicInputHelpers = m.classicInputHelpers;
   rfb.addEventListener('connect', () => { if (generation === connectionGeneration && displayID === id) { $('curtain').hidden = true; rfb.focus(); } });
   rfb.addEventListener('disconnect', () => { if (generation === connectionGeneration && displayID === id && current()?.running) connectTimer = setTimeout(() => connect(current()), 1000); });
+  rfb.addEventListener('pointertypechange', event => {
+    if (generation !== connectionGeneration) return;
+    relativePointer = event.detail.relative;
+    if (!relativePointer && document.pointerLockElement) document.exitPointerLock();
+    updateGameMouse();
+  });
   rfb.addEventListener('securityfailure', event => message(event.detail.reason || 'The Mac’s display could not be authenticated.'));
 }
 function render() {
@@ -51,6 +79,7 @@ function render() {
   const nextDisplay = m?.running ? `${m.id}:${m.display?.url}` : null;
   if (nextDisplay !== displayKey) { displayKey = nextDisplay; connect(m); }
   $('notice').textContent = m?.running ? 'Use Shut Down from Mac OS before closing ClassicMac. Force Off is for an unresponsive Mac.' : m ? 'Choose Start Mac, or use Media to select an installation CD.' : 'Open a .classic folder from your Mac, or create a new Mac.';
+  updateGameMouse();
 }
 api.onState(rows => { machines = rows; selected ??= rows[0]?.id; render(); });
 api.onProblem(message);
