@@ -1,0 +1,16 @@
+{
+  "release_source": "9ca105f583ba9e220f4795790032901da56f5c14",
+  "swift": {
+    "tests": 129,
+    "skipped": 2,
+    "failures": 0,
+    "skip_reason": "Optional native Copland machine/archive fixtures are not configured"
+  },
+  "desktop": {
+    "tests": 12,
+    "failures": 0
+  },
+  "native_icon_export_check": "32 strikes verified",
+  "native_windows_ci": 39267099712,
+  "native_linux_ci": 39267103833
+}

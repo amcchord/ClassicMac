@@ -624,3 +624,24 @@ consolidated root checks, publish and verify stable 4.1.1. Retain 4.1.0 for roll
 - Private draft 417348832 stages qualified assets. No public tag/release yet.
   Next: merge PR #31, consolidated integration tests, tag/publish stable Latest,
   fresh anonymous download verification and final release evidence.
+
+## 2026-10-19 — 4.2.0 stable release published and verified
+
+- Merged PR #31 as 9ca105f583ba9e220f4795790032901da56f5c14 and tagged that
+  exact source v4.2.0. Consolidated root validation passes 129 Swift tests
+  (two optional Copland fixture skips) and all 12 desktop tests; 32 native
+  icon strike exports/hash checks pass. Mac source tree matches its qualified
+  signed build; desktop source tree matches final native CI 2e86a5c.
+- Final Windows 39267099712 / Linux 39267103833 pass packaged boot/display,
+  restart/clean shutdown and all toolbar geometry assertions. Packaged source
+  and assets match; fresh screenshots and exact checksums are on main.
+- Published stable Latest v4.2.0 with ten assets. Every archive was freshly
+  downloaded anonymously and matches the manifest; the public API confirms
+  neither draft nor prerelease. Public DMG staple/Gatekeeper checks pass.
+  DMG SHA256 2e59561c8ee5929207f5ae76006c8a13341b2baa318ba2dc0cc649ae9e2929b5.
+- Task guests normally shut down, task mounts detached, mode-600 temporary
+  notarization key removed. No user machine, gxmetal, unrelated worktree,
+  Proxmox host, catalog, DNS or Apache changes. Worktree/evidence retained.
+- Stable v4.1.1 assets remain for rollback by promotion to Latest; record the
+  reason in 4.2 notes if used. No pending release work. The documented wider
+  font/layout/desktop fidelity limits remain outside the measured frame gate.

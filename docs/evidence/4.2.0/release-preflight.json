@@ -1,0 +1,11 @@
+{
+  "source": "9ca105f583ba9e220f4795790032901da56f5c14",
+  "prior_stable": "v4.1.1",
+  "rollback": "Promote retained v4.1.1 to Latest and record reason in 4.2 notes",
+  "all_ten_uploaded_digests_match": true,
+  "swift_tests": 129,
+  "swift_optional_skips": 2,
+  "desktop_tests": 12,
+  "mac_source_tree": "1ef81587d51e8beebac6ff06f9600e221b3feba6",
+  "desktop_runtime_source_matches": true
+}

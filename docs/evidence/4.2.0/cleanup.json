@@ -1,0 +1,8 @@
+{
+  "task_guests_stopped": true,
+  "task_source_and_verifier_mounts_detached": true,
+  "notary_private_key_temp_removed": true,
+  "user_machines_and_gxmetal_unchanged": true,
+  "qa_proxmox_vms_not_started_for_ui_only_release": true,
+  "worktree_and_qualification_outputs_retained": true
+}
