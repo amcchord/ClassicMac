@@ -18,7 +18,7 @@ function updateGameMouse() {
 }
 function captureGameMouse() {
   const canvas = $('display').querySelector('canvas');
-  if (relativePointer && canvas) canvas.requestPointerLock();
+  if (relativePointer && canvas) { rfb?.focus(); canvas.requestPointerLock(); }
 }
 $('capture').onclick = () => document.pointerLockElement ? document.exitPointerLock() : captureGameMouse();
 document.addEventListener('pointerlockchange', updateGameMouse);
