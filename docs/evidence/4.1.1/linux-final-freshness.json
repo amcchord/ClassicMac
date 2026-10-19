@@ -1,0 +1,23 @@
+{
+  "platform": "linux",
+  "version": "4.1.1",
+  "source_matches": {
+    "src/arguments.cjs": true,
+    "src/catalog.cjs": true,
+    "src/engine.cjs": true,
+    "src/machines.cjs": true,
+    "src/main.cjs": true,
+    "src/paste.cjs": true,
+    "src/preload.cjs": true,
+    "src/qualification.cjs": true,
+    "ui/renderer.js": true,
+    "ui/index.html": true,
+    "runtime/Browser/novnc/core/rfb.js": true
+  },
+  "app_asar_sha256": "ef2da4e436e2ae1dbdfd83591b39469966469b082cb0b9e88a19ea6cec239ab5",
+  "qemu_sha256": "8d2fce74443765586db5084a358b376d0f6d92f256910e2c86553082e122839a",
+  "usb_game_mouse_present": true,
+  "tools_sha256": "23a42184811c7e1ad8718b6746e061c3a1c3e3dd43af25c9c828b3fa326fca22",
+  "release_source": "dfdf4c1ad2b7206b385c1b787d72aa9af5385c2b",
+  "source_tree": "8ed4cfc21d1aefef83bc78b6a5a66350dc2817d3"
+}

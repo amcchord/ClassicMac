@@ -1,0 +1,83 @@
+{
+  "source": "daf8c31",
+  "fixture": "SuperDeluxe v2, private disposable clone",
+  "fixture_archive_sha256": "1b20062b704690e68b5fe256076a659c271cc7c9e1c40340d11ab75aa909135c",
+  "host": "Apple M5 Max, macOS 27.2",
+  "input_method": "simulated motion/buttons through the native display protocol",
+  "mac_package": {
+    "status": "pass",
+    "boot_s": 19.716,
+    "finder_relative": false,
+    "game_relative": true,
+    "menu_click": true,
+    "idle_changed_fraction": 0.014753689236111112,
+    "look_changed_fraction": 0.07468424479166667,
+    "returned_finder_relative": false,
+    "first_intro_uploads_8s": 203,
+    "replay_uploads_6s": 183
+  },
+  "sound": {
+    "bytes": 2510848,
+    "seconds": 14.233832199546486,
+    "active_10ms_bins": 481,
+    "total_10ms_bins": 1424,
+    "peak": 12336
+  },
+  "sound_status": "pass",
+  "dma_timing": {
+    "origin": "synthetic-qtest",
+    "apple_software_run": false,
+    "expect": "paced",
+    "screamer": "0x80014000",
+    "dbdma": "0x80008000",
+    "flag_while_stopped": "0xffffffff",
+    "half_done_ms": {
+      "0": 7.88,
+      "1": 18.96
+    },
+    "frame_stamps": [
+      0,
+      512
+    ],
+    "half_gap_ms": 11.08,
+    "pace_frames_per_s": 44100,
+    "hold_frames_per_s": {
+      "unserviced": 5120,
+      "serviced": 45056
+    },
+    "checks": [
+      {
+        "check": "no half completes while the virtual clock is stopped",
+        "ok": true
+      },
+      {
+        "check": "frame-counter stamps one half (512 frames) apart",
+        "ok": true
+      },
+      {
+        "check": "both halves complete once the VM runs",
+        "ok": true
+      },
+      {
+        "check": "half B completes about one half (11.6 ms) after half A",
+        "ok": true
+      },
+      {
+        "check": "the looping program takes 44100 frames per second within 0.5 % (no slip)",
+        "ok": true
+      },
+      {
+        "check": "output waits while the last interrupt is unserviced",
+        "ok": true
+      },
+      {
+        "check": "serviced interrupts: output at full speed",
+        "ok": true
+      }
+    ],
+    "pass": true
+  },
+  "limitation": "A physical trackpad and speaker recording were not exercised. No guest media or game audio is included.",
+  "mac_implementation_source": "daf8c31048f331755199340c079c209c2b85d4e6",
+  "release_source": "dfdf4c1ad2b7206b385c1b787d72aa9af5385c2b"
+}

@@ -540,3 +540,43 @@ CRLF; .gitattributes now preserves their LF bytes. Dedicated existing Proxmox
 QA VMs were started for package tests; Windows QA auto-login must be removed
 afterward. No release/tag has been published. Next: finish packages/QA, merge,
 consolidated root checks, publish and verify stable 4.1.1. Retain 4.1.0 for rollback.
+
+## 2026-10-19 — 4.1.1 stable release published and verified
+
+- Merged Quake III fixes in PR #28 (`daf8c31`) and desktop capture/focus follow-up
+  PR #29. Stable tag `v4.1.1` points to source
+  `dfdf4c1ad2b7206b385c1b787d72aa9af5385c2b`. Final native packaged CI used
+  `ff49110` with the identical source tree
+  `8ed4cfc21d1aefef83bc78b6a5a66350dc2817d3`.
+- Root integration validation passes 125 Swift tests (two optional Copland
+  fixture skips) and 12 desktop tests. Capture focus passes syntax and desktop
+  checks after integration. Native Linux 39247028650 and Windows 39247576540
+  both pass packaged CI; exact final DEB/ZIP also pass dedicated Proxmox
+  create/import/config, boot/display, pause/resume, restart/new-engine/reconnect,
+  native paste and normal shutdown. Linux additionally passes 9p host read and
+  guest write. Source freshness and engine hashes match the final archives.
+- Signed Mac package passes fresh SuperDeluxe first launch (203 uploads/8 s),
+  replay (183/6 s), menu motion/click, camera/fire and Finder restoration.
+  Separate soundtrack WAV and actual-device synthetic Screamer DMA checks
+  pass. Input was simulated through the native protocol; physical trackpad and
+  speaker recording were not exercised. No guest disk/software changes ship.
+- App notary `ad6f8966-8246-475d-a34d-55592f0bd221` and DMG notary
+  `13701bca-7b81-46b6-b7a8-3fea5e7dc1c8` accepted. Signatures, staples,
+  Gatekeeper, macOS 15 library deployment targets and full package verification
+  pass. Protected temporary notarization credentials were removed after use.
+- Published stable Latest v4.1.1 with all ten assets. Fresh anonymous downloads
+  match all nine archive SHA256 values; public API confirms neither draft nor
+  prerelease. DMG SHA256:
+  `55149b6a260762596a338386a832d3726e4f0a14c3782275a5e392ecdad1404b`.
+  Public DMG staple and Gatekeeper checks pass. Reports, source links, exact
+  manifest and cleanup state are in `docs/4.1.1-validation.md` and
+  `docs/evidence/4.1.1/`.
+- QA VMs 170/171 are verified stopped and retained. Windows auto-login disabled,
+  stored registry password removed, scheduled test task unregistered. Read-only
+  SuperDeluxe source mount detached. User gxmetal work, running guest and
+  unrelated worktrees preserved. No catalog, DNS or Apache changes.
+- Stable v4.1.0 assets remain for rollback; promote it with
+  `gh release edit v4.1.0 --latest` and record the reason in 4.1.1 notes.
+  No pending release action. Retain task worktree and ignored qualification
+  output for support; physical Windows/Linux GPU/audio testing remains outside
+  VM qualification, Windows remains unsigned and Copland remains Mac-only.

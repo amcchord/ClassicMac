@@ -1,0 +1,11 @@
+{
+  "windows_autologin_disabled": true,
+  "windows_stored_password_absent": true,
+  "windows_qa_task_removed": true,
+  "qa_vms_returned_to_stopped": [
+    170,
+    171
+  ],
+  "readonly_source_mount_detached": true,
+  "user_machines_unchanged": true
+}
