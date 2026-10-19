@@ -7,3 +7,6 @@
 
 # Copland patch hunks intentionally preserve the upstream mixed CRLF bytes.
 copland/*.patch -text
+
+# These copied device sources are then patched inside the vendor tree.
+screamer/*.[ch] text eol=lf

@@ -59,9 +59,10 @@ def main():
             c.tap(*chord.split('-'),hold=.035)
     def ensure_console():
         for attempt in range(3):
-            shot('console-state')
-            content=D.ocr(str(out/'console-state.png'))
-            if re.search(r'Q3\s*1[.,]11',content,re.I):return
+            shot('console-state-'+str(attempt))
+            surface=c.surface
+            content=D.ocr_region(str(out),(surface['width'],surface['height'],frame()),570,205,640,240,scale=5)
+            if re.search(r'Q3\s*1[.,]',content,re.I):return
             c.tap('grave_accent');c.pump(.35)
         raise RuntimeError('Quake console did not open')
     def command(text):
