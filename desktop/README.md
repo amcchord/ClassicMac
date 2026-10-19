@@ -8,7 +8,7 @@ listens only on loopback. The renderer is sandboxed with context isolation.
 
 Unzip the Windows download and run `ClassicMac.exe`, keeping its companion
 files. Windows binaries are unsigned. On Linux install the DEB with
-`sudo apt install ./ClassicMac-4.1.0-linux-amd64.deb`, or extract the tar.gz and
+`sudo apt install ./ClassicMac-4.1.1-linux-amd64.deb`, or extract the tar.gz and
 run `classicmac`. The tar distribution requires a host with working Chromium
 sandboxing; the DEB installs the sandbox helper with its standard ownership.
 Linux builds require glibc 2.39 or newer and host desktop/audio libraries.

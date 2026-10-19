@@ -1,26 +1,33 @@
-# Quake III fixes — 4.1.1 qualification
+# ClassicMac 4.1.1 — release checks in progress
 
-Task checkout: worktrees/q3-input-cinematic; branch codex/q3-input-cinematic.
-Integration main remains 11a4c61. Root gxmetal work is preserved. User confirmed
-macOS and authorized fixes and publication of a stable release.
+Worktree: worktrees/q3-input-cinematic, branch codex/q3-input-cinematic.
+PR #28; source 892b1d0 (test/doc follow-up may advance). Root main remains
+11a4c61; unrelated root gxmetal work is preserved. User authorized a stable
+release and clarified the Quake III report is on macOS.
 
-Verified standard USB HID input fixes the unchanged SuperDeluxe v2 Quake III
-menu, camera and fire controls. Position-aware ATI cursor detection handles
-the driver's offscreen cursor and restores the Finder tablet on exit.
+Both fixes pass fresh private SuperDeluxe v2 tests. USB HID and position-aware
+ATI cursor routing provide menu motion/clicks, aim/fire and seamless Finder
+return. Radeon WAIT_UNTIL's idle-clean mask was the intro cause: controlled
+0 <-> 0x30000 changes reproduce ~3 <-> 30 uploads/s without restarting the
+app or sound. Reset/handoff initialization now fixes first launch and replay.
 
-Intro diagnosis is now isolated: WAIT_UNTIL's zero initial idle-clean mask
-makes the Mac OpenGL driver's glFinish retry for ~150 ms. In one running
-unchanged guest, 0 -> 0x30000 restores ~30 texture uploads/s; writing 0 again
-restores ~3/s. Sound/video reset experiments were diagnostic, not the fix.
-A Radeon reset/handoff initialization is undergoing fresh-launch testing.
+Independent clean engine build/display/GL gates and Screamer synthetic DMA
+checks pass. Signed Mac package: menu, aim/fire, first intro 203 uploads in
+8 s, replay 183 in 6 s, Finder return PASS (mac-release-qualified). Separate
+WAV test passes, with 481 active 10 ms soundtrack bins (sound-cadence-final).
+Mac packaging is complete; notarization is running. Windows CI 39245242603
+(retry after copied-source CRLF fix) and Linux CI 39244841150 are building.
+No release or tag has been published.
 
-Screamer's upstream paced DMA, continuous sample clock, interrupt separation,
-and queued volume fixes pass the synthetic double-buffer timing test. Source
-patches are pinned verbatim from RetroBoot 1860881. No guest files are changed.
-All runtime tests use private disposable clones of the SHA-verified public
-SuperDeluxe v2 fixture; the source remains read-only.
+Dedicated Proxmox QA VMs 170/171 are running. Windows 171 temporarily has QA
+auto-login enabled for interactive package tests: disable AutoAdminLogon,
+remove DefaultPassword and unregister the task after testing. Never log or
+copy the protected test password from the root output/4.1.0/private file.
+The user VM PID 75833 must remain untouched. Old diagnostic test guests were
+stopped; only current qualification clones are task-owned. Source SuperDeluxe
+mount /dev/disk10 is read-only and should be ejected at completion.
 
-Next: require first-launch and replay cadence/audio plus menu/aim/fire/Finder
-return against fresh prepared/package engines; freeze source; run consolidated
-checks, native host builds, sign/notarize, and publish stable 4.1.1. Nothing has
-been pushed or published yet.
+Next: finish native CI packages and Proxmox smoke, notarization and freshness;
+merge PR, run consolidated root tests once, publish stable Latest v4.1.1 with
+all platform binaries, prepared engine sources and checksums; verify public
+assets and update release evidence. Rollback is retained stable v4.1.0.

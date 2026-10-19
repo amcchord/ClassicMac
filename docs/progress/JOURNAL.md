@@ -501,3 +501,42 @@
   9p backend, physical GPU/audio/game and Internet tests outside VM proof;
   whole-app/CSS pixel fidelity remains outside the component audit. No pending
   release action. See docs/4.1.0-validation.md for source, gates and rollback.
+
+
+## 2026-10-19 — Quake III input and cinematic fixes, release qualification
+
+Task branch `codex/q3-input-cinematic`, PR #28, implementation `2d01ad2`,
+Windows source-line-ending/test follow-ups `b240a16`, `892b1d0`. User confirmed
+macOS and authorized a new stable release. Baseline is main `11a4c61` and stable
+v4.1.0. Root's unrelated gxmetal work and the user's running guest are preserved.
+
+A verified fresh public SuperDeluxe v2 fixture reproduced missing mouse input.
+Standard USB HID fixes InputSprocket without guest changes. ATI's driver parks
+its enabled cursor offscreen, so routing includes cursor position and restores
+Finder's tablet on exit. Native trackpad motion preserves fractional deltas;
+Mac/browser/desktop game buttons bypass Finder helpers and capture is exposed.
+
+The intro's ~3 fps was isolated to the Mac OpenGL glFinish retry loop, not host
+GPU throughput. GDB-timed finishes take ~150 ms with WAIT_UNTIL zero. Changing
+only its idle-clean mask to 0x30000 restores 30 uploads/s in the same guest;
+clearing it restores the slowdown. Radeon reset/handoff now initializes that
+mask. Sound restart was a confounded diagnostic because it reinitializes video.
+No guest code or preferences are patched. Unsuccessful CPU nap, input heartbeat,
+Cuda, sample-clock-only and WAIT-zero experiments were removed.
+
+Pinned upstream Screamer patches separately correct codec volume order, paced
+DMA/continuous clock, buffer lead and interrupt separation. Actual-device
+synthetic checks pass: clock-paused halves remain pending, stamps differ by
+512 frames, half completions are separate, sample rate stays within 0.5%, and
+unserviced interrupts apply bounded backpressure. Independent QEMU preparation
+and native display/GL gates pass. Signed Mac package passes fresh first intro
+(203 uploads/8s), replay (183/6s), menu click, camera, fire and seamless Finder
+return; WAV qualification has 481 active 10 ms soundtrack bins. Detailed local
+artifacts stay under ignored output/4.1.1; guest media/audio are not release assets.
+
+Packaging/notarization and native Windows/Linux CI are in progress. First
+Windows attempt failed before compilation because copied Screamer sources had
+CRLF; .gitattributes now preserves their LF bytes. Dedicated existing Proxmox
+QA VMs were started for package tests; Windows QA auto-login must be removed
+afterward. No release/tag has been published. Next: finish packages/QA, merge,
+consolidated root checks, publish and verify stable 4.1.1. Retain 4.1.0 for rollback.
