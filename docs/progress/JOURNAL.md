@@ -609,3 +609,18 @@ consolidated root checks, publish and verify stable 4.1.1. Retain 4.1.0 for roll
 - The diagnostic reference guest was normally shut down; source mounts are
   detached. Temporary notarization credentials are obtained from AustinLand
   into a mode-600 temporary file and removed by the wrapper on completion.
+
+## 2026-10-19 — 4.2 package and layout gates complete
+
+- Final desktop source 2e86a5c; native Windows 39267099712 and Linux 39267103833
+  pass packaged boot/display, pause/resume, restart and clean shutdown. New
+  geometry checks require one-line labels, horizontal fit and toolbar visibility.
+  They caught Windows clamping the window to a small host work area; reserving
+  preview space and wrapping whole controls fixes the actual captured layout.
+- Every packaged source/UI asset (54 per platform) matches the branch; native
+  icon attribution/provenance and qualified Tools CD match too. Refreshed both
+  desktop screenshots. Mac source tree 1ef81587d51e8beebac6ff06f9600e221b3feba6
+  is unchanged after signing/notarization and real SuperDeluxe/WindowShade checks.
+- Private draft 417348832 stages qualified assets. No public tag/release yet.
+  Next: merge PR #31, consolidated integration tests, tag/publish stable Latest,
+  fresh anonymous download verification and final release evidence.

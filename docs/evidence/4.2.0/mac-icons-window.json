@@ -1,0 +1,32 @@
+{
+  "host": "Apple M5 Max; macOS 27.2",
+  "mac_version": "4.2.0",
+  "native_icon_families": 16,
+  "native_icon_strikes": 32,
+  "icon_export_hash_check": "pass",
+  "independent_icns_alpha_color_check": "pass",
+  "pixel_reference_os": "Mac OS 9.2.1 Appearance Manager plus separately labelled OS8 fixtures",
+  "reference_patterns": 42,
+  "device_scales": [
+    1,
+    2
+  ],
+  "window_frame_pixel_differences": 0,
+  "control_pixel_gate": "pass",
+  "composed_grow_box_gate": "pass",
+  "system_ascii_glyphs_and_advances": 95,
+  "live_bundle_checks": [
+    "fresh public SuperDeluxe clone boot/display",
+    "native Media CD/floppy artwork",
+    "640x480 compact toolbar",
+    "WindowShade collapse",
+    "restore to 1024x768",
+    "normal task guest shutdown"
+  ],
+  "app_notary": "53a97033-9471-4d0a-8a4b-701625329b62",
+  "dmg_notary": "5a796e94-7d8c-4e5a-96cd-4b99540456e9",
+  "signatures_staples_gatekeeper_release_verifier": "pass",
+  "dmg_sha256": "2e59561c8ee5929207f5ae76006c8a13341b2baa318ba2dc0cc649ae9e2929b5",
+  "limitations": "Native document/control states are covered; whole-app fonts/layouts, other window kinds and desktop CSS are not certified by the Mac frame gate.",
+  "mac_app_source_tree": "1ef81587d51e8beebac6ff06f9600e221b3feba6"
+}

@@ -1,13 +1,16 @@
-# 4.1 desktop captures
+# Desktop captures
 
-Captured October 18, 2026 on dedicated AustinLand/Proxmox SazProx test VMs:
-Windows 11 VM 171 and Debian 13 VM 170, using native x64 runtime packages.
-The OS9 screenshots show the independently built Retro68 input/filesystem
-probe and real MacRoman keyboard input. Linux's probe also reads a host file
-and writes back through classicvirtio 9p. The Quadra captures show the Mac OS
-8.1 installation CD at Finder. All guest disks were disposable test fixtures.
+The current `windows.png` and `linux.png` show the exact native 4.2.0 packaged
+applications in GitHub CI, October 19, 2026: Windows run 39267099712 and Linux
+run 39267103833. The default-window toolbar is checked for visible bounds and
+one-line labels, with controls wrapping as whole buttons. OS9 runs from a
+private disposable public fixture; boot/display, restart and clean shutdown pass.
 
-Images are direct application captures. The embedded guest preview scales to
-fit its pane; these are feature evidence, not pixel-fidelity references.
-The native Mac Platinum reference scope is described in
-[the audit](../../platinum-fidelity-audit.md).
+The `windows-quadra.png` and `linux-quadra.png` captures remain from October 18
+4.1 testing on dedicated AustinLand/Proxmox SazProx VMs 171/170, at the Mac OS
+8.1 installation CD Finder. The 4.1 parity reports retain native MacRoman paste
+and Linux 9p host-read/guest-write evidence.
+
+Images are direct application captures. The guest preview scales to its pane;
+these are feature evidence, not pixel-fidelity references. The native Mac
+Platinum pixel scope is described in [the audit](../../platinum-fidelity-audit.md).

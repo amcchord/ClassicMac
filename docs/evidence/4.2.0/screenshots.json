@@ -2,7 +2,7 @@
   "source": "signed 4.2.0 Mac bundle; disposable public SuperDeluxe clone; view-cache captures at 2x",
   "static_appearance": "PLATINUM_FORCE_ACTIVE used for final running/compact/WindowShade/Media/Library screenshots",
   "os9_native_reference": "separate raw Appearance Manager framebuffer fixtures",
-  "linux_source": "native packaged CI 39263262485",
+  "linux_source": "native packaged CI 39267103833",
   "mac_screenshots": {
     "get-info-display.png": "c128272b0a89e665ca32c7915c30b9b56e99cd2784fdd2edbd1312699fbcc3c5",
     "windowshade.png": "ffbb3ffc504c676a880b10ca9a367e0a5a53c740b4c47d002640ce14646da886",
@@ -12,5 +12,6 @@
     "media.png": "6df3354a034a6cae0c0dcd2461d09d7538e817892a66cbadd4bc2c729cb56299",
     "running-compact.png": "974f2e839fc0b3556bc228d64d4c45ae013b21f2f8aa76790f49ce22f5d06d0a",
     "running-ati.png": "c3cbf2d122a32ce1db4fab11b25a8036ec7a666a335690226fc033c20a3b4a23"
-  }
+  },
+  "windows_source": "native packaged CI 39267099712"
 }

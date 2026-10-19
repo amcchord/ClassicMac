@@ -2,7 +2,7 @@
   "platform": "linux",
   "version": "4.2.0",
   "archive": "ClassicMac-4.2.0-linux-x64.tar.gz",
-  "archive_sha256": "12ab95ae8d85eb05ebb0eec3f5dde608ca39bb3a82d15aff6dd5531a5b36a8e3",
+  "archive_sha256": "6a0decd2c0c4534ad88e61dc99e88d103ad3c5eeac45d995ee6a905d0abcb0f3",
   "source_matches": {
     "src/qualification.cjs": true,
     "src/preload.cjs": true,
@@ -61,7 +61,9 @@
   },
   "native_icon_provenance_matches": true,
   "browser_input_matches": true,
-  "app_asar_sha256": "2363fa70f535775b689061121a6d1a740ef0cf4874701131bfa4fc633cc65ea6",
+  "app_asar_sha256": "522cd495f47d30a2d5a2580d349fdc43ff36ea38447c73876092ef209ba3ed6c",
   "qemu_sha256": "e5f6a7ad3a215ffc862a719f441665331dce4d5f12c3ffba62c3c1be427465cf",
-  "tools_sha256": "23a42184811c7e1ad8718b6746e061c3a1c3e3dd43af25c9c828b3fa326fca22"
+  "tools_sha256": "23a42184811c7e1ad8718b6746e061c3a1c3e3dd43af25c9c828b3fa326fca22",
+  "native_ci_run": 39267103833,
+  "desktop_source_commit": "2e86a5c13bf90f18010b2271655c3b9a61f25227"
 }

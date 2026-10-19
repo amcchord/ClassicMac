@@ -1,0 +1,18 @@
+{
+  "machines": [
+    {
+      "id": "790a6f6b-f69b-4817-a35a-ed19c9c058ed",
+      "running": true
+    }
+  ],
+  "connected": true,
+  "canvas": true,
+  "selected": "790a6f6b-f69b-4817-a35a-ed19c9c058ed",
+  "toolbar": {
+    "fitsWidth": true,
+    "singleLineButtons": true,
+    "bottomVisible": true
+  },
+  "cleanShutdown": true,
+  "native_ci_run": 39267103833
+}
