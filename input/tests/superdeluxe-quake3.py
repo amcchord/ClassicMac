@@ -60,9 +60,10 @@ def main():
     def ensure_console():
         for attempt in range(3):
             shot('console-state-'+str(attempt))
-            surface=c.surface
-            content=D.ocr_region(str(out),(surface['width'],surface['height'],frame()),570,205,640,240,scale=5)
-            if re.search(r'Q3\s*1[.,]',content,re.I):return
+            # Quake's half-height console has a solid yellow separator.
+            # This remains visible when the small version label defeats OCR.
+            if all((lambda rgb: rgb[0]==rgb[1] and rgb[0]>=60 and rgb[2]==0)(c.pixel(x,238)) for x in (20,100,300,500)):
+                return
             c.tap('grave_accent');c.pump(.35)
         raise RuntimeError('Quake console did not open')
     def command(text):
