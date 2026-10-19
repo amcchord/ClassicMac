@@ -21,6 +21,7 @@ open class PlatinumWindow: NSWindow {
     private var userFrame: NSRect?
     private weak var modalChild: PlatinumWindow?
     private weak var modalParent: PlatinumWindow?
+    private var activationObservers: [NSObjectProtocol] = []
 
     public static func frameSize(forContent size: NSSize, kind: Chrome.WindowKind) -> NSSize {
         let i = Chrome.contentInsets(kind)
@@ -73,14 +74,24 @@ open class PlatinumWindow: NSWindow {
             NSSound.beep()
             self?.modalChild?.makeKeyAndOrderFront(nil)
         }
+        for name in [NSApplication.didBecomeActiveNotification, NSApplication.didResignActiveNotification] {
+            activationObservers.append(NotificationCenter.default.addObserver(forName: name, object: NSApp, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    guard let self else { return }
+                    self.state.isActive = self.isKeyWindow && NSApp.isActive
+                }
+            })
+        }
     }
+
+    deinit { activationObservers.forEach(NotificationCenter.default.removeObserver) }
 
     open override var canBecomeKey: Bool { true }
     open override var canBecomeMain: Bool { kind == .document }
 
     open override func becomeKey() {
         super.becomeKey()
-        state.isActive = true
+        state.isActive = NSApp.isActive
     }
 
     open override func resignKey() {

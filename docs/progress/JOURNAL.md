@@ -580,3 +580,32 @@ consolidated root checks, publish and verify stable 4.1.1. Retain 4.1.0 for roll
   No pending release action. Retain task worktree and ignored qualification
   output for support; physical Windows/Linux GPU/audio testing remains outside
   VM qualification, Windows remains unsigned and Copland remains Mac-only.
+
+## 2026-10-19 — native Mac OS 9 icons and VM frame qualification
+
+- User authorized original system icons, running-VM Platinum fidelity, merge
+  and a new stable release; then requested Mac OS 9 Icon Services/alpha.
+  Contained branch codex/native-platinum-icons starts at ecdda03. Root gxmetal
+  work, user machines and other worktrees are preserved.
+- Native Icon Services in a disposable public OS9 fixture exports the original
+  small/large families through GetIconRef/IconRefToIconFamily. This supplies
+  32-bit colour and 8-bit alpha absent from flat System resources. Added
+  original resources for remaining artwork. Source/family/member hashes and
+  copyright distinguish Apple assets from MIT drawings and Iconfactory art.
+  32 strikes export deterministically; independent ICNS decode/alpha checks pass.
+- Extended the guest Appearance Manager lab to capture whole document frames,
+  native small bevel buttons and held widgets. Corrected top/content offset,
+  stripe/box positions, shadow ends, inactive palette, held feedback and the
+  diagonal grow corner, including its notch and visibility above guest content.
+  New full-frame/control comparisons pass at 1×/2× with zero differing pixels;
+  original component/font gates still pass. Owning-window/application focus
+  controls active state. Narrow VM controls use a compact icon layout.
+- Signed Mac package boots a private SuperDeluxe clone to the Finder with
+  native toolbar/Media icons. Native Windows/Linux builds run; Linux packaged
+  CI 39263262485 passes. Mac notarization and additional narrow/WindowShade
+  screenshots are in progress. No stable release/tag is published yet; a
+  hidden draft stages unchanged matching engine sources. 4.1.1 is retained
+  for rollback. No production catalog, DNS or Apache changes.
+- The diagnostic reference guest was normally shut down; source mounts are
+  detached. Temporary notarization credentials are obtained from AustinLand
+  into a mode-600 temporary file and removed by the wrapper on completion.

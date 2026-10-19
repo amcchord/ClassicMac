@@ -111,6 +111,8 @@ fi
 VERSION="$(plutil -extract CFBundleShortVersionString raw "$PLIST")"
 BUILD="$(plutil -extract CFBundleVersion raw "$PLIST")"
 VERSION_MAJOR="${VERSION%%.*}"
+VERSION_REMAINDER="${VERSION#*.}"
+VERSION_MINOR="${VERSION_REMAINDER%%.*}"
 case "$VERSION_MAJOR" in
   ''|*[!0-9]*) die "Unexpected version $VERSION" ;;
 esac
@@ -165,6 +167,13 @@ if [ "$VERSION_MAJOR" -ge 4 ]; then
   log "Verifying included Iconfactory artwork and attribution"
   diff -r "$ROOT_DIR/Resources/Iconfactory" "$APP/Contents/Resources/Iconfactory" || \
     die "Bundled Iconfactory artwork or attribution differs from the release source"
+  if [ "$VERSION_MAJOR" -gt 4 ] || { [ "$VERSION_MAJOR" -eq 4 ] && [ "$VERSION_MINOR" -ge 2 ]; }; then
+    log "Verifying original Mac OS icon attribution and provenance"
+    cmp "$ROOT_DIR/platinum/macos-icons/README.txt" "$APP/Contents/Resources/Licenses/MacOS-icons.txt" || \
+      die "Mac OS icon attribution is missing or stale"
+    cmp "$ROOT_DIR/platinum/macos-icons/manifest.json" "$APP/Contents/Resources/Licenses/MacOS-icon-provenance.json" || \
+      die "Mac OS icon provenance is missing or stale"
+  fi
   ATI_HELP="$("$PPC_QEMU" -device ati-vga,help 2>&1)"
   for property in model x-accel-stats x-gl-renderer xres yres refresh_rate; do
     printf '%s\n' "$ATI_HELP" | grep -q "$property" || \

@@ -94,6 +94,24 @@ enum DebugSnapshots {
         case "start": if let id = store.selectedID, let vm = store.vms.first(where: { $0.id == id }) { QEMUManager.shared.start(vm) }
         case "collapse": (NSApp.orderedWindows.first { $0.isVisible } as? PlatinumWindow)?.toggleCollapse()
         default:
+            if step.hasPrefix("guest-size:"), let id = store.selectedID,
+               let vm = store.vms.first(where: { $0.id == id }),
+               let window = NSApp.windows.first(where: { $0.title == vm.name }) as? PlatinumWindow {
+                let dimensions = step.dropFirst(11).split(separator: "x").compactMap { Double($0) }
+                if dimensions.count == 2 {
+                    if window.state.isCollapsed { window.toggleCollapse() }
+                    var frame = window.frame
+                    let size = PlatinumWindow.frameSize(forContent: NSSize(width: dimensions[0], height: dimensions[1] + GuestWindows.toolbarHeight), kind: .document)
+                    frame.origin.y += frame.height - size.height; frame.size = size
+                    window.setFrame(frame, display: true)
+                    window.makeKeyAndOrderFront(nil)
+                }
+            }
+            if step == "guest-activate", let id = store.selectedID,
+               let vm = store.vms.first(where: { $0.id == id }) {
+                NSApp.windows.first(where: { $0.title == vm.name })?.makeKeyAndOrderFront(nil)
+                NSApp.activate(ignoringOtherApps: true)
+            }
             if step.hasPrefix("select:"), let n = Int(step.dropFirst(7)), store.vms.indices.contains(n) {
                 store.selectedID = store.vms[n].id
             }
