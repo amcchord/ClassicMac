@@ -15,3 +15,5 @@ button[data-icon]:disabled::before{opacity:.45}
 .titlebar::before{margin-left:20px}.titlebar::after{margin-right:20px}
 /* Keep icon/text controls on one line; the toolbar wraps whole controls. */
 button{white-space:nowrap}section.home>footer{flex-wrap:wrap;row-gap:8px}
+/* Leave room for both toolbar rows when the host limits window height. */
+#display{height:min(40vh,410px)}
