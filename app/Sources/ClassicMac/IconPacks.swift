@@ -215,10 +215,11 @@ enum ClassicIcon {
             } else if let bits = elements[spec.bits] {
                 let n = spec.size * spec.size
                 let mask = bits.count >= n / 4 ? Data(bits.suffix(n / 8)) : nil
+                let alpha = elements[spec.rgbMask]
                 if let eight = elements[spec.eight], eight.count >= n {
-                    result[spec.size] = indexed(eight, depth: 8, mask: mask, size: spec.size)
+                    result[spec.size] = indexed(eight, depth: 8, mask: mask, alphaMask: alpha, size: spec.size)
                 } else if let four = elements[spec.four], four.count >= n / 2 {
-                    result[spec.size] = indexed(four, depth: 4, mask: mask, size: spec.size)
+                    result[spec.size] = indexed(four, depth: 4, mask: mask, alphaMask: alpha, size: spec.size)
                 } else {
                     result[spec.size] = indexed(Data(bits.prefix(n / 8)), depth: 1, mask: mask, size: spec.size)
                 }
@@ -278,9 +279,10 @@ enum ClassicIcon {
         return image(pixels, size: size)
     }
 
-    private static func indexed(_ data: Data, depth: Int, mask: Data?, size: Int) -> CGImage? {
+    private static func indexed(_ data: Data, depth: Int, mask: Data?, alphaMask: Data? = nil, size: Int) -> CGImage? {
         let n = size * size
         let src = [UInt8](data), bitmask = mask.map { [UInt8]($0) }
+        let alpha = alphaMask.flatMap { $0.count >= n ? [UInt8]($0) : nil }
         var pixels = [UInt8](repeating: 0, count: n * 4)
         for p in 0..<n {
             let index: Int
@@ -290,12 +292,12 @@ enum ClassicIcon {
             default: index = Int(src[p / 8] >> (7 - p % 8) & 1)
             }
             let color = depth == 8 ? palette8[index] : depth == 4 ? palette4[index] : (index == 1 ? 0x000000 : 0xFFFFFF)
-            let visible = bitmask.map { $0[p / 8] >> (7 - p % 8) & 1 == 1 } ?? true
-            guard visible else { continue }
-            pixels[p * 4] = UInt8(color >> 16 & 0xFF)
-            pixels[p * 4 + 1] = UInt8(color >> 8 & 0xFF)
-            pixels[p * 4 + 2] = UInt8(color & 0xFF)
-            pixels[p * 4 + 3] = 255
+            let a = Int(alpha?[p] ?? ((bitmask.map { $0[p / 8] >> (7 - p % 8) & 1 == 1 } ?? true) ? 255 : 0))
+            guard a > 0 else { continue }
+            pixels[p * 4] = UInt8(Int(color >> 16 & 0xFF) * a / 255)
+            pixels[p * 4 + 1] = UInt8(Int(color >> 8 & 0xFF) * a / 255)
+            pixels[p * 4 + 2] = UInt8(Int(color & 0xFF) * a / 255)
+            pixels[p * 4 + 3] = UInt8(a)
         }
         return image(pixels, size: size)
     }

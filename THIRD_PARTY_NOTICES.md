@@ -22,8 +22,8 @@ QEMU emulator as a whole is licensed under the GNU General Public License,
 version 2. Individual source and firmware files may carry compatible licenses,
 as described by QEMU's `LICENSE` file and their source headers.
 
-The exact corresponding source is reproducible from the ClassicMac 4.1.0
-source at <https://github.com/amcchord/ClassicMac/tree/v4.1.0>. The repository's
+The exact corresponding source is reproducible from the ClassicMac 4.2.0
+source at <https://github.com/amcchord/ClassicMac/tree/v4.2.0>. The repository's
 `scripts/build-qemu.sh` retrieves the pinned upstream QEMU 11.0.2 source and
 applies every ClassicMac modification stored in the repository.
 
@@ -134,3 +134,12 @@ are from RetroBoot commit `1860881266449ca2575061e0bd4055c1265cf217`.
 The patches are GPL-2.0-or-later, matching the modified QEMU integration.
 Original source notices are retained; provenance and hashes are in
 `screamer/README.md`. Corresponding prepared engine sources accompany releases.
+
+## Original Mac OS icons
+
+The CD, floppy, folder, clipboard, display, alert and other system artwork
+identified in `platinum/macos-icons/manifest.json` is copyright Apple Computer,
+Inc. Original Mac OS 9 resource members are preserved, including native
+32-bit colour and 8-bit alpha masks where available. These assets are separate
+from the MIT-licensed Platinum drawings and Iconfactory artwork. Provenance
+and attribution accompany every desktop package in its Licenses directory.

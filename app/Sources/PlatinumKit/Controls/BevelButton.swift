@@ -29,19 +29,7 @@ private struct BevelBody: View {
     }
 
     static func draw(_ p: PixelPainter, _ r: PixelRect, _ state: ControlState) {
-        let outline: RGB, light: RGB, shadow: RGB, face: RGB
-        switch state {
-        case .normal: (outline, light, shadow, face) = (Platinum.gray63, Platinum.white, Platinum.grayA5, Platinum.grayDE)
-        case .pressed: (outline, light, shadow, face) = (Platinum.gray3A, Platinum.gray73, Platinum.grayC5, Platinum.grayA5)
-        case .disabled: (outline, light, shadow, face) = (Platinum.grayB5, Platinum.grayF7, Platinum.grayCE, Platinum.grayE6)
-        }
-        p.frame(r, outline)
-        let i = r.inset(1)
-        p.fill(i, face)
-        p.hline(i.x, i.y, i.w - 1, light)
-        p.vline(i.x, i.y, i.h - 1, light)
-        p.hline(i.x + 1, i.y + i.h - 1, i.w - 1, shadow)
-        p.vline(i.x + i.w - 1, i.y + 1, i.h - 1, shadow)
+        Chrome.smallBevel(p, r, state: state)
     }
 }
 
@@ -50,6 +38,7 @@ public struct PlatinumBevelButton: View {
     let title: String?
     let icon: String?
     let action: () -> Void
+    @Environment(\.isEnabled) private var isEnabled
 
     public init(_ title: String? = nil, icon: String? = nil, action: @escaping () -> Void) {
         self.title = title
@@ -61,7 +50,14 @@ public struct PlatinumBevelButton: View {
         Button(action: action) {
             HStack(spacing: 4) {
                 if let icon { PlatinumIcon(icon, size: 16) }
-                if let title { Text(title) }
+                if let title {
+                    PixelCanvas { p, _ in
+                        p.text(title, font: .system, x: 0, baseline: 12,
+                               color: isEnabled ? Platinum.black : Platinum.disabledText)
+                    }
+                    .frame(width: PlatinumFonts.width(title, font: .system), height: 16)
+                    .accessibilityHidden(true)
+                }
             }
         }
         .buttonStyle(PlatinumBevelButtonStyle())

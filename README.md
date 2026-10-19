@@ -21,13 +21,23 @@
 ---
 
 <p align="center">
-  <img src="docs/screenshots/platinum/running-ati.png" width="720" alt="ClassicMac 4.1 in the Apple Platinum appearance, with Mac OS 9.2.2 Deluxe running on the emulated ATI Radeon">
+  <img src="docs/screenshots/platinum/running-ati.png" width="720" alt="ClassicMac 4.2 in the Apple Platinum appearance, with Mac OS 9.2.2 Deluxe running on the emulated ATI Radeon">
 </p>
 
 <p align="center">
   <img src="docs/screenshots/quadra800-macos81.png" width="410" alt="Mac OS 8.1 on the emulated Quadra 800">
   <img src="docs/screenshots/powermacg4-macos92.png" width="410" alt="Mac OS 9.2 on the emulated Power Mac G4">
 </p>
+
+## New in ClassicMac 4.2
+
+- **Original Mac OS 9 icons.** Native Icon Services CD, floppy, folder,
+  clipboard and other artwork replaces the drawn substitutes. Original
+  16/32-pixel strikes and 8-bit alpha are preserved on every desktop.
+- **A closer Platinum VM window.** Native Appearance Manager captures verify
+  full active/inactive/WindowShade frames, held title boxes, resize corners
+  and toolbar button edges at 1× and 2× with zero differing pixels. Compact
+  controls keep narrow VM windows usable. [Fidelity scope](docs/platinum-fidelity-audit.md).
 
 ## New in ClassicMac 4.1.1
 

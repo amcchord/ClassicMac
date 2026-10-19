@@ -12,6 +12,7 @@ public enum PlatinumDebug {
 public final class PlatinumWindowState: ObservableObject {
     @Published public var title: String
     @Published public var isCollapsed = false
+    @Published public var isActive = true
     /// A modal dialog is in front of this window; its content ignores clicks.
     @Published public var isBlockedByModal = false
 
@@ -55,13 +56,6 @@ public struct PlatinumWindowChrome<Content: View>: View {
     let boxes: Chrome.TitleBoxes
     let growable: Bool
     let content: Content
-    #if os(macOS)
-    @Environment(\.controlActiveState) private var activeState
-    private var windowIsActive: Bool { activeState == .key || activeState == .active }
-    #else
-    // An iPad scene shows one window at a time; it is always the active one.
-    private var windowIsActive: Bool { true }
-    #endif
     @Environment(\.platinumStaticRender) private var staticRender
 
     public init(state: PlatinumWindowState, kind: Chrome.WindowKind, boxes: Chrome.TitleBoxes = .none,
@@ -76,23 +70,19 @@ public struct PlatinumWindowChrome<Content: View>: View {
     public var body: some View {
         GeometryReader { geo in
             let w = Int(geo.size.width), h = Int(geo.size.height)
-            let active = windowIsActive || kind == .modal || PlatinumDebug.forceActive
+            let active = state.isActive || kind == .modal || PlatinumDebug.forceActive
             let titled = kind != .modal
             let maxTitle = max(0, w - 1 - 60 - (boxes.zoom ? 24 : 0))
             let fullTitle = titled ? Int(PlatinumFonts.width(state.title, font: .system)) : 0
             let titleWidth = min(fullTitle, maxTitle)
             let insets = Chrome.contentInsets(kind)
             let titleX = (w - 1 - titleWidth) / 2
-            let baseline = kind == .utility ? 11 : 15
+            let baseline = kind == .utility ? 11 : 16
 
             ZStack(alignment: .topLeading) {
                 PixelCanvas { p, r in
                     Chrome.window(p, r, kind: kind, active: active, titleWidth: titleWidth,
-                                  boxes: active ? boxes : .none, collapsed: state.isCollapsed)
-                    if growable && active && !state.isCollapsed {
-                        Chrome.growBox(p, x: r.w - 1 - insets.right - 15, y: r.h - 1 - insets.bottom - 15,
-                                       active: true)
-                    }
+                                  boxes: active ? boxes : .none, collapsed: state.isCollapsed, growable: growable)
                 }
 
                 if !state.isCollapsed {
@@ -108,6 +98,14 @@ public struct PlatinumWindowChrome<Content: View>: View {
                                     .onTapGesture { state.blockedClick() }
                             }
                         }
+                }
+
+                // The placard/content would otherwise paint over the grow box.
+                if growable && !state.isCollapsed {
+                    PixelCanvas { p, _ in Chrome.growBox(p, x: 0, y: 0, active: active) }
+                        .frame(width: 17, height: 17)
+                        .offset(x: CGFloat(w - 1 - insets.right - 15), y: CGFloat(h - 1 - insets.bottom - 15))
+                        .allowsHitTesting(false)
                 }
 
                 #if os(macOS)

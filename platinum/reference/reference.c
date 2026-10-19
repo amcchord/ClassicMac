@@ -7,10 +7,33 @@
 #include <Dialogs.h>
 #include <Events.h>
 #include <Appearance.h>
+#include <Icons.h>
+#include <Resources.h>
+#include <Files.h>
+#include <Folders.h>
+#include <stdio.h>
 #include <string.h>
 
 static WindowPtr window;
 static short page = 1;
+static void exportIconServices(void) {
+    OSType types[] = { 'cddr', 'flpy', 'fldr', 'ofld', 'CLIP', 'caut', 'note', 'stop', 'hdsk', 'pref', 'trsh', 'gnet' };
+    short i;
+    for (i = 0; i < 12; ++i) {
+        IconRef icon; IconFamilyHandle family; FSSpec spec;
+        Str255 name; short file; long size;
+        if (GetIconRef(kOnSystemDisk, kSystemIconsCreator, types[i], &icon) != noErr) continue;
+        if (IconRefToIconFamily(icon, kSelectorAllAvailableData, &family) != noErr) { ReleaseIconRef(icon); continue; }
+        name[0] = 14; BlockMoveData("Native-", name + 1, 7);
+        BlockMoveData(&types[i], name + 8, 4); BlockMoveData(".icns", name + 12, 5); name[0] = 16;
+        if (FSMakeFSSpec(0, 0, name, &spec) != noErr) FSpCreate(&spec, 'CMpr', 'icns', smSystemScript);
+        if (FSpOpenDF(&spec, fsWrPerm, &file) == noErr) {
+            size = GetHandleSize((Handle)family); HLock((Handle)family);
+            FSWrite(file, &size, *family); HUnlock((Handle)family); FSClose(file);
+        }
+        DisposeHandle((Handle)family); ReleaseIconRef(icon);
+    }
+}
 static void text(short x, short y, const char *s) {
     Str255 p; short n = strlen(s); p[0] = n;
     BlockMoveData(s, p + 1, n); MoveTo(x, y); DrawString(p);
@@ -29,6 +52,35 @@ static void draw(void) {
     SetRect(&area, 0, 0, 800, 600); EraseRect(&area);
     RGBColor black = { 0, 0, 0 }; RGBForeColor(&black);
     UseThemeFont(kThemeSystemFont, smSystemScript);
+    if (page == 3 || page == 4) {
+        ThemeWindowMetrics m; ThemeWindowAttributes a;
+        memset(&m, 0, sizeof(m)); m.metricSize = sizeof(m);
+        m.titleHeight = 16; m.titleWidth = 70;
+        a = kThemeWindowHasGrow | kThemeWindowHasFullZoom |
+            kThemeWindowHasCloseBox | kThemeWindowHasCollapseBox | kThemeWindowHasTitleText;
+        text(20, 25, "Native window frames: active / inactive / collapsed / modal");
+        for (i = 0; i < 4; ++i) {
+            SetRect(&r, 30 + (i % 2) * 380, 80 + (i / 2) * 220,
+                    350 + (i % 2) * 380, 220 + (i / 2) * 220);
+            DrawThemeWindowFrame(i == 3 ? kThemeDialogWindow : kThemeDocumentWindow,
+                &r, i == 1 ? kThemeStateInactive : kThemeStateActive, &m,
+                i == 2 ? a | kThemeWindowIsCollapsed : i == 3 ? 0 : a, NULL, 0);
+            if (i < 3 && page == 4) {
+                short widget;
+                for (widget = 0; widget < 3; ++widget)
+                    DrawThemeTitleBarWidget(kThemeDocumentWindow, &r,
+                        kThemeStateActive, &m,
+                        i == 2 ? a | kThemeWindowIsCollapsed : a, widget);
+            }
+        }
+        for (i = 0; i < 3; ++i) {
+            SetRect(&r, 30 + i * 150, 490, 130 + i * 150, 512);
+            ThemeButtonDrawInfo b; b.state = i == 0 ? kThemeStateActive : i == 1 ? kThemeStatePressed : kThemeStateInactive;
+            b.value = kThemeButtonOff; b.adornment = 0;
+            DrawThemeButton(&r, kThemeSmallBevelButton, &b, NULL, NULL, NULL, 0);
+        }
+        return;
+    }
     if (page == 2) {
         text(20, 25, "ClassicMac  Cancel  Shut Down  Get Info...  Name:");
         text(20, 55, "ABCDEFGHIJKLMNOPQRSTUVWXYZ");
@@ -69,6 +121,7 @@ int main(void) {
     Rect bounds; Str255 title; EventRecord event; Boolean done = false;
     InitGraf(&qd.thePort); InitFonts(); InitWindows(); InitMenus(); TEInit(); InitDialogs(NULL); InitCursor();
     RegisterAppearanceClient();
+    exportIconServices();
     title[0] = 18; BlockMoveData("Platinum Reference", title + 1, 18);
     SetRect(&bounds, 50, 70, 850, 670);
     window = NewCWindow(NULL, &bounds, title, true, zoomDocProc, (WindowPtr)-1, true, 0);
@@ -80,7 +133,7 @@ int main(void) {
         if (event.what == keyDown) {
             char key = event.message & charCodeMask;
             if (key == 'q' || key == 'Q') done = true;
-            else if (key == '1' || key == '2') { page = key - '0'; draw(); }
+            else if (key >= '1' && key <= '4') { page = key - '0'; draw(); }
         }
         if (event.what == mouseDown) {
             WindowPtr hit; short part = FindWindow(event.where, &hit);

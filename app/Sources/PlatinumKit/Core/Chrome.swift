@@ -347,7 +347,7 @@ public enum Chrome {
     /// kind: rbui's PT_TITLE_H + 1 at the top and PT_FRAME at the sides.
     public static func contentInsets(_ kind: WindowKind) -> (top: Int, left: Int, bottom: Int, right: Int) {
         switch kind {
-        case .document, .movableModal: return (21, 6, 6, 6)
+        case .document, .movableModal: return (22, 6, 6, 6)
         case .modal: return (6, 6, 6, 6)
         case .utility: return (14, 4, 4, 4)
         }
@@ -372,9 +372,9 @@ public enum Chrome {
     /// Box positions within a window of width w (frame, shadow excluded).
     public static func closeBoxOrigin() -> (x: Int, y: Int) { (4, 4) }
     public static func zoomBoxOrigin(width w: Int, collapse: Bool) -> (x: Int, y: Int) {
-        (w - (collapse ? 34 : 18), 4)
+        (w - (collapse ? 33 : 17), 4)
     }
-    public static func collapseBoxOrigin(width w: Int) -> (x: Int, y: Int) { (w - 18, 4) }
+    public static func collapseBoxOrigin(width w: Int) -> (x: Int, y: Int) { (w - 17, 4) }
 
     /// The window frame filling `full`, whose last row and column hold the
     /// one-pixel drop shadow. Draws the frame, the inset content well and,
@@ -383,15 +383,15 @@ public enum Chrome {
     @discardableResult
     public static func window(_ p: PixelPainter, _ full: PixelRect, kind: WindowKind, active: Bool,
                               titleWidth: Int, boxes: TitleBoxes = .none,
-                              collapsed: Bool = false) -> (x: Int, baseline: Int) {
+                              collapsed: Bool = false, growable: Bool = false) -> (x: Int, baseline: Int) {
         let f = PixelRect(full.x, full.y, full.w - 1, full.h - 1)
         let x0 = f.x, y0 = f.y, x1 = f.x + f.w - 1, y1 = f.y + f.h - 1
         // Outline plus a one-pixel drop shadow on the right and bottom.
-        p.frame(f, active ? Platinum.black : Platinum.gray63)
-        let shadow = active ? Platinum.black : Platinum.gray94
-        p.vline(x1 + 1, y0 + 1, f.h, shadow)
-        p.hline(x0 + 1, y1 + 1, f.w, shadow)
-        p.fill(f.inset(1), Platinum.frame)
+        p.frame(f, active ? Platinum.black : Platinum.gray73)
+        let shadow = active ? Platinum.black : Platinum.gray73
+        p.vline(x1 + 1, y0 + 2, f.h - 1, shadow)
+        p.hline(x0 + 2, y1 + 1, f.w - 1, shadow)
+        p.fill(f.inset(1), active ? Platinum.frame : Platinum.face)
         if active {
             // Raised outer bevel: white top/left, B5 bottom/right.
             p.hline(x0 + 1, y0 + 1, f.w - 2, Platinum.white)
@@ -412,8 +412,9 @@ public enum Chrome {
                 p.hline(c.x - 1, c.y + c.h + 1, c.w + 3, Platinum.white)
                 p.vline(c.x + c.w + 1, c.y - 1, c.h + 3, Platinum.white)
             }
-            p.frame(c.outset(1), active ? Platinum.black : Platinum.gray94)
+            p.frame(c.outset(1), active ? Platinum.black : Platinum.gray73)
             p.fill(c, Platinum.face)
+            if growable { growBox(p, x: c.x + c.w - 15, y: c.y + c.h - 15, active: active) }
         }
 
         guard kind != .modal else { return (0, 0) }
@@ -423,9 +424,9 @@ public enum Chrome {
         if active {
             var left = x0 + 9
             var right = x1 - 8
-            if boxes.close { left = x0 + 4 + 13 + 4 }
-            if boxes.collapse { right = x0 + f.w - 18 - 4 }
-            if boxes.zoom { right = x0 + f.w - (boxes.collapse ? 34 : 18) - 4 }
+            if boxes.close { left = x0 + 4 + 13 + 5 }
+            if boxes.collapse { right = x0 + f.w - 17 - 4 }
+            if boxes.zoom { right = x0 + f.w - (boxes.collapse ? 33 : 17) - 4 }
             func stripes(_ a: Int, _ b: Int) {
                 guard b - a >= 2 else { return }
                 for i in 0..<rows {
@@ -434,19 +435,25 @@ public enum Chrome {
                 }
             }
             if titleWidth > 0 {
-                stripes(left, tx - 5)
-                stripes(tx + titleWidth + 5, right)
+                stripes(left, tx - 3)
+                stripes(tx + titleWidth + 4, right)
             } else {
                 stripes(left, right)
             }
         }
-        return (tx, kind == .utility ? y0 + 11 : y0 + 15)
+        return (tx, kind == .utility ? y0 + 11 : y0 + 16)
     }
 
     /// One 13x13 title-bar box (close, zoom or collapse) with its top-left at (x, y).
     public enum TitleBox: Sendable { case close, zoom, collapse }
 
     public static func titleBox(_ p: PixelPainter, x: Int, y: Int, kind: TitleBox, pressed: Bool) {
+        if pressed {
+            let rows = kind == .close ? MeasuredChrome.WINDOW_CLOSE_PRESSED :
+                kind == .zoom ? MeasuredChrome.WINDOW_ZOOM_PRESSED : MeasuredChrome.WINDOW_COLLAPSE_PRESSED
+            MeasuredChrome.sprite(p, rows, x: x, y: y)
+            return
+        }
         let c: (Character) -> RGB = { MeasuredChrome.color($0)! }
         p.fill(x, y, 13, 13, c("c"))
         p.hline(x, y, 12, c("8")); p.vline(x, y, 12, c("8"))
@@ -464,19 +471,16 @@ public enum Chrome {
         }
     }
 
-    /// The grow (size) box: 15x15 in the bottom-right corner of a document
-    /// window's content, two overlapping squares.
+    /// The 15-pixel grow area plus its two-pixel inset border. Mac OS 9 uses
+    /// diagonal grips; the inactive well retains the notch without grips.
     public static func growBox(_ p: PixelPainter, x: Int, y: Int, active: Bool) {
-        p.fill(x, y, 15, 15, Platinum.face)
-        guard active else { return }
-        p.vline(x, y, 15, Platinum.black)
-        p.hline(x, y, 15, Platinum.black)
-        p.frame(PixelRect(x + 5, y + 5, 8, 8), Platinum.black)
-        p.hline(x + 6, y + 6, 6, Platinum.white)
-        p.vline(x + 6, y + 6, 6, Platinum.white)
-        p.frame(PixelRect(x + 3, y + 3, 6, 6), Platinum.black)
-        p.fill(x + 4, y + 4, 4, 4, Platinum.grayE6)
-        p.hline(x + 4, y + 4, 4, Platinum.white)
-        p.vline(x + 4, y + 4, 4, Platinum.white)
+        MeasuredChrome.sprite(p, active ? MeasuredChrome.WINDOW_GROW : MeasuredChrome.WINDOW_GROW_INACTIVE, x: x, y: y)
+    }
+
+    /// Appearance Manager small bevel button used by the VM placard bar.
+    public static func smallBevel(_ p: PixelPainter, _ r: PixelRect, state: ControlState) {
+        let rows = state == .pressed ? MeasuredChrome.SMALL_BEVEL_PRESSED :
+            state == .disabled ? MeasuredChrome.SMALL_BEVEL_DISABLED : MeasuredChrome.SMALL_BEVEL_NORMAL
+        MeasuredChrome.stretch(p, r, rows, repeatAt: 2)
     }
 }

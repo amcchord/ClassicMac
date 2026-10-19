@@ -1,33 +1,18 @@
-# ClassicMac 4.1.1 — stable release complete
+# ClassicMac 4.2.0 — native icons and Platinum VM frames
 
-Stable Latest: [v4.1.1](https://github.com/amcchord/ClassicMac/releases/tag/v4.1.1),
-published October 19, 2026. Release source/tag is
-`dfdf4c1ad2b7206b385c1b787d72aa9af5385c2b` (PRs #28 and #29).
-The release contains signed/notarized Apple Silicon Mac, Windows x64 and Linux
-x64 binaries, matching prepared engine sources and SHA256SUMS (ten assets).
-Fresh anonymous downloads of all nine archives match the published manifest.
+User authorized original classic Mac OS icons, a running-VM window fidelity
+pass, merge and stable release. Baseline main ecdda03 / stable v4.1.1.
+Task: worktrees/native-platinum-icons, branch codex/native-platinum-icons.
+Root's unrelated gxmetal work and user guest remain untouched.
 
-Quake III Arena Demo with ATI Radeon now receives mouse motion/buttons in
-menus and gameplay, and Finder input is restored after exit. Radeon startup
-initializes the idle-clean state expected by Mac OpenGL, restoring the id intro
-cadence. Fresh SuperDeluxe tests pass initial/replay movies, menu clicks,
-aim/fire, Finder restoration and soundtrack activity. Input was simulated
-through the native display protocol; physical trackpad/speaker capture was not
-part of qualification.
+Original System/Finder/Monitors icon resource members are being extracted
+read-only from the available public SuperDeluxe v2 Mac OS 9.2.2 image.
+Record source fork/member hashes and preserve native 16/32-pixel color and
+mask data; Apple artwork must be identified separately from MIT drawings.
+A disposable public OS9 fixture in output/4.2.0/reference-disk.img runs the
+extended native Appearance Manager reference utility for full window frames.
+Source image is mounted read-only on disk10; detach after extraction.
 
-Integrated checks pass: 125 Swift tests (two optional Copland fixture skips),
-12 desktop tests, clean engine preparation/build and display/GL/device gates.
-Final Windows/Linux CI and exact released-package Proxmox checks pass, including
-restart, native paste and clean shutdown; Linux also passes 9p host read/write.
-Mac signatures, notarization, staples, Gatekeeper and package checks pass.
-See [release verification](../4.1.1-validation.md) for exact evidence and limits.
-
-Dedicated QA VMs 170/171 are stopped and retained. Windows QA auto-login,
-stored password and scheduled task are removed; the read-only source mount is
-detached. User gxmetal work, machines and unrelated worktrees are preserved.
-No Library catalog, DNS or Apache changes were made.
-
-No release work remains. Retain stable v4.1.0 and its assets for rollback:
-`gh release edit v4.1.0 --latest`, then record the reason in 4.1.1 notes.
-Task worktree and ignored qualification output remain under
-`worktrees/q3-input-cinematic` for support and reproducibility.
+Next: finish icon integration on Mac/desktop, extend independent pixel gates,
+inspect VM states/screenshots, package/sign/notarize all platforms and verify
+stable release downloads. Retain 4.1.1 and its assets for rollback.

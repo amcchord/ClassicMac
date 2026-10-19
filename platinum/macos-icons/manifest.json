@@ -1,0 +1,1057 @@
+{
+  "origin": "Native Mac OS 9.2.1 Icon Services; additional Mac OS 9.2.2 System / Finder / Monitors resources",
+  "source_fixture": "public OS9 fixture / SuperDeluxe v2; resource images mounted read-only",
+  "copyright": "Apple Computer, Inc.; these assets are not MIT licensed",
+  "sources": {
+    "Control Panels/Monitors": {
+      "resource_fork_sha256": "4edae98aa6ae9a19d1d0ddbd2b2cc553d5b00751715a63684be56d019bf20be9",
+      "version": "8.6.3"
+    },
+    "Finder": {
+      "resource_fork_sha256": "b13e0d5fc138b312c7bb0486920ff7ec432d53d55f55e34c102df9e030796677",
+      "version": "9.2"
+    },
+    "System": {
+      "resource_fork_sha256": "c02a172aca3e6014c24d13d964751a5e38e70db3d4c429b73e96a2e9d933c1c6",
+      "version": "9.2.2"
+    }
+  },
+  "icons": {
+    "cd": {
+      "sizes": [
+        16,
+        32
+      ],
+      "icns_sha256": "7736e1b67d8c97c946e3ecf97194965ae7c07566030b3ea67d1a33f48e9e40d5",
+      "icon_services_type": "cddr",
+      "members": [
+        {
+          "type": "icm#",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "04c4ab514b5ffbb0825f2fee39098318601a1bcd11400fbe80618be0fe305371"
+        },
+        {
+          "type": "icm8",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "2dd872fe75aaff2328fbc0a65328d92b0560f1b0b843190a92f1d3d3c058eadd"
+        },
+        {
+          "type": "ics#",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "de4e0e6f275b0d3f026d253117c3e91d3254da27d296c88e37ca7be02a57a8d4"
+        },
+        {
+          "type": "ics8",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "fb65c848b18cf95d76558ba43e0c22c987a470ec7400885bd045f927c1fd2d3a"
+        },
+        {
+          "type": "is32",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "e76cdedcacd3fbe2105cd443a3917552dfdb3f66f1c774908a5c74a3eed6a8af"
+        },
+        {
+          "type": "s8mk",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "8cc2051843eff4882abf449bbc3dc523549647e057d60719dc13a22318cec7da"
+        },
+        {
+          "type": "ICN#",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "026c2689833ede4f7f203791d382b94069f3333aba1f7e4af5374768a53b89e1"
+        },
+        {
+          "type": "icl8",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "0b2f44f8444ab5855049ed3400f575808172cec92b741ac2598bea64886ab25c"
+        },
+        {
+          "type": "il32",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "67e1edceea9eb040aff0d23085cb373d1b34bcc7ebf103020f26478b3f1df813"
+        },
+        {
+          "type": "l8mk",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "9ebabecd68e6fca64c6a29137f9f12fa8b10278427367be8f589cc8b0f63339e"
+        }
+      ]
+    },
+    "disk": {
+      "sizes": [
+        16,
+        32
+      ],
+      "icns_sha256": "00ef306cf984e100f2efa0fd8be311e83ad107779165b49249e003034d29a492",
+      "icon_services_type": "flpy",
+      "members": [
+        {
+          "type": "icm#",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "3a7c7b45cdb5a0a025dd768081412f0122bc8d9ac4b3d3b18baa583429f9fb5a"
+        },
+        {
+          "type": "icm4",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "cf7197cb5113b6532da398cca07fc81859f2789e1f5c9b52d29bac1294fcc3d5"
+        },
+        {
+          "type": "icm8",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "33816191e5e9714a1499db3c39157b10585d90ed8eff92bbe09698249aa2fbbf"
+        },
+        {
+          "type": "ics#",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "c10bd337329e07e993a8f5cfd05ba75f17a4f03290bc4493a075b2a81456d996"
+        },
+        {
+          "type": "ics4",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "a18557f2e39751fb507c0668324147c5770a92b3c924c270608b2a504e048843"
+        },
+        {
+          "type": "ics8",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "2ec383b92c4192859c89140dd94d2d8ccf1681c7ee4af97c659aab0e6e1fd43b"
+        },
+        {
+          "type": "is32",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "48ff53249650ab8ab2282dd52a6b0a12db5abb8f47d581f796333a6d6528b580"
+        },
+        {
+          "type": "s8mk",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "953557750ed7926499b5ae30f2d34c1d89b68ae33cb81b56159acfef7c715de3"
+        },
+        {
+          "type": "ICN#",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "2692b955f7f07eec404cbac5a0c7da3ee89421810b372b09024d10130f2449fd"
+        },
+        {
+          "type": "icl4",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "1a8296de55cf44334f657a3fbc4999b83436f492090140138b219956da52e9f8"
+        },
+        {
+          "type": "icl8",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "dd9d84fa25a8059b674b370c70ca5c43f254ad2b4c93eb989e1696c5bc9c7b50"
+        },
+        {
+          "type": "il32",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "da88b66f76976f658aa27169992c5ab95f14dee9e76becf98cbe491174a19285"
+        },
+        {
+          "type": "l8mk",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "fb641d8026a8b8ce10664799178730ad9c1ba4be02fd5f9001734996342c6f60"
+        }
+      ]
+    },
+    "folder": {
+      "sizes": [
+        16,
+        32
+      ],
+      "icns_sha256": "2f741ff1f3ed428ee199ed3a4b8a66e18bd846b796297cc68f9f910ab16e89c5",
+      "icon_services_type": "fldr",
+      "members": [
+        {
+          "type": "icm#",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "d9165a3e05a6acb4f77b06561d819a815b3c3a445dafd4db81cfa1f3191d0fa8"
+        },
+        {
+          "type": "icm4",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "e9726b3017569cc85144a2628e77fcf3a7236a80497233d0fde12b256cb50233"
+        },
+        {
+          "type": "icm8",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "892d9ad7ebfc3aac92474aa1a747f143db9bc2286bf3e675d092827ba6a16534"
+        },
+        {
+          "type": "ics#",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "ec5cb2a8f96e6dadf6997214518c6cbd895ddc822d118eb953059954e8418af7"
+        },
+        {
+          "type": "ics4",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "38422a0325bc701688bb7005ad173b7a74ea51044387fa278a20aab6def6cb0c"
+        },
+        {
+          "type": "ics8",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "2ad096a2584d4e98a1725800aa8ab54f4a7a02955715a200ef5c5fbd97dfc031"
+        },
+        {
+          "type": "is32",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "12417aec9a318250a765aa8287b345247e9683d96250361e4b819a89bbf29a0a"
+        },
+        {
+          "type": "s8mk",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "77e7027d73851c2265d5924056854ff8c042b16b193083fc1234e419f00bdb6e"
+        },
+        {
+          "type": "ICN#",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "f8b3abfd2229c1eb725d248b004622820cff6f9cf46ec88cfdd1edbe13c1b23d"
+        },
+        {
+          "type": "icl4",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "56fe6b5d8f3dd7708ae087a9138e9994d427b95e66ae616cdb18028c32ad1288"
+        },
+        {
+          "type": "icl8",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "8df52fccc2d27c3a6b7f4e3a0629618a70823829f712cb361f3c039a15a26fc9"
+        },
+        {
+          "type": "il32",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "9fe4540ae9b186986b1831b2f1bfae6b396b3abf757a962bc6778e57c927f9dd"
+        },
+        {
+          "type": "l8mk",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "960a70bcb816e429078ab9be6e2fb06a4089ffeaa480d08249a5fc1488c18745"
+        }
+      ]
+    },
+    "folder_open": {
+      "sizes": [
+        16,
+        32
+      ],
+      "icns_sha256": "8c202679b36416783d90d56e5f2136e0f171de9cc2f21f8138a10fcd605ea3f4",
+      "icon_services_type": "ofld",
+      "members": [
+        {
+          "type": "icm#",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "645788112157e8ba4cbb2f7b643edb24e93ae40c8862d3fa1e8291837df33f6a"
+        },
+        {
+          "type": "icm4",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "d7fe2e0166bb368074458d65b84fb3bf0d2b4ecc35662e330122a0dfe5022321"
+        },
+        {
+          "type": "icm8",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "33c48009efe4a9524165a97fc8c4877dae373390f6f7d932b69c781417849c5e"
+        },
+        {
+          "type": "ics#",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "8bad0aac61d8f6adce428fdbc40add36d75c4d6721b3c265b932982ea88d20c7"
+        },
+        {
+          "type": "ics4",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "d18d7b639299ba084675b332bb14e6b6cc1c69f4eee4a09452b9e36e6350f746"
+        },
+        {
+          "type": "ics8",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "6f1ec875427d77e84f664c5966029b22fdf6c1105de3cfbcf9526782290bd5f6"
+        },
+        {
+          "type": "s8mk",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "01e30cdcd92e410bf8beb0fb46257012e6e37bf1ae8283b8adf70110d30a7930"
+        },
+        {
+          "type": "ICN#",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "7db7e3a7c6794a3e179aa5bd635d0e7e0e8d545a87fe903473384b7f60ddffe0"
+        },
+        {
+          "type": "icl4",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "d5d4c1865227ee403ce2c8d4148ed8323f4b6f18c75e9516ed5a4ec0bd166cb0"
+        },
+        {
+          "type": "icl8",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "5c60e9f12a2d57e71f9e599f2ce5388a34fdfb4c949a167e9ea8a1cfe658f576"
+        },
+        {
+          "type": "l8mk",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "3eb64c6316d17556cac26c5377762c26d03ca6e52ba1300e11f5ea9f9ad01b5c"
+        }
+      ]
+    },
+    "library": {
+      "sizes": [
+        16,
+        32
+      ],
+      "icns_sha256": "7e9b41726bc743ee19834484582bc363dbf423d3a711f76c39ba646a7cf063b6",
+      "members": [
+        {
+          "type": "ics#",
+          "id": -3970,
+          "source": "System",
+          "container": "ics#",
+          "sha256": "4c6d3804bd4ae97cddd7b849092a86eb7570727b78a86ce32b7510388a3f9648"
+        },
+        {
+          "type": "ics4",
+          "id": -3970,
+          "source": "System",
+          "container": "ics4",
+          "sha256": "e5a5a1f0989f3552f478064f6f17f552b8b432793504bc1975318d21c617bc90"
+        },
+        {
+          "type": "ics8",
+          "id": -3970,
+          "source": "System",
+          "container": "ics8",
+          "sha256": "f25db1add22699f94f1cc2b6f11b37bc1d8ab44012fe6173e950bc532e180ef6"
+        },
+        {
+          "type": "ICN#",
+          "id": -3970,
+          "source": "System",
+          "container": "ICN#",
+          "sha256": "ab675e269a4f3131d8ac56b81b36b854acdcfe995f1e2e55519a584d1a9f6d07"
+        },
+        {
+          "type": "icl4",
+          "id": -3970,
+          "source": "System",
+          "container": "icl4",
+          "sha256": "1bbadd03d1e5d17741025beaa9f27d8e4b5918968dcf16331574bf6e0147c074"
+        },
+        {
+          "type": "icl8",
+          "id": -3970,
+          "source": "System",
+          "container": "icl8",
+          "sha256": "a9e60c9213c46cefd20de95ac4475e50cdb96a02953c08b9cc68e7343b17add3"
+        }
+      ]
+    },
+    "web": {
+      "sizes": [
+        16,
+        32
+      ],
+      "icns_sha256": "0084b8af969951f00d07dfa236982cadeea3a2964803e5923441af1f5e8809a5",
+      "icon_services_type": "gnet",
+      "members": [
+        {
+          "type": "ics#",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "4826164ebfb760e6c88f2942350350f0475b40206455af88c65be91599f07c1d"
+        },
+        {
+          "type": "ics8",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "0be04b4427ad732bb45881faa1a872ebf0259e693514d2ff260f8e4170c99ebc"
+        },
+        {
+          "type": "is32",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "69dcef903ac42df62410c07187afaec39693d743c28a27ca63499f4e2fec80fe"
+        },
+        {
+          "type": "s8mk",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "df313077ac5cd682d27ac22aeda395713943241c6a11af2ea876060ebf04aab2"
+        },
+        {
+          "type": "ICN#",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "0113f3008fcc4f6d74bcfb3ef1790915c5d6af369cb849005331239e3b482d42"
+        },
+        {
+          "type": "icl8",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "96d043d4a512e6b54ef396081bb26fc5c54bc12e13f1ef028d8388a7874a535e"
+        },
+        {
+          "type": "il32",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "eb045c3f0f0bf079d1950fe5254edb5fead6282444139f3239e39677d6097e39"
+        },
+        {
+          "type": "l8mk",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "5c4e9baca559bb54e33d04e58ff15bcadaa5303852560517914b90083c9bebbe"
+        }
+      ]
+    },
+    "display": {
+      "sizes": [
+        16,
+        32
+      ],
+      "icns_sha256": "8e67e338429678e6df26d2c327860a431b5d47a6b629bcae67c667b7444dbb2c",
+      "members": [
+        {
+          "type": "ics#",
+          "id": 128,
+          "source": "Control Panels/Monitors",
+          "container": "ics#",
+          "sha256": "33837dc783f385882c6ce94dd42c264dc94926bbf044f04519c153ccba90fa5d"
+        },
+        {
+          "type": "ics4",
+          "id": 128,
+          "source": "Control Panels/Monitors",
+          "container": "ics4",
+          "sha256": "1f37477ca696fcda73cdf270878ac94388944afc1d3412d7a83322ed6ccb67f7"
+        },
+        {
+          "type": "ics8",
+          "id": 128,
+          "source": "Control Panels/Monitors",
+          "container": "ics8",
+          "sha256": "7cb962e45492fda2ebd4643791afe3b6f253889a4f550c046aae44adbbbcb55d"
+        },
+        {
+          "type": "ICN#",
+          "id": 128,
+          "source": "Control Panels/Monitors",
+          "container": "ICN#",
+          "sha256": "0acdfbda8f5b5e97cdb95d303bd4e67588779775135a7272ea36c8a4bc01bc53"
+        },
+        {
+          "type": "icl4",
+          "id": 128,
+          "source": "Control Panels/Monitors",
+          "container": "icl4",
+          "sha256": "f67288f1dd22fab1c298f7ad4a2a39bc695d440c2bf5ecd56e17f82010303d4c"
+        },
+        {
+          "type": "icl8",
+          "id": 128,
+          "source": "Control Panels/Monitors",
+          "container": "icl8",
+          "sha256": "d548397d251e5d7a1afa792107fa0c25470a79662c9c488da0261dc510666aca"
+        }
+      ]
+    },
+    "clipboard": {
+      "sizes": [
+        16,
+        32
+      ],
+      "icns_sha256": "a718847c03b149df11d10e758e4405358612205345a63d6e20229d9fd83a42e8",
+      "icon_services_type": "CLIP",
+      "members": [
+        {
+          "type": "ics#",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "9ffc3a80ee46e369b501a4fc6d72a53476f26bf9946237224409b9c4948674a4"
+        },
+        {
+          "type": "ics8",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "17eb7a125b33f728629d1ef041327bdc5d098e6f6b665005bffcf3b79f56ba93"
+        },
+        {
+          "type": "is32",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "f438fdd500c16540ee4bbe323c5f162dbe7517b5e64d34af594cf4ac71088e8d"
+        },
+        {
+          "type": "s8mk",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "5ca514bcdeac168929b97373b543e5286e9ed96e85bc639c4a94d3fff09b107f"
+        },
+        {
+          "type": "ICN#",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "434ea17b1882f69e568d870bf1d2c754a87e922faa55b4d1cf1a07233166f340"
+        },
+        {
+          "type": "icl8",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "7907d32eeb8ee38c16a7ffad7f6cd10e871df497791e8ed179df29d8ee43238a"
+        },
+        {
+          "type": "il32",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "cb56eeebe0a50c455720548c891898bda675ee99e47e6087c6c17e7e3558e0af"
+        },
+        {
+          "type": "l8mk",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "7a8761f77ddcf273ed7d4a79673b2d6bf3f4b5925d5515f4d5c1ae8dea09f98a"
+        }
+      ]
+    },
+    "caution": {
+      "sizes": [
+        16,
+        32
+      ],
+      "icns_sha256": "187b1bc79a485f0558c6a72536c33dcf69420ee887148e893d00da8c482cc358",
+      "icon_services_type": "caut",
+      "members": [
+        {
+          "type": "ics#",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "378216bb36ce3ce59379aa22c05904fb0ffe5c58221319fba3117f1b06d1782e"
+        },
+        {
+          "type": "ics4",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "d7ba57ec1be6b88019d0792305d5c569a214b821cd25ebbbd1fa54c09b0230a5"
+        },
+        {
+          "type": "ics8",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "77e8d5e6b102aaa7b3cff9bbc7a947dbad157f62cf2380bb4461c8f3feab1268"
+        },
+        {
+          "type": "ICN#",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "c2c07db66f4236f6cbd90c7e4c1edf084608e600356a4c66bc2ff81fd524ff05"
+        },
+        {
+          "type": "icl4",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "09434ac099e859d9ac93b5a97daec343d57d8dc6256582ba020be23b34bd2d24"
+        },
+        {
+          "type": "icl8",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "f77ad056d25d981e8acefdf974a05f85ebcc05175b705876ee52fdc2b60f7c40"
+        }
+      ]
+    },
+    "stop": {
+      "sizes": [
+        16,
+        32
+      ],
+      "icns_sha256": "0207c0a5281f56ed54a7f6d394eb8e3b6c67f48ad6be60e2d2fec856ce773f14",
+      "icon_services_type": "stop",
+      "members": [
+        {
+          "type": "ics#",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "63e6120bb85fe1e33ca4a220752213845cb8c3938753419d538610c72ad3d11b"
+        },
+        {
+          "type": "ics4",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "17b3a27758e58025aebcdcdb5c7006b49257d171b55d719b8d64e75e3844ba4d"
+        },
+        {
+          "type": "ics8",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "1ae54475c58d5fd39c2ae17fbaf5fe5bf4d4069dd9021c9eb2d1a9732034dd75"
+        },
+        {
+          "type": "ICN#",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "b005d6bed06ce40acec7379a3f73bb66e6695029881a2ea99f5c12da26bbfcd5"
+        },
+        {
+          "type": "icl4",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "1a91c4d48e01275a8c984ab8f57b08179b9cc12b6642360dd002d3a294536737"
+        },
+        {
+          "type": "icl8",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "60ea95501f36e5dac97ed5bc4c3d246994b1101f2a2ab67472255b9a13e88648"
+        }
+      ]
+    },
+    "note": {
+      "sizes": [
+        16,
+        32
+      ],
+      "icns_sha256": "0cf9f5d0721305768a3e416443471500d56cf7cff7db099e7db7f087fd401cee",
+      "icon_services_type": "note",
+      "members": [
+        {
+          "type": "ics#",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "d7bb181e8d52ab7c0038ec4f4d87fd9d64c9f2d314c5d8fee7031d7a414aadd8"
+        },
+        {
+          "type": "ics4",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "e60889c248a7ccc88963b9e28f94b5549b26f851984b29e4af4a71083294288c"
+        },
+        {
+          "type": "ics8",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "8a87f1c05bf6ba9bcd3a4b8fe09d560d4ad7ea88331c1a3cc6f476e79a1423a0"
+        },
+        {
+          "type": "ICN#",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "771930fdf4b2496f6fcd00d0b008535491993bee9f12385bab855475e04c687d"
+        },
+        {
+          "type": "icl4",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "fa90fa5380d69714cf0b1b4b12ef3b089e3a2b4244f95007633b5600223b5e9e"
+        },
+        {
+          "type": "icl8",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "5c9b0eb9fd50911ca136d55db7919279bac9930780ee853e6db85e7d57acbf7d"
+        }
+      ]
+    },
+    "lock": {
+      "sizes": [
+        16,
+        32
+      ],
+      "icns_sha256": "0e45b89ae4a1e2f521061b29a9ba092d197a50dbbfb702991412df00b6a6d3ba",
+      "members": [
+        {
+          "type": "ics#",
+          "id": -3773,
+          "source": "System",
+          "container": "icns",
+          "sha256": "2ed0d7c356a8a8b454e23a5b823006b133c3cc6498054fca65ff03b35d480462"
+        },
+        {
+          "type": "ics4",
+          "id": -3773,
+          "source": "System",
+          "container": "icns",
+          "sha256": "57c6482726231a8fab8c72035953878a93c06d44e889490b519b6ce9950ef0b7"
+        },
+        {
+          "type": "ics8",
+          "id": -3773,
+          "source": "System",
+          "container": "icns",
+          "sha256": "07048dda3f7b8c87bb579e1d926a12a56e9f97f8bec03e848ead0c99473ecaf2"
+        },
+        {
+          "type": "is32",
+          "id": -3773,
+          "source": "System",
+          "container": "icns",
+          "sha256": "7ce251bdc39977a8288c49f65140c1c907f84ea7562eed4c14b9a747643649ae"
+        },
+        {
+          "type": "s8mk",
+          "id": -3773,
+          "source": "System",
+          "container": "icns",
+          "sha256": "ef292483f4bf064e5aada0362a4ca4d06386c3a0a53c784437c2800d2ac30bb4"
+        },
+        {
+          "type": "ICN#",
+          "id": -3773,
+          "source": "System",
+          "container": "icns",
+          "sha256": "5796bd9f028ddb02a5fbc96569dc1ad0246afca7df19aea1b865c92693e401c4"
+        },
+        {
+          "type": "icl4",
+          "id": -3773,
+          "source": "System",
+          "container": "icns",
+          "sha256": "a362f2289d191131f79773a690f78ef4c650fb286833f3782fb85c69fda06df4"
+        },
+        {
+          "type": "icl8",
+          "id": -3773,
+          "source": "System",
+          "container": "icns",
+          "sha256": "fe20bb07ecf7fded01d71ae6662548b027d7d14322346fbc4b4d213d61c7c7cb"
+        },
+        {
+          "type": "il32",
+          "id": -3773,
+          "source": "System",
+          "container": "icns",
+          "sha256": "ae17d264a7b41ae019131b60d2ff8c14f82a5f0776cc5deb374f56ecbe123195"
+        },
+        {
+          "type": "l8mk",
+          "id": -3773,
+          "source": "System",
+          "container": "icns",
+          "sha256": "89ce57fcf3199fd006ee046d90bc62ad78cbfc06a69ab6d38ae6f66569d2eba3"
+        }
+      ]
+    },
+    "trash": {
+      "sizes": [
+        16,
+        32
+      ],
+      "icns_sha256": "c61c4a4fb55f895b5d8253eabe582da4625593a446868f067f8459273964b6d4",
+      "icon_services_type": "trsh",
+      "members": [
+        {
+          "type": "icm#",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "871881cbb39544929311eb34eaeae1a6b4b37c8c08e7757e83807a683043031c"
+        },
+        {
+          "type": "icm4",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "968e749ed9f9f2e70827c14577040c6fabdc81a18323ac97d0397c9b1464da77"
+        },
+        {
+          "type": "icm8",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "996cf82839df9a2225399690c0c61256a0f86961c5c2071650b504e2566e8087"
+        },
+        {
+          "type": "ics#",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "8d35282669e7341cb23eeb593ce1826bb2c32e1928d98921e077c7e246491b91"
+        },
+        {
+          "type": "ics4",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "eef2508e157a55cac17af322060c80ebb06c1969b778114800f927ee0cc6c023"
+        },
+        {
+          "type": "ics8",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "9852086bfb7ce67c6a82ef21c64989dc4ec1af277462f94a40ecb0d4e6b17cbc"
+        },
+        {
+          "type": "s8mk",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "856087ae68c896f072ee750c5435f29e3efebc81f169f65aeccb6ceab231dac9"
+        },
+        {
+          "type": "ICN#",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "bbc3893533891c4f0a65e58ed3a06bc8d74dcf182f6c09593f2211bd3b3e6c1b"
+        },
+        {
+          "type": "icl4",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "0e1f58a89f368d87dd4b0eeff6fba00b3191112a39c7144498bd7667516627b1"
+        },
+        {
+          "type": "icl8",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "5ad255d6aa6e5e0b3b7a7edbd0ca976f9740b8d771e975846dad0d16edeaaaaa"
+        },
+        {
+          "type": "l8mk",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "39b3a9f215976811c30401a44857d60d4e80b77036de268bd69d4ee6a7a31a7d"
+        }
+      ]
+    },
+    "harddisk": {
+      "sizes": [
+        16,
+        32
+      ],
+      "icns_sha256": "709dc33b022dc8c87472c882aa0483b2c278f1f01a7262e7406ae08471b4472a",
+      "icon_services_type": "hdsk",
+      "members": [
+        {
+          "type": "icm#",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "0cf6403e35169c4731396b388beef240c2f9661d296ef0b0cec82244ecf6c294"
+        },
+        {
+          "type": "icm4",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "a0571294285357bb0becfb686244b8b7aa96b608384f051b663dd54e75e70710"
+        },
+        {
+          "type": "icm8",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "2a36b09b0a7ef3e7d771e3fee69a6e822d8fcdf13fa926c0b99785ff092eac4e"
+        },
+        {
+          "type": "ics#",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "335acafb8f1c3a9af5918d6bb1eb27e43360a796102153a49acdd4abee3724ab"
+        },
+        {
+          "type": "ics4",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "e254d327677f950f23027dcd4b1a638fc5c5009a965f48e3983593a2d68c645c"
+        },
+        {
+          "type": "ics8",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "37b37085c0987f837428f958c9e15dabda1898f0b0d53a03b2e12c33dde8ac4c"
+        },
+        {
+          "type": "is32",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "8ace426209e90e216459bc936ba1dd4e2ca0cc96fd8191365ba1b1a46fad2b0a"
+        },
+        {
+          "type": "s8mk",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "9ea39161b59a75136a3881971f07c5073cd213bdec35a77c676fb25cfba0b218"
+        },
+        {
+          "type": "ICN#",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "289df6a2461909b120476c84305fb882bbe52efb089ba8df70bc205258ed3f7d"
+        },
+        {
+          "type": "icl4",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "38348abf69b6454be6fba72f54fd8af720ed33d8ccec4e9694827ac397f798db"
+        },
+        {
+          "type": "icl8",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "e0ee780c9c8dac787997010c44839a1a429e1164899fcde1ac009ce37b64c14c"
+        },
+        {
+          "type": "il32",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "6e9808ab84cda384c7273e0c837eb5affe75d39c73af451eae7b4b8d6e77d519"
+        },
+        {
+          "type": "l8mk",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "a56916493dd2f5b3baf7d359c0e741ad788e0ee36b1e45d56206911102adb2ad"
+        }
+      ]
+    },
+    "preferences": {
+      "sizes": [
+        16,
+        32
+      ],
+      "icns_sha256": "93e544f51b40293513fe6c923d6dd06a281018d814ddf99f1486fb7429164fce",
+      "icon_services_type": "pref",
+      "members": [
+        {
+          "type": "ics#",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "5593f1fdf66f839ab300ee8586c827a84eeeeed82d3e20f21bd81fa5bc974032"
+        },
+        {
+          "type": "ics8",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "a4ef83b6ac41ac01df9a400171be1956b2c9dace28b9e86f241cc857680125d3"
+        },
+        {
+          "type": "is32",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "e8e3a003fb518357977db9d148705a8e64fbcf4d4341ed0cfaedc813b08eee05"
+        },
+        {
+          "type": "s8mk",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "3965cce453f0dcc998e1fce12c50202bc89efebed5555794a5e57c576e063373"
+        },
+        {
+          "type": "ICN#",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "de25a0e7190d7d3201d97540a60bb16b87c4f2d1bc6c85ab878545bcc01ae9cb"
+        },
+        {
+          "type": "icl4",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "076a27c79e5ace2a3d47f9dd2e83e4ff6ea8872b3c2218f66c92b89b55f36560"
+        },
+        {
+          "type": "icl8",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "fdec7a10c28d4ec90f65ad990cfcc86259c5d2f7ab595269c5668fc386e858a4"
+        },
+        {
+          "type": "il32",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "1a06c90244b5a90bf88c290f394d2126f061a304ba0f1d50a904e50a22aa03dc"
+        },
+        {
+          "type": "l8mk",
+          "source": "Mac OS 9.2.1 Icon Services",
+          "container": "IconRefToIconFamily(kSelectorAllAvailableData)",
+          "sha256": "2d8c8c08c44c8764404d88d8aab0613ad18ce3834fd625d0d7da81886100ea09"
+        }
+      ]
+    },
+    "mac": {
+      "sizes": [
+        16,
+        32
+      ],
+      "icns_sha256": "ea4aead4f62c672b7e8718c3eec3c3b443faa9144ee6a103ac0e4ce574678a98",
+      "members": [
+        {
+          "type": "ics#",
+          "id": 3,
+          "source": "System",
+          "container": "ics#",
+          "sha256": "f20ab455f8b680e12e0977d25b9729f7c23beaaf8800db31a82582149cba226e"
+        },
+        {
+          "type": "ics4",
+          "id": 3,
+          "source": "System",
+          "container": "ics4",
+          "sha256": "f12919886b4925ccf0c9dc90bb6ec4bfe3d29ecd71590a63d9636f520b71cb9e"
+        },
+        {
+          "type": "ics8",
+          "id": 3,
+          "source": "System",
+          "container": "ics8",
+          "sha256": "5a70ebc46332760b082218c5674c9470fe30bf63b40f99adb949b6fed568872d"
+        },
+        {
+          "type": "ICN#",
+          "id": 3,
+          "source": "System",
+          "container": "ICN#",
+          "sha256": "90958e69e823630290d78e44e22c9f0aa7b18818668cf34c7deff92d3bd00233"
+        },
+        {
+          "type": "icl4",
+          "id": 3,
+          "source": "System",
+          "container": "icl4",
+          "sha256": "192d8612b2b327a22d92cb846d3066c428340515995ab81d127eee38edea8058"
+        },
+        {
+          "type": "icl8",
+          "id": 3,
+          "source": "System",
+          "container": "icl8",
+          "sha256": "da7e114a0ad35439da55b60f7388580db8d29f402f78587c8399cdc9fbc77523"
+        }
+      ]
+    }
+  }
+}

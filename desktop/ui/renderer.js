@@ -97,7 +97,7 @@ let downloading=false,pasting=false;
 const platform=await api.platform();
 $('share').hidden=platform.name==='win32';
 $('share').onclick=()=>action(()=>api.chooseShare(selected));
-$('about').onclick=()=>message(`ClassicMac ${platform.version} — ${platform.name==='win32'?'Windows':'Linux'}\n\nClassic Macintosh emulation with QEMU and the Platinum appearance.\n\nMac icons © The Iconfactory, included with permission. Fonts and appearance shared with RetroBoot.\n\nCopland remains available in the macOS edition. Host folder sharing requires Linux or macOS.`);
+$('about').onclick=()=>message(`ClassicMac ${platform.version} — ${platform.name==='win32'?'Windows':'Linux'}\n\nClassic Macintosh emulation with QEMU and the Platinum appearance.\n\nSystem icons © Apple Computer, Inc. Machine artwork © The Iconfactory, included with permission. Fonts and appearance shared with RetroBoot.\n\nCopland remains available in the macOS edition. Host folder sharing requires Linux or macOS.`);
 $('library').onclick=()=>action(async()=>{
  $('catalog').showModal();$('editions').textContent='Loading Library…';
  const rows=await api.catalog();$('editions').replaceChildren();

@@ -1,0 +1,62 @@
+{
+  "source": "native Mac OS 9.2.1 Appearance Manager; reference.c page 3 / page 4 held widgets",
+  "source_sha256": "ee58406f59704e0e00ebb362039650e0d0a1d699e4702fe8ab8794033f63df9f",
+  "pressed_source_sha256": "892a0141c8aae8cddd815ab07f846688ab6303492f3a2cdc5287b39f5226decf",
+  "framebuffer": [
+    1024,
+    768,
+    32
+  ],
+  "content_origin": [
+    50,
+    70
+  ],
+  "native_metrics": {
+    "titleHeight": 16,
+    "titleWidth": 70
+  },
+  "rectangles": {
+    "os9-window-active": [
+      74,
+      128,
+      407,
+      297
+    ],
+    "os9-window-inactive": [
+      454,
+      128,
+      787,
+      297
+    ],
+    "os9-window-collapsed": [
+      74,
+      348,
+      407,
+      371
+    ],
+    "os9-bevel-normal": [
+      80,
+      560,
+      180,
+      582
+    ],
+    "os9-bevel-pressed": [
+      230,
+      560,
+      330,
+      582
+    ],
+    "os9-bevel-disabled": [
+      380,
+      560,
+      480,
+      582
+    ],
+    "os9-grow": [
+      385,
+      275,
+      400,
+      290
+    ]
+  }
+}

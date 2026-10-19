@@ -121,6 +121,51 @@ final class PlatinumRenderTests: XCTestCase {
         }
     }
 
+    func testNativeDocumentWindowPixels() throws {
+        for scale in [1, 2] {
+            for (name, active, collapsed) in [("active", true, false), ("inactive", false, false), ("collapsed", true, true)] {
+                try assertReference(bitmap(333, collapsed ? 23 : 169, scale: scale) { p, r in
+                    Chrome.window(p, r, kind: .document, active: active, titleWidth: 70,
+                                  boxes: .document, collapsed: collapsed, growable: true)
+                    if active {
+                        Chrome.titleBox(p, x: 4, y: 4, kind: .close, pressed: false)
+                        Chrome.titleBox(p, x: 299, y: 4, kind: .zoom, pressed: false)
+                        Chrome.titleBox(p, x: 315, y: 4, kind: .collapse, pressed: false)
+                    }
+                    if active && !collapsed { Chrome.growBox(p, x: 311, y: 147, active: true) }
+                }, name: "os9-window-" + name, scale: scale)
+            }
+        }
+    }
+
+    func testNativeVMToolbarAndHeldTitleBoxes() throws {
+        for scale in [1, 2] {
+            for (name, state) in [("normal", ControlState.normal), ("pressed", .pressed), ("disabled", .disabled)] {
+                try assertReference(bitmap(100, 22, scale: scale) { Chrome.smallBevel($0, $1, state: state) },
+                                    name: "os9-bevel-" + name, scale: scale)
+            }
+            for (name, kind) in [("close", Chrome.TitleBox.close), ("zoom", .zoom), ("collapse", .collapse)] {
+                try assertReference(bitmap(13, 13, scale: scale) { p, _ in
+                    Chrome.titleBox(p, x: 0, y: 0, kind: kind, pressed: true)
+                }, name: "os9-" + name + "-pressed", scale: scale)
+            }
+        }
+    }
+
+    func testGuestContentCannotCoverNativeGrowBox() throws {
+        for scale in [1, 2] {
+            let state = PlatinumWindowState(title: "ClassicMac")
+            let view = PlatinumWindowChrome(state: state, kind: .document, boxes: .document, growable: true) {
+                Color.red
+            }.frame(width: 333, height: 169).environment(\.platinumStaticRender, true)
+            let renderer = ImageRenderer(content: view); renderer.scale = CGFloat(scale)
+            let whole = try XCTUnwrap(renderer.cgImage)
+            let grow = try XCTUnwrap(whole.cropping(to: CGRect(x: 311 * scale, y: 147 * scale,
+                                                              width: 15 * scale, height: 15 * scale)))
+            try assertReference(grow, name: "os9-grow", scale: scale)
+        }
+    }
+
     func render<V: View>(_ view: V, name: String) throws -> CGImage {
         let renderer = ImageRenderer(content: view.environment(\.platinumStaticRender, true))
         renderer.scale = 2

@@ -31,7 +31,7 @@ struct MediaDrawerView: View {
             PlatinumGroupBox("CD") { drive(.disc, icon: "cd") }
             PlatinumGroupBox("ClassicMac Tools") {
                 VStack(alignment: .leading, spacing: 6) {
-                    drive(.tools, icon: "wrench")
+                    drive(.tools, icon: "cd")
                     Text(config.machineFamily == .powerMacG4
                          ? "Classic Mac utilities. Tools mounts at startup; while the Mac starts from an installer CD it waits for the first hard-disk startup."
                          : "Classic Mac utilities, including StuffIt Expander and Disk Copy.")

@@ -32,6 +32,7 @@ struct AboutView: View {
                 credit("Firmware", "OpenBIOS; Copland on DingusPPC")
                 credit("Sharing", "classicvirtio by Elliot Nunn")
                 credit("Appearance", "Platinum fonts, icons and controls shared with RetroBoot")
+                credit("System icons", "Original Mac OS 9 artwork © Apple Computer, Inc.")
                 if IconPacks.shared.isUsingIconfactory {
                     credit("Mac icons", "The Iconfactory — used with permission")
                 }

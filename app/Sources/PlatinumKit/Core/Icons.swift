@@ -1,9 +1,10 @@
 import SwiftUI
 import CoreGraphics
 import Foundation
+import ImageIO
 
-/// Original MIT Platinum icons (platinum/icons/*.icons and the ClassicMac
-/// additions in `ClassicMacIcons`), rendered from their palette grids.
+/// Native Mac OS resource artwork, with original Platinum drawings for actions
+/// without a matching system icon. Iconfactory/user overrides take precedence.
 public enum PlatinumIcons {
     private static let lock = NSLock()
     nonisolated(unsafe) private static var cache: [String: CGImage] = [:]
@@ -48,6 +49,12 @@ public enum PlatinumIcons {
         defer { lock.unlock() }
         if let override = overrides[key] { return override }
         if let cached = cache[key] { return cached }
+        if let encoded = MacOSIconAssets.png[key], let data = Data(base64Encoded: encoded),
+           let source = CGImageSourceCreateWithData(data as CFData, nil),
+           let image = CGImageSourceCreateImageAtIndex(source, 0, nil) {
+            cache[key] = image
+            return image
+        }
         guard let rows = extra[key] ?? PlatinumAssets.icons[key],
               let image = render(rows) else { return nil }
         cache[key] = image
@@ -58,7 +65,7 @@ public enum PlatinumIcons {
         let key = "\(name)@\(size)"
         lock.lock()
         defer { lock.unlock() }
-        return extra[key] != nil || PlatinumAssets.icons[key] != nil
+        return MacOSIconAssets.png[key] != nil || extra[key] != nil || PlatinumAssets.icons[key] != nil
     }
 
     /// Renders palette rows ("." transparent) to a premultiplied RGBA image.

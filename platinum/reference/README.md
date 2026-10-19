@@ -59,3 +59,26 @@ It does **not** certify all whole-window layouts, text wrapping, SwiftUI Text
 rasterization, menus, scrollbars, floating/modal windows or indeterminate
 animation. These require additional native references and regression tests.
 Do not describe the entire application as pixel-perfect based on this gate.
+
+## Mac OS 9 document window gate (4.2)
+
+Pages 3 and 4 capture native Appearance Manager document frames and held title
+widgets. Page 3 uses titleHeight 16/titleWidth 70, a 320×140 content rectangle
+and active/inactive/collapsed states. It also draws 100×22 small bevel buttons
+in normal/pressed/disabled states. Page 4 uses DrawThemeTitleBarWidget to draw
+the held widgets. Its widget-active state is the held state; it must not be
+confused with the enclosing window's active state. Source framebuffer hashes
+and exact rectangles are in os9-window-reference.json beside the fixtures.
+
+The gate covers the entire document border, stripe gaps, content offsets,
+shadow, inactive palette, grow-box notch, all three held title boxes and VM
+toolbar button edges at 1× and 2× with zero differing pixels. A composed SwiftUI
+view test paints opaque content to ensure it cannot hide the native grow box.
+Charcoal system glyphs retain the separate 95-character pixel/advance gate.
+Other fonts, menus and untested utility/modal layouts retain the earlier
+coverage limits; this is not an unrestricted whole-application certificate.
+
+The utility also exports the native standard Icon Services families into its
+working directory (Startup Items when launched at startup) without resampling.
+Icon Services also invokes the native Resource Manager decompressor for older
+members. These are artwork acquisition aids, not guest runtime patches.

@@ -78,6 +78,16 @@ open class PlatinumWindow: NSWindow {
     open override var canBecomeKey: Bool { true }
     open override var canBecomeMain: Bool { kind == .document }
 
+    open override func becomeKey() {
+        super.becomeKey()
+        state.isActive = true
+    }
+
+    open override func resignKey() {
+        super.resignKey()
+        state.isActive = false
+    }
+
     open override var title: String {
         didSet { if state.title != title { state.title = title } }
     }

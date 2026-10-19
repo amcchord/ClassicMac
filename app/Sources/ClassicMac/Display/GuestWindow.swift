@@ -298,24 +298,43 @@ struct GuestWindowContent: View {
 
     private var toolbar: some View {
         PlatinumPlacardBar {
-            PlatinumBevelButton("Shut Down…", icon: "power") { manager.requestStop(vmID) }
+            ViewThatFits(in: .horizontal) {
+                toolbarButtons(compact: false)
+                toolbarButtons(compact: true)
+            }
+        }
+    }
+
+    private func toolbarButtons(compact: Bool) -> some View {
+        HStack(spacing: 6) {
+            PlatinumBevelButton(compact ? nil : "Shut Down…", icon: "power") { manager.requestStop(vmID) }
+                .help("Shut Down…")
+                .accessibilityLabel("Shut Down…")
             PlatinumBevelButton("Restart") { manager.reboot(vmID) }
             PlatinumBevelButton(paused ? "Resume" : "Pause") {
                 if paused { manager.resume(vmID) } else { manager.pause(vmID) }
             }
             if config?.machineFamily != .powerMac7500 {
-                PlatinumBevelButton("Media…", icon: "cd") { MediaController.shared.present(for: vmID) }
-                PlatinumBevelButton("Paste Text…") { PasteTextController.shared.present(for: vmID) }
+                PlatinumBevelButton(compact ? nil : "Media…", icon: "cd") { MediaController.shared.present(for: vmID) }
+                    .help("Media…")
+                    .accessibilityLabel("Media…")
+                PlatinumBevelButton(compact ? nil : "Paste Text…", icon: "clipboard") { PasteTextController.shared.present(for: vmID) }
                     .disabled(paused || !state.revealed)
+                    .help("Paste Text…")
+                    .accessibilityLabel("Paste Text…")
             }
             Spacer(minLength: 6)
-            Text(status)
-                .platinumText(.detail)
-                .lineLimit(1)
-                .truncationMode(.middle)
+            if !compact {
+                Text(status)
+                    .platinumText(.detail)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
             Spacer(minLength: 6)
-            PlatinumBevelButton("Full Screen", icon: "display") { GuestWindows.shared.toggleFullScreen(vmID) }
+            PlatinumBevelButton(compact ? nil : "Full Screen", icon: "display") { GuestWindows.shared.toggleFullScreen(vmID) }
                 .padding(.trailing, 14)
+                .help("Full Screen")
+                .accessibilityLabel("Full Screen")
         }
     }
 

@@ -47,3 +47,24 @@ The current gate detects regressions in the corrected components. Extending
 it means collecting a native reference with its OS, depth, palette and state,
 recording the crop, and comparing it before changing the production renderer.
 See [the reference lab](../platinum/reference/README.md) for reproduction.
+
+## October 19 — Mac OS 9 icons and running-VM frame
+
+The 4.2 pass uses native Mac OS 9 Icon Services families, including original
+32-bit colour/8-bit alpha and separate 16/32-pixel artwork. Source/family/member
+hashes and the native acquisition method are in `platinum/macos-icons/`.
+
+Independent Appearance Manager captures add full document-frame comparisons:
+active, inactive and WindowShade-collapsed, small bevel toolbar buttons in all
+three states, held close/zoom/collapse boxes and the native diagonal resize
+corner. All newly covered states compare with zero pixel tolerance at 1×/2×.
+This fixes the one-pixel top/content offset, title stripe gaps and box offsets,
+shadow endpoints, inactive gray levels, missing held feedback and a grow box
+which opaque guest content previously covered. Toolbar labels use direct
+Charcoal-strike drawing; narrow VM windows retain controls through a compact
+icon layout. Focus comes from the owning NSWindow's key state.
+
+This extends document-window and icon coverage. The remaining font/layout,
+menu, utility/modal and animation gaps described above still need their own
+native references. Desktop CSS shares the original icon PNGs and corrected
+title stripe pattern, but is not certified by the native Swift frame gate.

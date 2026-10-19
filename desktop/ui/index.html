@@ -1,13 +1,13 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ClassicMac</title><link rel="stylesheet" href="platinum.css"></head>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ClassicMac</title><link rel="stylesheet" href="platinum.css"><link rel="stylesheet" href="mac-icons.css"></head>
 <body>
-  <nav><strong>ClassicMac</strong><button id="new">New Mac…</button><button id="open">Open Mac…</button><button id="library">Mac OS Library…</button><button id="about">About ClassicMac</button><span class="platform">Windows / Linux edition</span></nav>
+  <nav><strong>ClassicMac</strong><button id="new">New Mac…</button><button id="open" data-icon="folder">Open Mac…</button><button id="library" data-icon="library">Mac OS Library…</button><button id="about">About ClassicMac</button><span class="platform">Windows / Linux edition</span></nav>
   <main class="window"><header class="titlebar"><span></span><strong>ClassicMac</strong><span></span></header>
     <div class="workspace"><aside><h2>Macs on this computer:</h2><div id="machines" role="listbox" aria-label="Macs on this computer"></div><p class="hint">Open a .classic machine folder copied from your Mac, or create a new Mac with your own installation disc.</p></aside>
     <section class="home"><div id="display" tabindex="0" aria-label="Mac screen"><div id="curtain"><img src="powermac_g4-32.png" width="64" height="64" alt=""><p>Welcome to ClassicMac</p></div></div>
       <div class="heading"><h1 id="name">Your classic Macs, on your PC.</h1><span id="status">Ready</span></div>
-      <fieldset><legend>About This Mac</legend><dl id="details"></dl><div class="info-buttons"><button id="settings">Get Info…</button><button id="disc">Media…</button><button id="share">Share Folder…</button><button id="floppy">Floppy Image…</button><button id="reveal">Show Files</button></div></fieldset>
-      <footer><button id="pause">Pause</button><button id="restart">Restart</button><button id="stop">Shut Down…</button><button id="force">Force Off…</button><button id="paste">Paste Text…</button><span class="spacer"></span><button id="capture" hidden>Capture game mouse</button><button id="fullscreen">Full Screen</button><button id="start" class="default">Start Mac</button></footer>
+      <fieldset><legend>About This Mac</legend><dl id="details"></dl><div class="info-buttons"><button id="settings" data-icon="preferences">Get Info…</button><button id="disc" data-icon="cd">Media…</button><button id="share" data-icon="folder">Share Folder…</button><button id="floppy" data-icon="disk">Floppy Image…</button><button id="reveal" data-icon="folder">Show Files</button></div></fieldset>
+      <footer><button id="pause">Pause</button><button id="restart">Restart</button><button id="stop">Shut Down…</button><button id="force">Force Off…</button><button id="paste" data-icon="clipboard">Paste Text…</button><span class="spacer"></span><button id="capture" hidden>Capture game mouse</button><button id="fullscreen" data-icon="display">Full Screen</button><button id="start" class="default">Start Mac</button></footer>
     </section></div>
   </main>
   <p id="notice" role="status">Choose a Mac to begin.</p>

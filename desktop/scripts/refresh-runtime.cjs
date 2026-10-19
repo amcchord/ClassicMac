@@ -10,6 +10,9 @@ if (!fs.existsSync(path.join(runtime, 'bin/qemu-system-ppc' + (process.platform 
 fs.cpSync(path.join(root, 'Resources/Iconfactory'), path.join(runtime, 'Iconfactory'), { recursive: true });
 fs.copyFileSync(path.join(root, 'platinum/fonts/LICENSE-fonts.txt'), path.join(runtime, 'Licenses/Platinum-fonts.txt'));
 fs.copyFileSync(path.join(root, 'THIRD_PARTY_NOTICES.md'), path.join(runtime, 'ThirdPartyNotices.md'));
+for (const [source, name] of [['README.txt', 'MacOS-icons.txt'], ['manifest.json', 'MacOS-icon-provenance.json']]) {
+  fs.copyFileSync(path.join(root, 'platinum/macos-icons', source), path.join(runtime, 'Licenses', name));
+}
 const manifest = {};
 function visit(dir) {
   for (const item of fs.readdirSync(dir, { withFileTypes: true })) {

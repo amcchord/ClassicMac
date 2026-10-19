@@ -41,8 +41,8 @@ BUNDLE_STAGE_DIR=""
 BUNDLE_PREVIOUS_APP=""
 BUNDLE_LOCK_HELD=0
 
-APP_VERSION="${APP_VERSION:-4.1.1}"
-APP_BUILD_VERSION="${APP_BUILD_VERSION:-4.1.1}"
+APP_VERSION="${APP_VERSION:-4.2.0}"
+APP_BUILD_VERSION="${APP_BUILD_VERSION:-4.2.0}"
 BUNDLE_ID="com.classicmac.emulator"
 
 log() { printf '\n==> %s\n' "$*"; }
@@ -258,6 +258,8 @@ mkdir -p "$LICENSES_DIR"
 cp "$ROOT_DIR/copland/CLI11-LICENSE.txt" "$LICENSES_DIR/CLI11.txt"
 cp "$ROOT_DIR/platinum/fonts/LICENSE-fonts.txt" "$LICENSES_DIR/Platinum-fonts.txt"
 cp "$ROOT_DIR/platinum/icons/LICENSE-icons.txt" "$LICENSES_DIR/Platinum-icons.txt"
+cp "$ROOT_DIR/platinum/macos-icons/README.txt" "$LICENSES_DIR/MacOS-icons.txt"
+cp "$ROOT_DIR/platinum/macos-icons/manifest.json" "$LICENSES_DIR/MacOS-icon-provenance.json"
 cp "$VENDOR_DIR/dingusppc/LICENSE" "$LICENSES_DIR/DingusPPC-GPL-3.0.txt"
 cp "$VENDOR_DIR/SDL2/LICENSE.txt" "$LICENSES_DIR/SDL2.txt"
 cp "$VENDOR_DIR/dingusppc/thirdparty/capstone/LICENSE.TXT" "$LICENSES_DIR/Capstone.txt"

@@ -1,8 +1,9 @@
 # Platinum appearance
 
 ClassicMac draws its own interface in the Mac OS 8/9 "Platinum" appearance,
-shared with RetroBoot so the two products look and behave alike. The font programs, icon art and measured control drawing code are MIT
-licensed. Reference screenshot crops are test evidence, kept separate from
+shared with RetroBoot so the two products look and behave alike. The font programs, original drawn icons and measured control drawing code are MIT
+licensed. Original Apple Mac OS 9 artwork in `macos-icons/` has separate
+provenance and copyright; it is not MIT licensed. Reference screenshot crops are test evidence, kept separate from
 shipping app resources; their provenance is recorded in `reference/README.md`.
 
 - `fonts/` — RetroBoot System 12, Regular 12 and Small 10 bitmap fonts:
@@ -31,3 +32,8 @@ One Mac pixel is one point. PixelPainter controls and direct system text are
 tested at both 1× and 2× device scales. SwiftUI Text and whole application
 layouts require separate verification; the control gate is not a blanket
 pixel-perfect certification.
+
+- `macos-icons/` — original Mac OS 9 Icon Services families and selected native
+  resources, with source/member hashes. The exporter preserves full native
+  colour/alpha and separate 16/32-pixel strikes for Mac and desktop frontends.
+  `tools/extract_macos_icons.py --check` verifies deterministic exports.
