@@ -13,3 +13,5 @@ button[data-icon]:disabled::before{opacity:.45}
 .titlebar>span{display:none}.titlebar strong{background:#ccc;padding:0 4px;line-height:16px}
 .titlebar::before,.titlebar::after{content:"";flex:1;height:12px;margin-top:-2px;background:repeating-linear-gradient(to bottom,#fff 0,#fff 1px,#777 1px,#777 2px)}
 .titlebar::before{margin-left:20px}.titlebar::after{margin-right:20px}
+/* Keep icon/text controls on one line; the toolbar wraps whole controls. */
+button{white-space:nowrap}section.home>footer{flex-wrap:wrap;row-gap:8px}

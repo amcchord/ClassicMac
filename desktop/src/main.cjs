@@ -227,7 +227,7 @@ else app.whenReady().then(async () => {
   }
   await serve();
   installHandlers();
-  window = new BrowserWindow({ width: 1060, height: 760, minWidth: 780, minHeight: 560, title: 'ClassicMac', backgroundColor: '#c0c0c0', autoHideMenuBar: true,
+  window = new BrowserWindow({ width: 1060, height: 840, minWidth: 780, minHeight: 560, title: 'ClassicMac', backgroundColor: '#c0c0c0', autoHideMenuBar: true,
     icon: path.join(assets, 'app.ico'), webPreferences: { preload: path.join(__dirname, 'preload.cjs'), nodeIntegration: false, contextIsolation: true, sandbox: true } });
   window.setMenu(null);
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));

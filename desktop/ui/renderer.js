@@ -149,5 +149,14 @@ $('editor').querySelector('form').addEventListener('submit', event => {
     $('editor').close(); machines = await api.state(); render();
   });
 });
-window.classicmacEvidence = () => ({ machines: machines.map(m => ({ id: m.id, running: m.running })), connected: $('curtain').hidden, canvas: !!$('display').querySelector('canvas'), selected });
+window.classicmacEvidence = () => {
+  const footer = document.querySelector('section.home > footer'), bounds = footer.getBoundingClientRect();
+  const buttons = [...footer.querySelectorAll('button')].filter(button => button.getBoundingClientRect().width > 0);
+  const toolbar = {
+    fitsWidth: buttons.every(button => { const r = button.getBoundingClientRect(); return r.left >= bounds.left - 1 && r.right <= bounds.right + 1; }),
+    singleLineButtons: buttons.every(button => { const range = document.createRange(); range.selectNodeContents(button); return [...range.getClientRects()].filter(r => r.width > 0 && r.height > 0).length === 1; }),
+    bottomVisible: bounds.bottom <= innerHeight
+  };
+  return { machines: machines.map(m => ({ id: m.id, running: m.running })), connected: $('curtain').hidden, canvas: !!$('display').querySelector('canvas'), selected, toolbar };
+};
 machines = await api.state(); selected = machines[0]?.id; render();
