@@ -14,7 +14,7 @@ button[data-widget]{position:absolute;top:4px;width:13px;height:13px;min-width:0
 #window-close{left:4px}#window-zoom{right:33px}#window-collapse{right:17px}
 #window-grow{position:absolute;right:7px;bottom:7px;width:15px;height:15px;cursor:nwse-resize}
 body.shaded .workspace,body.shaded #setup,body.shaded #window-grow{visibility:hidden}
-body.shaded .window{height:23px;bottom:auto}
+body.shaded .window{height:23px;bottom:auto;padding:0}
 .workspace{height:100%;padding:12px;display:grid;grid-template-columns:262px minmax(0,1fr);gap:14px}
 h1,h2{font-size:12px;font-weight:normal;margin:0}h2{margin:0 0 8px}
 aside{display:flex;flex-direction:column;min-height:0}#machines{background:#fff;border:1px solid #000;box-shadow:-1px -1px #888,1px 1px #fff;flex:1;overflow:auto;min-height:80px}
