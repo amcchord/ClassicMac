@@ -21,6 +21,13 @@ const engines = new Map();
 let window, server, origin, quitting = false;
 let expandedBounds;
 const windowState = () => window?.webContents.send('window-state', { focused: window.isFocused(), shaded: !!expandedBounds });
+function expandWindow() {
+  if (!expandedBounds) return;
+  const previous=expandedBounds;expandedBounds=undefined;
+  if(process.platform==='win32')window.setShape([]);
+  window.setBounds(previous);window.setMinimumSize(780,560);windowState();
+}
+function showProblem(message) { expandWindow();window?.webContents.send('problem',message); }
 const indexFile = () => path.join(app.getPath('userData'), 'library.json');
 function binary(family) {
   if (process.platform === 'darwin' && process.env.CLASSICMAC_MAC_APP) {
@@ -79,9 +86,9 @@ async function start(id) {
     if (engines.get(id) !== e) return;
     engines.delete(id);
     if (result.restart && !quitting) {
-      try { await start(id); } catch (error) { window?.webContents.send('problem', error.message); }
+      try { await start(id); } catch (error) { showProblem(error.message); }
     } else {
-      if (result.code && !e.stopping) window?.webContents.send('problem', 'The Mac stopped unexpectedly. ' + e.log);
+      if (result.code && !e.stopping) showProblem('The Mac stopped unexpectedly. ' + e.log);
       await notify();
     }
   });
@@ -104,10 +111,12 @@ function installHandlers() {
     } else if (action === 'collapse') {
       if (window.isMaximized()) window.unmaximize();
       if (expandedBounds) {
-        const previous = expandedBounds; expandedBounds = undefined;
-        window.setBounds(previous); window.setMinimumSize(780,560);
+        expandWindow();
       } else {
         expandedBounds = window.getBounds(); window.setMinimumSize(780,23); window.setSize(expandedBounds.width,23);
+        // Windows enforces a 39-pixel minimum even for frameless windows.
+        // Clip the OS drawing/input region to the exact Platinum title frame.
+        if(process.platform==='win32')window.setShape([{x:0,y:0,width:window.getContentBounds().width,height:23}]);
       }
       windowState();
     } else throw new Error('Unknown window action.');
@@ -283,7 +292,7 @@ else app.whenReady().then(async () => {
   window.on('close', event => {
     if ((engines.size || downloadJob) && !quitting) {
       event.preventDefault();
-      window.webContents.send('problem', 'Shut down your running Macs before quitting ClassicMac. Choose Shut Down in Mac OS or use the Shut Down button. Pause or finish any active download.');
+      showProblem('Shut down your running Macs before quitting ClassicMac. Choose Shut Down in Mac OS or use the Shut Down button. Pause or finish any active download.');
     }
   });
   app.on('second-instance', () => { window.show(); window.focus(); });

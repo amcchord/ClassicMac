@@ -45,9 +45,18 @@ async function qualify({ window, dialog, home }) {
   await js('document.getElementById("close-media").click()');
   const expanded=window.getBounds();
   await js('document.getElementById("window-collapse").click()');
-  // Windows includes invisible non-client resize margins in getBounds().
-  // The visible title frame is the 23-pixel content area on every host.
-  await until('document.body.classList.contains("shaded")');assert.equal(window.getContentBounds().height,23);await shot('windowshade');
+  await until('document.body.classList.contains("shaded")');
+  assert.equal(await js('document.querySelector(".window").getBoundingClientRect().height'),23);
+  if(process.platform==='win32'){
+    // Query the actual native HWND drawing/input region, not just our CSS.
+    const {promisify}=require('node:util'),{execFile}=require('node:child_process');
+    const hwnd=window.getNativeWindowHandle().readBigUInt64LE().toString();
+    const script=`Add-Type -TypeDefinition 'using System;using System.Runtime.InteropServices;public class RegionProbe{[StructLayout(LayoutKind.Sequential)]public struct Rect{public int l,t,r,b;}[DllImport("user32.dll")]static extern int GetWindowRgn(IntPtr w,IntPtr r);[DllImport("gdi32.dll")]static extern IntPtr CreateRectRgn(int l,int t,int r,int b);[DllImport("gdi32.dll")]static extern int GetRgnBox(IntPtr r,out Rect b);[DllImport("gdi32.dll")]static extern bool DeleteObject(IntPtr p);public static int Height(long hwnd){var r=CreateRectRgn(0,0,0,0);try{if(GetWindowRgn(new IntPtr(hwnd),r)==0)return -1;Rect b;GetRgnBox(r,out b);return b.b-b.t;}finally{DeleteObject(r);}}}';[RegionProbe]::Height(${hwnd})`;
+    const result=await promisify(execFile)('powershell.exe',['-NoProfile','-NonInteractive','-Command',script],{windowsHide:true});
+    const scale=require('electron').screen.getDisplayMatching(window.getBounds()).scaleFactor;
+    assert.equal(Number(result.stdout.trim()),23*scale,'Actual Windows drawing/input region height');
+  }else assert.equal(window.getContentBounds().height,23);
+  await fs.writeFile(path.join(home,'windowshade.png'),(await window.webContents.capturePage({x:0,y:0,width:window.getContentBounds().width,height:23})).toPNG());
   await js('document.getElementById("window-collapse").click()');await until('!document.body.classList.contains("shaded")');assert.deepEqual(window.getBounds(),expanded);
   checks.push('Get Info, Media and reversible WindowShade through the actual sandboxed IPC');
   // Capture actual DOM controls after Chromium paints them. The external
