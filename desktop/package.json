@@ -54,7 +54,7 @@
     },
     "portable": {
       "artifactName": "ClassicMac-${version}-windows-x64.exe",
-      "unpackDir": false
+      "unpackDirName": false
     },
     "appImage": {
       "artifactName": "ClassicMac-${version}-linux-x64.AppImage"
