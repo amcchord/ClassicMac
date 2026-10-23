@@ -46,6 +46,19 @@ async function qualify({ window, dialog, home }) {
   await until('document.body.classList.contains("shaded")');assert.equal(window.getBounds().height,23);await shot('windowshade');
   await js('document.getElementById("window-collapse").click()');await until('!document.body.classList.contains("shaded")');assert.equal(window.getBounds().height,560);
   checks.push('Get Info, Media and reversible WindowShade through the actual sandboxed IPC');
+  // Capture actual DOM controls after Chromium paints them. The external
+  // harness compares every captured device pixel with independent guest PNGs.
+  const pixelCases=[];
+  for(const state of ['normal','pressed','disabled']){
+    pixelCases.push({name:'button-'+state,tag:'button',w:80,h:20,state},{name:'default-'+state,tag:'button',w:86,h:26,state,cls:'default'},{name:'popup-'+state,tag:'button',w:100,h:20,state,cls:'popup-button'});
+    for(const on of [false,true])for(const type of ['checkbox','radio'])pixelCases.push({name:type+'-'+(on?'on':'off')+'-'+state,tag:'input',type,on,w:type==='radio'?12:14,h:12,state});
+  }
+  for(const spec of pixelCases){
+    await js(`(()=>{document.getElementById('pixel-capture')?.remove();const pane=document.createElement('div');pane.id='pixel-capture';pane.style='position:fixed;left:0;top:0;width:400px;height:100px;background:#ddd;z-index:2147483647';const e=document.createElement(${JSON.stringify(spec.tag)});e.className=${JSON.stringify(spec.cls||'')};e.style='position:absolute;left:0;top:0;margin:0;width:${spec.w}px;height:${spec.h}px';${spec.type?`e.type=${JSON.stringify(spec.type)};e.checked=${spec.on};`:''}e.disabled=${spec.state==='disabled'};e.dataset.held=${JSON.stringify(String(spec.state==='pressed'))};pane.append(e);document.body.append(pane);})()`);
+    await new Promise(r=>setTimeout(r,80));
+    await fs.writeFile(path.join(home,'pixel-'+spec.name+'.png'),(await window.webContents.capturePage({x:0,y:0,width:spec.w,height:spec.h})).toPNG());
+  }
+  await js('document.getElementById("pixel-capture").remove()');
   await fs.writeFile(path.join(home,'ui-report.json'),JSON.stringify({platform:process.platform,version:require('../package.json').version,checks,passed:true},null,2));
 }
 module.exports={qualify};

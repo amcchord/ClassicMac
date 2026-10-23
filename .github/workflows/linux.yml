@@ -70,8 +70,8 @@ jobs:
         run: |
           sudo chown root:root output/desktop/packages/linux-unpacked/chrome-sandbox
           sudo chmod 4755 output/desktop/packages/linux-unpacked/chrome-sandbox
-      - name: Qualify the AppImage UI
-        run: CLASSICMAC_TEST_HOME="$PWD/output/desktop/ui-smoke" CLASSICMAC_TEST_UI=1 xvfb-run -a output/desktop/packages/ClassicMac-4.5.0-linux-x64.AppImage
+      - name: Qualify the AppImage UI at 1x and 2x
+        run: xvfb-run -a node desktop/tests/ui-smoke.cjs output/desktop/packages/ClassicMac-4.5.0-linux-x64.AppImage output/desktop/ui-smoke
       - name: Smoke test packaged Linux application
         run: xvfb-run -a node desktop/tests/smoke-desktop.cjs output/desktop/packages/ClassicMac-4.5.0-linux-x64.AppImage output/desktop/smoke
       - name: Test first-run setup through the packaged application
@@ -81,8 +81,8 @@ jobs:
         with:
           name: ClassicMac-Linux-smoke
           path: |
-            output/desktop/ui-smoke/*.png
-            output/desktop/ui-smoke/ui-report.json
+            output/desktop/ui-smoke/*/*.png
+            output/desktop/ui-smoke/*/*.json
             output/desktop/smoke/desktop.png*
             output/desktop/smoke/desktop.log
             output/desktop/smoke/isolated-home/guest.ppm

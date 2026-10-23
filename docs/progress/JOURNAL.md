@@ -848,3 +848,25 @@ consolidated root checks, publish and verify stable 4.1.1. Retain 4.1.0 for roll
   artifacts and unrelated worktrees are preserved; task checkout/output are
   retained for support. No pending release action. Rollback retains v4.3.0
   plus the checked original catalog; promotion changes no installed machine.
+
+## 2026-10-23 — portable Platinum desktop for 4.5
+
+- Austin authorized improving Windows/Linux to match the Mac’s Platinum UI,
+  single executable downloads, AustinLand/Proxmox testing and a new release.
+  Contained branch `codex/4.5-desktop-platinum`, baseline main `14cbebd`.
+- Exported measured Mac tables and BDF glyphs into a deterministic desktop
+  renderer. Its independent framebuffer gate passes at 1×/2× with zero
+  differing pixels, including the 95-character system-font atlas/advances.
+  Semantic HTML retains accessibility and keyboard controls. Removed the host
+  menu bar and host window decorations; title controls and WindowShade use
+  sandboxed, sender-checked IPC. Home follows the native Mac layout.
+- Portable Windows EXE and Linux AppImage replace multi-file ZIP/TAR downloads;
+  DEB remains optional. Native CI builds/tests are in progress. UI checks on
+  the Mac development host pass the wizard, popup, home at 940/780 widths,
+  settings, media and reversible WindowShade. All 22 desktop tests pass with
+  the real signed qemu-img. These are not yet native Windows/Linux results.
+- Started only existing dedicated QA VMs 170/171 using AustinLand. The Windows
+  start returned 500 despite starting; fresh detail confirms running/agent
+  ready, so no duplicate VM was created. Existing fixtures/user data preserved.
+  No public release, catalog, DNS or infrastructure configuration changes.
+  Next: qualify exact portable packages, integrate, release and verify downloads.

@@ -58,6 +58,9 @@
     },
     "appImage": {
       "artifactName": "ClassicMac-${version}-linux-x64.AppImage"
+    },
+    "toolsets": {
+      "appimage": "1.0.3"
     }
   },
   "homepage": "https://github.com/amcchord/ClassicMac"
