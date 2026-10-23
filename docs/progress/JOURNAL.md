@@ -848,3 +848,68 @@ consolidated root checks, publish and verify stable 4.1.1. Retain 4.1.0 for roll
   artifacts and unrelated worktrees are preserved; task checkout/output are
   retained for support. No pending release action. Rollback retains v4.3.0
   plus the checked original catalog; promotion changes no installed machine.
+
+## 2026-10-23 — portable Platinum desktop for 4.5
+
+- Austin authorized improving Windows/Linux to match the Mac’s Platinum UI,
+  single executable downloads, AustinLand/Proxmox testing and a new release.
+  Contained branch `codex/4.5-desktop-platinum`, baseline main `14cbebd`.
+- Exported measured Mac tables and BDF glyphs into a deterministic desktop
+  renderer. Its independent framebuffer gate passes at 1×/2× with zero
+  differing pixels, including the 95-character system-font atlas/advances.
+  Semantic HTML retains accessibility and keyboard controls. Removed the host
+  menu bar and host window decorations; title controls and WindowShade use
+  sandboxed, sender-checked IPC. Home follows the native Mac layout.
+- Portable Windows EXE and Linux AppImage replace multi-file ZIP/TAR downloads;
+  DEB remains optional. Native CI builds/tests are in progress. UI checks on
+  the Mac development host pass the wizard, popup, home at 940/780 widths,
+  settings, media and reversible WindowShade. All 22 desktop tests pass with
+  the real signed qemu-img. These are not yet native Windows/Linux results.
+- Started only existing dedicated QA VMs 170/171 using AustinLand. The Windows
+  start returned 500 despite starting; fresh detail confirms running/agent
+  ready, so no duplicate VM was created. Existing fixtures/user data preserved.
+  No public release, catalog, DNS or infrastructure configuration changes.
+  Next: qualify exact portable packages, integrate, release and verify downloads.
+
+## 2026-10-23 — portable packages and native pixel qualification complete
+
+- Runtime/UI source is frozen at `956dd7d` on PR #35. Shared Mac measurement
+  tables/BDF glyphs pass the independent native fixture suite; 21 actual DOM
+  control states plus the composed title frame pass with zero differing pixels
+  at both device scales. Final Windows/Linux 940×700 homes are pixel-identical.
+- Real Windows testing found the OS’s 39-pixel minimum. WindowShade now clips
+  the native drawing/input region to 23 pixels; GetWindowRgn/GetRgnBox verifies
+  physical region height at 1×/2×. Errors expand the window before presentation.
+  A final composed-header check exposed and removed legacy CSS overlays and
+  corrected integer title/widget placement. Native UI and exact package checks
+  pass after that correction. All 61 packaged source/UI files match source.
+- Both dedicated Proxmox hosts pass fresh public ATI image download, pause/
+  resume, SHA-256/import, both setup routes, Finder, restart and normal shutdown.
+  Final titlebar-only packages repeat the UI and guest cycle using the stopped
+  task-owned public fixture; main/engine/setup code is unchanged. Linux CI
+  40037705241 passes; Windows CI 40037702912 is finishing the full matrix.
+- Windows QA VM 171’s existing 100 GiB disk lacked space for another 32 GiB
+  fixture. Verified SazProx headroom, extended only its disk to 228 GiB via
+  AustinLand, then extended C: online without deleting data. FUSE 3 is installed
+  only on the minimal Linux QA VM. Earlier failed/partial test evidence remains.
+- Mac 4.5 retains the exact qualified 4.4 native frontend and four engine code
+  images, refreshed version metadata, original entitlements and final accepted
+  app/DMG notarization. Full exact verifier, staples/Gatekeeper and isolated
+  first-run launch pass. Source archives remain byte-identical to qualified
+  4.4 with NDRV checked. All 131 Swift tests pass (three optional local skips),
+  all 22 desktop tests pass with signed qemu-img, deterministic export passes.
+- No public 4.5 tag/release yet. Next: integrate, consolidated root validation,
+  publish stable Latest and verify every anonymous download. Rollback retains
+  v4.4.0. User machines, root gxmetal and unrelated worktrees are preserved;
+  no catalog, DNS, hosting configuration or production service changes.
+
+## 2026-10-23 — final native CI gates pass
+
+- Windows 40037702912 and Linux 40037705241 at `956dd7d` both pass all native
+  unit, exact portable UI/pixel/title-frame, boot/restart/shutdown and fresh
+  setup routes, including public ATI Library import and first Finder boot.
+  Final Proxmox portable bytes independently pass the UI and guest cycle.
+- Final Windows/Linux home captures are pixel-identical. Scale 2 captures,
+  source/UI inventories, source archives, SHA256SUMS and notarized Mac parity
+  are retained in evidence/4.5.0. PR #35 is ready for integration/publication.
+  No public 4.5 tag/release yet; rollback retains immutable v4.4.0.

@@ -1,0 +1,9 @@
+{
+  "platform": "win32",
+  "route": "download",
+  "checks": [
+    "License acknowledgment gates Continue",
+    "Real Library pause/resume, SHA-256, extraction, ready, Start Mac, Finder framebuffer and clean shutdown"
+  ],
+  "passed": true
+}

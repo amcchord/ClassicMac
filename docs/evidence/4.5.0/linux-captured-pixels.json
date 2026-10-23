@@ -1,0 +1,115 @@
+{
+  "passed": true,
+  "results": [
+    {
+      "file": "pixel-button-disabled.png",
+      "scale": 1,
+      "differing_pixels": 0
+    },
+    {
+      "file": "pixel-button-normal.png",
+      "scale": 1,
+      "differing_pixels": 0
+    },
+    {
+      "file": "pixel-button-pressed.png",
+      "scale": 1,
+      "differing_pixels": 0
+    },
+    {
+      "file": "pixel-checkbox-off-disabled.png",
+      "scale": 1,
+      "differing_pixels": 0
+    },
+    {
+      "file": "pixel-checkbox-off-normal.png",
+      "scale": 1,
+      "differing_pixels": 0
+    },
+    {
+      "file": "pixel-checkbox-off-pressed.png",
+      "scale": 1,
+      "differing_pixels": 0
+    },
+    {
+      "file": "pixel-checkbox-on-disabled.png",
+      "scale": 1,
+      "differing_pixels": 0
+    },
+    {
+      "file": "pixel-checkbox-on-normal.png",
+      "scale": 1,
+      "differing_pixels": 0
+    },
+    {
+      "file": "pixel-checkbox-on-pressed.png",
+      "scale": 1,
+      "differing_pixels": 0
+    },
+    {
+      "file": "pixel-default-disabled.png",
+      "scale": 1,
+      "differing_pixels": 0
+    },
+    {
+      "file": "pixel-default-normal.png",
+      "scale": 1,
+      "differing_pixels": 0
+    },
+    {
+      "file": "pixel-default-pressed.png",
+      "scale": 1,
+      "differing_pixels": 0
+    },
+    {
+      "file": "pixel-popup-disabled.png",
+      "scale": 1,
+      "differing_pixels": 0
+    },
+    {
+      "file": "pixel-popup-normal.png",
+      "scale": 1,
+      "differing_pixels": 0
+    },
+    {
+      "file": "pixel-popup-pressed.png",
+      "scale": 1,
+      "differing_pixels": 0
+    },
+    {
+      "file": "pixel-radio-off-disabled.png",
+      "scale": 1,
+      "differing_pixels": 0
+    },
+    {
+      "file": "pixel-radio-off-normal.png",
+      "scale": 1,
+      "differing_pixels": 0
+    },
+    {
+      "file": "pixel-radio-off-pressed.png",
+      "scale": 1,
+      "differing_pixels": 0
+    },
+    {
+      "file": "pixel-radio-on-disabled.png",
+      "scale": 1,
+      "differing_pixels": 0
+    },
+    {
+      "file": "pixel-radio-on-normal.png",
+      "scale": 1,
+      "differing_pixels": 0
+    },
+    {
+      "file": "pixel-radio-on-pressed.png",
+      "scale": 1,
+      "differing_pixels": 0
+    },
+    {
+      "file": "pixel-window-title.png",
+      "scale": 1,
+      "differing_pixels": 0
+    }
+  ]
+}

@@ -1,0 +1,37 @@
+{
+  "version": "4.5.0",
+  "runtime_ui_source": "956dd7d00ecb60b350608789aa6385a27f9ffa20",
+  "app_tree": "ea1be6e285b9be703e893a8160574b34ba1823cd",
+  "desktop_tree": "85186e0ec58549675b982bb23158b178bf99423f",
+  "native_ci": {
+    "linux": 40037705241,
+    "windows": 40037702912
+  },
+  "proxmox": {
+    "node": "SazProx",
+    "linux": 170,
+    "windows": 171,
+    "exact_portable_ui_and_guest_cycle": "pass",
+    "fresh_setup_routes_and_public_library": "pass",
+    "windows_qa_disk_gib": 228
+  },
+  "pixel_gates": {
+    "independent_mac_fixtures": "zero differing pixels at 1x/2x",
+    "captured_control_states": 21,
+    "composed_title_frame": "zero differing pixels at 1x/2x",
+    "windows_native_shaded_region": "23 logical pixels at both scales",
+    "cross_platform_home": {
+      "width": 940,
+      "height": 700,
+      "differing_pixels": 0
+    }
+  },
+  "mac": {
+    "code_unchanged_from": "4.4.0",
+    "app_notary": "493abc3d-6396-449b-8b44-1fb02b14c510",
+    "dmg_notary": "14fe17ea-6ed5-4eac-8108-7656613a5930",
+    "staples_gatekeeper_exact_verifier": "pass",
+    "original_entitlements": true
+  },
+  "rollback": "Promote immutable v4.4.0 to Latest; existing machines and Library catalog are unchanged."
+}

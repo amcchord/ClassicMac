@@ -1,0 +1,250 @@
+{
+  "version": "4.5.0",
+  "all_source_and_assets_match": true,
+  "files": [
+    {
+      "file": "src/arguments.cjs",
+      "sha256": "3ee197db1d98f983fab1aa3e2c448abdbb018079e81fdc30ff318caa1e38eeed"
+    },
+    {
+      "file": "src/catalog.cjs",
+      "sha256": "ca7d6c9794f184cae268d59588abf2af35976578e1daa60dd3d76450a4839192"
+    },
+    {
+      "file": "src/engine.cjs",
+      "sha256": "dddf1b0f5772cd02681a73b4ea4acc26ea2df995afd5f8470b531f70dd186c30"
+    },
+    {
+      "file": "src/machines.cjs",
+      "sha256": "cd274cf489b1f240866766fceac396cd952fe5baa910e9027aeda1969d9e218a"
+    },
+    {
+      "file": "src/main.cjs",
+      "sha256": "396a6c7085cd21d1fd628857b592b437ec0680e38507a982d564b51e4f9b00f1"
+    },
+    {
+      "file": "src/paste.cjs",
+      "sha256": "1a014e5c791dd7153f509a0a6eece5dfa5ec8607584e8c7c527f1f8dd3f3f8ce"
+    },
+    {
+      "file": "src/preload.cjs",
+      "sha256": "05e44d4489176befc2e634fab809ababebe8c09f57fbfef3d2664d316524ed4f"
+    },
+    {
+      "file": "src/qualification.cjs",
+      "sha256": "b050c2872061f613250019edfc0d3638d9a28fbc05ea60ce537ae08f2f89c2c9"
+    },
+    {
+      "file": "src/setup-machine.cjs",
+      "sha256": "0348312b5b1c5be9f6e63e41e67cde7123084a613f2f4dc349f03334081d56de"
+    },
+    {
+      "file": "src/setup-qualification.cjs",
+      "sha256": "3f8df72d4596071f7e1328eee90a8a08353efe8fc6819133342b64469e9c541e"
+    },
+    {
+      "file": "src/ui-qualification.cjs",
+      "sha256": "8140912c51705ac0ac8df557e65a9f607c3b3c6afa2eea0939600f4b224dd3ee"
+    },
+    {
+      "file": "ui/RetroBoot-Regular.ttf",
+      "sha256": "4063d030808361ee55ff0acc1a15b448819c53b3426230ed08e51b68c58ee8b7"
+    },
+    {
+      "file": "ui/RetroBoot-System.ttf",
+      "sha256": "d471e28c09df89201ba323a1929e8764a4996829d6de5ed28b886ca97a5e847a"
+    },
+    {
+      "file": "ui/app.ico",
+      "sha256": "6a6d1490e3a430d2bb87020d2ad5fd32055edcbd5e92a97700145e13bd8cb277"
+    },
+    {
+      "file": "ui/app.png",
+      "sha256": "09b9ea93b018336c3ae3815b9ed4ef218b950b900c9ea9d4d1126dc72622ca53"
+    },
+    {
+      "file": "ui/index.html",
+      "sha256": "2a1d8054cbb546d6a692df5459e638c2901f6f76ce1aa9643346f60505e2656c"
+    },
+    {
+      "file": "ui/mac-icons/caution-16.png",
+      "sha256": "8cdb118518c1f2cebaf4aaaea6678e2c3ede8ac7bfb4eb39fd0dbbd5a1ac948a"
+    },
+    {
+      "file": "ui/mac-icons/caution-32.png",
+      "sha256": "9758e454b0caac7c43485c7625e42e9217dfc4095efbc2097769585305f019b9"
+    },
+    {
+      "file": "ui/mac-icons/cd-16.png",
+      "sha256": "f48f26312808085e2506661b2fe6df303c6261a5d056d2f42367db93b9cfcd34"
+    },
+    {
+      "file": "ui/mac-icons/cd-32.png",
+      "sha256": "476c3d4c1f75f45e530a3204cc79d02faddd63b99d9ce87dc0ed14a913f588df"
+    },
+    {
+      "file": "ui/mac-icons/clipboard-16.png",
+      "sha256": "ce39f70f3bc8ad1a3622fb33f830d4aa0ca9961fc90b7ba9b5f9552739b65d42"
+    },
+    {
+      "file": "ui/mac-icons/clipboard-32.png",
+      "sha256": "7415fea008616457e8ad799f3e802ad2d4d859734c2cda31bbe441fb9370f9c3"
+    },
+    {
+      "file": "ui/mac-icons/disk-16.png",
+      "sha256": "a5e422facfd84f4053ada6da941a59c8cc5af7f7b1e50edec74e9d5795d95c72"
+    },
+    {
+      "file": "ui/mac-icons/disk-32.png",
+      "sha256": "5ef048732a532c4be92c85caaac5885de12f112724332c4ad3c6c07444abfe61"
+    },
+    {
+      "file": "ui/mac-icons/display-16.png",
+      "sha256": "d0b875bfd57518e049f06269dcb39548125b129080b3fb95470bbf192d5d179f"
+    },
+    {
+      "file": "ui/mac-icons/display-32.png",
+      "sha256": "e842eefce3112f8dc7e88c50ee72b0ce1863e919681e157c8b63520bf324f788"
+    },
+    {
+      "file": "ui/mac-icons/folder-16.png",
+      "sha256": "7cd7c413f64567fd4c55dfbfe5efe352326d2538049e26bb3af153433cdf6400"
+    },
+    {
+      "file": "ui/mac-icons/folder-32.png",
+      "sha256": "09610b370aace604bc3292fcae4606c14e5f45e463546acedffc161ce7d07ee3"
+    },
+    {
+      "file": "ui/mac-icons/folder_open-16.png",
+      "sha256": "b70f149a7afa5bd960667d77d189f71b9ba1b0e1ef512ae42676c634a4ab5af7"
+    },
+    {
+      "file": "ui/mac-icons/folder_open-32.png",
+      "sha256": "ad40538306f95e06bd11d1dff180e64ddf9c572fbd47f95f22662b7061d947ba"
+    },
+    {
+      "file": "ui/mac-icons/harddisk-16.png",
+      "sha256": "12e29f5c0e1423a1a9f76197def120ec1daa316e719407ef151dd20ea72525a8"
+    },
+    {
+      "file": "ui/mac-icons/harddisk-32.png",
+      "sha256": "8aebe350714a2e01902e336c4a99b2e0a51988677d2c73917ef7d3a28541b01e"
+    },
+    {
+      "file": "ui/mac-icons/library-16.png",
+      "sha256": "8c29696e6d02cb9dbca5bf1c7a7436dad8448660c2a9b1ff883ff98c63273d67"
+    },
+    {
+      "file": "ui/mac-icons/library-32.png",
+      "sha256": "1917dba782c1bd64d8d189ad2a1709011553bd582c48b26fc29a53c798988e50"
+    },
+    {
+      "file": "ui/mac-icons/lock-16.png",
+      "sha256": "fbe7b004df678b0c4519762ea76834e4dbcbe09606aca1f5e8a0c45af7b085df"
+    },
+    {
+      "file": "ui/mac-icons/lock-32.png",
+      "sha256": "251c4490ac2e20649a097f55439e8977ae0eb4c78f7f25f3303e1cb95171e9e6"
+    },
+    {
+      "file": "ui/mac-icons/mac-16.png",
+      "sha256": "345e78f4d0aef2132dd179b81d1b11981ad86d1658e2265fd4ef612495a35ed8"
+    },
+    {
+      "file": "ui/mac-icons/mac-32.png",
+      "sha256": "585bd3d74110fec7476b56fd8171b88cedf2075f6311b8817c49b3593b0eb50a"
+    },
+    {
+      "file": "ui/mac-icons/note-16.png",
+      "sha256": "a5594d5ee3ae6bf55a52c47b8e444da02140216847e9c7978de85fffd7ac838d"
+    },
+    {
+      "file": "ui/mac-icons/note-32.png",
+      "sha256": "8d7edab8d9900b1a9d55977b00f7221580e931abe9752bda458fc0b09bbadc5f"
+    },
+    {
+      "file": "ui/mac-icons/preferences-16.png",
+      "sha256": "c01e8dfa60cbf7bd6826ab3c495e10aa993e67fd21e003500f1b4e23eb8ef383"
+    },
+    {
+      "file": "ui/mac-icons/preferences-32.png",
+      "sha256": "15c9fbcb43769c8d6530d391be357e2df997d4202f5c8be464566f98ae60cbd2"
+    },
+    {
+      "file": "ui/mac-icons/stop-16.png",
+      "sha256": "3f2baad420b809e4ae048c2909eb8010e2396624ae57a17d13b18243722ca4b9"
+    },
+    {
+      "file": "ui/mac-icons/stop-32.png",
+      "sha256": "2ee20d9c1d3d5d5cd7ff49b3c92766bfb0a4655bdd6a79f79e349ceac38c7b86"
+    },
+    {
+      "file": "ui/mac-icons/trash-16.png",
+      "sha256": "202342e60c492d7913c4216494afe11862f9c2280eea4c52b7bf2c172288e2a0"
+    },
+    {
+      "file": "ui/mac-icons/trash-32.png",
+      "sha256": "e51ea0cc2c49720ed89f89926d1c1a690e9a4b6a99807dad7e2a44a664866077"
+    },
+    {
+      "file": "ui/mac-icons/web-16.png",
+      "sha256": "85089b6424246731b6e85daba9bd65cf8588b71e55539e74ceac7a3d264c5447"
+    },
+    {
+      "file": "ui/mac-icons/web-32.png",
+      "sha256": "675ced5d4f906b90958591415f15e1d082802da3c1a2686209cae81b578a9288"
+    },
+    {
+      "file": "ui/mac-icons.css",
+      "sha256": "0a8ebddc404abdf046c2d1366610b037052d8295045a401b88fa39711f37c0ae"
+    },
+    {
+      "file": "ui/platinum-assets.mjs",
+      "sha256": "87dfabc9fb195a5940801868f1b6d36edd9e881214ee8149194304e64e441bfa"
+    },
+    {
+      "file": "ui/platinum-dom.js",
+      "sha256": "a6ffc07977935d7d11690d08fb82044f71ab330b05e153266aae481d4267fc5b"
+    },
+    {
+      "file": "ui/platinum-pixels.mjs",
+      "sha256": "747b722d0fb224f119f8e2a7c20c929acd753bb308e54b5bb1d992f30544a096"
+    },
+    {
+      "file": "ui/platinum.css",
+      "sha256": "74efe68bc584a6d4ae5035d0ddead5e63746f87e1c58c0fbf8d57814c4050428"
+    },
+    {
+      "file": "ui/powermac_7500-16.png",
+      "sha256": "980063cd01ac9035cb05b485b0e72589b6605301b1e0a7fe6bd66dcb2e410f5e"
+    },
+    {
+      "file": "ui/powermac_7500-32.png",
+      "sha256": "1abc5011ed39bc703adc6d9aca105ae0aad7daccd42da064eaa66580a0a633a0"
+    },
+    {
+      "file": "ui/powermac_g4-16.png",
+      "sha256": "540ac6b8f22ed31bb429cff128d8f629cc3c933f2378aa51734476d28ef5ce49"
+    },
+    {
+      "file": "ui/powermac_g4-32.png",
+      "sha256": "abf67402e504663be59404d6f7b783d5487c398ab31efbef90d3ab2b27089976"
+    },
+    {
+      "file": "ui/quadra_800-16.png",
+      "sha256": "026ece047921a974d4fcccc32d438b15bcf68d92a3111581acaedda728843984"
+    },
+    {
+      "file": "ui/quadra_800-32.png",
+      "sha256": "ad9904df4e037b274105fb2439f77c68c5fe0dbb05677e15811f5901cb333fd6"
+    },
+    {
+      "file": "ui/renderer.js",
+      "sha256": "2fdb261392392505b0bb4589b77f139cd700b8a90ac0962b7e517fe7de095652"
+    },
+    {
+      "file": "ui/setup.js",
+      "sha256": "8cf68bb39a6a0258628f98adae0533a3322b416f644e3bc475c0db3dfdbec6a6"
+    }
+  ]
+}

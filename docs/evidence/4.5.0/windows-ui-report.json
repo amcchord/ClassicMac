@@ -1,0 +1,10 @@
+{
+  "platform": "win32",
+  "version": "4.5.0",
+  "checks": [
+    "Wizard acknowledgment, bitmap radio controls and keyboard accessible Platinum popup",
+    "No host menu bar; semantic bitmap labels, measured document frame and unclipped home at both window sizes",
+    "Get Info, Media and reversible WindowShade through the actual sandboxed IPC"
+  ],
+  "passed": true
+}

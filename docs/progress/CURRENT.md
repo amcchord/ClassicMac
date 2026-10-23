@@ -1,32 +1,25 @@
-# ClassicMac 4.4.0 — stable release complete
+# ClassicMac 4.5 — publication preflight
 
-[Stable Latest v4.4.0](https://github.com/amcchord/ClassicMac/releases/tag/v4.4.0),
-published October 22, 2026. Exact source/tag:
-`15240410d2164a69f6af35765cf27ff102ae318d` (PR #34).
-All ten assets are public; all nine fresh anonymous archive downloads match
-SHA256SUMS. The public Mac DMG passes full verification, Gatekeeper and staples.
+PR #35, contained `worktrees/4.5-desktop-platinum`, branch
+`codex/4.5-desktop-platinum`, runtime/UI source `956dd7d`. All requested desktop
+work is implemented: portable Windows EXE/Linux AppImage, measured Mac Platinum
+controls/bitmap fonts/window frame, classic title widgets/WindowShade and no
+host menu bar. Both setup and machine operations remain in the window.
 
-GXMetal app metadata, dormant NDRV transport, obsolete guides and five old
-screenshots are retired. Clean OS9 image v4 uses native Apple/ATI software
-on the emulated Radeon, with zero retired files/raw byte strings. Current
-Deluxe/SuperDeluxe have no retired files. Existing user machines are unchanged;
-immutable historical archives remain available. The original catalog backup
-is retained for rollback. The initial v3 candidate was withdrawn before release.
+Both native Proxmox hosts pass complete guest/setup checks. Exact final files
+repeat UI/pixels at 1×/2×, composed title frame, actual HWND region, Finder,
+pause/restart/reconnect and normal shutdown. All 61 source/UI files match each
+package. Windows/Linux home captures are pixel-identical. Linux native CI
+40037705241 and Windows 40037702912 pass the complete fresh setup matrix.
 
-Consolidated root checks pass 131 Swift tests (two optional Copland fixture
-skips), all 21 desktop tests, 15 Python checks and both NDRV contracts. Final
-notarized Mac native download/import/Finder/clean shutdown passes. Native
-Windows 39814128066 and Linux 39813549507 pass both setup routes, real public
-v4 download/pause/resume/hash/import/first ATI Finder boot/normal shutdown and
-standard-card restart/display/toolbar checks. All 57 source/UI assets and NDRV
-match each package; prepared sources match. See docs/4.4.0-validation.md.
+Mac 4.5 metadata-only app/DMG is signed, notarized, stapled and fully verified,
+with original entitlements and unchanged native frontend/engine code. Matching
+prepared engine source archives are staged. Local Swift 131/desktop 22 checks
+pass; deterministic exports pass. Ten release assets, including SHA256SUMS,
+are staged locally. No public 4.5 release/tag yet.
 
-No release action remains. Task guests stopped and mounts detached; local
-user build artifacts, machines and unrelated worktrees are preserved. Task
-worktree/output are retained for support. No temporary notary key was created.
-Catalog/image publication was atomic; no DNS, hosting config or service restart.
-
-Rollback: promote v4.3.0 with `gh release edit v4.3.0 --latest`; restore the
-checked pre-4.4 catalog backup if downloads need rollback, and record the reason.
-Windows remains unsigned and Copland remains Mac-only. Physical Windows/Linux
-GPU/audio qualification remains outside hosted-runner coverage.
+Next: integrate PR, run consolidated root checks once, publish stable Latest,
+then verify every fresh anonymous download and stop dedicated QA hosts.
+QA VM 171 grew from 100 to 228 GiB with data preserved; Linux QA got FUSE 3.
+No user machine, catalog, DNS, hosting configuration or production service was
+changed. Root gxmetal/other worktrees remain. Rollback: promote v4.4.0 Latest.
