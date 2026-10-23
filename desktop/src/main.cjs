@@ -331,6 +331,14 @@ else app.whenReady().then(async () => {
     }
     if (!engines.size) app.quit();
   }, Number(process.env.CLASSICMAC_TEST_WAIT || 2000));
-}).catch(async error => { console.error(error); if(process.env.CLASSICMAC_TEST_HOME)for(const e of engines.values())await e.forceOff(); app.exit(1); });
+}).catch(async error => {
+  console.error(error);
+  if (process.env.CLASSICMAC_TEST_HOME) {
+    // Portable GUI launchers do not always forward their child's console.
+    await fs.writeFile(path.join(app.getPath('userData'),'qualification-error.json'),JSON.stringify({message:error.message,stack:error.stack},null,2)).catch(()=>{});
+    for(const e of engines.values())await e.forceOff();
+  }
+  app.exit(1);
+});
 app.on('window-all-closed', () => { if (!engines.size) app.quit(); });
 app.on('quit', () => { quitting = true; downloadJob?.abort(); pasteJob?.abort(); server?.close(); });

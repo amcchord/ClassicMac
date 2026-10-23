@@ -42,9 +42,13 @@ async function qualify({ window, dialog, home }) {
   checks.push('No host menu bar; semantic bitmap labels, measured document frame and unclipped home at both window sizes');
   await js('document.getElementById("settings").click()');await until('document.getElementById("editor").open');await shot('get-info');
   await js('document.querySelector("#editor button[value=cancel]").click();document.getElementById("media").click()');await until('document.getElementById("media-dialog").open');await shot('media');
-  await js('document.getElementById("close-media").click();document.getElementById("window-collapse").click()');
-  await until('document.body.classList.contains("shaded")');assert.equal(window.getBounds().height,23);await shot('windowshade');
-  await js('document.getElementById("window-collapse").click()');await until('!document.body.classList.contains("shaded")');assert.equal(window.getBounds().height,560);
+  await js('document.getElementById("close-media").click()');
+  const expanded=window.getBounds();
+  await js('document.getElementById("window-collapse").click()');
+  // Windows includes invisible non-client resize margins in getBounds().
+  // The visible title frame is the 23-pixel content area on every host.
+  await until('document.body.classList.contains("shaded")');assert.equal(window.getContentBounds().height,23);await shot('windowshade');
+  await js('document.getElementById("window-collapse").click()');await until('!document.body.classList.contains("shaded")');assert.deepEqual(window.getBounds(),expanded);
   checks.push('Get Info, Media and reversible WindowShade through the actual sandboxed IPC');
   // Capture actual DOM controls after Chromium paints them. The external
   // harness compares every captured device pixel with independent guest PNGs.
