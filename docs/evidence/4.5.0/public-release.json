@@ -1,0 +1,56 @@
+{
+  "release": "https://github.com/amcchord/ClassicMac/releases/tag/v4.5.0",
+  "tag": "v4.5.0",
+  "published_at": "2026-10-23T23:22:03Z",
+  "stable_latest": true,
+  "draft": false,
+  "prerelease": false,
+  "anonymous_downloads": [
+    {
+      "name": "ClassicMac-4.5.0-linux-amd64.deb",
+      "bytes": 120011188,
+      "sha256": "195e64177f2e60d8c2a8b56a3d9e9f884a97217fe9956382adace81230c98297"
+    },
+    {
+      "name": "ClassicMac-4.5.0-linux-x64.AppImage",
+      "bytes": 140054745,
+      "sha256": "63ab0ede546b7cb028f8e5c02fbd8e6d9f2d70630bf27bdcdcf01d9d7401200c"
+    },
+    {
+      "name": "ClassicMac-4.5.0-windows-x64.exe",
+      "bytes": 114413903,
+      "sha256": "065c897ef8154d7160b6efc9143c7ef1030091c0a411cc3007704ce88c30fc8c"
+    },
+    {
+      "name": "ClassicMac-4.5.0.dmg",
+      "bytes": 47871387,
+      "sha256": "7a980ada9708276436f1596781f25fd1934ba409929362162f36d0406a2d179b"
+    },
+    {
+      "name": "ClassicMac-4.5.0.zip",
+      "bytes": 42511604,
+      "sha256": "3f7191726dce891be9bc299bfedfc4bb15a17f5315b05a0b41e81b116ebdd37f"
+    },
+    {
+      "name": "ClassicMac-Copland-source.tar.gz",
+      "bytes": 16898942,
+      "sha256": "4dc2545d184c8898338be726ad6e9521f4a8bae2ec48859d2996adb46e0f164b"
+    },
+    {
+      "name": "ClassicMac-Linux-QEMU-source.tar.gz",
+      "bytes": 42348552,
+      "sha256": "8063316c2ec574b1ed9754659f866561c89105cfecbc03eb5d7df6a9f2f1aa12"
+    },
+    {
+      "name": "ClassicMac-Windows-QEMU-source.tar.gz",
+      "bytes": 41535953,
+      "sha256": "e671b44bd04fb9a3d46b61ff65aa4f320a1a2b44c73733808ca3bf8f3ca1a93a"
+    },
+    {
+      "name": "ClassicMac-macOS-QEMU-source.tar.gz",
+      "bytes": 42048721,
+      "sha256": "9e4834516f9252c939420634b747e805178c75999b56302ee1f9d0334bf13e6b"
+    }
+  ],
+  "manifest_matches_qualified_bytes": true
+}

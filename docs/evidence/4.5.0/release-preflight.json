@@ -33,5 +33,30 @@
     "staples_gatekeeper_exact_verifier": "pass",
     "original_entitlements": true
   },
-  "rollback": "Promote immutable v4.4.0 to Latest; existing machines and Library catalog are unchanged."
+  "rollback": "Promote immutable v4.4.0 to Latest; existing machines and Library catalog are unchanged.",
+  "source": "69f3d52ed721599542afe231bd5820549ba07813",
+  "consolidated": {
+    "source": "69f3d52ed721599542afe231bd5820549ba07813",
+    "checkout": "project root integration checkout",
+    "swift": {
+      "tests": 131,
+      "skips": 2,
+      "failures": 0,
+      "skip_reason": "Optional Copland archive/lifecycle fixtures unavailable"
+    },
+    "desktop": {
+      "tests": 22,
+      "skips": 0,
+      "failures": 0,
+      "image_tool": "Real signed bundled qemu-img"
+    },
+    "deterministic_assets": "pass",
+    "bundle_script_syntax": "pass",
+    "runtime_tree_matches_qualified_source": "956dd7d00ecb60b350608789aa6385a27f9ffa20",
+    "desktop_tree": "85186e0ec58549675b982bb23158b178bf99423f",
+    "app_tree": "ea1be6e285b9be703e893a8160574b34ba1823cd"
+  },
+  "public_release": "https://github.com/amcchord/ClassicMac/releases/tag/v4.5.0",
+  "public_downloads_verified": 9,
+  "public_dmg_exact_verifier": "pass"
 }

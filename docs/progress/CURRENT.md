@@ -1,25 +1,37 @@
-# ClassicMac 4.5 — publication preflight
+# ClassicMac 4.5.0 — stable release complete
 
-PR #35, contained `worktrees/4.5-desktop-platinum`, branch
-`codex/4.5-desktop-platinum`, runtime/UI source `956dd7d`. All requested desktop
-work is implemented: portable Windows EXE/Linux AppImage, measured Mac Platinum
-controls/bitmap fonts/window frame, classic title widgets/WindowShade and no
-host menu bar. Both setup and machine operations remain in the window.
+[Stable Latest v4.5.0](https://github.com/amcchord/ClassicMac/releases/tag/v4.5.0),
+published October 23, 2026. Exact source/tag:
+`69f3d52ed721599542afe231bd5820549ba07813` (PR #35).
+All ten assets are public; all nine fresh anonymous downloads match SHA256SUMS.
+The public Mac DMG passes full exact verification, staples and Gatekeeper.
 
-Both native Proxmox hosts pass complete guest/setup checks. Exact final files
-repeat UI/pixels at 1×/2×, composed title frame, actual HWND region, Finder,
-pause/restart/reconnect and normal shutdown. All 61 source/UI files match each
-package. Windows/Linux home captures are pixel-identical. Linux native CI
-40037705241 and Windows 40037702912 pass the complete fresh setup matrix.
+Windows now ships as one portable EXE and Linux as one AppImage, with an
+optional DEB. Shared Mac measurements, bitmap fonts, document/title controls
+and the home layout replace the approximate theme. All operations are in the
+window, without a host menu bar. Electron remains the internal desktop host.
+Measured components and actual captured controls/composed title frames pass
+at 1×/2× with zero differing pixels. Windows/Linux home captures are identical.
+Windows WindowShade uses an exact native 23-pixel drawing/input region.
 
-Mac 4.5 metadata-only app/DMG is signed, notarized, stapled and fully verified,
-with original entitlements and unchanged native frontend/engine code. Matching
-prepared engine source archives are staged. Local Swift 131/desktop 22 checks
-pass; deterministic exports pass. Ten release assets, including SHA256SUMS,
-are staged locally. No public 4.5 release/tag yet.
+Native Windows CI 40037702912 and Linux CI 40037705241 pass the complete fresh
+matrix at runtime/UI source 956dd7d. Both Proxmox hosts independently pass both
+setup routes, public ATI download/import/first Finder boot/normal shutdown,
+and exact final portable UI/boot/restart/shutdown checks. All 61 packaged
+source/UI files match. Root checks pass 131 Swift tests (two optional skips),
+all 22 desktop tests, deterministic exports and bundle syntax.
 
-Next: integrate PR, run consolidated root checks once, publish stable Latest,
-then verify every fresh anonymous download and stop dedicated QA hosts.
-QA VM 171 grew from 100 to 228 GiB with data preserved; Linux QA got FUSE 3.
-No user machine, catalog, DNS, hosting configuration or production service was
-changed. Root gxmetal/other worktrees remain. Rollback: promote v4.4.0 Latest.
+Mac retains qualified 4.4 native frontend/engines with new version metadata,
+original entitlements and accepted 4.5 notarization. Prepared source archives
+remain byte-identical to qualified 4.4, with NDRV verified.
+
+No release work remains. Dedicated QA VMs 170/171 are stopped; task scheduled
+tasks/RDP are closed and temporary notary key files are removed. Windows QA
+storage grew from 100 to 228 GiB without deleting data; Linux QA got FUSE 3.
+Task artifacts are retained. User machines, root gxmetal and unrelated
+worktrees are preserved. No catalog, DNS, hosting or production service change.
+Windows remains unsigned; Copland remains Mac-only. Physical GPU/audio and
+untested whole-window/scrollbar/menu states retain documented coverage limits.
+
+Rollback: `gh release edit v4.4.0 --latest`; record the reason. Existing
+machines and the public Library catalog are unchanged.

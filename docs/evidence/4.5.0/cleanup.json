@@ -1,0 +1,14 @@
+{
+  "qa_vms": {
+    "170": "stopped",
+    "171": "stopped"
+  },
+  "windows_qa_disk_gib": 228,
+  "task_scheduled_tasks_removed": true,
+  "task_rdp_client_disconnected": true,
+  "temporary_notary_key_files_removed": true,
+  "user_machines_unchanged": true,
+  "catalog_dns_hosting_unchanged": true,
+  "user_gxmetal_and_other_worktrees_preserved": true,
+  "task_artifacts_retained": true
+}

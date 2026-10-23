@@ -913,3 +913,31 @@ consolidated root checks, publish and verify stable 4.1.1. Retain 4.1.0 for roll
   source/UI inventories, source archives, SHA256SUMS and notarized Mac parity
   are retained in evidence/4.5.0. PR #35 is ready for integration/publication.
   No public 4.5 tag/release yet; rollback retains immutable v4.4.0.
+
+## 2026-10-23 — ClassicMac 4.5.0 published and independently verified
+
+- Merged PR #35 as `69f3d52ed721599542afe231bd5820549ba07813`, then tagged that
+  exact source v4.5.0. Consolidated root checks pass 131 Swift tests (two
+  optional Copland skips), all 22 desktop tests with the signed image tool,
+  deterministic exports and bundle syntax. Qualified desktop/app trees match.
+- Native Windows 40037702912 and Linux 40037705241 at `956dd7d` pass all
+  fresh gates. Dedicated Proxmox hosts independently pass setup/public ATI
+  import/Finder/normal shutdown and exact final UI/pixel/title/guest cycles.
+  All 61 source/UI assets match each package. Source archives retain exact
+  qualified 4.4 bytes and NDRV; Mac native code remains unchanged.
+- Verified all ten draft asset sizes/digests before publishing stable Latest
+  v4.5.0. All nine fresh anonymous downloads match the qualified manifest.
+  The fresh public Mac DMG passes full exact verification, signature/staple
+  and Gatekeeper checks. DMG SHA256:
+  `7a980ada9708276436f1596781f25fd1934ba409929362162f36d0406a2d179b`.
+- Mac app notary `493abc3d-6396-449b-8b44-1fb02b14c510` and DMG notary
+  `14fe17ea-6ed5-4eac-8108-7656613a5930` are Accepted. Original entitlements
+  are preserved; temporary private-key files are removed. Public verification,
+  integration, source/package parity and cleanup are in evidence/4.5.0.
+- All task guests shut down normally. Task scheduled tasks and RDP are closed;
+  dedicated VMs 170/171 are stopped. QA files and task worktree/output remain
+  for support. Windows QA disk remains 228 GiB, with prior data preserved;
+  Linux QA retains FUSE 3. No other VM or production system is changed.
+- No user machine, root gxmetal, unrelated worktree, Library catalog, DNS or
+  hosting configuration was modified. Stable v4.4.0 remains for rollback by
+  promotion to Latest. Requested work and publication are complete.
