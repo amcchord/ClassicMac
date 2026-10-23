@@ -8,7 +8,7 @@ const {execFileSync}=require('node:child_process');
   for(const scale of [1,2]){
     const home=path.join(output,'scale-'+scale);await fs.mkdir(home,{recursive:true});
     const child=spawn(exe,[`--force-device-scale-factor=${scale}`,'--disable-gpu'],{env:{...process.env,CLASSICMAC_TEST_HOME:home,CLASSICMAC_TEST_UI:'1'},stdio:['ignore','pipe','pipe']});
-    const log=createWriteStream(path.join(home,'app.log'));child.stdout.pipe(log);child.stderr.pipe(log);
+    const log=createWriteStream(path.join(home,'app.log'));child.stdout.pipe(log,{end:false});child.stderr.pipe(log,{end:false});child.once('close',()=>log.end());
     await new Promise((resolve,reject)=>{
       const timer=setTimeout(()=>{child.kill();reject(new Error('Portable UI qualification timed out'));},120000);
       child.once('error',e=>{clearTimeout(timer);reject(e);});child.once('exit',code=>{clearTimeout(timer);code===0?resolve():reject(new Error('UI process exited '+code));});

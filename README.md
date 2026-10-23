@@ -29,6 +29,18 @@
   <img src="docs/screenshots/powermacg4-macos92.png" width="410" alt="Mac OS 9.2 on the emulated Power Mac G4">
 </p>
 
+## New in ClassicMac 4.5
+
+- **Single-file desktop downloads.** Run the portable Windows EXE directly.
+  On Linux, mark the AppImage executable and run it. The optional DEB remains.
+- **The Mac app’s Platinum pixels.** Shared measured control artwork and bitmap
+  text replace the approximate CSS theme. The window has classic close, zoom,
+  resize and WindowShade controls, with no host menu bar.
+- **The same home layout.** Macs, preview, About This Mac and power controls
+  follow the Mac app. New Mac, Open Mac, Library and About stay in the window.
+- **Measured output.** Native framebuffer fixtures and actual app captures
+  check control pixels at 1× and 2×, with zero differing pixels.
+
 ## New in ClassicMac 4.4
 
 - **Apple's graphics drivers on emulated ATI hardware.** The clean Mac OS 9
@@ -85,9 +97,9 @@
 | Download | Host | Install |
 | --- | --- | --- |
 | macOS DMG | Apple Silicon, macOS 15+ | Drag ClassicMac to Applications |
-| Windows ZIP | Windows 11, x64 | Extract and run `ClassicMac.exe`, keeping its companion files |
+| Windows EXE | Windows 11, x64 | Run the single portable executable |
 | Linux DEB | Ubuntu 24.04+/Debian 13, x64 | Install the package with your package manager |
-| Linux tar.gz | Same Linux baseline | Extract and run `classicmac`; the host must support Chromium sandboxing |
+| Linux AppImage | Same Linux baseline | Mark the single file executable, then run it |
 
 The [latest release](https://github.com/amcchord/ClassicMac/releases/latest)
 contains the applications, checksums and corresponding engine sources. The
@@ -343,7 +355,7 @@ Requirements: an Apple Silicon Mac (M1 or later) running macOS 15 or newer.
 # 3. Build the app and bundle QEMU + firmware + dylibs into
 #    dist/ClassicMac.app (code-signed). APP_VERSION, APP_BUILD_VERSION and
 #    DIST_DIR override the version and output folder.
-APP_VERSION=4.4.0 APP_BUILD_VERSION=4.4.0 ./scripts/bundle-qemu.sh
+APP_VERSION=4.5.0 APP_BUILD_VERSION=4.5.0 ./scripts/bundle-qemu.sh
 
 # 4. Notarize and package a distributable disk image (DIST_NAME and
 #    DMG_VOLUME_NAME name the outputs)
@@ -351,7 +363,7 @@ APP_VERSION=4.4.0 APP_BUILD_VERSION=4.4.0 ./scripts/bundle-qemu.sh
 
 # 5. Verify the exact signed/stapled artifact, including versions, Gatekeeper,
 #    the bundled Tools CD and both Power Mac display cards
-./scripts/verify-release.sh dist/ClassicMac.dmg 4.4.0 4.4.0
+./scripts/verify-release.sh dist/ClassicMac.dmg 4.5.0 4.5.0
 ```
 
 All scripts are idempotent and safe to re-run. Building needs the Xcode command line tools and [Homebrew](https://brew.sh).

@@ -14,7 +14,9 @@ binaries are unsigned.
 On Linux, download **ClassicMac-4.5.0-linux-x64.AppImage**, mark it executable
 (`chmod +x ClassicMac-4.5.0-linux-x64.AppImage`) and run it. A DEB is also
 available for system installation. Linux builds require glibc 2.39 or newer
-and host desktop/audio libraries. Machine folders and application preferences
+and host desktop/audio libraries. AppImage mounting uses FUSE 3; on a minimal
+host, `./ClassicMac-4.5.0-linux-x64.AppImage --appimage-extract-and-run`
+runs the same single file without FUSE. Machine folders and application preferences
 are saved separately, so replacing the executable preserves your Macs.
 
 QMP uses private process pipes; the password-protected display listens only

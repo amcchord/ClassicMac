@@ -1,5 +1,20 @@
 # Changelog
 
+## 4.5.0 — Portable Platinum desktop (2026-10-23)
+
+- Windows ships as one portable EXE; Linux ships as one AppImage, with an
+  optional DEB. Machine folders and preferences persist outside the executable.
+- Ported the native Mac app’s measured Platinum control/window drawing and
+  BDF bitmap glyphs. Added semantic bitmap labels, classic title widgets,
+  zoom, resize and WindowShade; removed the host title/menu bars.
+- Matched the Mac home’s machine list, preview, information and power layout.
+  Open Mac and About are reachable alongside New Mac and Library. Media keeps
+  disc, floppy, sharing and confirmed Force Off accessible in the window.
+- Added deterministic source exports, independent native fixture checks and
+  actual captured DOM control comparisons at 1× and 2×.
+- macOS receives matching version metadata and keeps the qualified 4.4
+  frontend/engines. Existing machines and Library images are unchanged.
+
 ## 4.4.0 — 2026-10-22
 
 - Retire the remaining GXMetal catalog/provenance fields and dormant PowerPC
