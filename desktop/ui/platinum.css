@@ -8,10 +8,10 @@ button.default{height:26px;padding:5px 15px}button:active,button[data-held=true]
 .window{position:fixed;inset:0;background-repeat:no-repeat;image-rendering:pixelated;padding:22px 7px 7px 6px}
 .titlebar{height:21px;position:relative;display:flex;align-items:center;justify-content:center;line-height:16px;padding:0;background:transparent}
 .window>.titlebar{position:absolute;inset:0 1px auto 0;app-region:drag;-webkit-app-region:drag}
-.titlebar strong{font-weight:normal;margin-top:2px;white-space:nowrap}
+.titlebar strong{position:absolute;top:4px;height:16px;font-weight:normal;margin:0;padding:0;white-space:nowrap}
 .window.inactive>.titlebar{color:#888}
 button[data-widget]{position:absolute;top:4px;width:13px;height:13px;min-width:0;padding:0;app-region:no-drag;-webkit-app-region:no-drag}
-#window-close{left:4px}#window-zoom{right:33px}#window-collapse{right:17px}
+#window-close{left:4px}#window-zoom{right:20px}#window-collapse{right:4px}
 #window-grow{position:absolute;right:7px;bottom:7px;width:15px;height:15px;cursor:nwse-resize}
 body.shaded .workspace,body.shaded #setup,body.shaded #window-grow{visibility:hidden}
 body.shaded .window{height:23px;bottom:auto;padding:0}

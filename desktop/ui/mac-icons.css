@@ -8,12 +8,3 @@ button[data-icon="preferences"]::before{background-image:url(mac-icons/preferenc
 button[data-icon="library"]::before{background-image:url(mac-icons/library-16.png)}
 button[data-icon="display"]::before{background-image:url(mac-icons/display-16.png)}
 button[data-icon]:disabled::before{opacity:.45}
-/* Mac OS 9 document title: six raised pinstripes on the CCC frame. */
-.titlebar{height:21px;gap:6px;background:#ccc;border-bottom:1px solid #000;box-shadow:inset 0 1px #fff}
-.titlebar>span{display:none}.titlebar strong{background:#ccc;padding:0 4px;line-height:16px}
-.titlebar::before,.titlebar::after{content:"";flex:1;height:12px;margin-top:-2px;background:repeating-linear-gradient(to bottom,#fff 0,#fff 1px,#777 1px,#777 2px)}
-.titlebar::before{margin-left:20px}.titlebar::after{margin-right:20px}
-/* Keep icon/text controls on one line; the toolbar wraps whole controls. */
-button{white-space:nowrap}section.home>footer{flex-wrap:wrap;row-gap:8px}
-/* Leave room for both toolbar rows when the host limits window height. */
-#display{height:min(40vh,410px)}

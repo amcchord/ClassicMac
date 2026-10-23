@@ -59,6 +59,9 @@ async function qualify({ window, dialog, home }) {
   await fs.writeFile(path.join(home,'windowshade.png'),(await window.webContents.capturePage({x:0,y:0,width:window.getContentBounds().width,height:23})).toPNG());
   await js('document.getElementById("window-collapse").click()');await until('!document.body.classList.contains("shaded")');assert.deepEqual(window.getBounds(),expanded);
   checks.push('Get Info, Media and reversible WindowShade through the actual sandboxed IPC');
+  window.focus();await until('!document.querySelector(".window").classList.contains("inactive")');
+  await new Promise(r=>setTimeout(r,150));
+  await fs.writeFile(path.join(home,'pixel-window-title.png'),(await window.webContents.capturePage({x:0,y:0,width:window.getContentBounds().width,height:20})).toPNG());
   // Capture actual DOM controls after Chromium paints them. The external
   // harness compares every captured device pixel with independent guest PNGs.
   const pixelCases=[];

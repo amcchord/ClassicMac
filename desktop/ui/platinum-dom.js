@@ -47,7 +47,7 @@ function paint() {
   for(const e of document.querySelectorAll(controls)){
     watch(e);const w=Math.round(e.offsetWidth),h=Math.round(e.offsetHeight);if(!w||!h)continue;
     const s=state(e),kind=e.dataset.widget;
-    if(kind){e.style.backgroundImage=cached(`widget:${kind}:${s}:${active}`,p=>{if(active)C.titleBox(p,kind,s==='pressed');},13,13);continue;}
+    if(kind){const visible=active&&!document.querySelector('dialog[open]');e.style.backgroundImage=cached(`widget:${kind}:${s}:${visible}`,p=>{if(visible)C.titleBox(p,kind,s==='pressed');},13,13);continue;}
     if(e.type==='checkbox'||e.type==='radio'){
       e.style.backgroundImage=cached(`toggle:${e.type}:${e.checked}:${s}:${e.indeterminate}`,p=>C.toggle(p,e.type==='radio',e.checked,s,e.indeterminate),e.type==='radio'?12:14,12);continue;
     }
@@ -60,9 +60,11 @@ function paint() {
   }
   for(const e of document.querySelectorAll('.window,dialog')){
     watch(e);const w=e.offsetWidth,h=e.offsetHeight;if(!w||!h)continue;
-    const title=e.querySelector(':scope > .titlebar strong, :scope > form > .titlebar strong')?.textContent||'';
+    const titleElement=e.querySelector(':scope > .titlebar strong, :scope > form > .titlebar strong');
+    const title=titleElement?.textContent||'';
     const boxes=e.classList.contains('window'),focused=boxes?active&&!document.querySelector('dialog[open]'):true;
     const titleWidth=C.textWidth(title),collapsed=document.body.classList.contains('shaded');
+    if(titleElement)titleElement.style.left=Math.floor((w-1-titleWidth)/2)+'px';
     e.style.backgroundImage=cached(`frame:${w}:${h}:${focused}:${titleWidth}:${boxes}:${collapsed}`,p=>C.windowFrame(p,{active:focused,titleWidth,boxes,growable:boxes,collapsed:boxes&&collapsed}),w,h,C.face);
     e.classList.toggle('inactive',!focused);
   }
