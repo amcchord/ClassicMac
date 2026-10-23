@@ -10,7 +10,7 @@ Both native Proxmox hosts pass complete guest/setup checks. Exact final files
 repeat UI/pixels at 1×/2×, composed title frame, actual HWND region, Finder,
 pause/restart/reconnect and normal shutdown. All 61 source/UI files match each
 package. Windows/Linux home captures are pixel-identical. Linux native CI
-40037705241 passes; Windows 40037702912 is finishing its fresh setup matrix.
+40037705241 and Windows 40037702912 pass the complete fresh setup matrix.
 
 Mac 4.5 metadata-only app/DMG is signed, notarized, stapled and fully verified,
 with original entitlements and unchanged native frontend/engine code. Matching

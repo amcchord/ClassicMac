@@ -902,3 +902,14 @@ consolidated root checks, publish and verify stable 4.1.1. Retain 4.1.0 for roll
   publish stable Latest and verify every anonymous download. Rollback retains
   v4.4.0. User machines, root gxmetal and unrelated worktrees are preserved;
   no catalog, DNS, hosting configuration or production service changes.
+
+## 2026-10-23 — final native CI gates pass
+
+- Windows 40037702912 and Linux 40037705241 at `956dd7d` both pass all native
+  unit, exact portable UI/pixel/title-frame, boot/restart/shutdown and fresh
+  setup routes, including public ATI Library import and first Finder boot.
+  Final Proxmox portable bytes independently pass the UI and guest cycle.
+- Final Windows/Linux home captures are pixel-identical. Scale 2 captures,
+  source/UI inventories, source archives, SHA256SUMS and notarized Mac parity
+  are retained in evidence/4.5.0. PR #35 is ready for integration/publication.
+  No public 4.5 tag/release yet; rollback retains immutable v4.4.0.
