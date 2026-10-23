@@ -82,3 +82,13 @@ The utility also exports the native standard Icon Services families into its
 working directory (Startup Items when launched at startup) without resampling.
 Icon Services also invokes the native Resource Manager decompressor for older
 members. These are artwork acquisition aids, not guest runtime patches.
+
+## Shared Windows/Linux renderer (4.5)
+
+`desktop/scripts/export-platinum.py` exports the Mac measurement tables and
+BDF glyphs deterministically. `desktop/tests/platinum.test.cjs` compares the
+shared pixel renderer with these same independent fixtures at 1×/2×.
+`desktop/tests/ui-smoke.cjs` also launches the actual portable application at
+both device scales and compares 21 captured DOM control states against the
+guest reference PNGs, with zero differing pixels. See the [4.5 qualification
+record](../../docs/4.5.0-validation.md) for actual-host coverage and limits.

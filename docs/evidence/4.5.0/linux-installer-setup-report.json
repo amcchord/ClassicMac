@@ -1,0 +1,9 @@
+{
+  "platform": "linux",
+  "route": "installer",
+  "checks": [
+    "License acknowledgment gates Continue",
+    "Own CD required; real sparse disk and CD copy created; ready screen survives registration; Later opens library"
+  ],
+  "passed": true
+}

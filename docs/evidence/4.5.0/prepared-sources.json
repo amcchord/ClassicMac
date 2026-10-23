@@ -1,0 +1,22 @@
+{
+  "ClassicMac-macOS-QEMU-source.tar.gz": {
+    "sha256": "9e4834516f9252c939420634b747e805178c75999b56302ee1f9d0334bf13e6b",
+    "unchanged_from_release": "4.4.0",
+    "ndrv_current": true
+  },
+  "ClassicMac-Windows-QEMU-source.tar.gz": {
+    "sha256": "e671b44bd04fb9a3d46b61ff65aa4f320a1a2b44c73733808ca3bf8f3ca1a93a",
+    "unchanged_from_release": "4.4.0",
+    "ndrv_current": true
+  },
+  "ClassicMac-Copland-source.tar.gz": {
+    "sha256": "4dc2545d184c8898338be726ad6e9521f4a8bae2ec48859d2996adb46e0f164b",
+    "unchanged_from_release": "4.4.0",
+    "ndrv_current": false
+  },
+  "ClassicMac-Linux-QEMU-source.tar.gz": {
+    "sha256": "8063316c2ec574b1ed9754659f866561c89105cfecbc03eb5d7df6a9f2f1aa12",
+    "unchanged_from_release": "4.4.0",
+    "ndrv_current": true
+  }
+}

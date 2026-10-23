@@ -870,3 +870,35 @@ consolidated root checks, publish and verify stable 4.1.1. Retain 4.1.0 for roll
   ready, so no duplicate VM was created. Existing fixtures/user data preserved.
   No public release, catalog, DNS or infrastructure configuration changes.
   Next: qualify exact portable packages, integrate, release and verify downloads.
+
+## 2026-10-23 — portable packages and native pixel qualification complete
+
+- Runtime/UI source is frozen at `956dd7d` on PR #35. Shared Mac measurement
+  tables/BDF glyphs pass the independent native fixture suite; 21 actual DOM
+  control states plus the composed title frame pass with zero differing pixels
+  at both device scales. Final Windows/Linux 940×700 homes are pixel-identical.
+- Real Windows testing found the OS’s 39-pixel minimum. WindowShade now clips
+  the native drawing/input region to 23 pixels; GetWindowRgn/GetRgnBox verifies
+  physical region height at 1×/2×. Errors expand the window before presentation.
+  A final composed-header check exposed and removed legacy CSS overlays and
+  corrected integer title/widget placement. Native UI and exact package checks
+  pass after that correction. All 61 packaged source/UI files match source.
+- Both dedicated Proxmox hosts pass fresh public ATI image download, pause/
+  resume, SHA-256/import, both setup routes, Finder, restart and normal shutdown.
+  Final titlebar-only packages repeat the UI and guest cycle using the stopped
+  task-owned public fixture; main/engine/setup code is unchanged. Linux CI
+  40037705241 passes; Windows CI 40037702912 is finishing the full matrix.
+- Windows QA VM 171’s existing 100 GiB disk lacked space for another 32 GiB
+  fixture. Verified SazProx headroom, extended only its disk to 228 GiB via
+  AustinLand, then extended C: online without deleting data. FUSE 3 is installed
+  only on the minimal Linux QA VM. Earlier failed/partial test evidence remains.
+- Mac 4.5 retains the exact qualified 4.4 native frontend and four engine code
+  images, refreshed version metadata, original entitlements and final accepted
+  app/DMG notarization. Full exact verifier, staples/Gatekeeper and isolated
+  first-run launch pass. Source archives remain byte-identical to qualified
+  4.4 with NDRV checked. All 131 Swift tests pass (three optional local skips),
+  all 22 desktop tests pass with signed qemu-img, deterministic export passes.
+- No public 4.5 tag/release yet. Next: integrate, consolidated root validation,
+  publish stable Latest and verify every anonymous download. Rollback retains
+  v4.4.0. User machines, root gxmetal and unrelated worktrees are preserved;
+  no catalog, DNS, hosting configuration or production service changes.

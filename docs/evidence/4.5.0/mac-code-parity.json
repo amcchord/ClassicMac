@@ -1,0 +1,11 @@
+{
+  "source_release": "v4.4.0",
+  "comparison": "Mach-O bytes before signature, normalizing signature offset/size and signature-dependent __LINKEDIT filesize",
+  "unchanged_code": {
+    "MacOS/ClassicMac": "4a85250a9b3eb4809ade13961f9a265e852ed422f14e78aeeb79edd9109978ba",
+    "Helpers/Power Mac G4.app/Contents/MacOS/qemu-system-ppc": "61c112392d9a0d72238c78256c51b545477b0145ef734a3b4b01d444fec644ba",
+    "Helpers/Quadra 800.app/Contents/MacOS/qemu-system-m68k": "255f70225e19dcf2490e1037cca8f397df70ba78f2929a76e48a793028ac57f6",
+    "Helpers/Quadra 800.app/Contents/MacOS/qemu-img": "eab9ddffa8013780a3abc1a15af6b96886e03aac893ebaea090ab7553557522d",
+    "Helpers/Power Mac 7500.app/Contents/MacOS/dingusppc": "8d5e6688a9f124408a6c0b84d350739599ff863d8afba507bcad04947505a5e9"
+  }
+}

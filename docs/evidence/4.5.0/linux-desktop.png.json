@@ -1,0 +1,20 @@
+{
+  "connected": true,
+  "canvas": true,
+  "toolbar": {
+    "fitsWidth": true,
+    "singleLineButtons": true,
+    "bottomVisible": true
+  },
+  "setup": {
+    "active": false,
+    "step": "welcome",
+    "busy": false,
+    "acknowledged": false
+  },
+  "platinum": {
+    "menuBar": false,
+    "bitmapLabels": 481,
+    "windowWidgets": 3
+  }
+}
