@@ -1,6 +1,6 @@
 {
   "name": "classicmac-desktop",
-  "version": "4.4.0",
+  "version": "4.5.0",
   "description": "ClassicMac for Windows and Linux",
   "author": "Austin McChord",
   "private": true,
@@ -8,14 +8,15 @@
   "scripts": {
     "start": "electron .",
     "test": "node --test tests/*.test.cjs",
-    "package:win": "electron-builder --win zip --x64 --publish never",
+    "package:win": "electron-builder --win portable --x64 --publish never",
     "prepackage:win": "npm test && node scripts/refresh-runtime.cjs",
-    "package:linux": "electron-builder --linux tar.gz deb --x64 --publish never",
+    "package:linux": "electron-builder --linux AppImage deb --x64 --publish never",
     "prepackage:linux": "node scripts/refresh-runtime.cjs"
   },
   "devDependencies": {
     "electron": "44.9.0",
-    "electron-builder": "26.15.3"
+    "electron-builder": "26.15.3",
+    "pngjs": "7.0.0"
   },
   "build": {
     "appId": "com.classicmac.emulator.desktop",
@@ -35,7 +36,10 @@
       }
     ],
     "win": {
-      "icon": "ui/app.ico"
+      "icon": "ui/app.ico",
+      "target": [
+        "portable"
+      ]
     },
     "artifactName": "ClassicMac-${version}-${os}-${arch}.${ext}",
     "linux": {
@@ -44,9 +48,16 @@
       "icon": "ui/app.png",
       "maintainer": "Austin McChord",
       "target": [
-        "tar.gz",
+        "AppImage",
         "deb"
       ]
+    },
+    "portable": {
+      "artifactName": "ClassicMac-${version}-windows-x64.exe",
+      "unpackDir": false
+    },
+    "appImage": {
+      "artifactName": "ClassicMac-${version}-linux-x64.AppImage"
     }
   },
   "homepage": "https://github.com/amcchord/ClassicMac"

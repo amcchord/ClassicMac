@@ -84,17 +84,29 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: ClassicMac-Windows-app
-          path: output/desktop/packages/*.zip
+          path: output/desktop/packages/*.exe
           retention-days: 14
+      - name: Qualify the portable executable UI
+        shell: pwsh
+        run: |
+          $env:CLASSICMAC_TEST_HOME = "$pwd/output/desktop/ui-smoke"
+          $env:CLASSICMAC_TEST_UI = "1"
+          $ui = Start-Process -FilePath output/desktop/packages/ClassicMac-4.5.0-windows-x64.exe -Wait -PassThru
+          if ($ui.ExitCode -ne 0) { throw "Portable UI qualification failed" }
+          if (-not (Test-Path "$env:CLASSICMAC_TEST_HOME/ui-report.json")) { throw "Missing portable UI report" }
+          Remove-Item Env:CLASSICMAC_TEST_UI
+          Remove-Item Env:CLASSICMAC_TEST_HOME
       - name: Test the packaged desktop with a disposable OS9 machine
-        run: node desktop/tests/smoke-desktop.cjs output/desktop/packages/win-unpacked/ClassicMac.exe output/desktop/smoke
+        run: node desktop/tests/smoke-desktop.cjs output/desktop/packages/ClassicMac-4.5.0-windows-x64.exe output/desktop/smoke
       - name: Test first-run setup through the packaged application
-        run: node desktop/tests/setup-smoke.cjs output/desktop/packages/win-unpacked/ClassicMac.exe output/desktop/setup-smoke
+        run: node desktop/tests/setup-smoke.cjs output/desktop/packages/ClassicMac-4.5.0-windows-x64.exe output/desktop/setup-smoke
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: ClassicMac-Windows-smoke
           path: |
+            output/desktop/ui-smoke/*.png
+            output/desktop/ui-smoke/ui-report.json
             output/desktop/smoke/desktop.png
             output/desktop/smoke/desktop.png.json
             output/desktop/smoke/desktop.png.shutdown.json

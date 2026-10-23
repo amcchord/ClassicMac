@@ -1,5 +1,5 @@
 'use strict';
-const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, Menu, screen } = require('electron');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const http = require('node:http');
@@ -19,6 +19,8 @@ const token = randomBytes(24).toString('hex');
 const machines = new Map();
 const engines = new Map();
 let window, server, origin, quitting = false;
+let expandedBounds;
+const windowState = () => window?.webContents.send('window-state', { focused: window.isFocused(), shaded: !!expandedBounds });
 const indexFile = () => path.join(app.getPath('userData'), 'library.json');
 function binary(family) {
   if (process.platform === 'darwin' && process.env.CLASSICMAC_MAC_APP) {
@@ -94,6 +96,28 @@ function handle(name, handler) {
   });
 }
 function installHandlers() {
+  handle('windowAction', action => {
+    if (action === 'close') window.close();
+    else if (action === 'zoom') {
+      if (expandedBounds) return;
+      if (window.isMaximized()) window.unmaximize(); else window.maximize();
+    } else if (action === 'collapse') {
+      if (window.isMaximized()) window.unmaximize();
+      if (expandedBounds) {
+        const previous = expandedBounds; expandedBounds = undefined;
+        window.setBounds(previous); window.setMinimumSize(780,560);
+      } else {
+        expandedBounds = window.getBounds(); window.setMinimumSize(780,23); window.setSize(expandedBounds.width,23);
+      }
+      windowState();
+    } else throw new Error('Unknown window action.');
+  });
+  handle('resizeWindow', size => {
+    if (expandedBounds || window.isMaximized()) return;
+    if (!Number.isFinite(size?.width) || !Number.isFinite(size?.height)) throw new Error('Invalid window size.');
+    const area=screen.getDisplayMatching(window.getBounds()).workAreaSize;
+    window.setSize(Math.round(Math.max(780,Math.min(area.width,size.width))),Math.round(Math.max(560,Math.min(area.height,size.height))));
+  });
   handle('state', state);
   handle('chooseInstallCD', async () => {
     const result = await dialog.showOpenDialog(window, { title: 'Choose your Mac OS installation CD image', properties: ['openFile'], filters: [{ name: 'Mac OS CD images', extensions: ['iso', 'img', 'toast', 'cdr'] }] });
@@ -169,10 +193,10 @@ function installHandlers() {
     const engine = engines.get(id); if (!engine) throw new Error('This Mac is not running.');
     await engine.restart();
   });
-  handle('forceOff', async id => {
+  handle('forceOff', async (id, confirmed) => {
     const engine = engines.get(id); if (!engine) return;
-    const result = await dialog.showMessageBox(window, { type: 'warning', message: `Force off “${lookup(id).config.name}”?`, detail: 'Unsaved changes will be lost. Use Shut Down in Mac OS whenever possible.', buttons: ['Cancel', 'Force Off'], defaultId: 0, cancelId: 0 });
-    if (result.response === 1) await engine.forceOff();
+    if (confirmed !== true) throw new Error('Confirm Force Off before stopping this Mac.');
+    await engine.forceOff();
   });
   handle('reveal', id => shell.showItemInFolder(lookup(id).folder));
   handle('catalog', async () => { catalogRows=await catalog.loadCatalog(); return catalogRows.map(m=>({...m,available:(m.machineFamily||'powerMacG4')==='powerMacG4'&&catalog.supportedVersion(m.minimumAppVersion)})); });
@@ -208,7 +232,7 @@ function installHandlers() {
 }
 
 async function serve() {
-  const mime = { '.html': 'text/html', '.css': 'text/css', '.js': 'text/javascript', '.png': 'image/png', '.ttf': 'font/ttf', '.ico': 'image/x-icon' };
+  const mime = { '.html': 'text/html', '.css': 'text/css', '.js': 'text/javascript', '.mjs': 'text/javascript', '.png': 'image/png', '.ttf': 'font/ttf', '.ico': 'image/x-icon' };
   server = http.createServer(async (req, res) => {
     try {
       if (req.method !== 'GET' || req.headers.host !== new URL(origin).host) { res.writeHead(403); return res.end(); }
@@ -247,21 +271,28 @@ else app.whenReady().then(async () => {
   }
   await serve();
   installHandlers();
-  window = new BrowserWindow({ width: 1060, height: 840, minWidth: 780, minHeight: 560, title: 'ClassicMac', backgroundColor: '#c0c0c0', autoHideMenuBar: true,
+  Menu.setApplicationMenu(null);
+  window = new BrowserWindow({ width: 940, height: 700, minWidth: 780, minHeight: 560, title: 'ClassicMac', backgroundColor: '#dddddd', frame: false, thickFrame: false, autoHideMenuBar: true,
     icon: path.join(assets, 'app.ico'), webPreferences: { preload: path.join(__dirname, 'preload.cjs'), nodeIntegration: false, contextIsolation: true, sandbox: true } });
   window.setMenu(null);
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   window.webContents.on('will-navigate', (event, url) => { if (url !== `${origin}/${token}/index.html`) event.preventDefault(); });
   window.webContents.on('will-attach-webview', event => event.preventDefault());
   window.on('blur',()=>pasteJob?.abort());
+  window.on('focus',windowState);window.on('blur',windowState);
   window.on('close', event => {
     if ((engines.size || downloadJob) && !quitting) {
       event.preventDefault();
-      dialog.showMessageBox(window, { type: 'info', message: 'Shut down your running Macs before quitting ClassicMac.', detail: 'Choose Shut Down from the Special menu in Mac OS, or use the Shut Down button. Use Force Off only if a Mac does not respond.' });
+      window.webContents.send('problem', 'Shut down your running Macs before quitting ClassicMac. Choose Shut Down in Mac OS or use the Shut Down button. Pause or finish any active download.');
     }
   });
   app.on('second-instance', () => { window.show(); window.focus(); });
   await window.loadURL(`${origin}/${token}/index.html`);
+  if (process.env.CLASSICMAC_TEST_UI) {
+    if (!process.env.CLASSICMAC_TEST_HOME) throw new Error('UI qualification requires an isolated home.');
+    await require('./ui-qualification.cjs').qualify({ window, dialog, home: app.getPath('userData') });
+    app.quit(); return;
+  }
   if (process.env.CLASSICMAC_TEST_SETUP) {
     await require('./setup-qualification.cjs').qualify({ window, dialog, engines, home: app.getPath('userData'), route: process.env.CLASSICMAC_TEST_SETUP });
     app.quit(); return;

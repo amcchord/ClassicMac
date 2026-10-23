@@ -97,6 +97,7 @@ export function initFirstMacSetup(api, finish) {
     try {
       await finish(readyID, start);
       active = false;
+      $('notice').textContent = start ? 'Use Shut Down from Mac OS before closing ClassicMac.' : 'Choose Start Up, or use Media to select an installation CD.';
     } catch (error) { showError(error); }
     finally { busy = false; render(); }
   }

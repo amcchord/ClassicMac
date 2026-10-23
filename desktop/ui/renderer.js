@@ -1,12 +1,22 @@
 import RFB from './browser/novnc/core/rfb.js';
 import { initFirstMacSetup } from './setup.js';
+import { initPlatinum } from './platinum-dom.js';
 const api = window.classicmac;
+initPlatinum(api);
 const $ = id => document.getElementById(id);
 const model = { powerMacG4: 'Power Mac G4', quadra800: 'Quadra 800', powerMac7500: 'Power Mac 7500' };
 const icon = { powerMacG4: 'powermac_g4', quadra800: 'quadra_800', powerMac7500: 'powermac_7500' };
 let relativePointer = false;
 let machines = [], selected, rfb, displayID, displayKey, connectTimer, creating = false, connectionGeneration = 0, setup;
 const current = () => machines.find(m => m.id === selected);
+$('machines').addEventListener('keydown', event => {
+  if (!['ArrowUp','ArrowDown','Home','End','Enter'].includes(event.key)) return;
+  event.preventDefault();
+  if (event.key === 'Enter') { $('start').click(); return; }
+  const index = machines.findIndex(m => m.id === selected);
+  const next = event.key === 'Home' ? 0 : event.key === 'End' ? machines.length - 1 : Math.max(0, Math.min(machines.length - 1, index + (event.key === 'ArrowDown' ? 1 : -1)));
+  if (machines[next]) { selected = machines[next].id; render(); }
+});
 function message(text) { $('message-text').textContent = text; if (!$('message').open) $('message').showModal(); }
 async function action(fn) { try { await fn(); } catch (error) { message(error.message); } }
 $('message-ok').onclick = () => $('message').close();
@@ -62,20 +72,25 @@ function render() {
     const name = document.createElement('strong'); name.textContent = m.name;
     const detail = document.createElement('small'); detail.textContent = m.paused ? 'Paused' : m.running ? 'Running now' : model[m.machineFamily];
     text.append(name, detail); row.append(image, text); row.onclick = () => { selected = m.id; render(); }; list.append(row);
+    row.ondblclick = () => $('start').click();
   }
   const m = current();
   $('name').textContent = m?.name ?? 'Your classic Macs, on your PC.';
-  $('status').textContent = m?.paused ? 'Paused' : m?.running ? 'Running now' : 'Ready';
+  $('status').textContent = m?.paused ? 'Paused' : m?.running ? 'Running now' : 'Shut down';
+  $('curtain').querySelector('img').src = `${icon[m?.machineFamily] || 'powermac_g4'}-32.png`;
+  $('curtain').querySelector('p').textContent = m?.running ? 'Starting up…' : 'Start up this Mac to see its screen here.';
   $('details').replaceChildren();
-  if (m) for (const [name, value] of [['Model', model[m.machineFamily]], ['Memory', `${m.ramMB} MB`], ['Hard disk', `${m.diskSizeGB ?? '—'} GB`], ['Screen', `${m.width} × ${m.height}`], ['Graphics', m.graphicsCard === 'atiRadeon' ? 'ATI Radeon' : 'Standard'], ['Sharing', m.sharedFolderPath ? 'On' : 'Off']]) {
+  if (m) for (const [name, value] of [['Model', model[m.machineFamily]], ['Mac OS', m.machineFamily === 'quadra800' ? 'System 7.1 – Mac OS 8.1' : 'Mac OS 8.5 – 9.2.2'], ['Memory', `${m.ramMB} MB`], ['Hard disk', `${m.diskSizeGB ?? '—'} GB`], ['Screen', `${m.width} × ${m.height}`], ['Graphics', m.graphicsCard === 'atiRadeon' ? 'ATI Radeon (3D acceleration)' : 'Standard'], ['Sharing', m.sharedFolderPath ? 'On' : 'Off']]) {
     const dt = document.createElement('dt'), dd = document.createElement('dd'); dt.textContent = name + ':'; dd.textContent = value; $('details').append(dt, dd);
   }
-  for (const id of ['start', 'settings', 'disc', 'reveal', 'share']) $(id).disabled = !m || (id !== 'reveal' && m.machineFamily === 'powerMac7500');
+  for (const id of ['start', 'settings', 'media', 'disc', 'reveal', 'share']) $(id).disabled = !m || (id !== 'reveal' && m.machineFamily === 'powerMac7500');
   for (const id of ['pause', 'restart', 'stop', 'force', 'fullscreen', 'paste']) $(id).disabled = !m?.running;
   $('settings').disabled ||= !!m?.running; $('disc').disabled ||= !!m?.running;
   $('floppy').disabled=!m||m.machineFamily!=='quadra800'||m.running;
   $('share').disabled=!m||m.running;
-  $('start').textContent = m?.paused ? 'Resume Mac' : m?.running ? 'Show Mac' : 'Start Mac';
+  $('start').textContent = m?.paused ? 'Resume Mac' : m?.running ? 'Show Mac' : 'Start Up';
+  for (const id of ['pause','restart','stop']) $(id).hidden = !m?.running;
+  document.querySelector('.screen-actions').hidden = !m?.running;
   $('pause').textContent = m?.paused ? 'Resume' : 'Pause';
   const nextDisplay = m?.running ? `${m.id}:${m.display?.url}` : null;
   if (nextDisplay !== displayKey) { displayKey = nextDisplay; connect(m); }
@@ -91,7 +106,14 @@ $('start').onclick = () => action(async () => { const m = current(); if (m?.paus
 $('pause').onclick = () => action(() => current().paused ? api.resume(selected) : api.pause(selected));
 $('stop').onclick = () => action(() => api.shutdown(selected));
 $('restart').onclick = () => action(() => api.restart(selected));
-$('force').onclick = () => action(() => api.forceOff(selected));
+$('force').onclick = () => {
+  $('confirm-text').textContent = `Force off “${current().name}”?\n\nUnsaved changes will be lost. Use Shut Down in Mac OS whenever possible.`;
+  $('confirm').showModal();
+};
+$('confirm-cancel').onclick = () => $('confirm').close();
+$('confirm-ok').onclick = () => action(async () => { await api.forceOff(selected,true); $('confirm').close(); $('media-dialog').close(); });
+$('media').onclick = () => $('media-dialog').showModal();
+$('close-media').onclick = () => $('media-dialog').close();
 $('disc').onclick = () => action(() => api.disc(selected));
 $('floppy').onclick=()=>action(()=>api.floppy(selected));
 $('reveal').onclick = () => action(() => api.reveal(selected));
@@ -157,10 +179,10 @@ window.classicmacEvidence = () => {
   const buttons = [...footer.querySelectorAll('button')].filter(button => button.getBoundingClientRect().width > 0);
   const toolbar = {
     fitsWidth: buttons.every(button => { const r = button.getBoundingClientRect(); return r.left >= bounds.left - 1 && r.right <= bounds.right + 1; }),
-    singleLineButtons: buttons.every(button => { const range = document.createRange(); range.selectNodeContents(button); return [...range.getClientRects()].filter(r => r.width > 0 && r.height > 0).length === 1; }),
+    singleLineButtons: buttons.every(button => button.scrollWidth <= button.clientWidth && [...button.querySelectorAll('.pixel-text')].every(span => span.offsetTop === button.querySelector('.pixel-text')?.offsetTop)),
     bottomVisible: bounds.bottom <= innerHeight
   };
-  return { machines: machines.map(m => ({ id: m.id, running: m.running })), connected: $('curtain').hidden, canvas: !!$('display').querySelector('canvas'), selected, toolbar, setup: setup?.evidence() };
+  return { machines: machines.map(m => ({ id: m.id, running: m.running })), connected: $('curtain').hidden, canvas: !!$('display').querySelector('canvas'), selected, toolbar, setup: setup?.evidence(), platinum: { menuBar: !!document.querySelector('nav'), bitmapLabels: document.querySelectorAll('.pixel-text').length, windowWidgets: document.querySelectorAll('[data-widget]').length } };
 };
 setup = initFirstMacSetup(api, async (id, start) => {
   selected = id;
