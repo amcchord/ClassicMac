@@ -23,7 +23,7 @@ let expandedBounds;
 const windowState = () => window?.webContents.send('window-state', { focused: window.isFocused(), shaded: !!expandedBounds });
 function expandWindow() {
   if (!expandedBounds) return;
-  const previous=expandedBounds;expandedBounds=undefined;
+  const previous={...expandedBounds,...Object.fromEntries(['x','y'].map(key=>[key,window.getBounds()[key]]))};expandedBounds=undefined;
   if(process.platform==='win32')window.setShape([]);
   window.setBounds(previous);window.setMinimumSize(780,560);windowState();
 }
