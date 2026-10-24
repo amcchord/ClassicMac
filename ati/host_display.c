@@ -1,10 +1,11 @@
 /* ClassicMac guest display-control mailbox. GPL-2.0-or-later. */
+#include "qemu/osdep.h"
+
 #include "classicmac_host_display.h"
 #include "hw/pci/pci_device.h"
 #include "migration/vmstate.h"
 #include "qapi/error.h"
 #include "qemu/module.h"
-#include "qemu/osdep.h"
 #include "qom/object.h"
 
 #define TYPE_CLASSICMAC_DISPLAY_CONTROL "classicmac-display-control"
