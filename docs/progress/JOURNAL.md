@@ -1284,3 +1284,15 @@ consolidated root checks, publish and verify stable 4.1.1. Retain 4.1.0 for roll
   fixtures and the VM175 SSH tunnel stopped after command/PID verification.
   AustinLand accepted graceful shutdown for owned VM175; private build and proof
   files remain on its disk. No unrelated VM, worktree or service was changed.
+
+## 2026-10-24 — client branch publication approved
+
+- User explicitly approved pushing both client branches and opening integration
+  PRs. Inspected current origins; ClassicMac is based on current main 6c5ff7b.
+  RetroBoot depends on D044 hostd e473f4c; its PR must remain draft until the
+  coordinator integrates and qualifies the full Quadra runtime.
+- Final build inspection found RTL8139 missing from the repeat-build reset list.
+  Added the file and ran source preparation twice successfully in the owned QEMU
+  worktree. Linux/Windows smoke paths now match desktop package version 4.6.0.
+  Bash syntax, version/path consistency and diff checks pass. Guest image bytes
+  and the public catalogs are unchanged.

@@ -48,6 +48,8 @@ emulator/guest/hostd workstreams remain owned by their coordinator; do not edit
 them. No cross-task messages or physical device changes occurred. VM175 retains
 its private build/proof files. All owned guest Macs shut down natively.
 
-Next: obtain explicit authorization to push the prepared client branches/open
-integration PRs, then coordinate D044 integration and client releases. The
-workspace agreement requires current-task authorization for shared pushes/releases.
+User approved pushing both prepared client branches and opening integration PRs.
+Next: publish those PRs; the RetroBoot PR remains a draft until D044 integration
+and appliance validation. This approval does not publish app binaries or deploy
+physical devices. Two repeated QEMU source-preparation passes verify the RTL
+reset-list fix, and both CI smoke paths now match package version 4.6.0.

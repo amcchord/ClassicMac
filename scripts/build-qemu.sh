@@ -63,6 +63,7 @@ PATCHED_FILES=(
   hw/misc/macio/macio.c
   include/hw/misc/macio/macio.h
   hw/ide/macio.c
+  hw/net/rtl8139.c
   hw/ide/trace-events
   hw/misc/macio/mac_dbdma.c
   hw/audio/trace-events
