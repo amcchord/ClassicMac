@@ -260,6 +260,7 @@ public:
   QJsonArray steps, results;
   QString output;
   int index = 0;
+  int announced = -1;
   QElapsedTimer elapsed;
   QTimer timer;
   bool runningStep = false;
@@ -276,6 +277,13 @@ public:
   }
   void finish(bool passed, QString error = {}) {
     timer.stop();
+    if (!passed) {
+      auto w = QApplication::activeModalWidget();
+      if (!w)
+        w = QApplication::activeWindow();
+      if (w)
+        w->grab().save(output + "/failure.png");
+    }
     Model::writeJSON(output + "/result.json",
                      QJsonObject{{"passed", passed},
                                  {"error", error},
@@ -295,6 +303,10 @@ public:
     }
     auto step = steps[index].toObject();
     auto action = step["action"].toString();
+    if (announced != index) {
+      announced = index;
+      qInfo("QA step %d: %s", index, action.toUtf8().constData());
+    }
     qint64 wait = step.value("timeout").toInt(60000);
     if (elapsed.elapsed() > wait) {
       finish(false, "Timed out at " + QString::number(index) + ": " + action);
@@ -446,9 +458,12 @@ public:
         done = !app->currentEngine();
       else if (action == "click") {
         QString target = step["text"].toString();
+        auto scope = QApplication::activeModalWidget();
         for (auto w : QApplication::allWidgets())
           if (auto b = qobject_cast<QAbstractButton *>(w);
               b && b->isVisible() && b->isEnabled() && b->text() == target) {
+            if (scope && b->window() != scope)
+              continue;
             QTimer::singleShot(0, b, [b] { b->click(); });
             done = true;
             break;
@@ -483,9 +498,15 @@ public:
       } else if (action == "file") {
         for (auto w : QApplication::topLevelWidgets())
           if (auto d = qobject_cast<QFileDialog *>(w); d && d->isVisible()) {
-            d->selectFile(step["path"].toString());
-            QTimer::singleShot(0, d,
-                               [d] { QMetaObject::invokeMethod(d, "accept"); });
+            QFileInfo file(step["path"].toString());
+            d->setDirectory(file.absolutePath());
+            QTimer::singleShot(500, d, [d, file] {
+              d->selectFile(file.absoluteFilePath());
+              if (auto edit = d->findChild<QLineEdit *>("fileNameEdit"))
+                edit->setText(file.absoluteFilePath());
+              QTimer::singleShot(
+                  100, d, [d] { QMetaObject::invokeMethod(d, "accept"); });
+            });
             done = true;
             break;
           }

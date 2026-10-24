@@ -366,7 +366,7 @@ Requirements: an Apple Silicon Mac (M1 or later) running macOS 15 or newer.
 # 3. Build the app and bundle QEMU + firmware + dylibs into
 #    dist/ClassicMac.app (code-signed). APP_VERSION, APP_BUILD_VERSION and
 #    DIST_DIR override the version and output folder.
-APP_VERSION=4.5.0 APP_BUILD_VERSION=4.5.0 ./scripts/bundle-qemu.sh
+APP_VERSION=4.6.0 APP_BUILD_VERSION=4.6.0 ./scripts/bundle-qemu.sh
 
 # 4. Notarize and package a distributable disk image (DIST_NAME and
 #    DMG_VOLUME_NAME name the outputs)
@@ -374,7 +374,7 @@ APP_VERSION=4.5.0 APP_BUILD_VERSION=4.5.0 ./scripts/bundle-qemu.sh
 
 # 5. Verify the exact signed/stapled artifact, including versions, Gatekeeper,
 #    the bundled Tools CD and both Power Mac display cards
-./scripts/verify-release.sh dist/ClassicMac.dmg 4.5.0 4.5.0
+./scripts/verify-release.sh dist/ClassicMac.dmg 4.6.0 4.6.0
 ```
 
 All scripts are idempotent and safe to re-run. Building needs the Xcode command line tools and [Homebrew](https://brew.sh).

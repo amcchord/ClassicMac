@@ -1,5 +1,6 @@
 #include "app.h"
 #include <QtConcurrent>
+#include <optional>
 using Model::fail;
 using namespace Platinum;
 static QString iconName(const QString &f) {
@@ -54,8 +55,14 @@ public:
     QImage image;
     if (auto e = app->currentEngine())
       image = e->vnc.frame;
-    else if (m)
-      image.load(m->folder + "/preview.png");
+    else if (m) {
+      try {
+        auto path = Model::machineFile(m->folder, "preview.png");
+        if (QFileInfo(path).size() <= 16 * 1048576)
+          image.load(path);
+      } catch (const std::exception &) { /* A preview is optional. */
+      }
+    }
     QPainter q(&p.image);
     if (!image.isNull())
       q.drawImage(QRect(2, 2, width() - 4, height() - 4), image);
@@ -92,7 +99,11 @@ background(QWidget *parent, const QString &title,
       cancel = true;
     return finished;
   };
-  QFutureWatcher<T> watcher;
+  struct Result {
+    std::optional<T> value;
+    QString error;
+  };
+  QFutureWatcher<Result> watcher;
   auto progress = [&](QString phase, qint64 complete, qint64 total) {
     QMetaObject::invokeMethod(
         &d,
@@ -103,14 +114,29 @@ background(QWidget *parent, const QString &title,
         },
         Qt::QueuedConnection);
   };
-  auto future = QtConcurrent::run([&] { return job(cancel, progress); });
-  QObject::connect(&watcher, &QFutureWatcher<T>::finished, &d, [&] {
+  auto future = QtConcurrent::run([&]() -> Result {
+    try {
+      return {job(cancel, progress), {}};
+    } catch (const std::exception &e) {
+      return {{}, QString::fromUtf8(e.what())};
+    } catch (...) {
+      return {{}, "The operation could not complete."};
+    }
+  });
+  QObject::connect(&watcher, &QFutureWatcher<Result>::finished, &d, [&] {
     finished = true;
     d.done();
   });
   watcher.setFuture(future);
   d.exec();
-  return future.result();
+  if (!finished) {
+    cancel = true;
+    future.waitForFinished();
+  }
+  auto result = future.result();
+  if (!result.error.isEmpty())
+    fail(result.error);
+  return *result.value;
 }
 App::App() : PWindow("ClassicMac", {940, 700}) {
   setMinimumSize(780, 560);
@@ -399,8 +425,12 @@ PWindow *App::guest(Engine *e) {
     preview->update();
     if (previewClock->elapsed() > 1000 && !e->vnc.frame.isNull()) {
       previewClock->restart();
-      e->vnc.frame.scaled(400, 300, Qt::KeepAspectRatio, Qt::FastTransformation)
-          .save(e->machine.folder + "/preview.png");
+      QSaveFile file(e->machine.folder + "/preview.png");
+      if (file.open(QFile::WriteOnly) &&
+          e->vnc.frame
+              .scaled(400, 300, Qt::KeepAspectRatio, Qt::FastTransformation)
+              .save(&file, "PNG"))
+        file.commit();
     }
   });
   return w;
@@ -613,43 +643,45 @@ void App::showEditor(bool create) {
               &d, "small", true));
   }
   v->addStretch();
-  buttonRow(v,
-            {button(
-                 "Cancel", [&] { d.done(0); }, &d),
-             button(
-                 create ? "Create" : "Save",
-                 [&] {
-                   if (create) {
-                     auto machine = background<Model::Machine>(
-                         &d, "Creating Mac",
-                         [&](std::atomic_bool &, Library::Progress) {
-                           return Model::createMachine(
-                               name->text(), family->currentData().toString(),
-                               capacity->currentData().toInt(),
-                               Model::documents());
-                         },
-                         false);
-                     registerMachine(machine);
-                   } else {
-                     auto next = c;
-                     next["name"] = name->text();
-                     bool ok;
-                     int n = ram->text().toInt(&ok);
-                     if (!ok)
-                       fail("Enter a whole number for memory.");
-                     next["ramMB"] = n;
-                     auto r = resolution->currentText().split('x');
-                     next["width"] = r[0].toInt();
-                     next["height"] = r[1].toInt();
-                     next["depth"] = depth->currentData().toInt();
-                     next["graphicsCard"] = graphics->currentData().toString();
-                     for (auto it = checks.begin(); it != checks.end(); ++it)
-                       next[it.key()] = it.value()->isChecked();
-                     settingsSaved(next);
-                   }
-                   d.done();
-                 },
-                 &d, true)});
+  buttonRow(v, {button(
+                    "Cancel", [&] { d.done(0); }, &d),
+                button(
+                    create ? "Create" : "Save",
+                    [&] {
+                      if (create) {
+                        const auto newName = name->text();
+                        const auto newFamily = family->currentData().toString();
+                        const auto diskSize = capacity->currentData().toInt();
+                        auto machine = background<Model::Machine>(
+                            &d, "Creating Mac",
+                            [=](std::atomic_bool &, Library::Progress) {
+                              return Model::createMachine(newName, newFamily,
+                                                          diskSize,
+                                                          Model::documents());
+                            },
+                            false);
+                        registerMachine(machine);
+                      } else {
+                        auto next = c;
+                        next["name"] = name->text();
+                        bool ok;
+                        int n = ram->text().toInt(&ok);
+                        if (!ok)
+                          fail("Enter a whole number for memory.");
+                        next["ramMB"] = n;
+                        auto r = resolution->currentText().split('x');
+                        next["width"] = r[0].toInt();
+                        next["height"] = r[1].toInt();
+                        next["depth"] = depth->currentData().toInt();
+                        next["graphicsCard"] =
+                            graphics->currentData().toString();
+                        for (auto it = checks.begin(); it != checks.end(); ++it)
+                          next[it.key()] = it.value()->isChecked();
+                        settingsSaved(next);
+                      }
+                      d.done();
+                    },
+                    &d, true)});
   d.exec();
 }
 void App::showMedia() {
@@ -953,13 +985,14 @@ void App::showSetup() {
         if (installer->isChecked()) {
           if (cd.isEmpty())
             fail("Choose your Mac OS installation CD image first.");
+          const auto newName = name->text();
+          const auto newFamily = model->currentData().toString();
           auto m = background<Model::Machine>(
               &d, "Creating your Mac",
-              [&](std::atomic_bool &, Library::Progress) {
-                return Model::createMachine(
-                    name->text(), model->currentData().toString(),
-                    model->currentData().toString() == "quadra800" ? 2 : 32,
-                    Model::documents(), cd);
+              [=](std::atomic_bool &, Library::Progress) {
+                return Model::createMachine(newName, newFamily,
+                                            newFamily == "quadra800" ? 2 : 32,
+                                            Model::documents(), cd);
               },
               false);
           registerMachine(m);

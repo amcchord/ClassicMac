@@ -26,7 +26,7 @@ the Linux packager uses a checksum-pinned AppImage tool. Run the matching
 `native/scripts/package-{windows,linux}.py output/native-build`.
 
 Windows ships one portable EXE, extracts into a private temporary folder and
-waits for the native app to exit. `--extract=C:\path\to\new-folder` exposes
+waits for the native app to exit. `--extract="C:\path\to\new-folder"` exposes
 the dynamic libraries for inspection or replacement. Linux ships one AppImage;
 `--appimage-extract` exposes its contents. Qt/OpenSSL remain dynamically linked.
 Replace compatible libraries in an extracted copy and run `classicmac.exe`

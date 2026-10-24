@@ -331,6 +331,9 @@ PDialog::PDialog(QString s, QSize size, QWidget *p) : PWindow(s, size, p) {
   connect(this, &PWindow::closed, &loop, &QEventLoop::quit);
 }
 int PDialog::exec() {
+  if (auto parent = qobject_cast<PWindow *>(parentWidget());
+      parent && parent->shaded)
+    parent->shade();
   if (parentWidget())
     move(parentWidget()->geometry().center() -
          QPoint(width() / 2, height() / 2));
@@ -392,7 +395,11 @@ bool question(QWidget *p, const QString &title, const QString &message,
 void problem(QWidget *p, const QString &message) {
   PDialog d("ClassicMac", {480, 240}, p);
   auto v = dialogLayout(&d);
-  v->addWidget(label(message, &d, "regular", true), 1);
+  auto area = new QScrollArea(&d);
+  area->setWidgetResizable(true);
+  area->setFrameShape(QFrame::NoFrame);
+  area->setWidget(label(message, &d, "regular", true));
+  v->addWidget(area, 1);
   buttonRow(v, {button("OK", [&] { d.done(); }, &d, true)});
   d.exec();
 }
