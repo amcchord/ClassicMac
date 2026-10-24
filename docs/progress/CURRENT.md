@@ -1,17 +1,26 @@
-# ClassicMac 4.6.0 — published and verified
+# Windows display refinement — final preflight
 
-Stable Latest: [v4.6.0](https://github.com/amcchord/ClassicMac/releases/tag/v4.6.0),
-tag/source `585b4189844703c4a7406f9953edb7e184118ba3`. PRs #36/#37 are merged.
-Windows/Linux use native C++/Qt with measured Platinum pixels, single EXE/
-AppImage packaging and all three classic base images. Electron is removed.
+Functional source bf9a749, worktree `worktrees/windows-dpi-resize`, PR #38.
+Windows CI40127036437 and Linux CI40127038152 pass. Latest remains4.6.0.
 
-Exact final packages pass the Proxmox setup/UI/three-base lifecycle matrix
-and pixel/inventory checks. Combined Swift/native/packaging validation passes.
-All nine public assets and fresh anonymous downloads verify; the downloaded
-Mac DMG passes full signature, staple, Gatekeeper and contents verification.
-See docs/4.6.0-validation.md and docs/evidence/4.6.0.
+Exact final AppImage passes46 steps: Power Mac8.6 repeated resize/fullscreen/
+pause/resume/pixel controls/shutdown, public System7.5.5 download/import,
+enhanced Quadra boot-time resize with safe fitting and clean shutdown.
+Exact final Windows EXE passes32 steps: enhanced7.5.5 early resize, all scale
+controls, fullscreen, shutdown/reboot, remembered Fit Window. Final Windows Standard Power Mac live DPI (49 steps), ATI fallback (16) and
+constrained 200% UI (18) pass. Twenty-three complete guest frames and four desktop
+captures compare with zero differing pixels; both package inventories pass.
 
-Own QA scheduled task/RDP are gone; VMs170/171 are stopped. Task artifacts
-remain in ignored worktree output. Existing user data, gxmetal and unrelated
-worktrees are preserved. No catalog/DNS/hosting changes. v4.5 remains available
-for rollback. No outstanding release action.
+Native Windows uses exact fractional DPI/Per-Monitor V2. Physical painting
+preserves every source pixel at integral zoom, including centered1024x768.
+Standard Power Macs support asynchronous live resolution changes; NDRV0bb2f227
+fixes repeated modes. ATI and all Quadras default to automatic fitting, keeping
+their OS mode; saved choices are retained. Startup stress exposed unsafe QFB
+hot-plug. All experimental firmware changes were reverted; native Quadra resize
+requests are disabled. Shared Quadra firmware is unchanged. Mac4.6.1 with new
+Power Mac NDRV is signed/notarized/stapled; full verification passes.
+
+QA VMs170/171 and own RDP/task ClassicMac461QA remain running. Task-only
+backed-up configs need restoration. No user disk/catalog/DNS/hosting change.
+Next: collect final evidence/inventories, merge, root validation, publish4.6.1,
+fresh public verification, then own task/RDP and VM cleanup.

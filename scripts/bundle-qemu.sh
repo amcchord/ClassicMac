@@ -41,8 +41,8 @@ BUNDLE_STAGE_DIR=""
 BUNDLE_PREVIOUS_APP=""
 BUNDLE_LOCK_HELD=0
 
-APP_VERSION="${APP_VERSION:-4.6.0}"
-APP_BUILD_VERSION="${APP_BUILD_VERSION:-4.6.0}"
+APP_VERSION="${APP_VERSION:-4.6.1}"
+APP_BUILD_VERSION="${APP_BUILD_VERSION:-4.6.1}"
 BUNDLE_ID="com.classicmac.emulator"
 
 log() { printf '\n==> %s\n' "$*"; }
@@ -242,7 +242,11 @@ else
 fi
 rm -rf "$ACTOOL_OUT"
 for fw in "${PCBIOS_FILES[@]}"; do
-  cp "$QEMU_PCBIOS_DIR/$fw" "$PCBIOS_DEST/"
+  if [ "$fw" = "qemu_vga.ndrv" ]; then
+    cp "$ROOT_DIR/ppcvid/qemu_vga.ndrv" "$PCBIOS_DEST/$fw"
+  else
+    cp "$QEMU_PCBIOS_DIR/$fw" "$PCBIOS_DEST/"
+  fi
 done
 cp -R "$QEMU_PCBIOS_DIR/keymaps" "$PCBIOS_DEST/keymaps"
 cp "$DECLROM_SRC" "$RES_DIR/declrom"

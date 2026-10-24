@@ -1,6 +1,10 @@
 #include "app.h"
+#include "display.h"
 #include <QtConcurrent>
 #include <optional>
+#ifdef Q_OS_WIN
+#include <windows.h>
+#endif
 using Model::fail;
 using namespace Platinum;
 static QString iconName(const QString &f) {
@@ -142,7 +146,7 @@ background(QWidget *parent, const QString &title,
   return *result.value;
 }
 App::App() : PWindow("ClassicMac", {940, 700}) {
-  setMinimumSize(780, 560);
+  setMinimumSize(360, 240);
   setWindowIcon(QIcon(":/app.png"));
   QFile f(Model::libraryFile());
   if (f.open(QFile::ReadOnly) && f.size() <= 1048576) {
@@ -319,7 +323,13 @@ void App::buildHome() {
   power->addWidget(startButton);
   panel->addLayout(power);
   columns->addWidget(right, 1);
-  outer->addWidget(home);
+  auto scroller = new QScrollArea(body);
+  scroller->setFrameShape(QFrame::NoFrame);
+  scroller->setWidgetResizable(true);
+  scroller->setWidget(home);
+  scroller->setAutoFillBackground(false);
+  scroller->viewport()->setAutoFillBackground(false);
+  outer->addWidget(scroller, 1);
   connect(list, &QListWidget::currentRowChanged, this, [&](int i) {
     if (i >= 0 && selected != i)
       select(i);
@@ -376,18 +386,73 @@ void App::render() {
 PWindow *App::guest(Engine *e) {
   if (guests.contains(e->machine.id()))
     return guests[e->machine.id()];
-  auto w =
-      new PWindow(e->machine.name(),
-                  {std::max(653, e->machine.config["width"].toInt() + 13),
-                   std::max(550, e->machine.config["height"].toInt() + 69)},
-                  this);
-  w->setMinimumSize(480, 360);
+  const auto display = this->screen();
+  const qreal dpi = display ? display->devicePixelRatio() : devicePixelRatioF();
+  QSettings viewSettings(Model::dataDirectory() + "/view.ini", QSettings::IniFormat);
+  const auto &config = e->machine.config;
+  const bool ppc = e->machine.family() == "powerMacG4";
+  const bool cdBoot = config["bootFromCD"].toBool() && !config["cdImagePath"].toString().isEmpty();
+  const bool followsWindow = ppc && (cdBoot || config["graphicsCard"].toString() != "atiRadeon");
+  const QString scaleKey = "display/" + e->machine.id() + "/scale";
+  const int savedScale = std::clamp(viewSettings.value(scaleKey, followsWindow ? 0 : 3).toInt(), 0, 3);
+  int zoom = savedScale == 1 ? 1 : savedScale == 2 ? 2 : NativeDisplay::preferredZoom(dpi);
+  const QSize source(e->machine.config["width"].toInt(), e->machine.config["height"].toInt());
+  auto initialSize = [&](int factor) {
+    if (savedScale == 3) return QSize(source.width() + 13, source.height() + 87);
+    return QSize(qCeil(source.width() * factor / dpi) + 13,
+                  qCeil(source.height() * factor / dpi) + 87);
+  };
+  while (zoom > 1 && display &&
+         (initialSize(zoom).width() > display->availableGeometry().width() - 8 ||
+          initialSize(zoom).height() > display->availableGeometry().height() - 8))
+    --zoom;
+  auto w = new PWindow(e->machine.name(), initialSize(zoom), this);
+  w->setMinimumSize(480, 240);
   auto v = new QVBoxLayout(w->body);
   v->setContentsMargins(0, 0, 0, 0);
   v->setSpacing(6);
   auto screen = new GuestView(&e->vnc, w->body);
   screen->helpers = e->machine.config["classicInputHelpers"].toBool();
+  screen->followsWindow = followsWindow;
+  screen->widthAlignment = ppc ? 8 : 1;
+  screen->fitWindow = savedScale == 3;
+  screen->pixelZoom = savedScale == 1 ? 1 : savedScale == 2 ? 2 : 0;
   v->addWidget(screen, 1);
+  auto displayRow = new QHBoxLayout;
+  displayRow->setContentsMargins(8, 0, 24, 0);
+  auto status = label("Starting up…", w, "small");
+  status->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
+  displayRow->addWidget(status, 1);
+  auto scale = new PCombo(w);
+  scale->setAccessibleName("Guest display scale");
+  scale->addItems({"Sharp Pixels", "1× Pixels", "2× Pixels", "Fit Window"});
+  scale->setCurrentIndex(savedScale);
+  scale->setFixedWidth(126);
+  displayRow->addWidget(scale);
+  v->addLayout(displayRow);
+  auto updateDisplayStatus = [=] {
+    QString s = e->vnc.frame.isNull() ? "Starting up…" :
+        QString("%1 × %2").arg(e->vnc.frame.width()).arg(e->vnc.frame.height());
+    if (!screen->followsWindow)
+      s += " · Fixed resolution";
+    if (!screen->resizeNotice.isEmpty())
+      s += " · " + screen->resizeNotice;
+    else if (e->vnc.relative)
+      s += screen->captured ? " · Escape releases mouse" : " · Click to capture mouse";
+    if (status->value != s)
+      status->setText(s);
+  };
+  connect(scale, qOverload<int>(&QComboBox::currentIndexChanged), screen, [=](int mode) {
+    screen->fitWindow = mode == 3;
+    screen->pixelZoom = mode == 1 ? 1 : mode == 2 ? 2 : 0;
+    screen->scheduleResize();
+    screen->update();
+    QSettings settings(Model::dataDirectory() + "/view.ini", QSettings::IniFormat);
+    settings.setValue(scaleKey, mode);
+  });
+  connect(screen, &GuestView::displayChanged, w, updateDisplayStatus);
+  connect(screen, &GuestView::captureChanged, w, updateDisplayStatus);
+  connect(&e->vnc, &VNC::changed, w, updateDisplayStatus);
   auto controls = new QHBoxLayout;
   controls->setContentsMargins(8, 0, 24, 6);
   controls->setSpacing(10);
@@ -405,21 +470,34 @@ PWindow *App::guest(Engine *e) {
   controls->addWidget(pause);
   controls->addWidget(button("Restart", [e] { e->shutdown(true); }, w));
   controls->addWidget(button("Shut Down", [e] { e->shutdown(); }, w));
-  controls->addWidget(button("Paste Text…", [this, e] { showPaste(e); }, w));
+  controls->addWidget(button("Paste…", [this, e] { showPaste(e); }, w));
   controls->addStretch();
-  controls->addWidget(button(
-      "Full Screen",
-      [w] {
+  auto fullScreen = new PButton("Full Screen", w);
+  auto toggleFullScreen = [w, screen, fullScreen] {
+        screen->release();
         if (w->isFullScreen())
           w->showNormal();
         else
           w->showFullScreen();
-      },
-      w));
+        fullScreen->setText(w->isFullScreen() ? "Window" : "Full Screen");
+        screen->setFocus();
+      };
+  connect(fullScreen, &PButton::clicked, w, toggleFullScreen);
+  connect(screen, &GuestView::toggleFullScreen, w, toggleFullScreen);
+  auto shortcut = new QShortcut(QKeySequence("Alt+Return"), w);
+  connect(shortcut, &QShortcut::activated, w, toggleFullScreen);
+  controls->addWidget(fullScreen);
   v->addLayout(controls);
   guests[e->machine.id()] = w;
-  connect(e, &Engine::changed, w,
-          [=] { pause->setText(e->paused ? "Resume" : "Pause"); });
+  connect(e, &Engine::changed, w, [=] {
+    pause->setText(e->paused ? "Resume" : "Pause");
+    bool wasPaused = screen->paused;
+    screen->paused = e->paused;
+    if (screen->paused)
+      screen->release();
+    if (wasPaused && !screen->paused)
+      screen->scheduleResize();
+  });
   connect(&e->vnc, &VNC::problem, this, [this](QString s) {
     QTimer::singleShot(0, this, [this, s] { problem(this, s); });
   });
@@ -622,6 +700,12 @@ void App::showEditor(bool create) {
     form->addWidget(graphics, 4, 1);
   }
   v->addLayout(form);
+  if (!create && m->family() == "powerMacG4")
+    v->addWidget(label("Standard graphics follows the window. ATI Radeon keeps the Mac's selected resolution; use Fit Window to fill the view.",
+                        &d, "small", true));
+  if (!create && m->family() == "quadra800")
+    v->addWidget(label("Quadra video keeps the Mac's selected resolution. Fit Window follows the window; choose Sharp Pixels for integral pixel zoom.",
+                        &d, "small", true));
   QMap<QString, PButton *> checks;
   if (!create) {
     for (auto pair : QList<QPair<QString, QString>>{
@@ -789,6 +873,8 @@ void App::showPaste(Engine *e) {
                      "its US keyboard layout.",
                      &d, "regular", true));
   auto edit = new QPlainTextEdit(&d);
+  edit->setFrameShape(QFrame::Box);
+  edit->setLineWidth(2);
   QFont bitmapFont("RetroBoot Regular");
   bitmapFont.setPixelSize(12);
   bitmapFont.setStyleStrategy(QFont::NoAntialias);
@@ -1039,7 +1125,32 @@ QJsonObject App::evidence() const {
                             {"folder", m.folder},
                             {"config", m.config},
                             {"running", engines.contains(m.id())}});
-  return {{"frontend", "native-qt-cpp"},
+  QJsonArray displays;
+  for (auto e : engines) {
+    auto w = guests.value(e->machine.id());
+    if (!w)
+      continue;
+    auto view = w->findChild<GuestView *>();
+    if (!view)
+      continue;
+    const auto image = view->screenRect();
+    const auto origin = view->mapTo(w, QPoint());
+    displays.append(QJsonObject{
+        {"name", e->machine.name()}, {"windowWidth", w->width()}, {"windowHeight", w->height()},
+        {"viewportWidth", view->width()}, {"viewportHeight", view->height()},
+        {"viewX", origin.x()}, {"viewY", origin.y()},
+        {"frameWidth", e->vnc.frame.width()}, {"frameHeight", e->vnc.frame.height()},
+        {"desiredWidth", view->desiredSize().width()}, {"desiredHeight", view->desiredSize().height()},
+        {"requestedWidth", e->vnc.lastRequestedSize.width()}, {"requestedHeight", e->vnc.lastRequestedSize.height()},
+        {"scale", w->devicePixelRatioF()}, {"followsWindow", view->followsWindow},
+        {"resizeSupported", e->vnc.desktopResizeSupported}, {"resizeResult", e->vnc.desktopResizeResult},
+        {"fitWindow", view->fitWindow}, {"pixelZoom", view->pixelZoom},
+        {"imageX", image.x()}, {"imageY", image.y()}, {"imageWidth", image.width()}, {"imageHeight", image.height()},
+        {"captured", view->captured}, {"relative", e->vnc.relative},
+        {"resizeNotice", view->resizeNotice}});
+  }
+  QJsonObject result = {{"frontend", "native-qt-cpp"},
+          {"processId", qint64(QCoreApplication::applicationPid())},
           {"version", CLASSICMAC_VERSION},
           {"machines", rows},
           {"width", width()},
@@ -1047,5 +1158,17 @@ QJsonObject App::evidence() const {
           {"shaded", shaded},
           {"scale", devicePixelRatioF()},
           {"electron", false},
-          {"webview", false}};
+          {"webview", false}, {"displays", displays}};
+#ifdef Q_OS_WIN
+  const auto hwnd = reinterpret_cast<HWND>(winId());
+  result["windowsDpi"] = int(GetDpiForWindow(hwnd));
+  result["perMonitorV2"] = bool(AreDpiAwarenessContextsEqual(
+      GetWindowDpiAwarenessContext(hwnd), DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2));
+  RECT client;
+  if (GetClientRect(hwnd, &client)) {
+    result["windowsClientWidth"] = int(client.right - client.left);
+    result["windowsClientHeight"] = int(client.bottom - client.top);
+  }
+#endif
+  return result;
 }

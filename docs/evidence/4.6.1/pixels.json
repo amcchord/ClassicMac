@@ -1,0 +1,208 @@
+{
+  "guestFrames": [
+    {
+      "platform": "linux",
+      "name": "initial-finder",
+      "dpi": 1.25,
+      "zoom": 1,
+      "pixels": 307200,
+      "different": 0
+    },
+    {
+      "platform": "linux",
+      "name": "ppc-1x",
+      "dpi": 1.25,
+      "zoom": 1,
+      "pixels": 1087480,
+      "different": 0
+    },
+    {
+      "platform": "linux",
+      "name": "ppc-full",
+      "dpi": 1.25,
+      "zoom": 1,
+      "pixels": 1087480,
+      "different": 0
+    },
+    {
+      "platform": "linux",
+      "name": "ppc-large",
+      "dpi": 1.25,
+      "zoom": 1,
+      "pixels": 911768,
+      "different": 0
+    },
+    {
+      "platform": "linux",
+      "name": "ppc-resumed",
+      "dpi": 1.25,
+      "zoom": 1,
+      "pixels": 1087480,
+      "different": 0
+    },
+    {
+      "platform": "linux",
+      "name": "ppc-small",
+      "dpi": 1.25,
+      "zoom": 1,
+      "pixels": 593024,
+      "different": 0
+    },
+    {
+      "platform": "linux",
+      "name": "quadra-sharp",
+      "dpi": 1.25,
+      "zoom": 1,
+      "pixels": 307200,
+      "different": 0
+    },
+    {
+      "platform": "windows",
+      "name": "ati-large",
+      "dpi": 1.75,
+      "zoom": 1,
+      "pixels": 786432,
+      "different": 0
+    },
+    {
+      "platform": "windows",
+      "name": "ati-small",
+      "dpi": 1.75,
+      "zoom": 1,
+      "pixels": 786432,
+      "different": 0
+    },
+    {
+      "platform": "windows",
+      "name": "double-pixels",
+      "dpi": 1.25,
+      "zoom": 1,
+      "pixels": 593024,
+      "different": 0
+    },
+    {
+      "platform": "windows",
+      "name": "full-screen",
+      "dpi": 1.75,
+      "zoom": 2,
+      "pixels": 4464448,
+      "different": 0
+    },
+    {
+      "platform": "windows",
+      "name": "guest-125",
+      "dpi": 1.25,
+      "zoom": 1,
+      "pixels": 593024,
+      "different": 0
+    },
+    {
+      "platform": "windows",
+      "name": "guest-150",
+      "dpi": 1.5,
+      "zoom": 2,
+      "pixels": 1315456,
+      "different": 0
+    },
+    {
+      "platform": "windows",
+      "name": "guest-175",
+      "dpi": 1.75,
+      "zoom": 2,
+      "pixels": 1160352,
+      "different": 0
+    },
+    {
+      "platform": "windows",
+      "name": "initial-finder",
+      "dpi": 1.5,
+      "zoom": 2,
+      "pixels": 1228800,
+      "different": 0
+    },
+    {
+      "platform": "windows",
+      "name": "maximized",
+      "dpi": 1.75,
+      "zoom": 2,
+      "pixels": 4252096,
+      "different": 0
+    },
+    {
+      "platform": "windows",
+      "name": "switch-125",
+      "dpi": 1.75,
+      "zoom": 2,
+      "pixels": 1160352,
+      "different": 0
+    },
+    {
+      "platform": "windows",
+      "name": "switch-175",
+      "dpi": 1.5,
+      "zoom": 2,
+      "pixels": 855168,
+      "different": 0
+    },
+    {
+      "platform": "windows",
+      "name": "quadra-1x",
+      "dpi": 1.25,
+      "zoom": 1,
+      "pixels": 307200,
+      "different": 0
+    },
+    {
+      "platform": "windows",
+      "name": "quadra-full",
+      "dpi": 1.25,
+      "zoom": 3,
+      "pixels": 2764800,
+      "different": 0
+    },
+    {
+      "platform": "windows",
+      "name": "quadra-large",
+      "dpi": 1.25,
+      "zoom": 1,
+      "pixels": 307200,
+      "different": 0
+    },
+    {
+      "platform": "windows",
+      "name": "quadra-resumed",
+      "dpi": 1.25,
+      "zoom": 1,
+      "pixels": 307200,
+      "different": 0
+    },
+    {
+      "platform": "windows",
+      "name": "quadra-small",
+      "dpi": 1.25,
+      "zoom": 1,
+      "pixels": 307200,
+      "different": 0
+    }
+  ],
+  "desktopCaptures": [
+    {
+      "name": "about-desktop",
+      "different": 0
+    },
+    {
+      "name": "settings-desktop",
+      "different": 0
+    },
+    {
+      "name": "compact-desktop",
+      "different": 0
+    },
+    {
+      "name": "home-desktop",
+      "different": 0
+    }
+  ],
+  "quadraSentNoResizeRequests": true,
+  "scalePersistedAfterRestart": true
+}

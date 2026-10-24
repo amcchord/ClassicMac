@@ -1,0 +1,353 @@
+{
+    "error": "",
+    "passed": true,
+    "state": {
+        "displays": [
+        ],
+        "electron": false,
+        "frontend": "native-qt-cpp",
+        "height": 700,
+        "machines": [
+            {
+                "config": {
+                    "bootFromCD": false,
+                    "classicInputHelpers": false,
+                    "depth": 16,
+                    "diskImageName": "disk.img",
+                    "diskSizeGB": 2,
+                    "graphicsCard": "standard",
+                    "height": 480,
+                    "id": "79a92bcb-765c-48fb-93d4-ee5aa36f4829",
+                    "machineFamily": "powerMacG4",
+                    "name": "Native Mac OS 8.6",
+                    "networking": true,
+                    "pramImageName": "pram.img",
+                    "ramMB": 128,
+                    "sound": false,
+                    "tabletInput": false,
+                    "toolsCDInserted": false,
+                    "useEnhancedFramebuffer": false,
+                    "useG4CPU": false,
+                    "useVirtioDisk": true,
+                    "width": 640
+                },
+                "folder": "/opt/ClassicMac/qa46/bases/documents/Native Mac OS 8.6.classic",
+                "id": "79a92bcb-765c-48fb-93d4-ee5aa36f4829",
+                "name": "Native Mac OS 8.6",
+                "running": false
+            },
+            {
+                "config": {
+                    "bootFromCD": false,
+                    "classicInputHelpers": true,
+                    "depth": 8,
+                    "diskImageName": "disk.img",
+                    "diskSizeGB": 2,
+                    "graphicsCard": "standard",
+                    "height": 480,
+                    "id": "8813dfa0-deee-4b30-a23f-d169bec22ff8",
+                    "machineFamily": "quadra800",
+                    "name": "Final Safe 755",
+                    "networking": true,
+                    "pramImageName": "pram.img",
+                    "ramMB": 128,
+                    "sound": true,
+                    "tabletInput": true,
+                    "toolsCDInserted": false,
+                    "useEnhancedFramebuffer": true,
+                    "useG4CPU": false,
+                    "useVirtioDisk": false,
+                    "width": 640
+                },
+                "folder": "/opt/ClassicMac/qa461/final461/documents/Final Safe 755.classic",
+                "id": "8813dfa0-deee-4b30-a23f-d169bec22ff8",
+                "name": "Final Safe 755",
+                "running": false
+            }
+        ],
+        "processId": 4134,
+        "scale": 1.25,
+        "shaded": false,
+        "version": "4.6.1",
+        "webview": false,
+        "width": 940
+    },
+    "steps": [
+        {
+            "action": "open",
+            "elapsed": 112,
+            "passed": true,
+            "step": 0
+        },
+        {
+            "action": "start",
+            "elapsed": 100,
+            "passed": true,
+            "step": 1
+        },
+        {
+            "action": "guestReady",
+            "elapsed": 76,
+            "passed": true,
+            "step": 2
+        },
+        {
+            "action": "wait",
+            "elapsed": 45000,
+            "passed": true,
+            "step": 3
+        },
+        {
+            "action": "capture",
+            "elapsed": 125,
+            "passed": true,
+            "step": 4
+        },
+        {
+            "action": "resize",
+            "elapsed": 78,
+            "passed": true,
+            "step": 5
+        },
+        {
+            "action": "guestSize",
+            "elapsed": 695,
+            "passed": true,
+            "step": 6
+        },
+        {
+            "action": "capture",
+            "elapsed": 161,
+            "passed": true,
+            "step": 7
+        },
+        {
+            "action": "resize",
+            "elapsed": 44,
+            "passed": true,
+            "step": 8
+        },
+        {
+            "action": "guestSize",
+            "elapsed": 694,
+            "passed": true,
+            "step": 9
+        },
+        {
+            "action": "capture",
+            "elapsed": 143,
+            "passed": true,
+            "step": 10
+        },
+        {
+            "action": "pause",
+            "elapsed": 56,
+            "passed": true,
+            "step": 11
+        },
+        {
+            "action": "resize",
+            "elapsed": 103,
+            "passed": true,
+            "step": 12
+        },
+        {
+            "action": "resume",
+            "elapsed": 97,
+            "passed": true,
+            "step": 13
+        },
+        {
+            "action": "guestSize",
+            "elapsed": 898,
+            "passed": true,
+            "step": 14
+        },
+        {
+            "action": "capture",
+            "elapsed": 169,
+            "passed": true,
+            "step": 15
+        },
+        {
+            "action": "click",
+            "elapsed": 31,
+            "passed": true,
+            "step": 16
+        },
+        {
+            "action": "guestSize",
+            "elapsed": 100,
+            "passed": true,
+            "step": 17
+        },
+        {
+            "action": "capture",
+            "elapsed": 179,
+            "passed": true,
+            "step": 18
+        },
+        {
+            "action": "guestEscape",
+            "elapsed": 20,
+            "passed": true,
+            "step": 19
+        },
+        {
+            "action": "guestSize",
+            "elapsed": 100,
+            "passed": true,
+            "step": 20
+        },
+        {
+            "action": "combo",
+            "elapsed": 133,
+            "passed": true,
+            "step": 21
+        },
+        {
+            "action": "guestSize",
+            "elapsed": 66,
+            "passed": true,
+            "step": 22
+        },
+        {
+            "action": "capture",
+            "elapsed": 179,
+            "passed": true,
+            "step": 23
+        },
+        {
+            "action": "combo",
+            "elapsed": 46,
+            "passed": true,
+            "step": 24
+        },
+        {
+            "action": "guestSize",
+            "elapsed": 74,
+            "passed": true,
+            "step": 25
+        },
+        {
+            "action": "shutdown",
+            "elapsed": 100,
+            "passed": true,
+            "step": 26
+        },
+        {
+            "action": "stopped",
+            "elapsed": 899,
+            "passed": true,
+            "step": 27
+        },
+        {
+            "action": "download",
+            "elapsed": 3899,
+            "passed": true,
+            "step": 28
+        },
+        {
+            "action": "click",
+            "elapsed": 3,
+            "passed": true,
+            "step": 29
+        },
+        {
+            "action": "click",
+            "elapsed": 96,
+            "passed": true,
+            "step": 30
+        },
+        {
+            "action": "click",
+            "elapsed": 100,
+            "passed": true,
+            "step": 31
+        },
+        {
+            "action": "start",
+            "elapsed": 134,
+            "passed": true,
+            "step": 32
+        },
+        {
+            "action": "guestReady",
+            "elapsed": 65,
+            "passed": true,
+            "step": 33
+        },
+        {
+            "action": "wait",
+            "elapsed": 1099,
+            "passed": true,
+            "step": 34
+        },
+        {
+            "action": "resize",
+            "elapsed": 104,
+            "passed": true,
+            "step": 35
+        },
+        {
+            "action": "wait",
+            "elapsed": 45095,
+            "passed": true,
+            "step": 36
+        },
+        {
+            "action": "guestSize",
+            "elapsed": 99,
+            "passed": true,
+            "step": 37
+        },
+        {
+            "action": "capture",
+            "elapsed": 141,
+            "passed": true,
+            "step": 38
+        },
+        {
+            "action": "combo",
+            "elapsed": 65,
+            "passed": true,
+            "step": 39
+        },
+        {
+            "action": "resize",
+            "elapsed": 97,
+            "passed": true,
+            "step": 40
+        },
+        {
+            "action": "guestSize",
+            "elapsed": 95,
+            "passed": true,
+            "step": 41
+        },
+        {
+            "action": "capture",
+            "elapsed": 136,
+            "passed": true,
+            "step": 42
+        },
+        {
+            "action": "combo",
+            "elapsed": 71,
+            "passed": true,
+            "step": 43
+        },
+        {
+            "action": "shutdown",
+            "elapsed": 92,
+            "passed": true,
+            "step": 44
+        },
+        {
+            "action": "stopped",
+            "elapsed": 199,
+            "passed": true,
+            "step": 45
+        }
+    ]
+}

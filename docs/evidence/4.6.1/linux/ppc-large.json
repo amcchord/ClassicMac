@@ -1,0 +1,71 @@
+{
+    "displays": [
+        {
+            "captured": false,
+            "desiredHeight": 797,
+            "desiredWidth": 1144,
+            "fitWindow": false,
+            "followsWindow": true,
+            "frameHeight": 797,
+            "frameWidth": 1144,
+            "imageHeight": 637.6,
+            "imageWidth": 915.2,
+            "imageX": 2.4,
+            "imageY": 0,
+            "name": "Native Mac OS 8.6",
+            "pixelZoom": 0,
+            "relative": true,
+            "requestedHeight": 797,
+            "requestedWidth": 1144,
+            "resizeNotice": "",
+            "resizeResult": 0,
+            "resizeSupported": true,
+            "scale": 1.25,
+            "viewX": 6,
+            "viewY": 22,
+            "viewportHeight": 638,
+            "viewportWidth": 920,
+            "windowHeight": 725,
+            "windowWidth": 933
+        }
+    ],
+    "electron": false,
+    "frontend": "native-qt-cpp",
+    "height": 700,
+    "machines": [
+        {
+            "config": {
+                "bootFromCD": false,
+                "classicInputHelpers": false,
+                "depth": 16,
+                "diskImageName": "disk.img",
+                "diskSizeGB": 2,
+                "graphicsCard": "standard",
+                "height": 480,
+                "id": "79a92bcb-765c-48fb-93d4-ee5aa36f4829",
+                "machineFamily": "powerMacG4",
+                "name": "Native Mac OS 8.6",
+                "networking": true,
+                "pramImageName": "pram.img",
+                "ramMB": 128,
+                "sound": false,
+                "tabletInput": false,
+                "toolsCDInserted": false,
+                "useEnhancedFramebuffer": false,
+                "useG4CPU": false,
+                "useVirtioDisk": true,
+                "width": 640
+            },
+            "folder": "/opt/ClassicMac/qa46/bases/documents/Native Mac OS 8.6.classic",
+            "id": "79a92bcb-765c-48fb-93d4-ee5aa36f4829",
+            "name": "Native Mac OS 8.6",
+            "running": true
+        }
+    ],
+    "processId": 4134,
+    "scale": 1.25,
+    "shaded": false,
+    "version": "4.6.1",
+    "webview": false,
+    "width": 940
+}

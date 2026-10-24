@@ -50,3 +50,25 @@ documents and qualification environment variables. It operates the real
 native widgets and engine and records screenshots, state and results. It
 has no remote listener. Keep qualification output and disposable guests in
 ignored `output/` directories.
+
+Windows honors the OS's exact display scale (including 125%, 150% and 175%)
+with Per-Monitor V2 awareness. Bitmap chrome uses nearest-neighbor rendering.
+Initial windows fit the work area; long dialogs scroll while their action
+buttons stay visible. Moving between DPI/work-area settings updates the view.
+
+Standard Power Macs can change the Mac's resolution
+when their window is resized. Requests are debounced and asynchronous; initial
+boot sizing is preserved while classic Display Manager starts. The driver also
+invalidates an earlier dynamic mode during each subsequent mode switch.
+
+The guest scale menu remembers each Mac's choice in the desktop profile's
+`view.ini`. Sharp Pixels uses integral physical-pixel zoom, adapting the guest
+resolution to the viewport. 1×/2× offer explicit pixel zoom; Fit Window allows
+fractional fitting. A screen too large for the available view is reduced to fit.
+ATI Radeon and all Quadra video retain the resolution selected by Mac OS;
+choose Standard Power Mac graphics after shutdown for live resolution changes.
+Fixed displays default to Fit Window; an existing saved scale choice is preserved.
+Enhanced Quadra hot-plug is disabled in the native frontend because early mode
+switching can crash classic Display Manager. The shared Quadra firmware is unchanged.
+Alt+Enter toggles full screen;
+Escape releases mouse capture, then exits full screen when no capture is held.

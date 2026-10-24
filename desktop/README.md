@@ -5,8 +5,8 @@ Electron and its renderer, package dependencies, IPC host and browser client
 have been removed from the desktop application. This directory retains the
 platform QEMU build/staging scripts and shared exported image/font assets.
 
-Download and run `ClassicMac-4.6.0-windows-x64.exe` on Windows 11, or mark
-`ClassicMac-4.6.0-linux-x64.AppImage` executable and run it on Linux.
+Download and run `ClassicMac-4.6.1-windows-x64.exe` on Windows 11, or mark
+`ClassicMac-4.6.1-linux-x64.AppImage` executable and run it on Linux.
 Both are single portable downloads. On Linux, `--appimage-extract-and-run`
 can be used when FUSE is unavailable. Windows binaries remain unsigned.
 

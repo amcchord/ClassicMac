@@ -95,6 +95,7 @@ public:
   std::function<bool()> canClose;
   explicit PWindow(QString title, QSize size, QWidget *parent = nullptr);
   void shade();
+  void fitToScreen();
   void setTitle(const QString &s) {
     title = s;
     setWindowTitle(s);
@@ -106,6 +107,8 @@ signals:
 protected:
   void paintEvent(QPaintEvent *) override;
   void resizeEvent(QResizeEvent *) override;
+  void showEvent(QShowEvent *) override;
+  bool event(QEvent *) override;
   void changeEvent(QEvent *) override;
   void mousePressEvent(QMouseEvent *) override;
   void mouseMoveEvent(QMouseEvent *) override;
@@ -119,6 +122,9 @@ private:
   QPoint drag, origin;
   QSize startSize;
   bool resizing = false;
+  bool screenConnected = false;
+  QMetaObject::Connection workAreaConnection;
+  void followWorkArea();
   QString hit(QPoint) const;
 };
 class PDialog : public PWindow {

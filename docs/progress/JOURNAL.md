@@ -1389,3 +1389,79 @@ consolidated root checks, publish and verify stable 4.1.1. Retain 4.1.0 for roll
   mutation. v4.5.0 is retained as rollback by promoting it to Latest.
 - Public verification and cleanup evidence are committed in docs/evidence/
   4.6.0; CURRENT now records the completed release. No required work remains.
+
+## 2026-10-24 — Windows DPI and resize follow-up started
+
+- User reports scaling/graphics and guest resolution failures in v4.6.0 and
+  requests a detailed robustness pass. New owned worktree windows-dpi-resize,
+  branch codex/windows-dpi-resize from d1a69b1. No agents delegated.
+- Confirmed forced DPI rounding and missing guest resize messages; prior
+  1x/2x reference gates did not cover fractional OS DPI or guest mode changes.
+  QEMU already forwards RFB SetDesktopSize to the Standard/QFB driver channel,
+  so the fix can use the native async transport without changing engines.
+- Started existing QA VM171; API returned a warning but read-back confirms
+  running at 192.168.105.146. No VM created/resized or user data modified.
+- Next: implement and test per-monitor/fractional scaling, real guest resize,
+  bounded/fixed-resolution fallback and window usability on scaled work areas.
+
+## 2026-10-24 — detailed Windows DPI/resize refinement
+
+- PR #38 / worktree windows-dpi-resize. Frozen functional commit c371006.
+  Actual Windows reproduction: OS120 DPI with4.6 Qt scale1 and940px window.
+  First new packages honor120/144 DPI as Qt1.25/1.5; V2 awareness verified.
+- New native resizing uses ExtendedDesktopSize/SetDesktopSize over authenticated
+  RFB, including fragmented/deferred/rejected replies. Rendering uses integral
+  physical pixels and remembers scale choices; dialogs scroll with pinned
+  actions and windows follow the work area/DPI. No QEMU source code changes.
+- Hardware tests caught two missed behaviors: early hot-plug while System7
+  Display Manager initializes, and a previous dynamic Power Mac mode remaining
+  valid, blocking the next resize. Initial boot mode is retained; the NDRV now
+  temporarily invalidates all non-target modes. New NDRV SHA0bb2f227cf7dd7d8.
+  Host mode/gamma contracts pass. Fresh enhanced System7.5.5 post-boot resize
+  and clean shutdown pass. Power Mac8.6 passes30-step repeated resize/full
+  screen/pause/resume/scale cycle after the NDRV fix.
+- Complete framebuffer comparisons caught a clipped final row at half-pixel
+  child origins. Using the guaranteed physical viewport extent fixes it;
+  a unique-color-per-pixel nested widget regression runs in separate125/150/
+  175% applications as well as the84 references and7 widget-device scales.
+- Corrected an X11 Display namespace collision and an explicit QtMath include
+  needed by supported Qt6.4. Old failed diagnostics remain in ignored output.
+- Misread missing CI progress as an MSYS cache stall and canceled two early
+  Windows builds. Completed logs show they were rebuilding engines because
+  branch-scoped caches were unavailable. The fresh engine build then completed;
+  subsequent builds use its cache. The package-cache setting was disabled;
+  engine/source provenance and all qualification gates are retained.
+- A direct Linux diagnostic initially used root-owned extracted runtime files;
+  corrected ownership in task-owned QA paths and repeated the test. No product
+  failure was hidden. QA configs only are backed up for restoration; no user
+  disk was modified. Mac4.6.1 rebuilt using existing prepared engine inputs
+  and new NDRV, signed, accepted/stapled app89dd74c3-979a-42ab-a7d8-1297a12156b8
+  and DMG8da1f7f8-550b-46ee-b9ca-b03e41c187d1; full verifier passes.
+- Next: final Windows native-DPI transitions/matrix and framebuffer/desktop
+  comparisons, ATI fallback, integration,4.6.1 publication and QA cleanup.
+
+## 2026-10-24 — final Windows DPI/resize qualification
+
+- Functional source bf9a749; native Windows CI40127036437 and Linux
+  CI40127038152 pass. Actual OS DPI matrix100/125/150/175/200% and same-process
+  transitions pass; native DPI and Qt scale agree, Per-Monitor V2 is true.
+- Full framebuffer comparison caught a second centered-image row drop at175%.
+  Device-coordinate painting plus filling/letterbox unique-pixel tests fixes it.
+  Real centered ATI1024x768 compares every pixel with zero differences.
+- Final EXE passes49-step live8.6 DPI/resize/lifecycle,32-step enhanced7.5.5
+  fitting/reboot/preferences,16-step ATI fallback and18-step tiny200% UI.
+  Final AppImage passes46 steps including repeated8.6 modes and fresh public
+  7.5.5 SHA import/boot-time fitting/shutdown. Inventories verify every file.
+- Extended early-boot Quadra stress exposed Finder and m68k faults. Application/
+  Window Manager readiness and delay firmware experiments did not qualify; all
+  were reverted. Native Quadra hot-plug is disabled, retaining original firmware.
+  ATI/Quadra displays default to Fit Window, retaining existing saved choices.
+  Standard Power Macs have live mode changes; settings explain the distinction.
+- Shutdown's timed Return could precede the OS9 confirmation. The classic OS
+  shortcut passes7.5.5/8.6/9.2.1; an additional7.5.5 shutdown/reboot proof reaches
+  normal Finder without a recovery alert. Failed diagnostics remain in output.
+- Restored the original MSYS package-cache setting after confirming earlier
+  perceived stalls were cold engine builds. Final app/engine contents match the
+  qualified functional source; the cache-setting cleanup changes no compiled code.
+- Next: merge PR38, consolidated root validation, publish4.6.1, fresh downloads,
+  restore own QA configs/task/RDP and stop VMs170/171. No public release yet.

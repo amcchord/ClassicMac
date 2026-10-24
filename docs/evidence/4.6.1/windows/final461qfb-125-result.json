@@ -1,0 +1,245 @@
+{
+    "error": "",
+    "passed": true,
+    "state": {
+        "displays": [
+        ],
+        "electron": false,
+        "frontend": "native-qt-cpp",
+        "height": 700,
+        "machines": [
+            {
+                "config": {
+                    "bootFromCD": false,
+                    "classicInputHelpers": true,
+                    "depth": 8,
+                    "diskImageName": "disk.img",
+                    "diskSizeGB": 2,
+                    "graphicsCard": "standard",
+                    "height": 480,
+                    "id": "f2692e45-cc16-4fd3-bc27-bdb0d8740096",
+                    "machineFamily": "quadra800",
+                    "name": "System 7.5.5",
+                    "networking": true,
+                    "pramImageName": "pram.img",
+                    "ramMB": 128,
+                    "sound": true,
+                    "tabletInput": true,
+                    "toolsCDInserted": false,
+                    "useEnhancedFramebuffer": true,
+                    "useG4CPU": false,
+                    "useVirtioDisk": false,
+                    "width": 640
+                },
+                "folder": "C:/ClassicMacQA/v461/releasewizard-200/documents/System 7.5.5.classic",
+                "id": "f2692e45-cc16-4fd3-bc27-bdb0d8740096",
+                "name": "System 7.5.5",
+                "running": false
+            }
+        ],
+        "perMonitorV2": true,
+        "processId": 7404,
+        "scale": 1.25,
+        "shaded": false,
+        "version": "4.6.1",
+        "webview": false,
+        "width": 940,
+        "windowsClientHeight": 875,
+        "windowsClientWidth": 1175,
+        "windowsDpi": 120
+    },
+    "steps": [
+        {
+            "action": "open",
+            "elapsed": 193,
+            "passed": true,
+            "step": 0
+        },
+        {
+            "action": "start",
+            "elapsed": 669,
+            "passed": true,
+            "step": 1
+        },
+        {
+            "action": "guestReady",
+            "elapsed": 121,
+            "passed": true,
+            "step": 2
+        },
+        {
+            "action": "wait",
+            "elapsed": 1112,
+            "passed": true,
+            "step": 3
+        },
+        {
+            "action": "resize",
+            "elapsed": 120,
+            "passed": true,
+            "step": 4
+        },
+        {
+            "action": "guestSize",
+            "elapsed": 101,
+            "passed": true,
+            "step": 5
+        },
+        {
+            "action": "capture",
+            "elapsed": 161,
+            "passed": true,
+            "step": 6
+        },
+        {
+            "action": "combo",
+            "elapsed": 75,
+            "passed": true,
+            "step": 7
+        },
+        {
+            "action": "wait",
+            "elapsed": 45048,
+            "passed": true,
+            "step": 8
+        },
+        {
+            "action": "resize",
+            "elapsed": 122,
+            "passed": true,
+            "step": 9
+        },
+        {
+            "action": "capture",
+            "elapsed": 145,
+            "passed": true,
+            "step": 10
+        },
+        {
+            "action": "resize",
+            "elapsed": 71,
+            "passed": true,
+            "step": 11
+        },
+        {
+            "action": "capture",
+            "elapsed": 136,
+            "passed": true,
+            "step": 12
+        },
+        {
+            "action": "pause",
+            "elapsed": 84,
+            "passed": true,
+            "step": 13
+        },
+        {
+            "action": "resize",
+            "elapsed": 112,
+            "passed": true,
+            "step": 14
+        },
+        {
+            "action": "resume",
+            "elapsed": 102,
+            "passed": true,
+            "step": 15
+        },
+        {
+            "action": "capture",
+            "elapsed": 159,
+            "passed": true,
+            "step": 16
+        },
+        {
+            "action": "click",
+            "elapsed": 59,
+            "passed": true,
+            "step": 17
+        },
+        {
+            "action": "capture",
+            "elapsed": 255,
+            "passed": true,
+            "step": 18
+        },
+        {
+            "action": "guestEscape",
+            "elapsed": 82,
+            "passed": true,
+            "step": 19
+        },
+        {
+            "action": "combo",
+            "elapsed": 126,
+            "passed": true,
+            "step": 20
+        },
+        {
+            "action": "capture",
+            "elapsed": 129,
+            "passed": true,
+            "step": 21
+        },
+        {
+            "action": "combo",
+            "elapsed": 71,
+            "passed": true,
+            "step": 22
+        },
+        {
+            "action": "combo",
+            "elapsed": 111,
+            "passed": true,
+            "step": 23
+        },
+        {
+            "action": "shutdown",
+            "elapsed": 100,
+            "passed": true,
+            "step": 24
+        },
+        {
+            "action": "stopped",
+            "elapsed": 319,
+            "passed": true,
+            "step": 25
+        },
+        {
+            "action": "start",
+            "elapsed": 246,
+            "passed": true,
+            "step": 26
+        },
+        {
+            "action": "guestReady",
+            "elapsed": 90,
+            "passed": true,
+            "step": 27
+        },
+        {
+            "action": "wait",
+            "elapsed": 45011,
+            "passed": true,
+            "step": 28
+        },
+        {
+            "action": "capture",
+            "elapsed": 142,
+            "passed": true,
+            "step": 29
+        },
+        {
+            "action": "shutdown",
+            "elapsed": 82,
+            "passed": true,
+            "step": 30
+        },
+        {
+            "action": "stopped",
+            "elapsed": 312,
+            "passed": true,
+            "step": 31
+        }
+    ]
+}

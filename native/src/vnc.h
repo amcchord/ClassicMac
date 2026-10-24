@@ -7,11 +7,15 @@ class VNC : public QObject {
 public:
   QImage frame;
   bool relative = false, ready = false;
+  bool desktopResizeSupported = false;
+  int desktopResizeResult = -1;
+  QSize lastRequestedSize;
   explicit VNC(QObject *parent = nullptr);
   void open(int port, const QByteArray &password);
   void close();
   void key(quint32 keysym, bool down);
   void pointer(int x, int y, int mask);
+  bool resizeDesktop(QSize);
   static QByteArray authenticate(QByteArray challenge, QByteArray password);
 signals:
   void changed();
@@ -31,12 +35,22 @@ class GuestView : public QWidget {
 public:
   VNC *vnc;
   bool helpers = true, captured = false;
+  bool followsWindow = false, fitWindow = false;
+  bool paused = false;
+  int widthAlignment = 1;
+  int pixelZoom = 0;
+  QString resizeNotice;
   QString notice = "Starting up…";
   explicit GuestView(VNC *, QWidget *parent = nullptr);
   ~GuestView() override;
   void release();
+  QRectF screenRect() const;
+  QSize desiredSize() const;
+  void scheduleResize();
 signals:
   void captureChanged(bool);
+  void displayChanged();
+  void toggleFullScreen();
 
 protected:
   void paintEvent(QPaintEvent *) override;
@@ -47,12 +61,20 @@ protected:
   void mouseMoveEvent(QMouseEvent *) override;
   void wheelEvent(QWheelEvent *) override;
   void focusOutEvent(QFocusEvent *) override;
+  void resizeEvent(QResizeEvent *) override;
+  void showEvent(QShowEvent *) override;
+  bool event(QEvent *) override;
 
 private:
-  QRect screenRect() const;
   void mouse(QMouseEvent *);
   QSet<quint32> keys;
   int mask = 0;
   bool controlClick = false;
+  QTimer resizeDebounce, resizeDeadline;
+  QSize observedSize, pendingSize;
+  QPoint lastPointer;
+  int resizeAttempts = 0, wheelRemainder = 0;
+  bool resizeArmed = false, wantsResize = false, shownOnce = false;
+  void requestResize();
   quint32 keySym(QKeyEvent *) const;
 };

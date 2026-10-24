@@ -550,20 +550,14 @@ GraphicsCoreGetModeTiming(VDTimingInfoRec *timingInfo)
 	} else {
 		timingInfo->csTimingFlags =
 			(1 << kModeValid) | (1 << kModeDefault) | (1 <<kModeSafe);
-		/* While a host window resize is pending, report every other mode
-		 * as not valid. The Display Manager's connect-change re-probe
-		 * otherwise revalidates its *saved* preference (usually the mode
-		 * we are already in) and stops without ever switching, so the
-		 * window drag would be ignored on any system that has a saved
-		 * Display Preferences entry. With the old mode invalid, the
-		 * re-probe falls through to GetPreferredConfiguration, which
-		 * names the pending window-sized mode. The flags return to
-		 * normal as soon as the switch lands (cscSwitchMode clears the
-		 * pending mode), so the Monitors panel is unaffected. */
-		if (GLOBAL.hostPendingMode != 0 &&
-		    GLOBAL.hostPendingMode != timingInfo->csTimingMode)
-			timingInfo->csTimingFlags = 0;
 	}
+	/* Invalidate every other mode while switching, including a dynamic mode
+	 * selected by a previous resize. Keeping that mode valid lets Display
+	 * Manager reuse its saved preference and ignore the second window resize.
+	 * SwitchMode clears hostPendingMode, restoring all normal timing flags. */
+	if (GLOBAL.hostResizeAvail && GLOBAL.hostPendingMode != 0 &&
+	    GLOBAL.hostPendingMode != timingInfo->csTimingMode)
+		timingInfo->csTimingFlags = 0;
 
 	timingInfo->csTimingFormat	= kDeclROMtables;
 	timingInfo->csTimingData	= timingVESA_640x480_60hz;

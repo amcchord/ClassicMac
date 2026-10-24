@@ -1,0 +1,149 @@
+{
+    "error": "",
+    "passed": true,
+    "state": {
+        "displays": [
+        ],
+        "electron": false,
+        "frontend": "native-qt-cpp",
+        "height": 700,
+        "machines": [
+            {
+                "config": {
+                    "bootFromCD": false,
+                    "classicInputHelpers": true,
+                    "depth": 16,
+                    "diskImageName": "disk.img",
+                    "diskSizeGB": 32,
+                    "graphicsCard": "atiRadeon",
+                    "height": 768,
+                    "id": "bff8e281-7787-4c62-a959-6b40037294e1",
+                    "machineFamily": "powerMacG4",
+                    "name": "Mac OS 9.2.1",
+                    "networking": true,
+                    "pramImageName": "pram.img",
+                    "ramMB": 512,
+                    "sound": true,
+                    "tabletInput": true,
+                    "toolsCDInserted": true,
+                    "useEnhancedFramebuffer": true,
+                    "useG4CPU": true,
+                    "useVirtioDisk": false,
+                    "width": 1024
+                },
+                "folder": "C:/ClassicMacQA/v45/source/output/qualified-setup/download/Documents/ClassicMac/Mac OS 9.2.1.classic",
+                "id": "bff8e281-7787-4c62-a959-6b40037294e1",
+                "name": "Mac OS 9.2.1",
+                "running": false
+            }
+        ],
+        "perMonitorV2": true,
+        "processId": 2296,
+        "scale": 1.75,
+        "shaded": false,
+        "version": "4.6.1",
+        "webview": false,
+        "width": 940,
+        "windowsClientHeight": 1225,
+        "windowsClientWidth": 1645,
+        "windowsDpi": 168
+    },
+    "steps": [
+        {
+            "action": "open",
+            "elapsed": 129,
+            "passed": true,
+            "step": 0
+        },
+        {
+            "action": "start",
+            "elapsed": 787,
+            "passed": true,
+            "step": 1
+        },
+        {
+            "action": "guestReady",
+            "elapsed": 60,
+            "passed": true,
+            "step": 2
+        },
+        {
+            "action": "wait",
+            "elapsed": 45025,
+            "passed": true,
+            "step": 3
+        },
+        {
+            "action": "capture",
+            "elapsed": 219,
+            "passed": true,
+            "step": 4
+        },
+        {
+            "action": "combo",
+            "elapsed": 19,
+            "passed": true,
+            "step": 5
+        },
+        {
+            "action": "resize",
+            "elapsed": 107,
+            "passed": true,
+            "step": 6
+        },
+        {
+            "action": "wait",
+            "elapsed": 2096,
+            "passed": true,
+            "step": 7
+        },
+        {
+            "action": "capture",
+            "elapsed": 201,
+            "passed": true,
+            "step": 8
+        },
+        {
+            "action": "resize",
+            "elapsed": 33,
+            "passed": true,
+            "step": 9
+        },
+        {
+            "action": "wait",
+            "elapsed": 2081,
+            "passed": true,
+            "step": 10
+        },
+        {
+            "action": "capture",
+            "elapsed": 180,
+            "passed": true,
+            "step": 11
+        },
+        {
+            "action": "combo",
+            "elapsed": 59,
+            "passed": true,
+            "step": 12
+        },
+        {
+            "action": "capture",
+            "elapsed": 162,
+            "passed": true,
+            "step": 13
+        },
+        {
+            "action": "shutdown",
+            "elapsed": 42,
+            "passed": true,
+            "step": 14
+        },
+        {
+            "action": "stopped",
+            "elapsed": 6007,
+            "passed": true,
+            "step": 15
+        }
+    ]
+}

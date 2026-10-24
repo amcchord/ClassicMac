@@ -316,10 +316,28 @@ int selfTest(const QString &fixtures, const QString &output) {
     else
       qputenv("CLASSICMAC_QUALIFY", oldQualification);
   }
+  displayTests(fixtures, output);
+  // Global DPI affects child backing-store clips, so render in real separate
+  // QApplication instances as well as onto synthetic high-DPI paint devices.
+  for (auto scale : {"1.25", "1.5", "1.75"}) {
+    QProcess child;
+    auto env = QProcessEnvironment::systemEnvironment();
+    env.insert("QT_SCALE_FACTOR", scale);
+    env.insert("QT_QPA_PLATFORM", "offscreen");
+    child.setProcessEnvironment(env);
+    const auto folder = output.isEmpty() ? QString() : output + "/dpi-" + scale;
+    if (!folder.isEmpty()) QDir().mkpath(folder);
+    child.start(QCoreApplication::applicationFilePath(), {"--display-test", fixtures, folder});
+    require(child.waitForFinished(20000) && child.exitStatus() == QProcess::NormalExit && child.exitCode() == 0,
+            "Fractional backing-store test failed at " + QString(scale) + ": " +
+                QString::fromUtf8(child.readAllStandardError()));
+  }
   if (!output.isEmpty())
     Model::writeJSON(output + "/self-test.json",
                      QJsonObject{{"checks", count},
                                  {"nativeWidgets", 5},
+                                 {"dpiScales", QJsonArray{1, 1.25, 1.5, 1.75, 2, 2.5, 3}},
+                                 {"displayProtocolAndInput", "passed"},
                                  {"pixels", reports},
                                  {"result", "passed"}});
   std::printf("Passed %d independent pixel captures, 95 glyph advances, native "
@@ -395,14 +413,76 @@ public:
         app->addMachine(step["folder"].toString());
         done = true;
       } else if (action == "resize") {
-        app->resize(step["width"].toInt(), step["height"].toInt());
+        PWindow *target = app;
+        if (step["window"].toString() == "guest") {
+          require(app->currentEngine(), "No running guest to resize");
+          target = app->guest(app->currentEngine());
+        }
+        target->resize(step["width"].toInt(), step["height"].toInt());
         QApplication::processEvents();
-        for (auto b : app->body->findChildren<PButton *>())
-          if (b->isVisible())
-            require(
-                app->rect().contains(QRect(b->mapTo(app, QPoint()), b->size())),
-                "A home action is clipped at this window size: " + b->text());
+        for (auto b : target->body->findChildren<PButton *>()) {
+          if (b->isVisible()) {
+            if (target == app) {
+              for (auto area : app->body->findChildren<QScrollArea *>())
+                area->ensureWidgetVisible(b);
+            } else
+              require(target->rect().contains(QRect(b->mapTo(target, QPoint()), b->size())),
+                      "A guest action is clipped: " + b->text());
+          }
+        }
         done = true;
+      } else if (action == "fitScreen") {
+        auto w = step["window"].toString() == "guest" && app->currentEngine() ?
+                   app->guest(app->currentEngine()) : app;
+        if (step["window"].toString() == "modal")
+          w = qobject_cast<PWindow *>(QApplication::activeModalWidget());
+        require(w, "No window to fit");
+        w->fitToScreen();
+        QApplication::processEvents();
+        require(w->screen()->availableGeometry().contains(w->frameGeometry()),
+                "A window extends outside the Windows work area");
+        for (auto b : w->body->findChildren<PButton *>())
+          if (b->isVisible() && b->parentWidget() == w->body)
+            require(w->rect().contains(QRect(b->mapTo(w, QPoint()), b->size())),
+                    "A dialog/guest footer action is clipped: " + b->text());
+        done = true;
+      } else if (action == "maximize" || action == "restore") {
+        auto w = step["window"].toString() == "guest" && app->currentEngine() ?
+                   app->guest(app->currentEngine()) : app;
+        if (action == "maximize") w->showMaximized();
+        else w->showNormal();
+        done = true;
+      } else if (action == "assertDpi") {
+        const auto scale = step["scale"].toDouble();
+        require(qAbs(app->devicePixelRatioF() - scale) < 0.02, "Qt did not honor the requested display scale");
+#ifdef Q_OS_WIN
+        auto state = app->evidence();
+        require(state["perMonitorV2"].toBool(), "The Windows window is not Per-Monitor V2 aware");
+        if (step["native"].toBool())
+          require(qAbs(state["windowsDpi"].toInt() / 96.0 - scale) < 0.02,
+                  "The Windows OS DPI does not match this test");
+#endif
+        done = true;
+      } else if (action == "guestSize") {
+        if (auto e = app->currentEngine(); e && e->vnc.ready) {
+          auto view = app->guest(e)->findChild<GuestView *>();
+          const auto expected = step["automatic"].toBool() ? view->desiredSize() :
+                                 QSize(step["width"].toInt(), step["height"].toInt());
+          done = e->vnc.frame.size() == expected;
+          if (done && step["sharp"].toBool()) {
+            const auto r = view->screenRect();
+            auto zoom = r.width() * view->devicePixelRatioF() / expected.width();
+            require(qAbs(zoom - qRound(zoom)) < 0.001 && zoom >= 1,
+                    "Guest pixels do not map to integral physical pixels");
+          }
+        }
+      } else if (action == "guestEscape") {
+        if (auto e = app->currentEngine()) {
+          auto view = app->guest(e)->findChild<GuestView *>();
+          QKeyEvent event(QEvent::KeyPress, Qt::Key_Escape, Qt::NoModifier);
+          QApplication::sendEvent(view, &event);
+          done = true;
+        }
       } else if (action == "setup") {
         QTimer::singleShot(0, app, [a = app] { a->showSetup(); });
         done = true;
@@ -502,14 +582,24 @@ public:
                             : QApplication::activeWindow());
         if (!w)
           w = app;
+        if (step["window"].toString() == "guest" && app->currentEngine())
+          w = app->guest(app->currentEngine());
         w->grab().save(output + "/" + step["name"].toString() + ".png");
+        if (step["nativeScreen"].toBool() && w->screen()) {
+          const auto origin = w->mapToGlobal(QPoint());
+          w->screen()->grabWindow(0, origin.x(), origin.y(), w->width(), w->height())
+              .save(output + "/" + step["name"].toString() + "-desktop.png");
+        }
+        Model::writeJSON(output + "/" + step["name"].toString() + ".json", app->evidence());
         if (auto e = app->currentEngine(); e && !e->vnc.frame.isNull())
           e->vnc.frame.save(output + "/" + step["name"].toString() +
                             "-guest.png");
         done = true;
       } else if (action == "shade") {
-        app->shade();
-        require(app->height() == (app->shaded ? 23 : app->expanded.height()),
+        auto w = step["window"].toString() == "guest" && app->currentEngine() ?
+                   app->guest(app->currentEngine()) : app;
+        w->shade();
+        require(w->height() == (w->shaded ? 23 : w->expanded.height()),
                 "WindowShade height");
         done = true;
       } else if (action == "pause" || action == "resume" ||
@@ -567,6 +657,8 @@ public:
         auto w = (QApplication::activeModalWidget()
                       ? QApplication::activeModalWidget()
                       : QApplication::activeWindow());
+        if (step["window"].toString() == "guest" && app->currentEngine())
+          w = app->guest(app->currentEngine());
         if (w) {
           auto combos = w->findChildren<PCombo *>();
           int i = step.value("index").toInt();

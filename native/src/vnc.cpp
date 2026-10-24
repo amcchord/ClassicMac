@@ -1,5 +1,6 @@
 #include "vnc.h"
 #include "platinum.h"
+#include "display.h"
 #include <QtWidgets>
 #include <openssl/des.h>
 static quint16 u16(const char *p) { return (quint8(p[0]) << 8) | quint8(p[1]); }
@@ -73,6 +74,9 @@ void VNC::close() {
   rects = -1;
   frame = {};
   relative = false;
+  desktopResizeSupported = false;
+  desktopResizeResult = -1;
+  lastRequestedSize = {};
 }
 void VNC::failure(QString s) {
   close();
@@ -156,8 +160,8 @@ void VNC::parse() {
       QByteArray enc;
       enc += char(2);
       enc += char(0);
-      put16(enc, 4);
-      for (int i : {0, 1, -223, -257})
+      put16(enc, 5);
+      for (int i : {0, 1, -223, -257, -308})
         put32(enc, quint32(i));
       socket.write(enc);
       state = 6;
@@ -205,7 +209,31 @@ void VNC::parse() {
       const char *b = buffer.constData();
       int x = u16(b), y = u16(b + 2), w = u16(b + 4), h = u16(b + 6);
       qint32 encoding = qint32(u32(b + 8));
-      if (encoding == -223) {
+      if (encoding == -308) {
+        // ExtendedDesktopSize has a variable screen layout. QEMU returns
+        // status 4 when the guest driver will apply the request asynchronously.
+        if (buffer.size() < 16)
+          return;
+        int screens = quint8(buffer[12]);
+        if (screens < 1 || screens > 16) {
+          failure("Invalid guest display layout.");
+          return;
+        }
+        int bytes = 16 + screens * 16;
+        if (buffer.size() < bytes)
+          return;
+        if (w < 1 || h < 1 || w > 4096 || h > 2160) {
+          failure("Unsupported guest screen size.");
+          return;
+        }
+        desktopResizeResult = x == 1 ? y : 0;
+        desktopResizeSupported = desktopResizeResult == 0 || desktopResizeResult == 4;
+        if (desktopResizeResult == 0 && frame.size() != QSize(w, h)) {
+          frame = QImage(w, h, QImage::Format_RGB32);
+          frame.fill(Qt::black);
+        }
+        buffer.remove(0, bytes);
+      } else if (encoding == -223) {
         if (w < 1 || h < 1 || w > 4096 || h > 2160) {
           failure("Unsupported guest screen size.");
           return;
@@ -282,39 +310,142 @@ void VNC::pointer(int x, int y, int mask) {
   put16(b, quint16(std::clamp(y, 0, 65535)));
   socket.write(b);
 }
+bool VNC::resizeDesktop(QSize size) {
+  if (!ready || !desktopResizeSupported || size.width() < 512 ||
+      size.height() < 384 || size.width() > 3840 || size.height() > 2160)
+    return false;
+  QByteArray b;
+  b += char(251);
+  b += char(0);
+  put16(b, size.width());
+  put16(b, size.height());
+  b += char(1); // one display, matching QEMU's console
+  b += char(0);
+  put32(b, 0);
+  put16(b, 0);
+  put16(b, 0);
+  put16(b, size.width());
+  put16(b, size.height());
+  put32(b, 0);
+  socket.write(b);
+  lastRequestedSize = size;
+  return true;
+}
 GuestView::GuestView(VNC *client, QWidget *p) : QWidget(p), vnc(client) {
   setFocusPolicy(Qt::StrongFocus);
   setMouseTracking(true);
   setAccessibleName("Mac screen");
-  connect(vnc, &VNC::changed, this, qOverload<>(&QWidget::update));
+  resizeDebounce.setSingleShot(true);
+  resizeDebounce.setInterval(250);
+  resizeDeadline.setSingleShot(true);
+  resizeDeadline.setInterval(5000);
+  connect(&resizeDebounce, &QTimer::timeout, this, &GuestView::requestResize);
+  connect(&resizeDeadline, &QTimer::timeout, this, [this] {
+    if (vnc->frame.size() != pendingSize) {
+      resizeNotice = "This Mac has kept its current screen size.";
+      emit displayChanged();
+    }
+  });
+  connect(vnc, &VNC::changed, this, [this] {
+    if (captured && !vnc->relative)
+      release();
+    if (vnc->ready && observedSize != vnc->frame.size()) {
+      observedSize = vnc->frame.size();
+      if (observedSize == pendingSize) {
+        resizeDeadline.stop();
+        resizeNotice.clear();
+      } else if (wantsResize && resizeAttempts < 3)
+        resizeDebounce.start();
+      emit displayChanged();
+    }
+    update();
+  });
 }
 GuestView::~GuestView() { release(); }
-QRect GuestView::screenRect() const {
+QRectF GuestView::screenRect() const {
   if (vnc->frame.isNull())
     return rect();
-  auto s = vnc->frame.size();
-  s.scale(size(), Qt::KeepAspectRatio);
-  return QRect(QPoint((width() - s.width()) / 2, (height() - s.height()) / 2),
-               s);
+  return NativeDisplay::imageRect(size(), vnc->frame.size(), devicePixelRatioF(), fitWindow, pixelZoom);
+}
+QSize GuestView::desiredSize() const {
+  return NativeDisplay::requestedSize(size(), fitWindow ? 1 : devicePixelRatioF(),
+                                widthAlignment, fitWindow ? 1 : pixelZoom);
+}
+void GuestView::scheduleResize() {
+  wantsResize = true;
+  resizeAttempts = 0;
+  resizeDebounce.start();
+}
+void GuestView::requestResize() {
+  if (!wantsResize)
+    return;
+  if (desiredSize() == vnc->frame.size()) {
+    resizeDeadline.stop();
+    if (!resizeNotice.isEmpty()) {
+      resizeNotice.clear();
+      emit displayChanged();
+    }
+    return;
+  }
+  if (!followsWindow || paused || !isVisible() || !vnc->ready ||
+      window()->isMinimized() || desiredSize() == vnc->frame.size() ||
+      resizeAttempts >= 3)
+    return;
+  if (vnc->resizeDesktop(desiredSize())) {
+    pendingSize = desiredSize();
+    ++resizeAttempts;
+    resizeNotice.clear();
+    resizeDeadline.start();
+  } else if (vnc->desktopResizeResult > 0) {
+    resizeNotice = "This display uses a fixed screen size.";
+    emit displayChanged();
+  }
+}
+void GuestView::resizeEvent(QResizeEvent *e) {
+  QWidget::resizeEvent(e);
+  if (resizeArmed)
+    scheduleResize();
+}
+void GuestView::showEvent(QShowEvent *e) {
+  QWidget::showEvent(e);
+  if (!shownOnce) {
+    shownOnce = true;
+    // Initial layout/work-area fitting must not ask a classic video driver
+    // to hot-plug its screen while Display Manager is still starting up.
+    QTimer::singleShot(500, this, [this] { resizeArmed = true; });
+  } else if (wantsResize)
+    resizeDebounce.start();
+}
+bool GuestView::event(QEvent *e) {
+#if QT_VERSION >= QT_VERSION_CHECK(6, 6, 0)
+  if (e->type() == QEvent::DevicePixelRatioChange) {
+    if (resizeArmed)
+      scheduleResize();
+    update();
+  }
+#endif
+  return QWidget::event(e);
 }
 void GuestView::paintEvent(QPaintEvent *) {
   QPainter q(this);
   q.fillRect(rect(), vnc->ready ? Qt::black : QColor(0x63639c));
   q.setRenderHint(QPainter::SmoothPixmapTransform, false);
-  if (!vnc->frame.isNull())
-    q.drawImage(screenRect(), vnc->frame);
+  if (!vnc->frame.isNull()) {
+    // Rasterize in integral device coordinates. A logical QRectF whose height
+    // is 768 / 1.75 can round just below 768 and drop a source row even with
+    // nearest-neighbor sampling, especially when the image is letterboxed.
+    const auto device = q.deviceTransform();
+    const auto target = device.mapRect(screenRect());
+    q.setWorldTransform(device.inverted());
+    q.drawImage(QRectF(qRound(target.x()), qRound(target.y()),
+                       qRound(target.width()), qRound(target.height())), vnc->frame);
+  }
   else {
     Platinum::Pixels p(width(), height(), 0xff63639c);
     Platinum::text(p, notice,
                    (width() - Platinum::textWidth(notice, "small")) / 2,
                    height() / 2, 0xffffffff, "small");
     q.drawImage(0, 0, p.image);
-  }
-  if (vnc->relative && !captured) {
-    Platinum::Pixels p(width(), 20, 0xffdddddd);
-    Platinum::text(p, "Click to capture mouse. Escape releases it.", 6, 14,
-                   0xff000000, "small");
-    q.drawImage(0, height() - 20, p.image);
   }
 }
 quint32 GuestView::keySym(QKeyEvent *e) const {
@@ -374,6 +505,17 @@ void GuestView::keyPressEvent(QKeyEvent *e) {
     e->accept();
     return;
   }
+  if (captured && ((e->key() == Qt::Key_Alt && e->modifiers() & Qt::ControlModifier) ||
+                   (e->key() == Qt::Key_Control && e->modifiers() & Qt::AltModifier))) {
+    release();
+    e->accept();
+    return;
+  }
+  if (e->key() == Qt::Key_Escape && window()->isFullScreen()) {
+    emit toggleFullScreen();
+    e->accept();
+    return;
+  }
   auto key = keySym(e);
   if (key) {
     keys.insert(key);
@@ -396,7 +538,11 @@ void GuestView::release() {
   if (controlClick)
     vnc->key(0xffe3, false);
   controlClick = false;
+  if (mask)
+    vnc->pointer(vnc->relative ? 0x7fff : lastPointer.x(),
+                 vnc->relative ? 0x7fff : lastPointer.y(), 0);
   mask = 0;
+  wheelRemainder = 0;
   if (captured) {
     captured = false;
     releaseMouse();
@@ -420,12 +566,15 @@ void GuestView::mouse(QMouseEvent *e) {
     vnc->pointer(0x7fff + delta.x(), 0x7fff + delta.y(), mask);
     if (e->type() == QEvent::MouseMove)
       QCursor::setPos(mapToGlobal(center));
-  } else if (r.contains(e->position().toPoint()))
-    vnc->pointer((e->position().x() - r.x()) * vnc->frame.width() /
-                     std::max(1, r.width()),
-                 (e->position().y() - r.y()) * vnc->frame.height() /
-                     std::max(1, r.height()),
-                 mask);
+  } else if (!vnc->frame.isNull() &&
+             (r.contains(e->position()) || mask || e->type() == QEvent::MouseButtonRelease)) {
+    lastPointer = {
+        std::clamp(int((e->position().x() - r.x()) * vnc->frame.width() /
+                        std::max(qreal(1), r.width())), 0, vnc->frame.width() - 1),
+        std::clamp(int((e->position().y() - r.y()) * vnc->frame.height() /
+                        std::max(qreal(1), r.height())), 0, vnc->frame.height() - 1)};
+    vnc->pointer(lastPointer.x(), lastPointer.y(), mask);
+  }
 }
 void GuestView::mousePressEvent(QMouseEvent *e) {
   setFocus();
@@ -464,16 +613,27 @@ void GuestView::mouseReleaseEvent(QMouseEvent *e) {
 }
 void GuestView::mouseMoveEvent(QMouseEvent *e) { mouse(e); }
 void GuestView::wheelEvent(QWheelEvent *e) {
+  if (e->angleDelta().y() == 0 || (vnc->relative && !captured)) {
+    e->ignore();
+    return;
+  }
+  wheelRemainder += e->angleDelta().y();
+  int steps = wheelRemainder / 120;
+  wheelRemainder %= 120;
   if (helpers && !vnc->relative) {
-    quint32 k = e->angleDelta().y() > 0 ? 0xff52 : 0xff54;
-    for (int n = 0; n < std::max(1, std::abs(e->angleDelta().y() / 120)); ++n) {
+    quint32 k = steps > 0 ? 0xff52 : 0xff54;
+    for (int n = 0; n < std::abs(steps); ++n) {
       vnc->key(k, true);
       vnc->key(k, false);
     }
   } else {
-    int bit = e->angleDelta().y() > 0 ? 8 : 16;
-    vnc->pointer(0x7fff, 0x7fff, mask | bit);
-    vnc->pointer(0x7fff, 0x7fff, mask);
+    int bit = steps > 0 ? 8 : 16;
+    for (int n = 0; n < std::abs(steps); ++n) {
+      vnc->pointer(vnc->relative ? 0x7fff : lastPointer.x(),
+                   vnc->relative ? 0x7fff : lastPointer.y(), mask | bit);
+      vnc->pointer(vnc->relative ? 0x7fff : lastPointer.x(),
+                   vnc->relative ? 0x7fff : lastPointer.y(), mask);
+    }
   }
   e->accept();
 }
