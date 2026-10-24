@@ -1,0 +1,161 @@
+{
+    "error": "",
+    "passed": true,
+    "state": {
+        "displays": [
+        ],
+        "electron": false,
+        "frontend": "native-qt-cpp",
+        "height": 300,
+        "machines": [
+            {
+                "config": {
+                    "bootFromCD": false,
+                    "classicInputHelpers": true,
+                    "depth": 16,
+                    "diskImageName": "disk.img",
+                    "diskSizeGB": 2,
+                    "graphicsCard": "standard",
+                    "height": 768,
+                    "id": "2c77361d-1de6-4025-9f9a-71709d4c33d4",
+                    "machineFamily": "quadra800",
+                    "name": "DPI Quadra",
+                    "networking": true,
+                    "pramImageName": "pram.img",
+                    "ramMB": 128,
+                    "sound": true,
+                    "tabletInput": true,
+                    "toolsCDInserted": false,
+                    "useEnhancedFramebuffer": true,
+                    "useG4CPU": true,
+                    "useVirtioDisk": false,
+                    "width": 1024
+                },
+                "folder": "C:/ClassicMacQA/v461/final461small-200/documents/DPI Quadra.classic",
+                "id": "2c77361d-1de6-4025-9f9a-71709d4c33d4",
+                "name": "DPI Quadra",
+                "running": false
+            }
+        ],
+        "perMonitorV2": true,
+        "processId": 3444,
+        "scale": 2,
+        "shaded": false,
+        "version": "4.6.1",
+        "webview": false,
+        "width": 520,
+        "windowsClientHeight": 600,
+        "windowsClientWidth": 1040,
+        "windowsDpi": 192
+    },
+    "steps": [
+        {
+            "action": "assertDpi",
+            "elapsed": 109,
+            "passed": true,
+            "step": 0
+        },
+        {
+            "action": "create",
+            "elapsed": 197,
+            "passed": true,
+            "step": 1
+        },
+        {
+            "action": "fitScreen",
+            "elapsed": 7,
+            "passed": true,
+            "step": 2
+        },
+        {
+            "action": "capture",
+            "elapsed": 203,
+            "passed": true,
+            "step": 3
+        },
+        {
+            "action": "click",
+            "elapsed": 17,
+            "passed": true,
+            "step": 4
+        },
+        {
+            "action": "fitScreen",
+            "elapsed": 110,
+            "passed": true,
+            "step": 5
+        },
+        {
+            "action": "capture",
+            "elapsed": 173,
+            "passed": true,
+            "step": 6
+        },
+        {
+            "action": "click",
+            "elapsed": 47,
+            "passed": true,
+            "step": 7
+        },
+        {
+            "action": "click",
+            "elapsed": 110,
+            "passed": true,
+            "step": 8
+        },
+        {
+            "action": "fitScreen",
+            "elapsed": 111,
+            "passed": true,
+            "step": 9
+        },
+        {
+            "action": "capture",
+            "elapsed": 172,
+            "passed": true,
+            "step": 10
+        },
+        {
+            "action": "click",
+            "elapsed": 48,
+            "passed": true,
+            "step": 11
+        },
+        {
+            "action": "resize",
+            "elapsed": 115,
+            "passed": true,
+            "step": 12
+        },
+        {
+            "action": "fitScreen",
+            "elapsed": 104,
+            "passed": true,
+            "step": 13
+        },
+        {
+            "action": "capture",
+            "elapsed": 159,
+            "passed": true,
+            "step": 14
+        },
+        {
+            "action": "shade",
+            "elapsed": 62,
+            "passed": true,
+            "step": 15
+        },
+        {
+            "action": "shade",
+            "elapsed": 113,
+            "passed": true,
+            "step": 16
+        },
+        {
+            "action": "fitScreen",
+            "elapsed": 106,
+            "passed": true,
+            "step": 17
+        }
+    ]
+}

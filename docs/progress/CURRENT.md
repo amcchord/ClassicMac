@@ -1,17 +1,26 @@
-# Windows DPI and guest-resize refinement in progress
+# Windows display refinement — final preflight
 
-Owned worktree `worktrees/windows-dpi-resize`, branch `codex/windows-dpi-resize`,
-from main d1a69b1. Stable Latest remains v4.6.0. User requested a detailed
-Windows robustness pass covering real OS scaling, sharp graphics and live
-guest resolution changes when the window is resized.
+Functional source bf9a749, worktree `worktrees/windows-dpi-resize`, PR #38.
+Windows CI40127036437 and Linux CI40127038152 pass. Latest remains4.6.0.
 
-Confirmed gaps: RoundPreferFloor ignores fractional Windows DPI; GuestView
-only stretches a fixed framebuffer and never sends the driver's existing
-host-resize request; fixed initial windows/dialogs can exceed a scaled work
-area. Prior 1x/2x tests did not cover these cases. Use Windows VM171, isolated
-QA paths, and real Windows DPI measurements as well as render tests. Preserve
-existing guests, root gxmetal and unrelated worktrees.
+Exact final AppImage passes46 steps: Power Mac8.6 repeated resize/fullscreen/
+pause/resume/pixel controls/shutdown, public System7.5.5 download/import,
+enhanced Quadra boot-time resize with safe fitting and clean shutdown.
+Exact final Windows EXE passes32 steps: enhanced7.5.5 early resize, all scale
+controls, fullscreen, shutdown/reboot, remembered Fit Window. Final Windows Standard Power Mac live DPI (49 steps), ATI fallback (16) and
+constrained 200% UI (18) pass. Twenty-three complete guest frames and four desktop
+captures compare with zero differing pixels; both package inventories pass.
 
-Next: implement pass-through DPI, bounded asynchronous RFB desktop resizing,
-sharp device-pixel rendering and work-area fitting, then qualify the Windows
-portable executable at fractional scales and with real guest mode changes.
+Native Windows uses exact fractional DPI/Per-Monitor V2. Physical painting
+preserves every source pixel at integral zoom, including centered1024x768.
+Standard Power Macs support asynchronous live resolution changes; NDRV0bb2f227
+fixes repeated modes. ATI and all Quadras default to automatic fitting, keeping
+their OS mode; saved choices are retained. Startup stress exposed unsafe QFB
+hot-plug. All experimental firmware changes were reverted; native Quadra resize
+requests are disabled. Shared Quadra firmware is unchanged. Mac4.6.1 with new
+Power Mac NDRV is signed/notarized/stapled; full verification passes.
+
+QA VMs170/171 and own RDP/task ClassicMac461QA remain running. Task-only
+backed-up configs need restoration. No user disk/catalog/DNS/hosting change.
+Next: collect final evidence/inventories, merge, root validation, publish4.6.1,
+fresh public verification, then own task/RDP and VM cleanup.

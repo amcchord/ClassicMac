@@ -1,0 +1,47 @@
+{
+    "displays": [
+    ],
+    "electron": false,
+    "frontend": "native-qt-cpp",
+    "height": 304,
+    "machines": [
+        {
+            "config": {
+                "bootFromCD": false,
+                "classicInputHelpers": true,
+                "depth": 16,
+                "diskImageName": "disk.img",
+                "diskSizeGB": 2,
+                "graphicsCard": "standard",
+                "height": 768,
+                "id": "2c77361d-1de6-4025-9f9a-71709d4c33d4",
+                "machineFamily": "quadra800",
+                "name": "DPI Quadra",
+                "networking": true,
+                "pramImageName": "pram.img",
+                "ramMB": 128,
+                "sound": true,
+                "tabletInput": true,
+                "toolsCDInserted": false,
+                "useEnhancedFramebuffer": true,
+                "useG4CPU": true,
+                "useVirtioDisk": false,
+                "width": 1024
+            },
+            "folder": "C:/ClassicMacQA/v461/final461small-200/documents/DPI Quadra.classic",
+            "id": "2c77361d-1de6-4025-9f9a-71709d4c33d4",
+            "name": "DPI Quadra",
+            "running": false
+        }
+    ],
+    "perMonitorV2": true,
+    "processId": 3444,
+    "scale": 2,
+    "shaded": false,
+    "version": "4.6.1",
+    "webview": false,
+    "width": 632,
+    "windowsClientHeight": 608,
+    "windowsClientWidth": 1264,
+    "windowsDpi": 192
+}

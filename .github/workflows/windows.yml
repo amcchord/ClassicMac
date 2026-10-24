@@ -23,7 +23,6 @@ jobs:
         with:
           msystem: UCRT64
           update: true
-          cache: false
           install: >-
             git make diffutils mingw-w64-ucrt-x86_64-gcc
             mingw-w64-ucrt-x86_64-python mingw-w64-ucrt-x86_64-python-pip

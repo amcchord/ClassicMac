@@ -1,0 +1,10 @@
+{
+  "source": "bf9a749caa8cfba1f11a2437859ac35be72e5a95",
+  "platform": "Linux",
+  "packagedFiles": 380,
+  "runtimeFiles": 128,
+  "allHashesMatch": true,
+  "noElectronOrBrowser": true,
+  "frontendMagic": "7f454c46",
+  "singleExecutableSha256": "3664253d67322b78ea03a58610371e404ca306793a40a779105f8abe5dc4f228"
+}

@@ -1,0 +1,347 @@
+{
+    "error": "",
+    "passed": true,
+    "state": {
+        "displays": [
+        ],
+        "electron": false,
+        "frontend": "native-qt-cpp",
+        "height": 700,
+        "machines": [
+            {
+                "config": {
+                    "bootFromCD": false,
+                    "classicInputHelpers": false,
+                    "depth": 16,
+                    "diskImageName": "disk.img",
+                    "diskSizeGB": 2,
+                    "graphicsCard": "standard",
+                    "height": 480,
+                    "id": "636980ec-5a82-4a68-aa9b-623dfad80046",
+                    "machineFamily": "powerMacG4",
+                    "name": "Native Mac OS 8.6",
+                    "networking": true,
+                    "pramImageName": "pram.img",
+                    "ramMB": 128,
+                    "sound": false,
+                    "tabletInput": false,
+                    "toolsCDInserted": false,
+                    "useEnhancedFramebuffer": false,
+                    "useG4CPU": false,
+                    "useVirtioDisk": true,
+                    "width": 640
+                },
+                "folder": "C:/ClassicMacQA/v46/first-bases/documents/Native Mac OS 8.6.classic",
+                "id": "636980ec-5a82-4a68-aa9b-623dfad80046",
+                "name": "Native Mac OS 8.6",
+                "running": false
+            }
+        ],
+        "perMonitorV2": true,
+        "processId": 6104,
+        "scale": 1.25,
+        "shaded": false,
+        "version": "4.6.1",
+        "webview": false,
+        "width": 940,
+        "windowsClientHeight": 875,
+        "windowsClientWidth": 1175,
+        "windowsDpi": 120
+    },
+    "steps": [
+        {
+            "action": "assertDpi",
+            "elapsed": 109,
+            "passed": true,
+            "step": 0
+        },
+        {
+            "action": "open",
+            "elapsed": 136,
+            "passed": true,
+            "step": 1
+        },
+        {
+            "action": "start",
+            "elapsed": 697,
+            "passed": true,
+            "step": 2
+        },
+        {
+            "action": "guestReady",
+            "elapsed": 48,
+            "passed": true,
+            "step": 3
+        },
+        {
+            "action": "wait",
+            "elapsed": 45013,
+            "passed": true,
+            "step": 4
+        },
+        {
+            "action": "capture",
+            "elapsed": 194,
+            "passed": true,
+            "step": 5
+        },
+        {
+            "action": "resize",
+            "elapsed": 38,
+            "passed": true,
+            "step": 6
+        },
+        {
+            "action": "guestSize",
+            "elapsed": 641,
+            "passed": true,
+            "step": 7
+        },
+        {
+            "action": "capture",
+            "elapsed": 180,
+            "passed": true,
+            "step": 8
+        },
+        {
+            "action": "pause",
+            "elapsed": 50,
+            "passed": true,
+            "step": 9
+        },
+        {
+            "action": "resize",
+            "elapsed": 109,
+            "passed": true,
+            "step": 10
+        },
+        {
+            "action": "resume",
+            "elapsed": 98,
+            "passed": true,
+            "step": 11
+        },
+        {
+            "action": "guestSize",
+            "elapsed": 764,
+            "passed": true,
+            "step": 12
+        },
+        {
+            "action": "capture",
+            "elapsed": 159,
+            "passed": true,
+            "step": 13
+        },
+        {
+            "action": "wait",
+            "elapsed": 15052,
+            "passed": true,
+            "step": 14
+        },
+        {
+            "action": "assertDpi",
+            "elapsed": 112,
+            "passed": true,
+            "step": 15
+        },
+        {
+            "action": "guestSize",
+            "elapsed": 112,
+            "passed": true,
+            "step": 16
+        },
+        {
+            "action": "capture",
+            "elapsed": 168,
+            "passed": true,
+            "step": 17
+        },
+        {
+            "action": "maximize",
+            "elapsed": 63,
+            "passed": true,
+            "step": 18
+        },
+        {
+            "action": "guestSize",
+            "elapsed": 542,
+            "passed": true,
+            "step": 19
+        },
+        {
+            "action": "capture",
+            "elapsed": 264,
+            "passed": true,
+            "step": 20
+        },
+        {
+            "action": "restore",
+            "elapsed": 69,
+            "passed": true,
+            "step": 21
+        },
+        {
+            "action": "guestSize",
+            "elapsed": 769,
+            "passed": true,
+            "step": 22
+        },
+        {
+            "action": "shade",
+            "elapsed": 111,
+            "passed": true,
+            "step": 23
+        },
+        {
+            "action": "capture",
+            "elapsed": 124,
+            "passed": true,
+            "step": 24
+        },
+        {
+            "action": "shade",
+            "elapsed": 97,
+            "passed": true,
+            "step": 25
+        },
+        {
+            "action": "guestSize",
+            "elapsed": 107,
+            "passed": true,
+            "step": 26
+        },
+        {
+            "action": "click",
+            "elapsed": 111,
+            "passed": true,
+            "step": 27
+        },
+        {
+            "action": "guestSize",
+            "elapsed": 660,
+            "passed": true,
+            "step": 28
+        },
+        {
+            "action": "capture",
+            "elapsed": 281,
+            "passed": true,
+            "step": 29
+        },
+        {
+            "action": "guestEscape",
+            "elapsed": 47,
+            "passed": true,
+            "step": 30
+        },
+        {
+            "action": "guestSize",
+            "elapsed": 650,
+            "passed": true,
+            "step": 31
+        },
+        {
+            "action": "capture",
+            "elapsed": 165,
+            "passed": true,
+            "step": 32
+        },
+        {
+            "action": "wait",
+            "elapsed": 15074,
+            "passed": true,
+            "step": 33
+        },
+        {
+            "action": "assertDpi",
+            "elapsed": 112,
+            "passed": true,
+            "step": 34
+        },
+        {
+            "action": "guestSize",
+            "elapsed": 111,
+            "passed": true,
+            "step": 35
+        },
+        {
+            "action": "capture",
+            "elapsed": 158,
+            "passed": true,
+            "step": 36
+        },
+        {
+            "action": "combo",
+            "elapsed": 79,
+            "passed": true,
+            "step": 37
+        },
+        {
+            "action": "guestSize",
+            "elapsed": 95,
+            "passed": true,
+            "step": 38
+        },
+        {
+            "action": "combo",
+            "elapsed": 119,
+            "passed": true,
+            "step": 39
+        },
+        {
+            "action": "guestSize",
+            "elapsed": 100,
+            "passed": true,
+            "step": 40
+        },
+        {
+            "action": "capture",
+            "elapsed": 155,
+            "passed": true,
+            "step": 41
+        },
+        {
+            "action": "combo",
+            "elapsed": 75,
+            "passed": true,
+            "step": 42
+        },
+        {
+            "action": "guestSize",
+            "elapsed": 633,
+            "passed": true,
+            "step": 43
+        },
+        {
+            "action": "capture",
+            "elapsed": 151,
+            "passed": true,
+            "step": 44
+        },
+        {
+            "action": "combo",
+            "elapsed": 80,
+            "passed": true,
+            "step": 45
+        },
+        {
+            "action": "guestSize",
+            "elapsed": 643,
+            "passed": true,
+            "step": 46
+        },
+        {
+            "action": "shutdown",
+            "elapsed": 120,
+            "passed": true,
+            "step": 47
+        },
+        {
+            "action": "stopped",
+            "elapsed": 1215,
+            "passed": true,
+            "step": 48
+        }
+    ]
+}

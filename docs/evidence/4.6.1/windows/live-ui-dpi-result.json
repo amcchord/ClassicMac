@@ -1,0 +1,73 @@
+{
+    "error": "",
+    "passed": true,
+    "state": {
+        "displays": [
+        ],
+        "electron": false,
+        "frontend": "native-qt-cpp",
+        "height": 700,
+        "machines": [
+        ],
+        "perMonitorV2": true,
+        "processId": 9504,
+        "scale": 1.5,
+        "shaded": false,
+        "version": "4.6.1",
+        "webview": false,
+        "width": 940,
+        "windowsClientHeight": 1050,
+        "windowsClientWidth": 1410,
+        "windowsDpi": 144
+    },
+    "steps": [
+        {
+            "action": "assertDpi",
+            "elapsed": 110,
+            "passed": true,
+            "step": 0
+        },
+        {
+            "action": "capture",
+            "elapsed": 316,
+            "passed": true,
+            "step": 1
+        },
+        {
+            "action": "wait",
+            "elapsed": 15090,
+            "passed": true,
+            "step": 2
+        },
+        {
+            "action": "assertDpi",
+            "elapsed": 110,
+            "passed": true,
+            "step": 3
+        },
+        {
+            "action": "capture",
+            "elapsed": 207,
+            "passed": true,
+            "step": 4
+        },
+        {
+            "action": "wait",
+            "elapsed": 15040,
+            "passed": true,
+            "step": 5
+        },
+        {
+            "action": "assertDpi",
+            "elapsed": 111,
+            "passed": true,
+            "step": 6
+        },
+        {
+            "action": "capture",
+            "elapsed": 239,
+            "passed": true,
+            "step": 7
+        }
+    ]
+}
