@@ -254,10 +254,13 @@ void PWindow::shade() {
   if (shaded) {
     shaded = false;
     body->show();
-    setMinimumHeight(150);
+    setMinimumSize(expandedMinimum);
     resize(expanded);
   } else {
+    if (isMaximized() || isFullScreen())
+      showNormal();
     expanded = size();
+    expandedMinimum = minimumSize();
     shaded = true;
     body->hide();
     setMinimumHeight(23);

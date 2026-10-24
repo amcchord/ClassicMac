@@ -91,6 +91,7 @@ public:
   QString title;
   bool shaded = false, allowShade = true, growable = true;
   QSize expanded;
+  QSize expandedMinimum;
   std::function<bool()> canClose;
   explicit PWindow(QString title, QSize size, QWidget *parent = nullptr);
   void shade();

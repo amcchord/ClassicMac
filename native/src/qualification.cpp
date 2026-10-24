@@ -268,6 +268,12 @@ int selfTest(const QString &fixtures, const QString &output) {
             "Actual native window/content/grow frame differs at %1x: %2 pixels")
             .arg(scale)
             .arg(differences));
+    const auto minimum = native.minimumSize();
+    native.shade();
+    require(native.height() == 23, "Native window does not shade to 23 pixels");
+    native.shade();
+    require(native.minimumSize() == minimum,
+            "WindowShade changed the resize minimum");
     native.close();
   }
   if (!output.isEmpty())
@@ -347,6 +353,15 @@ public:
         done = elapsed.elapsed() >= step["milliseconds"].toInt();
       else if (action == "open") {
         app->addMachine(step["folder"].toString());
+        done = true;
+      } else if (action == "resize") {
+        app->resize(step["width"].toInt(), step["height"].toInt());
+        QApplication::processEvents();
+        for (auto b : app->body->findChildren<PButton *>())
+          if (b->isVisible())
+            require(
+                app->rect().contains(QRect(b->mapTo(app, QPoint()), b->size())),
+                "A home action is clipped at this window size: " + b->text());
         done = true;
       } else if (action == "setup") {
         QTimer::singleShot(0, app, [a = app] { a->showSetup(); });
