@@ -1,0 +1,153 @@
+diff --git a/hw/net/rtl8139.c b/hw/net/rtl8139.c
+index 424af73a18f..96cd2821358 100644
+--- a/hw/net/rtl8139.c
++++ b/hw/net/rtl8139.c
+@@ -438,6 +438,11 @@ struct RTL8139State {
+     uint8_t mult[8]; /* multicast mask array */
+ 
+     uint32_t TxStatus[4]; /* TxStatus0 in C mode*/ /* also DTCCR[0] and DTCCR[1] in C+ mode */
++    /* Optional wire-time delay for old drivers that cannot handle inline TX. */
++    uint64_t tx_delay_ns;
++    uint8_t tx_pending;
++    int64_t tx_deadline[4];
++    QEMUTimer *tx_timer;
+     uint32_t TxAddr[4];   /* TxAddr0 */
+     uint32_t RxBuf;       /* Receive buffer */
+     uint32_t RxBufferSize;/* internal variable, receive ring buffer size in C mode */
+@@ -1215,6 +1220,9 @@ static void rtl8139_reset(DeviceState *d)
+ 
+     rtl8139_update_irq(s);
+ 
++    s->tx_pending = 0;
++    timer_del(s->tx_timer);
++
+     /* mark all status registers as owned by host */
+     for (i = 0; i < 4; ++i)
+     {
+@@ -1789,7 +1797,7 @@ static void rtl8139_transfer_frame(RTL8139State *s, uint8_t *buf, int size,
+     }
+ }
+ 
+-static int rtl8139_transmit_one(RTL8139State *s, int descriptor)
++static int rtl8139_transmit_one_now(RTL8139State *s, int descriptor)
+ {
+     if (!rtl8139_transmitter_enabled(s))
+     {
+@@ -1832,6 +1840,58 @@ static int rtl8139_transmit_one(RTL8139State *s, int descriptor)
+     return 1;
+ }
+ 
++/* A real MAC finishes a packet after the guest has submitted its descriptor.
++ * This opt-in delay also keeps a synchronous backend from returning a reply
++ * while the old guest driver is still accounting for its transmit request. */
++static int rtl8139_next_tx(RTL8139State *s)
++{
++    int first = -1;
++    for (int i = 0; i < 4; i++) {
++        if ((s->tx_pending & (1u << i)) &&
++            (first < 0 || s->tx_deadline[i] < s->tx_deadline[first])) {
++            first = i;
++        }
++    }
++    return first;
++}
++
++static void rtl8139_delayed_tx(void *opaque)
++{
++    RTL8139State *s = opaque;
++    int next;
++    int64_t now = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
++    while ((next = rtl8139_next_tx(s)) >= 0) {
++        if (s->tx_deadline[next] > now) {
++            timer_mod(s->tx_timer, s->tx_deadline[next]);
++            return;
++        }
++        s->tx_pending &= ~(1u << next);
++        rtl8139_transmit_one_now(s, next);
++    }
++}
++
++static int rtl8139_transmit_one(RTL8139State *s, int descriptor)
++{
++    if (!s->tx_delay_ns) {
++        return rtl8139_transmit_one_now(s, descriptor);
++    }
++    if (!rtl8139_transmitter_enabled(s) ||
++        (s->TxStatus[descriptor] & TxHostOwns) ||
++        (s->tx_pending & (1u << descriptor))) {
++        return 0;
++    }
++    int64_t due = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
++    for (int i = 0; i < 4; i++) {
++        if (s->tx_pending & (1u << i)) {
++            due = MAX(due, s->tx_deadline[i]);
++        }
++    }
++    s->tx_deadline[descriptor] = due + s->tx_delay_ns;
++    s->tx_pending |= 1u << descriptor;
++    timer_mod(s->tx_timer, s->tx_deadline[rtl8139_next_tx(s)]);
++    return 1;
++}
++
+ #define TCP_HEADER_CLEAR_FLAGS(tcp, off) ((tcp)->th_offset_flags &= cpu_to_be16(~TCP_FLAGS_ONLY(off)))
+ 
+ /* produces ones' complement sum of data */
+@@ -3158,6 +3218,26 @@ static int rtl8139_post_load(void *opaque, int version_id)
+     return 0;
+ }
+ 
++static bool rtl8139_tx_delay_needed(void *opaque)
++{
++    RTL8139State *s = opaque;
++    return s->tx_delay_ns != 0;
++}
++
++static const VMStateDescription vmstate_rtl8139_tx_delay = {
++    .name = "rtl8139/tx-delay",
++    .version_id = 1,
++    .minimum_version_id = 1,
++    .needed = rtl8139_tx_delay_needed,
++    .fields = (const VMStateField[]) {
++        VMSTATE_UINT64(tx_delay_ns, RTL8139State),
++        VMSTATE_UINT8(tx_pending, RTL8139State),
++        VMSTATE_INT64_ARRAY(tx_deadline, RTL8139State, 4),
++        VMSTATE_TIMER_PTR(tx_timer, RTL8139State),
++        VMSTATE_END_OF_LIST()
++    }
++};
++
+ static bool rtl8139_hotplug_ready_needed(void *opaque)
+ {
+     return qdev_machine_modified();
+@@ -3277,6 +3357,7 @@ static const VMStateDescription vmstate_rtl8139 = {
+     },
+     .subsections = (const VMStateDescription * const []) {
+         &vmstate_rtl8139_hotplug_ready,
++        &vmstate_rtl8139_tx_delay,
+         NULL
+     }
+ };
+@@ -3347,6 +3428,7 @@ static void pci_rtl8139_uninit(PCIDevice *dev)
+     g_free(s->cplus_txbuffer);
+     s->cplus_txbuffer = NULL;
+     timer_free(s->timer);
++    timer_free(s->tx_timer);
+     qemu_del_nic(s->nic);
+ }
+ 
+@@ -3415,6 +3497,7 @@ static void pci_rtl8139_realize(PCIDevice *dev, Error **errp)
+     s->cplus_txbuffer_offset = 0;
+ 
+     s->timer = timer_new_ns(QEMU_CLOCK_VIRTUAL, rtl8139_timer, s);
++    s->tx_timer = timer_new_ns(QEMU_CLOCK_VIRTUAL, rtl8139_delayed_tx, s);
+ }
+ 
+ static void rtl8139_instance_init(Object *obj)
+@@ -3428,6 +3511,7 @@ static void rtl8139_instance_init(Object *obj)
+ 
+ static const Property rtl8139_properties[] = {
+     DEFINE_NIC_PROPERTIES(RTL8139State, conf),
++    DEFINE_PROP_UINT64("tx-delay-ns", RTL8139State, tx_delay_ns, 0),
+ };
+ 
+ static void rtl8139_class_init(ObjectClass *klass, const void *data)

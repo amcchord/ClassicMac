@@ -1,5 +1,6 @@
 import Foundation
 import Darwin
+import CryptoKit
 
 // A catalog's smaller storage bound is usable only on a destination that
 // reports sparse-file support. Missing metadata retains the 3.0 space check.
@@ -60,7 +61,7 @@ enum MachineTemplateInstaller {
 
     private static func checkAllocatedStorage(in directory: URL, maximumBytes: Int64) throws {
         var total: Int64 = 0
-        for name in ["disk.img", "config.json", "preview.png", "bootrom.bin", "nvram.bin", VMTemplateMetadata.fileName] {
+        for name in ["disk.img", "config.json", "preview.png", "bootrom.bin", "nvram.bin", "Quadra800.rom", "pram.img", VMTemplateMetadata.fileName] {
             let path = directory.appendingPathComponent(name)
             var info = stat()
             if lstat(path.path, &info) != 0 {
@@ -112,7 +113,7 @@ enum MachineTemplateInstaller {
                                attributes: [.posixPermissions: 0o700])
         defer { try? fm.removeItem(at: staging) }
         try extract(archive, into: staging, expectedBytes: machine.installedBytes,
-                    expectedDiskBytes: machine.diskCapacityBytes, maximumStorageBytes: plan.sparseWriteLimit, copland: machine.family == .powerMac7500,
+                    expectedDiskBytes: machine.diskCapacityBytes, maximumStorageBytes: plan.sparseWriteLimit, copland: machine.family == .powerMac7500, quadra: machine.family == .quadra800,
                     cancelled: cancelled, progress: progress)
         if cancelled() { throw CancellationError() }
 
@@ -126,6 +127,17 @@ enum MachineTemplateInstaller {
             throw MachineDownloadError.unsafeArchive("This template does not match its catalog machine.")
         }
         if source.machineFamily == .powerMac7500 { try CoplandMachine.validateFirmware(in: staging) }
+        if source.machineFamily == .quadra800 {
+            let rom = staging.appendingPathComponent("Quadra800.rom")
+            if fm.fileExists(atPath: rom.path) {
+                let bytes = try Data(contentsOf: rom)
+                let hash = SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined()
+                guard bytes.count == 1_048_576,
+                      hash == "05ad753fb594e656cf078023ec189e09e2a7655a780de993b75b8c51ed6b09ca" else {
+                    throw MachineDownloadError.unsafeArchive("The Quadra ROM does not match this machine.")
+                }
+            }
+        }
         // Build a new config from supported hardware fields. Template paths,
         // IDs, mounted discs, browser mode and future unknown fields cannot be
         // carried into a new user's machine.
@@ -138,9 +150,9 @@ enum MachineTemplateInstaller {
             diskSizeGB: diskSizeGB, width: source.width, height: source.height,
             depth: source.depth, useEnhancedFramebuffer: false,
             customResolution: source.customResolution, useBrowserDisplay: false,
-            bootFromCD: false, toolsCDInserted: true,
+            bootFromCD: false, toolsCDInserted: source.toolsCDInserted,
             networking: source.networking, sound: source.sound,
-            useG4CPU: source.useG4CPU, tabletInput: source.tabletInput,
+            useG4CPU: source.useG4CPU, useVirtioDisk: source.useVirtioDisk, tabletInput: source.tabletInput,
             classicInputHelpers: source.classicInputHelpers
         )
         let encoder = JSONEncoder()
@@ -178,7 +190,7 @@ enum MachineTemplateInstaller {
     // devices or sparse extents are interpreted. GNU's positive base-256 size
     // encoding supports raw disks larger than USTAR's 8 GB limit.
     static func extract(_ archive: URL, into directory: URL, expectedBytes: Int64,
-                        expectedDiskBytes: Int64? = nil, maximumStorageBytes: Int64? = nil, copland: Bool = false,
+                        expectedDiskBytes: Int64? = nil, maximumStorageBytes: Int64? = nil, copland: Bool = false, quadra: Bool = false,
                         cancelled: () -> Bool = { false },
                         progress: (Int64) -> Void = { _ in }) throws {
         let pipe = Pipe()
@@ -225,10 +237,12 @@ enum MachineTemplateInstaller {
                   header.subdata(in: 345..<500).allSatisfy({ $0 == 0 }) else { throw invalidArchive() }
             let nameBytes = header.prefix(100).prefix(while: { $0 != 0 })
             guard let name = String(data: nameBytes, encoding: .utf8),
-                  (["config.json", "disk.img", "preview.png"] + (copland ? ["bootrom.bin", "nvram.bin"] : [])).contains(name),
+                  (["config.json", "disk.img", "preview.png"] + (copland ? ["bootrom.bin", "nvram.bin"] : []) + (quadra ? ["Quadra800.rom", "pram.img"] : [])).contains(name),
                   seen.insert(name).inserted else { throw invalidArchive() }
             let size = try number(header.subdata(in: 124..<136))
             guard size > 0, size <= expectedBytes - extracted else { throw invalidArchive() }
+            if name == "Quadra800.rom" && size != 1_048_576 { throw invalidArchive() }
+            if name == "pram.img" && size != 256 && size != 512 { throw invalidArchive() }
             if name == "bootrom.bin" && size != 4_194_304 { throw invalidArchive() }
             if name == "nvram.bin" && size != 8209 { throw invalidArchive() }
             if name == "config.json" && size > 65_536 { throw invalidArchive() }

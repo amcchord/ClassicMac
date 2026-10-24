@@ -20,7 +20,6 @@ jobs:
             output/desktop/ClassicMac-Windows-QEMU-source.tar.gz
           key: windows-engine-${{ hashFiles('**/*.patch', 'qfb/*.c', 'qfb/*.h', 'qfb/*.rom', 'screamer/*', 'ppcvid/qemu_vga.ndrv', 'shared/*', 'scripts/build-qemu.sh', 'desktop/ati_gl_windows.inc', 'desktop/scripts/build-engine.sh', 'desktop/scripts/stage-runtime.py', 'desktop/scripts/prepare-windows-gl.py', '.github/workflows/windows.yml') }}
       - uses: msys2/setup-msys2@v2
-        if: steps.engine-cache.outputs.cache-hit != 'true'
         with:
           msystem: UCRT64
           update: true
@@ -34,6 +33,9 @@ jobs:
             mingw-w64-ucrt-x86_64-libslirp mingw-w64-ucrt-x86_64-dtc
             mingw-w64-ucrt-x86_64-libgcrypt
             mingw-w64-ucrt-x86_64-zstd
+            mingw-w64-ucrt-x86_64-qt6-base mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-openssl mingw-w64-ucrt-x86_64-zlib
+            mingw-w64-ucrt-x86_64-nsis
       - name: Build patched Windows engines
         if: steps.engine-cache.outputs.cache-hit != 'true'
         shell: msys2 {0}
@@ -70,40 +72,17 @@ jobs:
           name: ClassicMac-Windows-QEMU-source
           path: output/desktop/ClassicMac-Windows-QEMU-source.tar.gz
           retention-days: 14
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: desktop/package-lock.json
-      - name: Build Windows desktop package
-        working-directory: desktop
+      - name: Build native C++ frontend and portable package
+        shell: msys2 {0}
         run: |
-          npm ci
-          npm test
-          npm run package:win
+          cmake -S native -B output/native-build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build output/native-build -j 4
+          QT_QPA_PLATFORM=offscreen output/native-build/classicmac.exe --self-test app/Tests/ClassicMacTests/Fixtures/Platinum output/native-pixels
+          python3 native/scripts/package-windows.py output/native-build
       - uses: actions/upload-artifact@v4
         with:
           name: ClassicMac-Windows-app
-          path: output/desktop/packages/*.exe
-          retention-days: 14
-      - name: Qualify the portable executable UI at 1x and 2x
-        run: node desktop/tests/ui-smoke.cjs output/desktop/packages/ClassicMac-4.5.0-windows-x64.exe output/desktop/ui-smoke
-      - name: Test the packaged desktop with a disposable OS9 machine
-        run: node desktop/tests/smoke-desktop.cjs output/desktop/packages/ClassicMac-4.5.0-windows-x64.exe output/desktop/smoke
-      - name: Test first-run setup through the packaged application
-        run: node desktop/tests/setup-smoke.cjs output/desktop/packages/ClassicMac-4.5.0-windows-x64.exe output/desktop/setup-smoke
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: ClassicMac-Windows-smoke
           path: |
-            output/desktop/ui-smoke/*/*.png
-            output/desktop/ui-smoke/*/*.json
-            output/desktop/smoke/desktop.png
-            output/desktop/smoke/desktop.png.json
-            output/desktop/smoke/desktop.png.shutdown.json
-            output/desktop/smoke/desktop.log
-            output/desktop/setup-smoke/*/*.png
-            output/desktop/setup-smoke/*/*.json
-            output/desktop/setup-smoke/*/desktop.log
-          retention-days: 14
+            output/desktop/packages/*.exe
+            output/native-pixels/*.json
+          retention-days: 30

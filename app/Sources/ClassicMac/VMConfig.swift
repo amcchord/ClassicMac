@@ -253,6 +253,10 @@ struct VMConfig: Codable, Identifiable, Hashable {
     // Mac OS 8.5 predates G4 hardware, so it can retain the G3 model.
     var useG4CPU: Bool
 
+    // The retail Mac OS 8.6 ROM needs a Virtio startup disk on mac99.
+    // Existing Power Macs retain their ordinary MacIO IDE hard disk.
+    var useVirtioDisk: Bool
+
     // Tablet input: use a virtio absolute-pointing device so the mouse moves
     // seamlessly in and out of the VM window without needing to be captured.
     // On by default. When off, the standard relative mouse is used and the
@@ -279,7 +283,7 @@ struct VMConfig: Codable, Identifiable, Hashable {
         case width, height, depth, useEnhancedFramebuffer, customResolution
         case useBrowserDisplay
         case cdImagePath, bootFromCD, floppyImagePath
-        case networking, sound, useG4CPU, sharedFolderPath, graphicsCard
+        case networking, sound, useG4CPU, useVirtioDisk, sharedFolderPath, graphicsCard
         case classicInputHelpers, tabletInput, toolsCDInserted
         case toolsDeliveryVersion
     }
@@ -302,6 +306,7 @@ struct VMConfig: Codable, Identifiable, Hashable {
          networking: Bool = true,
          sound: Bool = true,
          useG4CPU: Bool = true,
+         useVirtioDisk: Bool = false,
          graphicsCard: GraphicsCard = .standard,
          tabletInput: Bool = true,
          classicInputHelpers: Bool = true,
@@ -328,6 +333,7 @@ struct VMConfig: Codable, Identifiable, Hashable {
         self.networking = networking
         self.sound = sound
         self.useG4CPU = machineFamily == .powerMacG4 && useG4CPU
+        self.useVirtioDisk = machineFamily == .powerMacG4 && useVirtioDisk
         self.graphicsCard = graphicsCard
         self.tabletInput = tabletInput
         self.classicInputHelpers = classicInputHelpers
@@ -392,6 +398,7 @@ struct VMConfig: Codable, Identifiable, Hashable {
         // Preserve the boot-compatible G3 identity for existing VM packages.
         // Newly created Power Macs opt into G4 through the regular initializer.
         useG4CPU = try c.decodeIfPresent(Bool.self, forKey: .useG4CPU) ?? false
+        useVirtioDisk = try c.decodeIfPresent(Bool.self, forKey: .useVirtioDisk) ?? false
         graphicsCard = (try? c.decodeIfPresent(GraphicsCard.self, forKey: .graphicsCard)) ?? .standard
         classicInputHelpers = try c.decodeIfPresent(Bool.self, forKey: .classicInputHelpers) ?? true
         tabletInput = try c.decodeIfPresent(Bool.self, forKey: .tabletInput) ?? true
@@ -415,6 +422,7 @@ struct VMConfig: Codable, Identifiable, Hashable {
             useEnhancedFramebuffer = false
         } else {
             useG4CPU = false
+            useVirtioDisk = false
             graphicsCard = .standard
         }
         width = Self.clampedWidth(width)

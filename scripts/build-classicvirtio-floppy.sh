@@ -9,7 +9,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VENDOR_DIR="$ROOT_DIR/vendor"
 SOURCE_DIR="$VENDOR_DIR/classicvirtio"
-TOOLCHAIN="$VENDOR_DIR/Retro68-build/toolchain"
+TOOLCHAIN="${CLASSICVIRTIO_TOOLCHAIN:-$VENDOR_DIR/Retro68-build/toolchain}"
 INTERFACES_DIR="$VENDOR_DIR/mpw/InterfacesAndLibraries"
 PATCH_FILE="$ROOT_DIR/classicvirtio/floppy-driver.patch"
 POWER_MAC_PATCH_FILE="$ROOT_DIR/classicvirtio/powermac-boot.patch"
@@ -23,7 +23,7 @@ CLASSICVIRTIO_COMMIT="${CLASSICVIRTIO_COMMIT:-fc401b4c731027cb4068f3415def7fe79f
 log() { printf '\n==> %s\n' "$*"; }
 die() { printf '\nERROR: %s\n' "$*" >&2; exit 1; }
 
-if [ ! -d "$SOURCE_DIR/.git" ]; then
+if ! git -C "$SOURCE_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   log "Cloning classicvirtio"
   git clone "$CLASSICVIRTIO_REPO" "$SOURCE_DIR"
 fi
@@ -40,6 +40,7 @@ git -C "$SOURCE_DIR" apply "$PATCH_FILE"
 git -C "$SOURCE_DIR" apply "$POWER_MAC_PATCH_FILE"
 git -C "$SOURCE_DIR" apply "$TOOLS_MOUNT_PATCH_FILE"
 git -C "$SOURCE_DIR" apply "$DISPLAY_INPUT_PATCH_FILE"
+git -C "$SOURCE_DIR" apply "$ROOT_DIR/classicvirtio/powermac-fixed-disks.patch"
 
 [ -x "$TOOLCHAIN/bin/m68k-apple-macos-gcc" ] ||
   die "Retro68 is not built. Run scripts/build-qfb-rom.sh first."
