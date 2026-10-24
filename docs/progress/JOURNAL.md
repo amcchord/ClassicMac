@@ -1389,3 +1389,17 @@ consolidated root checks, publish and verify stable 4.1.1. Retain 4.1.0 for roll
   mutation. v4.5.0 is retained as rollback by promoting it to Latest.
 - Public verification and cleanup evidence are committed in docs/evidence/
   4.6.0; CURRENT now records the completed release. No required work remains.
+
+## 2026-10-24 — Windows DPI and resize follow-up started
+
+- User reports scaling/graphics and guest resolution failures in v4.6.0 and
+  requests a detailed robustness pass. New owned worktree windows-dpi-resize,
+  branch codex/windows-dpi-resize from d1a69b1. No agents delegated.
+- Confirmed forced DPI rounding and missing guest resize messages; prior
+  1x/2x reference gates did not cover fractional OS DPI or guest mode changes.
+  QEMU already forwards RFB SetDesktopSize to the Standard/QFB driver channel,
+  so the fix can use the native async transport without changing engines.
+- Started existing QA VM171; API returned a warning but read-back confirms
+  running at 192.168.105.146. No VM created/resized or user data modified.
+- Next: implement and test per-monitor/fractional scaling, real guest resize,
+  bounded/fixed-resolution fallback and window usability on scaled work areas.

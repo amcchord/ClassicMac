@@ -233,6 +233,28 @@ void PWindow::paintEvent(QPaintEvent *) {
 void PWindow::resizeEvent(QResizeEvent *) {
   body->setGeometry(6, 22, width() - 13, std::max(0, height() - 29));
 }
+void PWindow::fitToScreen() {
+  if (isFullScreen() || isMaximized() || shaded || !screen())
+    return;
+  auto available = screen()->availableGeometry().adjusted(4, 4, -4, -4);
+  if (available.isEmpty())
+    return;
+  resize(size().boundedTo(available.size()).expandedTo(minimumSize()));
+  move(std::clamp(pos().x(), available.left(),
+                  std::max(available.left(), available.right() - width() + 1)),
+       std::clamp(pos().y(), available.top(),
+                  std::max(available.top(), available.bottom() - height() + 1)));
+}
+void PWindow::showEvent(QShowEvent *e) {
+  QWidget::showEvent(e);
+  if (!screenConnected && windowHandle()) {
+    screenConnected = true;
+    connect(windowHandle(), &QWindow::screenChanged, this, [this] {
+      QTimer::singleShot(0, this, &PWindow::fitToScreen);
+    });
+  }
+  QTimer::singleShot(0, this, &PWindow::fitToScreen);
+}
 void PWindow::changeEvent(QEvent *e) {
   if (e->type() == QEvent::ActivationChange) {
     update();

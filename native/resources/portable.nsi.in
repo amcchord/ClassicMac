@@ -8,10 +8,10 @@ SilentInstall silent
 # into $PLUGINSDIR, without installing into the host filesystem.
 InstallDir "$TEMP"
 SetCompressor /SOLID lzma
-VIProductVersion "4.6.0.0"
+VIProductVersion "4.6.1.0"
 VIAddVersionKey /LANG=1033 "ProductName" "ClassicMac"
 VIAddVersionKey /LANG=1033 "FileDescription" "ClassicMac native portable application"
-VIAddVersionKey /LANG=1033 "FileVersion" "4.6.0"
+VIAddVersionKey /LANG=1033 "FileVersion" "4.6.1"
 VIAddVersionKey /LANG=1033 "LegalCopyright" "Austin McChord"
 Icon "@ICON@"
 Section

@@ -1,17 +1,17 @@
-# ClassicMac 4.6.0 — published and verified
+# Windows DPI and guest-resize refinement in progress
 
-Stable Latest: [v4.6.0](https://github.com/amcchord/ClassicMac/releases/tag/v4.6.0),
-tag/source `585b4189844703c4a7406f9953edb7e184118ba3`. PRs #36/#37 are merged.
-Windows/Linux use native C++/Qt with measured Platinum pixels, single EXE/
-AppImage packaging and all three classic base images. Electron is removed.
+Owned worktree `worktrees/windows-dpi-resize`, branch `codex/windows-dpi-resize`,
+from main d1a69b1. Stable Latest remains v4.6.0. User requested a detailed
+Windows robustness pass covering real OS scaling, sharp graphics and live
+guest resolution changes when the window is resized.
 
-Exact final packages pass the Proxmox setup/UI/three-base lifecycle matrix
-and pixel/inventory checks. Combined Swift/native/packaging validation passes.
-All nine public assets and fresh anonymous downloads verify; the downloaded
-Mac DMG passes full signature, staple, Gatekeeper and contents verification.
-See docs/4.6.0-validation.md and docs/evidence/4.6.0.
+Confirmed gaps: RoundPreferFloor ignores fractional Windows DPI; GuestView
+only stretches a fixed framebuffer and never sends the driver's existing
+host-resize request; fixed initial windows/dialogs can exceed a scaled work
+area. Prior 1x/2x tests did not cover these cases. Use Windows VM171, isolated
+QA paths, and real Windows DPI measurements as well as render tests. Preserve
+existing guests, root gxmetal and unrelated worktrees.
 
-Own QA scheduled task/RDP are gone; VMs170/171 are stopped. Task artifacts
-remain in ignored worktree output. Existing user data, gxmetal and unrelated
-worktrees are preserved. No catalog/DNS/hosting changes. v4.5 remains available
-for rollback. No outstanding release action.
+Next: implement pass-through DPI, bounded asynchronous RFB desktop resizing,
+sharp device-pixel rendering and work-area fitting, then qualify the Windows
+portable executable at fractional scales and with real guest mode changes.

@@ -45,4 +45,4 @@ if not tool.exists():urllib.request.urlretrieve('https://github.com/AppImage/app
 if hashlib.sha256(tool.read_bytes()).hexdigest()!=digest:raise SystemExit('AppImage tool checksum mismatch')
 tool.chmod(0o755);packages=root/'output/desktop/packages';packages.mkdir(parents=True,exist_ok=True)
 env=os.environ|{'ARCH':'x86_64','APPIMAGE_EXTRACT_AND_RUN':'1'}
-subprocess.check_call([str(tool),'--no-appstream',str(app),str(packages/'ClassicMac-4.6.0-linux-x64.AppImage')],env=env)
+subprocess.check_call([str(tool),'--no-appstream',str(app),str(packages/'ClassicMac-4.6.1-linux-x64.AppImage')],env=env)

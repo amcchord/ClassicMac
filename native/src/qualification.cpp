@@ -316,10 +316,13 @@ int selfTest(const QString &fixtures, const QString &output) {
     else
       qputenv("CLASSICMAC_QUALIFY", oldQualification);
   }
+  displayTests(fixtures, output);
   if (!output.isEmpty())
     Model::writeJSON(output + "/self-test.json",
                      QJsonObject{{"checks", count},
                                  {"nativeWidgets", 5},
+                                 {"dpiScales", QJsonArray{1, 1.25, 1.5, 1.75, 2, 2.5, 3}},
+                                 {"displayProtocolAndInput", "passed"},
                                  {"pixels", reports},
                                  {"result", "passed"}});
   std::printf("Passed %d independent pixel captures, 95 glyph advances, native "
@@ -395,14 +398,55 @@ public:
         app->addMachine(step["folder"].toString());
         done = true;
       } else if (action == "resize") {
-        app->resize(step["width"].toInt(), step["height"].toInt());
+        PWindow *target = app;
+        if (step["window"].toString() == "guest") {
+          require(app->currentEngine(), "No running guest to resize");
+          target = app->guest(app->currentEngine());
+        }
+        target->resize(step["width"].toInt(), step["height"].toInt());
         QApplication::processEvents();
-        for (auto b : app->body->findChildren<PButton *>())
-          if (b->isVisible())
-            require(
-                app->rect().contains(QRect(b->mapTo(app, QPoint()), b->size())),
-                "A home action is clipped at this window size: " + b->text());
+        for (auto b : target->body->findChildren<PButton *>()) {
+          if (b->isVisible()) {
+            if (target == app) {
+              for (auto area : app->body->findChildren<QScrollArea *>())
+                area->ensureWidgetVisible(b);
+            } else
+              require(target->rect().contains(QRect(b->mapTo(target, QPoint()), b->size())),
+                      "A guest action is clipped: " + b->text());
+          }
+        }
         done = true;
+      } else if (action == "assertDpi") {
+        const auto scale = step["scale"].toDouble();
+        require(qAbs(app->devicePixelRatioF() - scale) < 0.02, "Qt did not honor the requested display scale");
+#ifdef Q_OS_WIN
+        auto state = app->evidence();
+        require(state["perMonitorV2"].toBool(), "The Windows window is not Per-Monitor V2 aware");
+        if (step["native"].toBool())
+          require(qAbs(state["windowsDpi"].toInt() / 96.0 - scale) < 0.02,
+                  "The Windows OS DPI does not match this test");
+#endif
+        done = true;
+      } else if (action == "guestSize") {
+        if (auto e = app->currentEngine(); e && e->vnc.ready) {
+          auto view = app->guest(e)->findChild<GuestView *>();
+          const auto expected = step["automatic"].toBool() ? view->desiredSize() :
+                                 QSize(step["width"].toInt(), step["height"].toInt());
+          done = e->vnc.frame.size() == expected;
+          if (done && step["sharp"].toBool()) {
+            const auto r = view->screenRect();
+            auto zoom = r.width() * view->devicePixelRatioF() / expected.width();
+            require(qAbs(zoom - qRound(zoom)) < 0.001 && zoom >= 1,
+                    "Guest pixels do not map to integral physical pixels");
+          }
+        }
+      } else if (action == "guestEscape") {
+        if (auto e = app->currentEngine()) {
+          auto view = app->guest(e)->findChild<GuestView *>();
+          QKeyEvent event(QEvent::KeyPress, Qt::Key_Escape, Qt::NoModifier);
+          QApplication::sendEvent(view, &event);
+          done = true;
+        }
       } else if (action == "setup") {
         QTimer::singleShot(0, app, [a = app] { a->showSetup(); });
         done = true;
@@ -502,7 +546,10 @@ public:
                             : QApplication::activeWindow());
         if (!w)
           w = app;
+        if (step["window"].toString() == "guest" && app->currentEngine())
+          w = app->guest(app->currentEngine());
         w->grab().save(output + "/" + step["name"].toString() + ".png");
+        Model::writeJSON(output + "/" + step["name"].toString() + ".json", app->evidence());
         if (auto e = app->currentEngine(); e && !e->vnc.frame.isNull())
           e->vnc.frame.save(output + "/" + step["name"].toString() +
                             "-guest.png");
@@ -567,6 +614,8 @@ public:
         auto w = (QApplication::activeModalWidget()
                       ? QApplication::activeModalWidget()
                       : QApplication::activeWindow());
+        if (step["window"].toString() == "guest" && app->currentEngine())
+          w = app->guest(app->currentEngine());
         if (w) {
           auto combos = w->findChildren<PCombo *>();
           int i = step.value("index").toInt();

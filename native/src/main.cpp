@@ -3,7 +3,7 @@
 #include <cstdio>
 int main(int argc, char **argv) {
   QGuiApplication::setHighDpiScaleFactorRoundingPolicy(
-      Qt::HighDpiScaleFactorRoundingPolicy::RoundPreferFloor);
+      Qt::HighDpiScaleFactorRoundingPolicy::PassThrough);
   QApplication app(argc, argv);
   app.setApplicationName("ClassicMac");
   app.setApplicationVersion(CLASSICMAC_VERSION);
