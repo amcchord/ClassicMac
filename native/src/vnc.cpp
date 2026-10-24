@@ -430,8 +430,16 @@ void GuestView::paintEvent(QPaintEvent *) {
   QPainter q(this);
   q.fillRect(rect(), vnc->ready ? Qt::black : QColor(0x63639c));
   q.setRenderHint(QPainter::SmoothPixmapTransform, false);
-  if (!vnc->frame.isNull())
-    q.drawImage(screenRect(), vnc->frame);
+  if (!vnc->frame.isNull()) {
+    // Rasterize in integral device coordinates. A logical QRectF whose height
+    // is 768 / 1.75 can round just below 768 and drop a source row even with
+    // nearest-neighbor sampling, especially when the image is letterboxed.
+    const auto device = q.deviceTransform();
+    const auto target = device.mapRect(screenRect());
+    q.setWorldTransform(device.inverted());
+    q.drawImage(QRectF(qRound(target.x()), qRound(target.y()),
+                       qRound(target.width()), qRound(target.height())), vnc->frame);
+  }
   else {
     Platinum::Pixels p(width(), height(), 0xff63639c);
     Platinum::text(p, notice,
