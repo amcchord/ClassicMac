@@ -12,10 +12,15 @@ QString runtime() {
 }
 QString dataDirectory() {
   auto r = qEnvironmentVariable("CLASSICMAC_TEST_HOME");
-  if (r.isEmpty())
+  if (r.isEmpty()) {
+#ifdef Q_OS_WIN
+    r = qEnvironmentVariable("APPDATA") + "/classicmac-desktop";
+#else
     r = QStandardPaths::writableLocation(
             QStandardPaths::GenericConfigLocation) +
         "/classicmac-desktop";
+#endif
+  }
   QDir().mkpath(r);
   return r;
 }

@@ -257,6 +257,16 @@ void PWindow::mousePressEvent(QMouseEvent *e) {
   startSize = size();
   resizing = growable && !shaded && e->position().x() > width() - 23 &&
              e->position().y() > height() - 23;
+  if (held.isEmpty() && windowHandle()) {
+    bool moved =
+        resizing
+            ? windowHandle()->startSystemResize(Qt::BottomEdge | Qt::RightEdge)
+            : e->position().y() < 21 && windowHandle()->startSystemMove();
+    if (moved) {
+      drag = {};
+      return;
+    }
+  }
   if (!held.isEmpty())
     update();
   else if (e->position().y() < 21 || resizing)
@@ -484,6 +494,8 @@ public:
   }
 };
 void installPlatinumStyle() {
+  QFontDatabase::addApplicationFont(":/RetroBoot-Regular.ttf");
+  QFontDatabase::addApplicationFont(":/RetroBoot-System.ttf");
   qApp->setStyle(new PStyle);
   QPalette p;
   p.setColor(QPalette::Window, QColor(0xdddddd));

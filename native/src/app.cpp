@@ -114,7 +114,7 @@ background(QWidget *parent, const QString &title,
 }
 App::App() : PWindow("ClassicMac", {940, 700}) {
   setMinimumSize(780, 560);
-  setWindowIcon(QIcon(":/powermac_g4-32.png"));
+  setWindowIcon(QIcon(":/app.png"));
   QFile f(Model::libraryFile());
   if (f.open(QFile::ReadOnly) && f.size() <= 1048576) {
     auto paths = QJsonDocument::fromJson(f.readAll()).array();
@@ -127,6 +127,7 @@ App::App() : PWindow("ClassicMac", {940, 700}) {
         if (!duplicate)
           machines << m;
       } catch (const std::exception &e) {
+        unavailablePaths << p.toString();
         qWarning("Skipped unavailable library machine: %s", e.what());
       }
     }
@@ -167,11 +168,14 @@ Engine *App::currentEngine() const {
 }
 void App::saveLibrary() {
   QJsonArray paths;
+  for (const auto &path : unavailablePaths)
+    paths.append(path);
   for (auto m : machines)
     paths.append(m.folder);
   Model::writeJSON(Model::libraryFile(), paths);
 }
 void App::registerMachine(const Model::Machine &m) {
+  unavailablePaths.removeAll(m.folder);
   for (int i = 0; i < machines.size(); ++i)
     if (machines[i].id() == m.id()) {
       if (machines[i].folder != m.folder)
@@ -741,6 +745,10 @@ void App::showPaste(Engine *e) {
                      "its US keyboard layout.",
                      &d, "regular", true));
   auto edit = new QPlainTextEdit(&d);
+  QFont bitmapFont("RetroBoot Regular");
+  bitmapFont.setPixelSize(12);
+  bitmapFont.setStyleStrategy(QFont::NoAntialias);
+  edit->setFont(bitmapFont);
   edit->setPlainText(QApplication::clipboard()->text().left(8192));
   v->addWidget(edit, 1);
   auto slow = new PButton("Slow typing", &d);

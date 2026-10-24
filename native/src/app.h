@@ -32,6 +32,7 @@ private:
   QWidget *preview = nullptr;
   PButton *startButton = nullptr, *infoButton = nullptr, *mediaButton = nullptr;
   QJsonArray catalogRows;
+  QStringList unavailablePaths;
   void buildHome();
   void importMachine();
   void registerMachine(const Model::Machine &);

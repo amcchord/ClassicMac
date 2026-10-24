@@ -29,6 +29,17 @@
   <img src="docs/screenshots/powermacg4-macos92.png" width="410" alt="Mac OS 9.2 on the emulated Power Mac G4">
 </p>
 
+## New in ClassicMac 4.6
+
+- **Native Windows and Linux apps.** Compiled C++ replaces Electron entirely,
+  with direct guest display/input and the Mac app's measured Platinum pixels.
+- **Single executable downloads.** A portable Windows EXE and a Linux AppImage
+  include the native app, engines and runtime. No installation is required.
+- **More classic base Macs.** The Library adds System 7.5.5, Mac OS 8.1 and
+  Mac OS 8.6, including their prepared hardware and applications from PR #36.
+- **Sparse virtual disks on Windows.** Empty disk space stays unallocated.
+  Existing `.classic` machines and Library preferences remain compatible.
+
 ## New in ClassicMac 4.5
 
 - **Single-file desktop downloads.** Run the portable Windows EXE directly.
