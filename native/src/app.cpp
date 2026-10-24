@@ -38,7 +38,10 @@ public:
                        e->paused ? QColor(0xff8600) : QColor(0x00a600));
       painter.fillRect(33, 31, 1, 1, Qt::white);
     }
+    q->save();
+    q->setRenderHint(QPainter::SmoothPixmapTransform, false);
     q->drawImage(o.rect.topLeft(), p.image);
+    q->restore();
   }
 };
 class Preview : public QWidget {

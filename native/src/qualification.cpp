@@ -277,6 +277,41 @@ int selfTest(const QString &fixtures, const QString &output) {
             "WindowShade changed the resize minimum");
     native.close();
   }
+  {
+    auto oldHome = qgetenv("CLASSICMAC_TEST_HOME"),
+         oldQualification = qgetenv("CLASSICMAC_QUALIFY");
+    qputenv("CLASSICMAC_TEST_HOME", (tmp.path() + "/ui").toUtf8());
+    qputenv("CLASSICMAC_QUALIFY", "1");
+    {
+      App native;
+      native.machines.append({tmp.path(), Model::freshConfig("Pixel Mac")});
+      native.render();
+      native.show();
+      QApplication::setActiveWindow(&native);
+      QApplication::processEvents();
+      QImage one(940, 700, QImage::Format_ARGB32),
+          two(1880, 1400, QImage::Format_ARGB32);
+      two.setDevicePixelRatio(2);
+      one.fill(face);
+      two.fill(face);
+      native.QWidget::render(&one);
+      native.QWidget::render(&two);
+      auto expected =
+          one.scaled(two.size(), Qt::IgnoreAspectRatio, Qt::FastTransformation);
+      require(two == expected,
+              "Composed home is not an exact 2x pixel expansion");
+      native.canClose = {};
+      native.close();
+    }
+    if (oldHome.isNull())
+      qunsetenv("CLASSICMAC_TEST_HOME");
+    else
+      qputenv("CLASSICMAC_TEST_HOME", oldHome);
+    if (oldQualification.isNull())
+      qunsetenv("CLASSICMAC_QUALIFY");
+    else
+      qputenv("CLASSICMAC_QUALIFY", oldQualification);
+  }
   if (!output.isEmpty())
     Model::writeJSON(output + "/self-test.json",
                      QJsonObject{{"checks", count},

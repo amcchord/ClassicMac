@@ -149,7 +149,10 @@ public:
              o.state & QStyle::State_Selected ? 0xff6666cc : face);
     text(p, elide(i.data().toString(), p.w() - 16), 8, 14,
          o.state & QStyle::State_Selected ? 0xffffffff : 0xff000000);
+    q->save();
+    q->setRenderHint(QPainter::SmoothPixmapTransform, false);
     q->drawImage(o.rect.topLeft(), p.image);
+    q->restore();
   }
   QSize sizeHint(const QStyleOptionViewItem &,
                  const QModelIndex &i) const override {
@@ -505,9 +508,12 @@ public:
                                                                       : 0)
                       : 0;
     scrollBar(p, s->maximum > s->minimum ? pos : -1, pressed);
+    q->save();
+    q->setRenderHint(QPainter::SmoothPixmapTransform, false);
     q->drawImage(o->rect.topLeft(),
                  vertical ? p.image
                           : p.image.transformed(QTransform().rotate(-90)));
+    q->restore();
   }
   void drawPrimitive(PrimitiveElement pe, const QStyleOption *o, QPainter *p,
                      const QWidget *w = nullptr) const override {
