@@ -30,9 +30,9 @@ runtime and sparse fixture copies and owned Xvfb99. Original fixtures/configs an
 user machines untouched. End own resources and restore both VMs to stopped after
 publication. Root gxmetal and unrelated worktrees preserved.
 
-Latest qualification: see the newest journal entry. Quadra passes all depths and
-real Windows DPI scales. Clean Windows ATI100/125% pass,150% mode changes pass
-but the short shutdown chord missed;500ms hold is being qualified. Readiness must
-be latched before the first resize, so games launched first can service later
-requests. All callback/timer/debug experiments are removed. Fresh b41c9f3 firmware
-and final Windows lifecycle/live-DPI qualification remain. Do not publish yet.
+Latest qualification:138f56d fixes first-resize readiness and passes four actual
+mode changes during Quake III rendering. The final Linux CI40141732363 passes;
+Windows40141731053 is building. Mac repackage/notarization/verifier pass with
+b41c9f3 firmware. Final Linux package lifecycle/game tests are running. Finish
+Windows lifecycle/live DPI, integration/preflight, publish and verify all nine
+assets, then restore QA VMs to stopped. No release/tag published yet.

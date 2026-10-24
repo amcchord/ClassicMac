@@ -1585,3 +1585,16 @@ consolidated root checks, publish and verify stable 4.1.1. Retain 4.1.0 for roll
 - Standard8.6 exact AppImage passes27 steps after the owned clone's Disk First
   Aid Done action. No original guest files/configs were changed.113 whole
   integral guest captures currently compare with zero different pixels.
+
+## 2026-10-24 — ATI game resizing verified
+
+-138f56d observes Finder readiness even with an empty mailbox. The clean
+  service then changes the real desktop1144×797 →896×656 →1600×1200 →1024×768
+  while windowed Quake III continues rendering. Each switch records39k–42k
+  additional3D draws and338–353 uploads. Screenshots show a healthy game,
+  desktop and return to Finder. The harness mistook expected shutdown socket
+  closure for failure; final-package repetition will handle closure and require
+  exit0. No trap/timer/wakeup/debug code is present in production source.
+- Fresh final Windows40141731053 and Linux40141732363 builds are dispatched at
+ 138f56d. Mac app is being repackaged/notarized with b41c9f3 firmware. No
+  publication; all final package lifecycle/public checks still required.

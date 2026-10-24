@@ -20,6 +20,13 @@ time because it is not available when boot-time NDRVs are initialized. A safe
 unload restores the previous filter; a filter chained by someone else prevents
 unloading the still-referenced code.
 
+Finder readiness is observed even before a resize is requested, so launching a
+game first does not block later mode changes. `input/tests/ati-window-resize.py`
+checks that sequence with an independently supplied SuperDeluxe fixture: four
+actual modes while Quake III continues rendering, return to Finder and clean
+shutdown. Pass the prepared QEMU, BIOS, loader, Tools CD, disk and output paths
+using its command-line options. The test creates its own sparse disk clone.
+
 Mailbox registers are 32-bit big-endian: magic `CMrs` at0, requested width at4,
 height at8, serial at12, signed result at16, completed serial at20. A new request
 has result INT32_MAX. Zero result with matching completed serial confirms the
