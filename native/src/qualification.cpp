@@ -298,6 +298,10 @@ int selfTest(const QString &fixtures, const QString &output) {
       native.QWidget::render(&two);
       auto expected =
           one.scaled(two.size(), Qt::IgnoreAspectRatio, Qt::FastTransformation);
+      if (!output.isEmpty()) {
+        one.save(output + "/home-1x.png");
+        two.save(output + "/home-2x.png");
+      }
       require(two == expected,
               "Composed home is not an exact 2x pixel expansion");
       native.canClose = {};
@@ -315,7 +319,7 @@ int selfTest(const QString &fixtures, const QString &output) {
   if (!output.isEmpty())
     Model::writeJSON(output + "/self-test.json",
                      QJsonObject{{"checks", count},
-                                 {"nativeWidgets", 4},
+                                 {"nativeWidgets", 5},
                                  {"pixels", reports},
                                  {"result", "passed"}});
   std::printf("Passed %d independent pixel captures, 95 glyph advances, native "

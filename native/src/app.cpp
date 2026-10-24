@@ -250,6 +250,7 @@ void App::buildHome() {
   list->setItemDelegate(new MachineDelegate(this));
   list->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
   list->setFrameStyle(QFrame::Box);
+  list->setLineWidth(2);
   list->setSpacing(0);
   list->setSelectionMode(QAbstractItemView::SingleSelection);
   l->addWidget(list, 1);

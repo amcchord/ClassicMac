@@ -429,6 +429,19 @@ void problem(QWidget *p, const QString &message) {
 class PStyle : public QProxyStyle {
 public:
   PStyle() : QProxyStyle("Fusion") {}
+  void drawControl(ControlElement ce, const QStyleOption *o, QPainter *q,
+                   const QWidget *w = nullptr) const override {
+    if (ce == CE_ShapedFrame && qobject_cast<const QListWidget *>(w)) {
+      Pixels p(o->rect.width(), o->rect.height(), 0);
+      sunken(p);
+      q->save();
+      q->setRenderHint(QPainter::SmoothPixmapTransform, false);
+      q->drawImage(o->rect.topLeft(), p.image);
+      q->restore();
+      return;
+    }
+    QProxyStyle::drawControl(ce, o, q, w);
+  }
   int pixelMetric(PixelMetric m, const QStyleOption *o = nullptr,
                   const QWidget *w = nullptr) const override {
     if (m == PM_ScrollBarExtent)
