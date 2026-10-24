@@ -198,14 +198,10 @@ void Engine::shutdown(bool restart) {
   stopping = true;
   if (paused)
     resume();
-  hmp("sendkey power");
-  QTimer::singleShot(750, this, [&] {
-    if (running)
-      try {
-        hmp("sendkey ret");
-      } catch (const std::exception &) {
-      };
-  });
+  // Ask the classic OS to quit applications and shut down. Sending Power
+  // followed by a timed Return races the confirmation dialog on busy guests
+  // and can instead accept an unrelated document dialog.
+  hmp("sendkey ctrl-alt-meta_l-power");
 }
 void Engine::forceOff() {
   restarting = false;
