@@ -371,6 +371,31 @@ public:
           }
           done = true;
         }
+      } else if (action == "nativePointer") {
+        if (auto e = app->currentEngine(); e && e->vnc.ready) {
+          auto view = app->guest(e)->findChild<GuestView *>();
+          require(view, "Native guest pointer view missing");
+          auto size = e->vnc.frame.size();
+          size.scale(view->size(), Qt::KeepAspectRatio);
+          QPointF p((view->width() - size.width()) / 2.0 +
+                        step["x"].toInt() * size.width() /
+                            double(e->vnc.frame.width()),
+                    (view->height() - size.height()) / 2.0 +
+                        step["y"].toInt() * size.height() /
+                            double(e->vnc.frame.height()));
+          QMouseEvent move(QEvent::MouseMove, p, view->mapToGlobal(p.toPoint()),
+                           Qt::NoButton, Qt::NoButton, Qt::NoModifier);
+          QApplication::sendEvent(view, &move);
+          QMouseEvent press(QEvent::MouseButtonPress, p,
+                            view->mapToGlobal(p.toPoint()), Qt::LeftButton,
+                            Qt::LeftButton, Qt::NoModifier);
+          QApplication::sendEvent(view, &press);
+          QMouseEvent release(QEvent::MouseButtonRelease, p,
+                              view->mapToGlobal(p.toPoint()), Qt::LeftButton,
+                              Qt::NoButton, Qt::NoModifier);
+          QApplication::sendEvent(view, &release);
+          done = true;
+        }
       } else if (action == "guestReady") {
         auto e = app->currentEngine();
         done = e && e->vnc.ready && !e->vnc.frame.isNull();

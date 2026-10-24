@@ -32,7 +32,7 @@ shutil.copytree(prefix/'share/licenses',app/'Licenses/MSYS2',dirs_exist_ok=True)
 text='''Unicode true
 !include "FileFunc.nsh"
 Name "ClassicMac"
-OutFile "ClassicMac-4.6.0-windows-x64.exe"
+OutFile "@OUTPUT@"
 RequestExecutionLevel user
 SilentInstall silent
 SetCompressor /SOLID lzma
@@ -41,11 +41,11 @@ VIAddVersionKey /LANG=1033 "ProductName" "ClassicMac"
 VIAddVersionKey /LANG=1033 "FileDescription" "ClassicMac native portable application"
 VIAddVersionKey /LANG=1033 "FileVersion" "4.6.0"
 VIAddVersionKey /LANG=1033 "LegalCopyright" "Austin McChord"
-Icon "../../desktop/ui/app.ico"
+Icon "@ICON@"
 Section
   InitPluginsDir
   SetOutPath "$PLUGINSDIR/ClassicMac"
-  File /r "app/*"
+  File /r "@APP@\\*.*"
   ${GetParameters} $R0
   ${GetOptions} $R0 "--extract=" $R1
   StrCmp $R1 "" run
@@ -58,6 +58,7 @@ run:
 done:
 SectionEnd
 '''
+text=text.replace('@OUTPUT@',str(out/'ClassicMac-4.6.0-windows-x64.exe')).replace('@ICON@',str(root/'desktop/ui/app.ico')).replace('@APP@',str(app))
 (out/'portable.nsi').write_text(text)
 subprocess.check_call(['makensis',str(out/'portable.nsi')],cwd=out)
 packages=root/'output/desktop/packages';packages.mkdir(parents=True,exist_ok=True)
