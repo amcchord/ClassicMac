@@ -1,0 +1,67 @@
+{
+  "tag": "v4.6.1",
+  "source": "431e0873d802ed2c749c9bee533c927c00523c65",
+  "url": "https://github.com/amcchord/ClassicMac/releases/tag/v4.6.1",
+  "publishedAt": "2026-10-24T20:24:22Z",
+  "stableLatest": true,
+  "draft": false,
+  "assets": [
+    {
+      "name": "ClassicMac-4.6.1-linux-x64.AppImage",
+      "bytes": 60484088,
+      "sha256": "3664253d67322b78ea03a58610371e404ca306793a40a779105f8abe5dc4f228",
+      "anonymousDownloadMatches": true
+    },
+    {
+      "name": "ClassicMac-4.6.1-windows-x64.exe",
+      "bytes": 42516446,
+      "sha256": "2e16cbf2b02efbc5f0932c3ac4d6f0936ebc84ca31ea423970e13578a677eeae",
+      "anonymousDownloadMatches": true
+    },
+    {
+      "name": "ClassicMac-4.6.1.dmg",
+      "bytes": 47908472,
+      "sha256": "43a1310ddbbb3d03caf737583b9be11b5d895a9c43d019d2a1f3dfc7a557a50a",
+      "anonymousDownloadMatches": true
+    },
+    {
+      "name": "ClassicMac-4.6.1.zip",
+      "bytes": 42543216,
+      "sha256": "6a29d2b05bb51eedae12ab02ab048ca98ce77fc5c8dc5d3b6ff16ce0a0f29350",
+      "anonymousDownloadMatches": true
+    },
+    {
+      "name": "ClassicMac-Copland-source.tar.gz",
+      "bytes": 16899171,
+      "sha256": "35b3af17d6c4a250ba9104216c9ee6e65c956927d76bde6d0e62fc486f0d12da",
+      "anonymousDownloadMatches": true
+    },
+    {
+      "name": "ClassicMac-Linux-QEMU-source.tar.gz",
+      "bytes": 42375941,
+      "sha256": "6b2fc474c866066e1385b151a78140adcd3146985747301a39629468bec48a29",
+      "anonymousDownloadMatches": true
+    },
+    {
+      "name": "ClassicMac-macOS-QEMU-source.tar.gz",
+      "bytes": 42168956,
+      "sha256": "fa87a6654ac0ef280d1c27ccae1d8bf258b5e9acbc0d64f420abfc6758ab757f",
+      "anonymousDownloadMatches": true
+    },
+    {
+      "name": "ClassicMac-Windows-QEMU-source.tar.gz",
+      "bytes": 41534001,
+      "sha256": "fda640cf6bcd9d3a7344edd20efeb20bfee8742b4aebc1772f6bc8566fd09d6d",
+      "anonymousDownloadMatches": true
+    },
+    {
+      "name": "SHA256SUMS",
+      "bytes": 782,
+      "sha256": "b1ab3275014e6873405a1cd8ef2c5fc86b92857eafab24d7c4944c3446edce78",
+      "anonymousDownloadMatches": true
+    }
+  ],
+  "manifestMatches": true,
+  "allFreshAnonymousDownloadsMatch": true,
+  "downloadedMacDMGFullVerifier": "passed"
+}

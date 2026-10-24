@@ -1479,3 +1479,21 @@ consolidated root checks, publish and verify stable 4.1.1. Retain 4.1.0 for roll
   firmware ships. Original4.6 remains Latest until publication. Root gxmetal
   and all unrelated worktrees are preserved. Next: publish and public verification,
   restore QA configurations and stop task-owned test resources.
+
+## 2026-10-24 — Windows refinement 4.6.1 published and verified
+
+- Published stable Latest v4.6.1 at20:24:22 UTC, tagged exact source
+  431e0873d802ed2c749c9bee533c927c00523c65. All nine uploaded asset sizes and
+  digests match the qualified files. Release:
+  https://github.com/amcchord/ClassicMac/releases/tag/v4.6.1.
+- All nine fresh anonymous downloads match, including SHA256SUMS. Latest API
+  confirms non-draft/non-prerelease4.6.1. The downloaded Mac DMG passes every
+  signature/staple/Gatekeeper/runtime/Tools/firmware freshness gate.
+- Restored task-owned legacy QA configs; no guest processes remained. Removed
+  ClassicMac461QA, restored Windows test DPI to100%, ended own RDP and Xvfb,
+  and verified VMs170/171 stopped after graceful shutdown. No temporary notary
+  keys remain. No user machines/catalog/DNS/hosting changes; root gxmetal and
+  unrelated worktrees are preserved.
+- Public verification and cleanup records are retained in docs/evidence/4.6.1.
+  v4.6.0 remains rollback. Requested implementation, qualification and publication
+  are complete, with the explicit Standard-versus-fixed display boundary.

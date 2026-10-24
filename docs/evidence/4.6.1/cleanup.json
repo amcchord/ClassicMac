@@ -1,0 +1,14 @@
+{
+  "qaVMStates": {
+    "170": "stopped",
+    "171": "stopped"
+  },
+  "noGuestProcessesBeforeShutdown": true,
+  "qaConfigsRestored": true,
+  "ownScheduledTaskRemoved": true,
+  "ownRDPStopped": true,
+  "windowsDPIRestoredTo100Percent": true,
+  "ownXvfbStopped": true,
+  "temporaryNotaryKeysRemain": false,
+  "unrelatedUserFilesPreserved": true
+}
