@@ -1165,3 +1165,89 @@ consolidated root checks, publish and verify stable 4.1.1. Retain 4.1.0 for roll
   earlier missing-metadata ROM tests into ROM incompatibility claims.
 - Current retail probe checks Apple KB60337's documented TCP/IP Advanced
   option to disable Load Only When Needed and restart. No pass claimed.
+
+## 2026-10-24 — 8.6 OEM, queue and native ATA comparisons
+
+- Disabling TCP/IP Load Only When Needed acquires DHCP on startup but does
+  not fix large FTP. Retail ROM 1.6 (with tbxi/chrp type) boots but stalls.
+- The full G4 ASR System boots using retail ROM 1.4; it includes Open
+  Transport 2.5.1 and Apple Enet 2.3. Passive FTP is enabled via the existing
+  stock Internet Preferences UsePassiveFTP key. Its large transfer still stalls.
+  One script hit the obsolete signup prompt after a failed pointer operation;
+  the attempt failed with no personal address. Escape cancels that prompt.
+  Do not batch dependent typing after pointer errors.
+- A private PPC QSend polling experiment passed two consecutive 4,194,582-byte
+  downloads and StuffIt expansion. Both payloads exactly match SHA256
+  501e3235620a82d1d045ebad6e1bc34ace244170da0311ffa942a5e95107b121.
+  A second fresh cold image stalls again, so it is not a qualified fix.
+  interruptmask.c was restored; no experimental polling in tracked binaries.
+- Native About This Computer on that failed fresh image directly reports
+  Mac OS 8.6, VM Off, 128 MB; screenshot kernel-memory-real.png.
+- Correct CMD646 OF shape has an ata-4@0 child, compatible cmd646-ata. Native
+  Drive Setup sees an uninitialized ATA bus 2 disk, then writes APM plus two
+  Apple_Driver_ATA partitions. HFS remains zero and the device disappears
+  after driver loading, so no successful native initialization is claimed.
+- Two-Virtio CD/HD probes do not both mount; full installation remains
+  unqualified. Current comparisons isolate the stock upstream video NDRV
+  (18,752 bytes) and CPU optimization flags disabled, using separate clones.
+- 68k public artifacts/catalog are unchanged. Local candidate source checkpoint
+  4a5c077 contains profile/defaults/test changes and excludes unqualified 8.6
+  publication. No shared push or release. OEM raw-image attachment ejected.
+
+## 2026-10-24 — 8.6 network isolation and paced HTTP proof
+
+- Disabling all three CPU optimizations (MMU contexts, fast FPU, fast branch)
+  does not fix the stall. Stock upstream video NDRV passes two transfers on
+  one image but stalls on another fresh image. Neither is a fix.
+- Finder duplicates the 9,504,985-byte Netscape app after an FTP stall.
+  Transmit 1.7 from Panic's official File Museum boots but still stalls.
+- Fresh Netscape HTTP, before any FTP, also stalls. QEMU packet capture shows
+  ACKs stop at 37,441 bytes with a nonzero 17,520-byte window; the backend
+  retransmits while the RTL ring is drained, receiver enabled, no IRQ pending
+  or missed-packet count. Do not classify this as just a File Manager issue.
+- The identical 4,194,582-byte ZIP downloaded through a paced loopback HTTP
+  fixture (1,440-byte chunks / 5 ms gap) completes at 100%. Clean native
+  shutdown and extraction exactly match SHA256
+  fbc4598f63f7511fadad32f65c912640278b38a9819d5312cb6e1c41776cdd84.
+  Netscape's ZIP helper is ZipIt, absent in the candidate; fix that mapping
+  to StuffIt or Save To Disk before any final image.
+- A private QEMU experiment adds opt-in delayed RTL transmit completion;
+  default zero retains the original path. It is being tested at 1 ms using
+  a fresh image and unpaced FTP. No final driver/runtime claim yet; migration
+  support is deliberately not in this experimental source.
+
+## 2026-10-24 — delayed Ethernet completion trial
+
+- Paced HTTP payload is extracted after native clean shutdown and matches its
+  exact ZIP hash, not just a progress bar.
+- New opt-in RTL transmit deferral keeps hardware descriptor ownership until
+  a virtual-clock timer sends each queued packet and completes it in FIFO
+  order. Default zero uses the unchanged upstream path. At 1 ms the first
+  guest completes two unpaced 4 MiB passive downloads in 0.986 / 0.731 s,
+  with native automatic StuffIt expansion. Both extracted payloads match
+  501e3235620a82d1d045ebad6e1bc34ace244170da0311ffa942a5e95107b121.
+  Fresh second-guest repetition is still pending; not yet a qualified fix.
+- A separate receive pacing experiment exists only in task vendor source,
+  default zero and not tested yet. Neither experiment is in a tracked patch
+  or release. Pending migration support must be added if either is retained.
+- Private VNC screenshot helper now requests two frames, avoiding stale
+  display-cache captures immediately after guest actions. Native menu drags
+  must move down before right to avoid switching from Apple to File menu.
+
+## 2026-10-24 — repeated Ethernet qualification and matched Linux runtime
+
+- Final opt-in RTL TX patch defers DMA/send/descriptor completion/TxOK using a
+  virtual timer and four FIFO deadlines. Default zero preserves the old path.
+  Reset/unrealize handle the timer; an optional migration subsection saves the
+  queue, deadlines and timer. The receive experiment and CMD646 selection are
+  removed. Swift and desktop enable 1 ms only for the 8.6 Virtio profile.
+- Fresh second guest: both expanded FTP payloads match SHA256 501e3235...b121;
+  unpaced Netscape HTTP ZIP matches fbc4598f...dd84 after native shutdown.
+  Final PPC Transmit 1.2 source passes two more transfers. Native Netscape ZIP
+  mapping is being changed from absent ZipIt to Save To Disk before cleanup.
+- Swift focused consolidated checks: 75 tests, 2 optional skips, zero failures.
+  Desktop 23 pass / 2 optional skips; package accounting 3 pass, Bash syntax and
+  diff checks pass. RetroBoot Linux: 43 hardware/catalog tests pass, versus the
+  expected macOS supervisor/platform failures. New Linux package build and
+  capability verification pass on owned VM175; no appliance qualification yet.
+- No new public archive/catalog or shared software release in this checkpoint.

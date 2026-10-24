@@ -12,20 +12,18 @@ Production Swift checksum verification and real archive import pass for both;
 those imported copies also boot. Source disk files are frozen read-only.
 Artifacts/evidence are in the ignored root `output/classic-base-images`.
 
-8.6 is still unqualified. Both PPC and 68k Transmit 1.2 can complete an
-individual 4 MiB passive FTP download with automatic StuffIt expansion and
-exact payload hash, but repeated fresh-image downloads also stall. Neither
-switching app architecture nor avoiding filename overwrites fixes reliability.
-Native About This Computer confirms actual VM Off / 128 MB. HTTP and FTP
-login/LIST pass. The stalled RTL receive ring was empty with no pending IRQ.
-A smaller 512 MiB HFS probe also stalls; bare HFS+ does not boot through this
-firmware. A native CMD646 disk boots the retail ROM but cannot find a root
-disk, but native Drive Setup sees no CMD646 drives. The G4 ASR image was decoded
-with ndif2raw and mounted read-only; its System/ROM are intact, including
-ROM 2.5.1 matching the reference collection. That ROM fails early in QEMU.
-ROM 1.8.1 needs explicit tbxi/chrp Finder metadata (the reference file has
-none); with metadata it reaches ROM code, but still has a black display.
-Current probe tests Apple's documented TCP/IP Load Only When Needed setting. No 8.6 image or entry is public.
+8.6 now passes repeated fresh-guest 4 MiB FTP downloads and native StuffIt
+expansion with exact payload hashes using opt-in RTL8139 TX deferral (1 ms).
+A second fresh guest also completes a full unpaced HTTP ZIP with exact hash.
+The final PPC Transmit 1.2 candidate passes two transfers; its HTTP and final
+scrub/import are in progress. A third cold guest uses the final TX-only QEMU
+with migration support; the receive-pacing experiment was removed. Other guests
+retain the default-zero inline path. CUDA's 50 ms idle IRQ separately fixes
+lost Finder wakeups. Native About This Computer verifies VM Off / 128 MB.
+The source is retail installer core plus native installed applications, not a
+claim of full multi-stage installer success. Native CMD646/two-Virtio installer
+probes remain unqualified and are not being shipped. No 8.6 image or entry is
+public yet. Linux runtime build/verification passes; actual guest check next.
 
 The qualified 7.5.5 and 8.1 immutable archives and catalog-v2.json are now public.
 Full public HTTPS downloads, hashes, byte ranges, production Swift import and

@@ -216,6 +216,8 @@ def main():
                      requiredStorageBytes=required_storage_bytes, sha256=digest.hexdigest())
         if source["machineFamily"] != "powerMacG4":
             entry["machineFamily"] = source["machineFamily"]
+        if source["machineFamily"] == "powerMacG4" and config.get("useVirtioDisk") is True:
+            entry["requiredRuntime"] = "macos8"
         os.chmod(staged, 0o644)
         publish_new_file(staged, output)
         try:

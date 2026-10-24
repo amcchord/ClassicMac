@@ -74,7 +74,7 @@ function argumentsFor(machine, resources, endpoint, platform = process.platform)
     if (ppc && !legacy && !c.tabletInput && !c.toolsCDInserted) a.push('-device', `loader,addr=0x4000000,file=${option(path.join(resources, 'ndrvloader'))}`, '-prom-env', 'boot-command=init-program go');
   }
   a.push('-nic', c.networking ? `user,model=${ppc ? legacy ? 'rtl8139' : 'sungem' : 'dp83932'}` : 'none');
-  if (legacy && c.networking) a.push('-global', 'rtl8139.romfile=');
+  if (legacy && c.networking) a.push('-global', 'rtl8139.romfile=', '-global', 'rtl8139.tx-delay-ns=1000000');
   return a;
 }
 module.exports = { argumentsFor, option };

@@ -56,6 +56,7 @@ final class QEMURunnerArgumentTests: XCTestCase {
             XCTAssertEqual(optionValues("-M", in: args), ["mac99,via=cuda,usb=off,audiodev=snd0"])
             XCTAssertEqual(optionValues("-nic", in: args), ["user,model=rtl8139"])
             XCTAssertTrue(optionValues("-global", in: args).contains("cuda.idle-irq-ms=50"))
+            XCTAssertTrue(optionValues("-global", in: args).contains("rtl8139.tx-delay-ns=1000000"))
             XCTAssertFalse(args.contains("usb-mouse,id=classicmac-game-mouse"))
             if !fromCD { XCTAssertFalse(optionValues("-drive", in: args).contains { $0.contains("if=ide") }) }
             XCTAssertFalse(optionValues("-drive", in: args).contains { $0.contains("disk.img,format=raw,media=disk") })

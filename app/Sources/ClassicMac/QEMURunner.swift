@@ -1096,7 +1096,7 @@ final class QEMUManager: ObservableObject {
         // User-mode networking through the mac99 onboard sungem ethernet.
         if config.networking {
             args += ["-nic", legacy ? "user,model=rtl8139" : "user,model=sungem"]
-            if legacy { args += ["-global", "rtl8139.romfile="] }
+            if legacy { args += ["-global", "rtl8139.romfile=", "-global", "rtl8139.tx-delay-ns=1000000"] }
         } else {
             // QEMU otherwise creates the mac99 machine's default Sungem NIC.
             args += ["-nic", "none"]

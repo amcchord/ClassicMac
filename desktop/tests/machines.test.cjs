@@ -39,6 +39,7 @@ test('Mac OS 8.6 retains its candidate storage, Ethernet and real-time profile',
   assert(a.includes('mac99,via=cuda,usb=off,audiodev=snd0'));
   assert(a.includes('user,model=rtl8139')); assert(a.includes('rtl8139.romfile='));
   assert(a.includes('cuda.idle-irq-ms=50')); assert(a.includes('-nodefaults'));
+  assert(a.includes('rtl8139.tx-delay-ns=1000000'));
   assert.equal(a.filter(x => x.startsWith('loader,addr=')).length, 1);
   const shared = argumentsFor(make({ ...c, sharedFolderPath: '/host' }), '/resources', ports, 'linux');
   assert.equal(shared.filter(x => x.startsWith('loader,addr=')).length, 1);

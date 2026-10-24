@@ -493,6 +493,7 @@ done
 # wake its main task after a lost wakeup. This property defaults off; only
 # the legacy Virtio startup profile opts in. Ported from RetroBoot.
 git -C "$QEMU_DIR" apply "$POWERMAC_DIR/mac-os-8-idle-interrupt.patch" || die "Failed to apply legacy Mac OS idle wakeup"
+git -C "$QEMU_DIR" apply "$POWERMAC_DIR/mac-os-8-ethernet-timing.patch" || die "Failed to apply legacy Mac OS Ethernet timing"
 
 # ---------------------------------------------------------------------------
 # 3f. Emulated ATI Radeon R100 (ati-vga,model=r100), applied last
