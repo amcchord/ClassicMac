@@ -12,6 +12,11 @@ int main(int argc, char **argv) {
   installPlatinumStyle();
   auto args = app.arguments();
   try {
+    if (args.contains("--display-test")) {
+      int i = args.indexOf("--display-test");
+      displayTests(args.value(i + 1), args.value(i + 2));
+      return 0;
+    }
     if (args.contains("--catalog-check")) {
       auto rows = Library::load();
       QSet<QString> ids;

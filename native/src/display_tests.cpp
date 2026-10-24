@@ -109,6 +109,35 @@ public:
 
 void displayTests(const QString &fixtures, const QString &output) {
   {
+    QWidget host;
+    host.resize(933, 725);
+    VNC framebuffer;
+    framebuffer.ready = true;
+    GuestView view(&framebuffer, &host);
+    view.setGeometry(6, 22, 920, 638);
+    const qreal dpi = view.devicePixelRatioF();
+    const auto size = NativeDisplay::requestedSize(view.size(), dpi, 8);
+    framebuffer.frame = QImage(size, QImage::Format_RGB32);
+    for (int y = 0; y < size.height(); ++y)
+      for (int x = 0; x < size.width(); ++x)
+        framebuffer.frame.setPixel(x, y, qRgb(x % 251, y % 251, (x + y) % 251));
+    host.show();
+    QApplication::processEvents();
+    auto captured = host.grab().toImage();
+    const auto r = view.screenRect();
+    const int zoom = qRound(r.width() * dpi / size.width());
+    const QPoint at(qRound(view.x() * dpi) + qRound(r.x() * dpi),
+                     qRound(view.y() * dpi) + qRound(r.y() * dpi));
+    check(zoom >= 1, "Synthetic guest cannot fit at integral zoom");
+    for (int y = 0; y < size.height() * zoom; ++y)
+      for (int x = 0; x < size.width() * zoom; ++x)
+        check(captured.valid(at.x() + x, at.y() + y) &&
+                captured.pixel(at.x() + x, at.y() + y) == framebuffer.frame.pixel(x / zoom, y / zoom),
+                "Guest framebuffer pixels were clipped/resampled at DPR " + QString::number(dpi));
+    if (!output.isEmpty()) host.grab().save(output + "/guest-grid.png");
+    host.close();
+  }
+  {
     PDialog dialog("Small display", {420, 250}, nullptr);
     auto v = dialogLayout(&dialog);
     auto tall = new QWidget;

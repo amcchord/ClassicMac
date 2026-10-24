@@ -317,6 +317,21 @@ int selfTest(const QString &fixtures, const QString &output) {
       qputenv("CLASSICMAC_QUALIFY", oldQualification);
   }
   displayTests(fixtures, output);
+  // Global DPI affects child backing-store clips, so render in real separate
+  // QApplication instances as well as onto synthetic high-DPI paint devices.
+  for (auto scale : {"1.25", "1.5", "1.75"}) {
+    QProcess child;
+    auto env = QProcessEnvironment::systemEnvironment();
+    env.insert("QT_SCALE_FACTOR", scale);
+    env.insert("QT_QPA_PLATFORM", "offscreen");
+    child.setProcessEnvironment(env);
+    const auto folder = output.isEmpty() ? QString() : output + "/dpi-" + scale;
+    if (!folder.isEmpty()) QDir().mkpath(folder);
+    child.start(QCoreApplication::applicationFilePath(), {"--display-test", fixtures, folder});
+    require(child.waitForFinished(20000) && child.exitStatus() == QProcess::NormalExit && child.exitCode() == 0,
+            "Fractional backing-store test failed at " + QString(scale) + ": " +
+                QString::fromUtf8(child.readAllStandardError()));
+  }
   if (!output.isEmpty())
     Model::writeJSON(output + "/self-test.json",
                      QJsonObject{{"checks", count},
