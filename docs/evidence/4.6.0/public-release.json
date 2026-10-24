@@ -1,0 +1,77 @@
+{
+  "verifiedAt": "2026-10-24T15:32:30.585680+00:00",
+  "release": "https://github.com/amcchord/ClassicMac/releases/tag/v4.6.0",
+  "tag": "v4.6.0",
+  "sourceCommit": "585b4189844703c4a7406f9953edb7e184118ba3",
+  "stableLatest": true,
+  "anonymousDownloads": true,
+  "manifestMatches": true,
+  "assets": [
+    {
+      "name": "ClassicMac-4.6.0-linux-x64.AppImage",
+      "url": "https://github.com/amcchord/ClassicMac/releases/download/v4.6.0/ClassicMac-4.6.0-linux-x64.AppImage",
+      "bytes": 60447224,
+      "sha256": "0a69d47db2a68184a755a7504e849ae4af02fade2f8f3a17f4d91c48e40827e1",
+      "matchesQualifiedAsset": true
+    },
+    {
+      "name": "ClassicMac-4.6.0-windows-x64.exe",
+      "url": "https://github.com/amcchord/ClassicMac/releases/download/v4.6.0/ClassicMac-4.6.0-windows-x64.exe",
+      "bytes": 42502786,
+      "sha256": "a4610f6440db47993125a8ca2f76e4d67a2585c9f8f75a6191b217a3e718d7d3",
+      "matchesQualifiedAsset": true
+    },
+    {
+      "name": "ClassicMac-4.6.0.dmg",
+      "url": "https://github.com/amcchord/ClassicMac/releases/download/v4.6.0/ClassicMac-4.6.0.dmg",
+      "bytes": 47907806,
+      "sha256": "0f431e201a33a26619c8189b1e3ed5336fc922502e7e863fd2c51b447c955fd9",
+      "matchesQualifiedAsset": true
+    },
+    {
+      "name": "ClassicMac-4.6.0.zip",
+      "url": "https://github.com/amcchord/ClassicMac/releases/download/v4.6.0/ClassicMac-4.6.0.zip",
+      "bytes": 42543165,
+      "sha256": "5345d859f3794585a6a800aa0e03924de201fa643d0478df3437dc5fdfd59400",
+      "matchesQualifiedAsset": true
+    },
+    {
+      "name": "ClassicMac-Copland-source.tar.gz",
+      "url": "https://github.com/amcchord/ClassicMac/releases/download/v4.6.0/ClassicMac-Copland-source.tar.gz",
+      "bytes": 16899171,
+      "sha256": "35b3af17d6c4a250ba9104216c9ee6e65c956927d76bde6d0e62fc486f0d12da",
+      "matchesQualifiedAsset": true
+    },
+    {
+      "name": "ClassicMac-Linux-QEMU-source.tar.gz",
+      "url": "https://github.com/amcchord/ClassicMac/releases/download/v4.6.0/ClassicMac-Linux-QEMU-source.tar.gz",
+      "bytes": 42372822,
+      "sha256": "c5dc8bfd6ce8055ff7575835ced0c095a3dd9aa5144f539635fff8a1c9684144",
+      "matchesQualifiedAsset": true
+    },
+    {
+      "name": "ClassicMac-Windows-QEMU-source.tar.gz",
+      "url": "https://github.com/amcchord/ClassicMac/releases/download/v4.6.0/ClassicMac-Windows-QEMU-source.tar.gz",
+      "bytes": 41533505,
+      "sha256": "197670262884c1d7042c7035d51d35e0ef26d6ea8cdc0532fda2919e85a8555c",
+      "matchesQualifiedAsset": true
+    },
+    {
+      "name": "ClassicMac-macOS-QEMU-source.tar.gz",
+      "url": "https://github.com/amcchord/ClassicMac/releases/download/v4.6.0/ClassicMac-macOS-QEMU-source.tar.gz",
+      "bytes": 42505445,
+      "sha256": "93ed90d9dc748b5250ef8c74403f4c0ce5a4ee77c19ea47f1d89a22be3a89d7c",
+      "matchesQualifiedAsset": true
+    }
+  ],
+  "macPublicDMG": {
+    "fullReleaseVerifier": "passed",
+    "signature": "Developer ID Application: Austin McChord (7PTN7E8EDS)",
+    "notarizationAndStaples": "passed",
+    "gatekeeper": "accepted",
+    "version": "4.6.0",
+    "toolsSha256": "23a42184811c7e1ad8718b6746e061c3a1c3e3dd43af25c9c828b3fa326fca22",
+    "ndrvSha256": "7274cce5c7a29a9a740f5c01f2a55e547be1781f2e447b2ce4048eefe738171c",
+    "qualifiedToolsSource": "checksum-qualified CI runtime, matching the Mac release build"
+  }
+}

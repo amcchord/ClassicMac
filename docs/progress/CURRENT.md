@@ -1,17 +1,17 @@
-# ClassicMac 4.6 — qualified, awaiting publication
+# ClassicMac 4.6.0 — published and verified
 
-PR #36 and PR #37 are merged on main (1a5cae8). Native C++/Qt replaces
-Electron on Windows/Linux, with measured Platinum rendering, preserved
-machines/preferences and single EXE/AppImage downloads. Library supports
-System 7.5.5, Mac OS 8.1 and Mac OS 8.6 and matching engines.
+Stable Latest: [v4.6.0](https://github.com/amcchord/ClassicMac/releases/tag/v4.6.0),
+tag/source `585b4189844703c4a7406f9953edb7e184118ba3`. PRs #36/#37 are merged.
+Windows/Linux use native C++/Qt with measured Platinum pixels, single EXE/
+AppImage packaging and all three classic base images. Electron is removed.
 
-Both final files pass Proxmox setup, public image import, native input, UI
-at 1x/2x, minimum size, WindowShade and three-base lifecycle checks. Actual
-home captures have zero scaling differences; active homes match between
-platforms. All package inventories pass. Mac app/DMG are signed, notarized,
-stapled and release-verified. Consolidated root Swift/native/packaging checks
-pass; details and exact hashes are in docs/4.6.0-validation.md and evidence.
+Exact final packages pass the Proxmox setup/UI/three-base lifecycle matrix
+and pixel/inventory checks. Combined Swift/native/packaging validation passes.
+All nine public assets and fresh anonymous downloads verify; the downloaded
+Mac DMG passes full signature, staple, Gatekeeper and contents verification.
+See docs/4.6.0-validation.md and docs/evidence/4.6.0.
 
-Next: tag and publish v4.6, verify all anonymous downloads and exact public
-Mac DMG, then stop task QA services and both Proxmox VMs. Latest is v4.5
-until publication. Preserve root gxmetal and unrelated worktrees.
+Own QA scheduled task/RDP are gone; VMs170/171 are stopped. Task artifacts
+remain in ignored worktree output. Existing user data, gxmetal and unrelated
+worktrees are preserved. No catalog/DNS/hosting changes. v4.5 remains available
+for rollback. No outstanding release action.

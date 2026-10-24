@@ -1369,3 +1369,23 @@ consolidated root checks, publish and verify stable 4.1.1. Retain 4.1.0 for roll
   under docs/evidence/4.6.0; current screenshots show the native apps. Nine
   release assets are assembled. Publication and fresh public verification
   remain next, followed by own QA task/RDP and VM cleanup. v4.5 is rollback.
+
+## 2026-10-24 — native 4.6.0 published and publicly verified
+
+- Tagged exact source 585b4189844703c4a7406f9953edb7e184118ba3 as v4.6.0.
+  Published stable Latest at 15:31:58 UTC with nine assets. All uploaded
+  sizes/SHA-256 metadata match the qualified application/source files.
+  Release: https://github.com/amcchord/ClassicMac/releases/tag/v4.6.0.
+- Fresh anonymous downloads verify all eight application/source files and
+  SHA256SUMS. Latest API confirms v4.6.0 stable, non-draft, nine assets.
+  Downloaded Mac DMG passes full exact contents/signature/staple/Gatekeeper
+  verification. Initial root verifier referenced an older ignored dist Tools
+  ISO; reran with the independent checksum-qualified CI Tools image used by
+  this build, preserving every verifier gate. Product files are unchanged.
+- No running QA guests remain. Removed own ClassicMac46QA scheduled task,
+  ended own RDP, requested graceful shutdown and verified VMs170/171 stopped.
+  No temporary notary keys remain. Existing fixtures/user data, root gxmetal,
+  unrelated worktrees and task output are preserved. No catalog/DNS/hosting
+  mutation. v4.5.0 is retained as rollback by promoting it to Latest.
+- Public verification and cleanup evidence are committed in docs/evidence/
+  4.6.0; CURRENT now records the completed release. No required work remains.

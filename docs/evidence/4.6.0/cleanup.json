@@ -1,0 +1,18 @@
+{
+  "at": "2026-10-24T15:32:57.318492+00:00",
+  "noRunningQAGuests": true,
+  "scheduledTaskRemoved": "ClassicMac46QA",
+  "ownRdpEnded": true,
+  "shutdownRequested": [
+    170,
+    171
+  ],
+  "preservedUserData": true,
+  "preservedUnrelatedWorktrees": true,
+  "verifiedAt": "2026-10-24T15:34:49.678534+00:00",
+  "vmStates": {
+    "170": "stopped",
+    "171": "stopped"
+  },
+  "temporaryNotaryKeysAbsent": true
+}
