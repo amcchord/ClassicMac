@@ -1251,3 +1251,31 @@ consolidated root checks, publish and verify stable 4.1.1. Retain 4.1.0 for roll
   expected macOS supervisor/platform failures. New Linux package build and
   capability verification pass on owned VM175; no appliance qualification yet.
 - No new public archive/catalog or shared software release in this checkpoint.
+
+## 2026-10-24 — all three immutable images published and imported
+
+- Final 8.6 PPC source passes two FTP/StuffIt payloads and unpaced HTTP with exact
+  hashes. After native shutdown, test files/caches/history are removed, Netscape
+  ZIP handling saves to disk, and the HFS free allocation blocks are zeroed while
+  preserving the allocated-content digest. Source frozen read-only.
+- 8.6 archive: 56,692,342 bytes; expanded 2,147,503,280; 2 GiB disk; initial storage
+  bound 191,889,408. SHA256 f7e61bc9c8a1a098b55006bf9619c011447def243c79a91eed03b8875a2f9a88.
+  Immutable public URL https://mcchord.net/classicmac/mac-os-8.6-base-v1.tar.gz.
+- VM175 builds the matched RetroBoot Linux runtime, verifies its package and passes
+  43 hardware/catalog tests. Actual production import/argv cold boot the archive.
+  Native HTTP ZIP and FTP expanded payload match their source hashes after native
+  clean shutdown. FTP transferred 4,194,582 bytes in 0.089 s. This proves the Linux
+  emulator/profile, not physical hardware or full appliance presentation.
+- Public full HTTPS/hash/Range 206 pass before atomic 9-row catalog-v2 promotion.
+  Catalog SHA256 942b2bb05f44302f2a36a24d9fa45e72876497e5a67f971cc80177b6c2b7c5bc.
+  All 8 previous v2 rows preserved. Legacy catalog.json unchanged. Remote backup
+  /root/classicmac-catalog-backups/pre-base86-v2-20261024.json (0600). No service/DNS
+  changes. Publication evidence/rollback in private hosting/.
+- Fresh public bytes pass production Swift, desktop and RetroBoot imports; all
+  three base IDs survive the compatible RetroBoot capability filter. 8.6 imported
+  native disk boots and accepts Finder keyboard input. Desktop real import test
+  now covers prepared Power Mac hardware as well as the Quadra ROM contract.
+- Source checkpoints: ClassicMac 36432ca, RetroBoot b475e3d. No shared Git push,
+  application release or physical device change. Existing clients still need the
+  companion updates. Next is explicit permission to publish client source and
+  integration with D044; image/catalog upload was already authorized.

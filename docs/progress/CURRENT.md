@@ -1,47 +1,53 @@
-# Classic OS base images — in progress
+# Classic OS base images — uploaded; client integration pending
 
-Task branch `codex/classic-base-images`, contained worktree `worktrees/classic-base-images`.
-User requested System 7.5.5, Mac OS 8.1 and 8.6 base installs with StuffIt, Transmit,
-Netscape, and explicitly authorized uploads and catalog setup for ClassicMac and
-RetroBoot. Root/main and unrelated releases remain separate work.
+Owned branch `codex/classic-base-images`, worktree `worktrees/classic-base-images`.
+ClassicMac source checkpoint 36432ca; matching RetroBoot branch b475e3d builds on
+D044 hostd e473f4c. Root/main and unrelated work are preserved.
 
-7.5.5 and 8.1 are scrubbed, compacted, packaged immutable local v1 archives.
-They have native Netscape 3.04, Transmit 1.2 and StuffIt 5.5. HTTP, passive FTP,
-expansion with exact payload comparisons, Mac/Linux boot and input pass.
-Production Swift checksum verification and real archive import pass for both;
-those imported copies also boot. Source disk files are frozen read-only.
-Artifacts/evidence are in the ignored root `output/classic-base-images`.
+All requested immutable v1 archives are public at https://mcchord.net/classicmac/:
+- system-7.5.5-base-v1.tar.gz — 20,511,664 bytes, SHA256 68b8ffb1...38246.
+- mac-os-8.1-base-v1.tar.gz — 36,423,160 bytes, SHA256 779cb74e...a3d09.
+- mac-os-8.6-base-v1.tar.gz — 56,692,342 bytes, SHA256 f7e61bc9...f9a88.
+Each has StuffIt Expander 5.5, Transmit 1.2 and Netscape (3.04 on 68k, 4.5 on 8.6).
+Source disks are scrubbed, free HFS allocation blocks zeroed and frozen read-only.
+Private sources, complete hashes and evidence live in root output/classic-base-images.
+No proprietary guest content is in Git.
 
-8.6 now passes repeated fresh-guest 4 MiB FTP downloads and native StuffIt
-expansion with exact payload hashes using opt-in RTL8139 TX deferral (1 ms).
-A second fresh guest also completes a full unpaced HTTP ZIP with exact hash.
-The final PPC Transmit 1.2 candidate passes two transfers; its HTTP and final
-scrub/import are in progress. A third cold guest uses the final TX-only QEMU
-with migration support; the receive-pacing experiment was removed. Other guests
-retain the default-zero inline path. CUDA's 50 ms idle IRQ separately fixes
-lost Finder wakeups. Native About This Computer verifies VM Off / 128 MB.
-The source is retail installer core plus native installed applications, not a
-claim of full multi-stage installer success. Native CMD646/two-Virtio installer
-probes remain unqualified and are not being shipped. No 8.6 image or entry is
-public yet. Linux runtime build/verification passes; actual guest check next.
+Catalog-v2.json now preserves the six legacy rows and lists all three bases (9).
+SHA256 942b2bb05f44302f2a36a24d9fa45e72876497e5a67f971cc80177b6c2b7c5bc.
+Legacy catalog.json is unchanged (21661864...cf85). Latest rollback on the server:
+/root/classicmac-catalog-backups/pre-base86-v2-20261024.json. No server restart.
+User explicitly authorized archive upload and catalog setup.
 
-The qualified 7.5.5 and 8.1 immutable archives and catalog-v2.json are now public.
-Full public HTTPS downloads, hashes, byte ranges, production Swift import and
-Finder input on the imported copies pass. Legacy catalog.json is unchanged.
-Mac OS 8.6 is not uploaded or listed. New ClassicMac needs catalog-v2.json,
-Quadra archive support and a qualified 8.6 runtime profile. Keep catalog.json
-unchanged because older Swift clients reject the entire catalog on Quadra.
-RetroBoot D044 is independently implementing Quadra in its three active task
-worktrees; do not edit them. No cross-task message has been sent while the
-coordination permission question is pending. The separate RetroBoot task branch
-now builds on its completed hostd dependency e473f4c; local commit 07aff57 changes
-the compatible catalog default to v2 and records real imports of both public
-68k archives. It is not integrated or released. Candidate runtime/loader capability gates
-are committed locally at bec18c7; 26 pure hardware/catalog checks pass, with
-Linux-dependent appliance tests deferred. The new loader reproduces all old
-intermediate hashes and ends at 1aaa285a...bcf45. It is not deployed. Owned VM175 is a private Linux
-emulator smoke-test builder, not production appliance validation.
+Verification: full public HTTPS downloads, exact hashes, Range 206 and production
+Swift/desktop/RetroBoot archive imports pass. Fresh imported disks boot and accept
+Finder input. 68k Mac/Linux boot/input and native HTTP, PASV FTP/StuffIt pass.
+8.6 passes repeated 4 MiB FTP/StuffIt transfers on three fresh Mac guests and
+unpaced HTTP on two. The real Linux RetroBoot importer/profile also cold boots;
+native HTTP ZIP and FTP expanded payload hashes match after clean shutdown.
+8.6 uses completed retail installer core plus native app installs; a complete
+multi-stage CD installer run, native ATA disk or multiple auxiliary Virtio volumes
+is not claimed. VM Off is directly verified in About This Computer.
 
-Next: qualify 8.6 installer/apps/storage and finish the matching launch profile;
-validate real imports, prepare reviewable code atop current main, upload only
-qualified immutable archives and atomically promote compatible catalogs.
+The 8.6 profile uses G3/128 MiB, Virtio startup, ADB, real time, RTL8139 with opt-in
+1 ms deferred TX, and 50 ms CUDA idle IRQ. TX defaults to zero for other guests;
+queue/timer migration is implemented. RX pacing and driver polling experiments
+were removed. No experimental polling is in the shared loader. Tools, sharing,
+tablet and sound are off in this base. RetroBoot requires verified startup loader,
+CUDA idle IRQ, relative-pointer and deferred-TX emulator capabilities before listing
+8.6. Older clients retain the old catalog because they cannot handle these images.
+
+Checks: Swift 75 tests / 2 optional skips / 0 failures; desktop 23 pass / 2 skips;
+public 8.6 import adds a real Swift pass and all 8 parity tests pass. Packager 3
+pass. Matching Linux emulator build and capability verification pass; 43 Linux
+hardware/catalog tests pass. No physical/appliance presenter qualification claimed.
+
+Client source is local and has not been pushed, integrated or released. Existing
+installed apps need companion updates to display all three bases. RetroBoot D044
+emulator/guest/hostd workstreams remain owned by their coordinator; do not edit
+them. No cross-task messages or physical device changes occurred. VM175 retains
+its private build/proof files. All owned guest Macs shut down natively.
+
+Next: obtain explicit authorization to push the prepared client branches/open
+integration PRs, then coordinate D044 integration and client releases. The
+workspace agreement requires current-task authorization for shared pushes/releases.
