@@ -129,7 +129,7 @@ async function install(m,parent,name,cache,options={}) {
    let rom;try{rom=await fs.readFile(path.join(folder,'Quadra800.rom'));}catch(error){if(error.code!=='ENOENT')throw error;}
    if(rom&&createHash('sha256').update(rom).digest('hex')!==QUADRA_ROM_SHA256)throw new Error('The Quadra ROM failed its integrity check.');
   }
-  const c=freshConfig(name||m.name,family);for(const key of ['ramMB','width','height','depth','networking','sound','useG4CPU','tabletInput','classicInputHelpers','useEnhancedFramebuffer'])if(Object.hasOwn(source,key))c[key]=source[key];
+  const c=freshConfig(name||m.name,family);for(const key of ['ramMB','width','height','depth','networking','sound','useG4CPU','useVirtioDisk','tabletInput','classicInputHelpers','useEnhancedFramebuffer'])if(Object.hasOwn(source,key))c[key]=source[key];
   c.diskSizeGB=Math.ceil((await fs.stat(path.join(folder,'disk.img'))).size/1073741824);c.toolsCDInserted=source.toolsCDInserted??(family==='powerMacG4');
   if(/^(?:os922-(?:superdeluxe|deluxe)|mac-os-9\.2\.1-ati-32gb)-v\d+$/.test(m.id))c.graphicsCard='atiRadeon';
   await writeJSON(path.join(folder,'config.json'),validate(c));

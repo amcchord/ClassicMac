@@ -9,6 +9,8 @@ function argumentsFor(machine, resources, endpoint, platform = process.platform)
   if (c.sharedFolderPath && platform === 'win32') throw new Error('Host folder sharing requires Linux or macOS. Turn it off in Get Info for Windows.');
   const ppc = c.machineFamily === 'powerMacG4';
   const cdBoot = !!(c.bootFromCD && c.cdImagePath);
+  const legacy = ppc && c.useVirtioDisk;
+  const compatibilityCD = cdBoot && (!c.useG4CPU || legacy);
   const ati = ppc && !cdBoot && c.graphicsCard === 'atiRadeon';
   const firmware = path.join(resources, 'qemu', 'pc-bios');
   const disk = option(path.join(machine.folder, c.diskImageName));
@@ -17,9 +19,15 @@ function argumentsFor(machine, resources, endpoint, platform = process.platform)
     '-display', `vnc=127.0.0.1:${endpoint.vncPort - 5900},websocket=127.0.0.1:${endpoint.webSocketPort},password=on,share=force-shared`,
     '-qmp', 'stdio', '-monitor', 'none', '-serial', 'none', '-action', 'reboot=shutdown'];
   if (ppc) {
-    a.push('-device', 'usb-mouse,id=classicmac-game-mouse', '-accel', 'tcg,tb-size=512', '-M', 'mac99,via=cuda,audiodev=snd0', '-cpu', c.useG4CPU ? '7400' : 'g3',
-      '-global', `macio-ide.dma-completion-delay-ns=${cdBoot ? 1000000 : 0}`, '-prom-env', 'output-device=ttya',
-      '-drive', `file=${disk},format=raw,media=disk`);
+    if (legacy) a.push('-nodefaults', '-global', 'cuda.idle-irq-ms=50');
+    else a.push('-device', 'usb-mouse,id=classicmac-game-mouse');
+    a.push('-accel', 'tcg,tb-size=512', '-M', legacy ? 'mac99,via=cuda,usb=off,audiodev=snd0' : 'mac99,via=cuda,audiodev=snd0', '-cpu', c.useG4CPU ? '7400' : 'g3',
+      '-global', `macio-ide.dma-completion-delay-ns=${cdBoot ? 1000000 : 0}`, '-prom-env', 'output-device=ttya');
+    if (legacy) {
+      a.push('-drive', `file=${disk},format=raw,if=none,id=startup0`);
+      if (!compatibilityCD) a.push('-device', 'virtio-blk-pci,drive=startup0,addr=0xf');
+      if (!cdBoot) a.push('-prom-env', 'boot-device=/pci@f2000000/scsi@f/disk:\\\\:tbxi');
+    } else a.push('-drive', `file=${disk},format=raw,media=disk`);
     if (ati) {
       const w = Math.min(1920, Math.max(640, Math.floor(c.width / 8) * 8));
       const h = Math.min(1440, Math.max(480, c.height));
@@ -29,20 +37,21 @@ function argumentsFor(machine, resources, endpoint, platform = process.platform)
       a.push('-vga', 'std', '-global', 'VGA.host-resize=on', '-global', 'VGA.vgamem_mb=64',
         '-global', 'VGA.packed-lowbpp=on', '-global', 'VGA.untracked-vram=on', '-global', 'VGA.hardware-cursor=on',
         '-g', `${c.width}x${c.height}x${c.depth === 32 ? 32 : 15}`);
-      if (!cdBoot) a.push('-icount', 'shift=4,sleep=off', '-global', 'VGA.classicmac-boot-handoff=on');
+      if (!cdBoot && !legacy) a.push('-icount', 'shift=4,sleep=off', '-global', 'VGA.classicmac-boot-handoff=on');
     }
-    a.push('-drive', `if=ide,index=${cdBoot ? 2 : 3},media=cdrom,id=cd0,readonly=on${c.cdImagePath ? `,file=${option(c.cdImagePath)},format=raw` : ''}`,
-      '-drive', `if=ide,index=${cdBoot ? 3 : 2},media=cdrom,id=tools0,readonly=on`);
+    if (!legacy || c.cdImagePath) a.push('-drive', `if=ide,index=${cdBoot ? 2 : 3},media=cdrom,id=cd0,readonly=on${c.cdImagePath ? `,file=${option(c.cdImagePath)},format=raw` : ''}`);
+    if (!legacy) a.push('-drive', `if=ide,index=${cdBoot ? 3 : 2},media=cdrom,id=tools0,readonly=on`);
     const tools = c.toolsCDInserted && !cdBoot;
     if (tools) a.push('-drive', `if=none,id=classicmac-tools,file=${option(path.join(resources, 'ClassicMacTools.iso'))},format=raw,readonly=on`, '-device', 'virtio-blk-pci,drive=classicmac-tools');
-    if (c.tabletInput || tools) {
+    if (c.tabletInput || tools || legacy) {
       a.push('-device', `loader,addr=0x4000000,file=${option(path.join(resources, 'ndrvloader'))}`, '-prom-env', 'boot-command=init-program go');
       if (c.tabletInput) a.push('-device', 'virtio-tablet-pci');
     }
     // Mac OS 8.5/8.6 need the same early Virtio CD mirror as the Mac app.
-    if (cdBoot && !c.useG4CPU) {
-      if (!c.tabletInput && !tools) a.push('-device', `loader,addr=0x4000000,file=${option(path.join(resources, 'ndrvloader'))}`, '-prom-env', 'boot-command=init-program go');
-      a.push('-drive', `if=none,id=bootcd,file=${option(c.cdImagePath)},format=raw,readonly=on`, '-device', 'virtio-blk-pci,drive=bootcd', '-prom-env', 'boot-device=virtio0:\\:tbxi');
+    if (compatibilityCD) {
+      if (!c.tabletInput && !tools && !legacy) a.push('-device', `loader,addr=0x4000000,file=${option(path.join(resources, 'ndrvloader'))}`, '-prom-env', 'boot-command=init-program go');
+      a.push('-drive', `if=none,id=bootcd,file=${option(c.cdImagePath)},format=raw,readonly=on`, '-device', legacy ? 'virtio-blk-pci,drive=bootcd,addr=0xf' : 'virtio-blk-pci,drive=bootcd', '-prom-env', legacy ? 'boot-device=/pci@f2000000/scsi@f/disk:\\\\:tbxi' : 'boot-device=virtio0:\\:tbxi');
+      if (legacy) a.push('-device', 'virtio-blk-pci,drive=startup0,addr=0x10');
     } else if (cdBoot) a.push('-boot', 'd');
   } else {
     a.push('-M', `q800${c.useEnhancedFramebuffer ? ',fb=none' : ''},audiodev=snd0`, '-bios', path.join(resources, 'Quadra800.rom'),
@@ -62,9 +71,10 @@ function argumentsFor(machine, resources, endpoint, platform = process.platform)
     if (typeof tag !== 'string' || tag.length > 31 || /[\x00-\x1f]/.test(tag)) throw new Error('Invalid shared volume name.');
     a.push('-fsdev', `local,id=share0,security_model=none,path=${option(c.sharedFolderPath)}`,
       '-device', `${ppc ? 'virtio-9p-pci' : 'virtio-9p-device'},fsdev=share0,mount_tag=${option(tag)}`);
-    if (ppc && !c.tabletInput && !c.toolsCDInserted) a.push('-device', `loader,addr=0x4000000,file=${option(path.join(resources, 'ndrvloader'))}`, '-prom-env', 'boot-command=init-program go');
+    if (ppc && !legacy && !c.tabletInput && !c.toolsCDInserted) a.push('-device', `loader,addr=0x4000000,file=${option(path.join(resources, 'ndrvloader'))}`, '-prom-env', 'boot-command=init-program go');
   }
-  a.push('-nic', c.networking ? `user,model=${ppc ? 'sungem' : 'dp83932'}` : 'none');
+  a.push('-nic', c.networking ? `user,model=${ppc ? legacy ? 'rtl8139' : 'sungem' : 'dp83932'}` : 'none');
+  if (legacy && c.networking) a.push('-global', 'rtl8139.romfile=');
   return a;
 }
 module.exports = { argumentsFor, option };

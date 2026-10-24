@@ -1,6 +1,18 @@
 --- a/device-block.c
 +++ b/device-block.c
-@@ -471,6 +471,16 @@
+@@ -216,6 +216,11 @@
+ 	 * ready to consume its first diskEvt. Keep accRun enabled so cAccRun can
+ 	 * retry the mount notification at a bounded rate until a VCB appears.
+ 	 */
++	/* Apple DV35 forbids dNeedTime for native drivers. Keep only the
++	 * existing read-only Tools workaround; startup disks need no retry. */
++#if GENERATINGCFM
++	if (dqe.writeProt)
++#endif
+ 	(*GetDCtlEntry(drvrRefNum))->dCtlFlags |= dNeedTimeMask;
+ 	PostEvent(diskEvt, dqe.dQDrive);
+ 
+@@ -471,6 +476,16 @@
  	refreshMedia(true);
  }
  
@@ -17,7 +29,7 @@
  static void refreshMedia(bool postEvent) {
  	struct config *config = VConfig;
  	uint64_t capacity = config->capacity;
-@@ -481,7 +491,7 @@
+@@ -481,7 +496,7 @@
  	numblocks = capacity > UINT32_MAX ? UINT32_MAX : capacity;
  	dqe.driveSize = numblocks;
  	dqe.driveS1 = numblocks >> 16;
@@ -26,7 +38,7 @@
  
  	printf("Device size: %#llx bytes, %#llx blocks\n", capacity*512, capacity);
  	if (inserted && !postEvent) {
-@@ -531,8 +541,8 @@
+@@ -531,8 +546,8 @@
  static OSErr cDriveInfo(struct CntrlParam *pb) {
  	uint32_t ret =
  		(0 << 8) |  // set for external, clear for internal
@@ -37,7 +49,7 @@
  		(1 << 11) | // set for secondary drives, clear for primary drive
  		1;
  
-@@ -548,12 +558,12 @@
+@@ -548,12 +563,12 @@
  static OSErr cAccRun(struct CntrlParam *pb) {
  	/*
  	 * Mac OS 9 reliably opens a Virtio startup disk, but may drop the one
@@ -52,6 +64,19 @@
  		if (mountRetryCountdown == 0) {
  			PostEvent(diskEvt, dqe.dQDrive);
  			mountRetryCountdown = 30;
+@@ -679,7 +694,11 @@
+ 		err = sDriveStatus(pb);
+ 	} else if (pb->csCode == kDriverGestaltCode) {
+ 		DriverGestaltParam *gpb = (DriverGestaltParam *)pb;
+-		if (gpb->driverGestaltSelector == 'nmrg') {
++		if (gpb->driverGestaltSelector == kdgSync) {
++			gpb->driverGestaltResponse = 0;
++			GetDriverGestaltSyncResponse(gpb)->behavesSynchronously = true;
++			err = noErr;
++		} else if (gpb->driverGestaltSelector == 'nmrg') {
+ 			err = dgNameRegistryEntry(gpb);
+ 		} else if (gpb->driverGestaltSelector == 'ofpt' || gpb->driverGestaltSelector == 'ofbt') {
+ 			err = dgOpenFirmwareBoot(gpb);
 --- a/ndrvloader.c
 +++ b/ndrvloader.c
 @@ -260,48 +260,46 @@

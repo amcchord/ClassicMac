@@ -1039,3 +1039,129 @@ consolidated root checks, publish and verify stable 4.1.1. Retain 4.1.0 for roll
   writes. An explicit synchronous-driver Gestalt response does not fix it.
   SCC diagnostic builds log completed block I/O before the File Manager wait;
   native runtime command/completion tracing is the next isolated probe.
+
+## 2026-10-24 — current-main client checks and 8.6 file-write probe
+
+- Rebased the contained branch onto current main 6c5ff7b, preserving main's
+  release history and all task journal entries. Current checkpoint dbc3d73;
+  no shared push or release. Local 4.6.0 version preparation remains uncommitted.
+- Swift focused suite: 75 tests, 2 optional real-archive skips, zero failures.
+  Desktop suite after isolated npm dependency bootstrap: 22 pass, 2 optional
+  qualification skips. Both real public 68k archives pass desktop production
+  imports with the prepared Quadra family, 128 MB, 640x480x8 and Tools off.
+- Apple DV35 explicitly disallows setting dNeedTime on native NDRV drivers.
+  A private writable-PPC probe skips that flag. A small native Toolbox-based
+  68k test app then grows a new file to 8 MiB, writes 4 MiB and closes it, all
+  returning noErr. A prior RetroConsole-based test app exits with type 12;
+  that test artifact is discarded and is never part of a template.
+- Full self-hosted 8.6 installation still waits at SetEOF even with that
+  change. It may involve the active System/resource fork or same-volume
+  install source, rather than generic data writes. Do not publish 8.6 until
+  browser, FTP, StuffIt and payload checks pass. Native Memory preferences
+  and clean-install source/destination behavior are the next checks.
+
+## 2026-10-24 — corrected 8.6 virtual-memory preference
+
+- Native Memory control panel disproves the earlier VM-off assumption: VM was
+  still on at 179 MB with 128 MB physical RAM. The edited vm resource was in
+  the System file, but the effective preference is the vm resource in
+  System Folder:Preferences:System Preferences (flags 1, size 0x0b300000).
+- Turned VM and RAM Disk off in the native Memory panel, saved and cleanly
+  shut down. The native preference now has flags 2 and size 0x08100000.
+  Private capture apps/86-native-system-prefs retains that resource. The
+  separate System-file vm resource is unchanged by the control panel.
+- A fresh boot after the native setting is being checked, followed by the
+  installer/application write gates. Prior statements that 8.6 VM was off
+  refer to the ineffective earlier edit, not verified runtime state.
+
+## 2026-10-24 — 8.6 application data path passes
+
+- Cold boot retains VM Off when the correct native System Preferences vm
+  resource is used (flags 2). RAM Disk UI state resets with non-persistent
+  mac99 NVRAM; no RAM Disk volume is mounted. VM Off itself is disk-persistent.
+- Transmit 1.2 PPC, after a fresh boot and with the private FTP fixture's
+  sendfile path disabled, downloads 4,194,582 bytes in 7.675 seconds. StuffIt
+  5.5 automatically expands it. Extracted 4,194,304-byte payload SHA256 is
+  501e3235620a82d1d045ebad6e1bc34ace244170da0311ffa942a5e95107b121,
+  exactly matching the host fixture. Guest shut down cleanly before extraction.
+- Full clean install now reaches an explicit missing-source-folder error for
+  Mac OS 8.5, so no full final installer success is claimed. The core came
+  from the earlier Apple core installer stage under a 9.2.1 startup CD.
+- A public mirror of the original G4 8.6 691-2460-A media is being downloaded.
+  Archive.org identifier 691-2460-AZsawtooth_8-6-Install-or-Restore, ZIP
+  395,012,040 bytes; expected SHA1 917c37ce752224ca376bd22231d5483dd3ef79ee
+  matches Macintosh Repository's original-media manifest. Test it separately
+  for native IDE/Sungem support before finalizing the retail Virtio profile.
+
+## 2026-10-24 — public RetroBoot imports and 8.6 repeatability regression
+
+- RetroBoot contained branch now builds on completed quadra-hostd dependency
+  e473f4c without editing that worktree or root. Local commit 07aff57 switches
+  its Internet catalog default to catalog-v2.json and records the delivery
+  contract. Production hostd imports of both full public 68k archives pass,
+  preserving family, hardware, capacity and pinned ROM. Seven supported rows
+  are decoded; Copland is omitted. No shared push, integration or host release.
+- A fresh 8.6 filesystem and clean NDRV build reach Finder, launch Netscape
+  without a profile wizard after native profile repair, and pass HTTP. Native
+  About This Computer confirms VM Off / 128 MB. The original System file was
+  restored for one probe (only its default vm resource byte differed); this
+  does not fix large transfers. Reapplying the old default does not fix them.
+- The earlier 4 MiB FTP result is not repeatable: a new transfer stalls even
+  on an untouched source-disk clone with the exact original diagnostic loader
+  and argv. Host curl still fetches the full fixture with exact SHA256. An
+  incoming network wakeup and the CUDA idle IRQ do not resolve this stall.
+  The RTL receive ring is drained with no pending interrupt at inspection.
+  Do not attribute the issue to filesystem cleanup or claim 8.6 qualified.
+- Diagnostic SCC/runtime logging and unique driver-name experiments were
+  removed from the tracked driver build. The candidate adds synchronous
+  Driver Gestalt reporting and avoids native writable-driver dNeedTime,
+  retaining the existing read-only Tools workaround (Apple DV35). The new
+  loader builds; final behavioral qualification remains.
+- Original G4 691-2460-A media ZIP was downloaded and verified at
+  395,012,040 bytes / SHA1 917c37ce752224ca376bd22231d5483dd3ef79ee.
+  Native IDE CD startup fails on both CUDA and PMU, 128 and 512 MB. OEM
+  Apple Enet 2.3 has GMAC support but a retail-ROM probe still cannot connect
+  after selecting the new Ethernet interface and DHCP in native TCP/IP.
+  No OEM payload is in Git. No 8.6 image or catalog entry is public.
+
+## 2026-10-24 — 8.6 fresh-download repetitions and native-controller probe
+
+- The 68k Transmit 1.2 app (18 CODE resources, no cfrg, zero data fork)
+  completed a fresh 4,194,582-byte passive FTP download in 7.38 seconds.
+  StuffIt expanded it and the extracted payload exactly matches SHA256
+  501e3235...07b121. But another fresh image with the same app also stalls.
+  Do not claim an app-architecture or duplicate-file fix from one pass.
+- Smaller 512 MiB classic HFS also reaches Finder; its transfer stalls. A
+  plain HFS+ fresh filesystem with original 8.6 files remains in firmware
+  before RTAS, so it is not a valid boot candidate. A CMD646 native HDD
+  reaches the retail Mac OS ROM and ?-floppy, suggesting the source OS 9
+  ATA driver prefix is unsuitable. Next probe initializes a blank native
+  CMD646 disk from a read-only Virtio 8.6 startup CD, with only one Virtio
+  block device. No diagnostic or failed filesystem is publishable.
+- All production Swift config/arguments/download checks: 75 tests, 2 optional
+  real-archive skips, zero failures. Desktop: 23 pass, 2 optional skips.
+- RetroBoot own branch bec18c7 adds candidate 8.6 profile, import preservation
+  and capability-gated rows, a verified startup-driver overlay and relative
+  ADB input. It bypasses OS 9 guest-prep/driver injection. 26 pure
+  hardware/catalog tests pass. Real appliance behavior is still unqualified.
+  All seven old driver intermediate hashes reproduce exactly; final overlay
+  SHA256 1aaa285a7377562210f8d9607c61b0d516d6a84b73854df0d9e412044edbcf45.
+  No shared push, release, physical device or 8.6 publication occurred.
+
+## 2026-10-24 — OEM restore inspection and 68k driver regression
+
+- Rebuilt shared declrom passes fresh cold boot and Finder keyboard input on
+  separate clones of both published 68k sources; both shut down natively.
+- CMD646 native Drive Setup 1.7.2 lists no disks. No ATA initialization
+  occurred. Both scratch native-controller and small-HFS probes stopped.
+- Decoded Power Mac G4 HD.img from the verified 691-2460-A media using
+  mhjacobson/ndif2raw; output is 670,998,528-byte plain HFS+. Read-only
+  explicit raw image attachment works. Its full installed System differs
+  from the CD startup System. ROM 2.5.1 matches the reference ROM data hash
+  c18ffdc0...707ac. Vio/native IDE probes still fail early in that ROM.
+- Reference ROM files have no FinderInfo, so a plain hfs-copy loses the
+  tbxi/chrp type required for startup. A private 1.8.1 copy with correct
+  type reaches ROM code, but no usable desktop yet. Do not generalize
+  earlier missing-metadata ROM tests into ROM incompatibility claims.
+- Current retail probe checks Apple KB60337's documented TCP/IP Advanced
+  option to disable Load Only When Needed and restart. No pass claimed.

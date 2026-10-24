@@ -26,7 +26,7 @@ struct MachineCatalog: Codable {
     static let defaultURL = URL(string: "https://mcchord.net/classicmac/catalog-v2.json")!
     static let maximumCatalogBytes: Int64 = 1_048_576
     static var currentAppVersion: String {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "4.4.0"
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "4.6.0"
     }
 
     let schemaVersion: Int

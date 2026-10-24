@@ -30,6 +30,23 @@ test('Quadra has PRAM, SCSI, ordered NuBus transport and framebuffer', () => {
   assert(a.findIndex(x => x.startsWith('nubus-virtio-mmio,')) < a.findIndex(x => x.startsWith('nubus-qfb,')));
   assert(a.some(x => x.includes('if=mtd'))); assert(a.includes('virtio-tablet-device'));
 });
+test('Mac OS 8.6 retains its candidate storage, Ethernet and real-time profile', () => {
+  const c = { ...freshConfig('Mac OS 8.6'), ramMB: 128, useG4CPU: false,
+    useVirtioDisk: true, tabletInput: false, toolsCDInserted: false };
+  const a = argumentsFor(make(c), '/resources', ports, 'linux');
+  assert(a.includes('virtio-blk-pci,drive=startup0,addr=0xf'));
+  assert(a.includes('boot-device=/pci@f2000000/scsi@f/disk:' + '\\'.repeat(2) + ':tbxi'));
+  assert(a.includes('mac99,via=cuda,usb=off,audiodev=snd0'));
+  assert(a.includes('user,model=rtl8139')); assert(a.includes('rtl8139.romfile='));
+  assert(a.includes('cuda.idle-irq-ms=50')); assert(a.includes('-nodefaults'));
+  assert.equal(a.filter(x => x.startsWith('loader,addr=')).length, 1);
+  const shared = argumentsFor(make({ ...c, sharedFolderPath: '/host' }), '/resources', ports, 'linux');
+  assert.equal(shared.filter(x => x.startsWith('loader,addr=')).length, 1);
+  assert(!a.includes('-icount')); assert(!a.includes('usb-mouse,id=classicmac-game-mouse'));
+  assert(!a.some(x => x.includes('if=ide')));
+  const quadra = validate({ ...freshConfig('Quadra', 'quadra800'), useVirtioDisk: true });
+  assert.equal(quadra.useVirtioDisk, false);
+});
 test('Unported features fail clearly instead of silently changing machines', () => {
   assert.throws(() => argumentsFor(make(freshConfig('Copland', 'powerMac7500')), '/r', ports), /Copland/);
   assert.throws(() => argumentsFor(make({ ...freshConfig('Shared'), sharedFolderPath: '/host' }), '/r', ports, 'win32'), /sharing/);
