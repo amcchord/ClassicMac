@@ -1,7 +1,7 @@
 #include "catalog.h"
 #include <QtNetwork>
-#include <zlib.h>
 #include <cstring>
+#include <zlib.h>
 #ifdef Q_OS_WIN
 #include <io.h>
 #else
@@ -9,55 +9,433 @@
 #endif
 using Model::fail;
 namespace Library {
-static constexpr qint64 limit=140LL*1073741824;
-static void checkCancel(std::atomic_bool &cancel){if(cancel)fail("Paused. Your download is saved. Choose Download again to resume.");}
-static QUrl secureURL(const QString &s){QUrl u(s);if(!u.isValid()||u.scheme()!="https"||!u.userInfo().isEmpty()||u.hasFragment()||u.host().isEmpty())fail("Library downloads require HTTPS.");return u;}
-QJsonArray parse(const QByteArray &data){
-    if(data.size()>1048576)fail("The Library catalog is too large.");QJsonParseError error;auto doc=QJsonDocument::fromJson(data,&error);auto o=doc.object();if(error.error!=QJsonParseError::NoError||o["schemaVersion"].toInt()!=1||!o["machines"].isArray()||o["machines"].toArray().size()>50)fail("Unsupported Library catalog.");
-    QSet<QString> seen;for(auto row:o["machines"].toArray()){auto m=row.toObject();auto id=m["id"].toString();if(!QRegularExpression("^[a-z0-9][a-z0-9._-]{0,99}$").match(id).hasMatch()||seen.contains(id)||m["name"].toString().trimmed().isEmpty()||m["name"].toString().size()>100||!m["summary"].isString()||m["summary"].toString().size()>1000||!QRegularExpression("^\\d{1,6}\\.\\d{1,6}(\\.\\d{1,6})?$").match(m["minimumAppVersion"].toString()).hasMatch()||!QRegularExpression("^[a-f0-9]{64}$").match(m["sha256"].toString()).hasMatch())fail("Invalid Library entry.");
-        for(auto key:{"archiveBytes","installedBytes"}){double n=m[key].toDouble();if(!m[key].isDouble()||n<=0||n>limit||n!=qint64(n))fail("Invalid Library size.");}if(m["installedBytes"].toDouble()<512)fail("Invalid installed size.");auto family=m.value("machineFamily").toString("powerMacG4");if(!QStringList{"powerMacG4","quadra800","powerMac7500"}.contains(family))fail("Unknown Library Mac model.");secureURL(m["archiveURL"].toString());seen.insert(id);
-    }return o["machines"].toArray();
+static constexpr qint64 limit = 140LL * 1073741824;
+static void checkCancel(std::atomic_bool &cancel) {
+  if (cancel)
+    fail("Paused. Your download is saved. Choose Download again to resume.");
+}
+static QUrl secureURL(const QString &s) {
+  QUrl u(s);
+  if (!u.isValid() || u.scheme() != "https" || !u.userInfo().isEmpty() ||
+      u.hasFragment() || u.host().isEmpty())
+    fail("Library downloads require HTTPS.");
+  return u;
+}
+QJsonArray parse(const QByteArray &data) {
+  if (data.size() > 1048576)
+    fail("The Library catalog is too large.");
+  QJsonParseError error;
+  auto doc = QJsonDocument::fromJson(data, &error);
+  auto o = doc.object();
+  if (error.error != QJsonParseError::NoError ||
+      o["schemaVersion"].toInt() != 1 || !o["machines"].isArray() ||
+      o["machines"].toArray().size() > 50)
+    fail("Unsupported Library catalog.");
+  QSet<QString> seen;
+  for (auto row : o["machines"].toArray()) {
+    auto m = row.toObject();
+    auto id = m["id"].toString();
+    if (!QRegularExpression("^[a-z0-9][a-z0-9._-]{0,99}$")
+             .match(id)
+             .hasMatch() ||
+        seen.contains(id) || m["name"].toString().trimmed().isEmpty() ||
+        m["name"].toString().size() > 100 || !m["summary"].isString() ||
+        m["summary"].toString().size() > 1000 ||
+        !QRegularExpression("^\\d{1,6}\\.\\d{1,6}(\\.\\d{1,6})?$")
+             .match(m["minimumAppVersion"].toString())
+             .hasMatch() ||
+        !QRegularExpression("^[a-f0-9]{64}$")
+             .match(m["sha256"].toString())
+             .hasMatch())
+      fail("Invalid Library entry.");
+    for (auto key : {"archiveBytes", "installedBytes"}) {
+      double n = m[key].toDouble();
+      if (!m[key].isDouble() || n <= 0 || n > limit || n != qint64(n))
+        fail("Invalid Library size.");
+    }
+    if (m["installedBytes"].toDouble() < 512)
+      fail("Invalid installed size.");
+    auto family = m.value("machineFamily").toString("powerMacG4");
+    if (!QStringList{"powerMacG4", "quadra800", "powerMac7500"}.contains(
+            family))
+      fail("Unknown Library Mac model.");
+    secureURL(m["archiveURL"].toString());
+    seen.insert(id);
+  }
+  return o["machines"].toArray();
 }
 // One request per worker thread; no network objects cross Qt thread boundaries.
-static void request(const QUrl &initial,const QByteArray &range,qint64 maximum,std::atomic_bool &cancel,const std::function<void(QNetworkReply*)> &headers,const std::function<void(QByteArray)> &chunk){
-    QNetworkAccessManager manager;QUrl u=initial;
-    for(int redirect=0;redirect<4;++redirect){
-        QNetworkRequest req(u);req.setAttribute(QNetworkRequest::RedirectPolicyAttribute,QNetworkRequest::ManualRedirectPolicy);req.setTransferTimeout(30000);req.setRawHeader("Accept-Encoding","identity");req.setRawHeader("User-Agent","ClassicMac/" CLASSICMAC_VERSION " Native");if(!range.isEmpty())req.setRawHeader("Range",range);
-        auto reply=manager.get(req);QEventLoop loop;QTimer poll;poll.setInterval(80);QString failure;bool checked=false;bool redirecting=false;qint64 total=0;
-        auto consume=[&]{try{checkCancel(cancel);if(!checked){if(!reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).isValid())return;int status=reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();redirecting=status==301||status==302||status==303||status==307||status==308;if(!redirecting)headers(reply);checked=true;}if(redirecting){reply->readAll();return;}auto bytes=reply->readAll();total+=bytes.size();if(total>maximum)fail("The server sent more data than declared.");if(!bytes.isEmpty())chunk(bytes);}catch(const std::exception &e){failure=QString::fromUtf8(e.what());reply->abort();}};
-        QObject::connect(reply,&QNetworkReply::readyRead,&loop,consume);QObject::connect(reply,&QNetworkReply::finished,&loop,&QEventLoop::quit);QObject::connect(&poll,&QTimer::timeout,&loop,[&]{if(cancel){failure="Paused. Your download is saved. Choose Download again to resume.";reply->abort();}});poll.start();loop.exec();consume();poll.stop();
-        auto status=reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();auto next=reply->attribute(QNetworkRequest::RedirectionTargetAttribute).toUrl();auto netError=reply->error();auto reason=reply->errorString();delete reply;
-        if(!failure.isEmpty())fail(failure);if(redirecting){auto target=secureURL(u.resolved(next).toString());if(target.host()!=initial.host()||target.port(443)!=initial.port(443))fail("The download redirected to another site.");u=target;continue;}
-        if(netError!=QNetworkReply::NoError||status<200||status>=300)fail("The download could not complete: "+reason);return;
-    }fail("Too many download redirects.");
+static void request(const QUrl &initial, const QByteArray &range,
+                    qint64 maximum, std::atomic_bool &cancel,
+                    const std::function<void(QNetworkReply *)> &headers,
+                    const std::function<void(QByteArray)> &chunk) {
+  QNetworkAccessManager manager;
+  QUrl u = initial;
+  for (int redirect = 0; redirect < 4; ++redirect) {
+    QNetworkRequest req(u);
+    req.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
+                     QNetworkRequest::ManualRedirectPolicy);
+    req.setTransferTimeout(30000);
+    req.setRawHeader("Accept-Encoding", "identity");
+    req.setRawHeader("User-Agent", "ClassicMac/" CLASSICMAC_VERSION " Native");
+    if (!range.isEmpty())
+      req.setRawHeader("Range", range);
+    auto reply = manager.get(req);
+    QEventLoop loop;
+    QTimer poll;
+    poll.setInterval(80);
+    QString failure;
+    bool checked = false;
+    bool redirecting = false;
+    qint64 total = 0;
+    auto consume = [&] {
+      try {
+        checkCancel(cancel);
+        if (!checked) {
+          if (!reply->attribute(QNetworkRequest::HttpStatusCodeAttribute)
+                   .isValid())
+            return;
+          int status =
+              reply->attribute(QNetworkRequest::HttpStatusCodeAttribute)
+                  .toInt();
+          redirecting = status == 301 || status == 302 || status == 303 ||
+                        status == 307 || status == 308;
+          if (!redirecting)
+            headers(reply);
+          checked = true;
+        }
+        if (redirecting) {
+          reply->readAll();
+          return;
+        }
+        auto bytes = reply->readAll();
+        total += bytes.size();
+        if (total > maximum)
+          fail("The server sent more data than declared.");
+        if (!bytes.isEmpty())
+          chunk(bytes);
+      } catch (const std::exception &e) {
+        failure = QString::fromUtf8(e.what());
+        reply->abort();
+      }
+    };
+    QObject::connect(reply, &QNetworkReply::readyRead, &loop, consume);
+    QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+    QObject::connect(&poll, &QTimer::timeout, &loop, [&] {
+      if (cancel) {
+        failure =
+            "Paused. Your download is saved. Choose Download again to resume.";
+        reply->abort();
+      }
+    });
+    poll.start();
+    loop.exec();
+    consume();
+    poll.stop();
+    auto status =
+        reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+    auto next =
+        reply->attribute(QNetworkRequest::RedirectionTargetAttribute).toUrl();
+    auto netError = reply->error();
+    auto reason = reply->errorString();
+    delete reply;
+    if (!failure.isEmpty())
+      fail(failure);
+    if (redirecting) {
+      auto target = secureURL(u.resolved(next).toString());
+      if (target.host() != initial.host() ||
+          target.port(443) != initial.port(443))
+        fail("The download redirected to another site.");
+      u = target;
+      continue;
+    }
+    if (netError != QNetworkReply::NoError || status < 200 || status >= 300)
+      fail("The download could not complete: " + reason);
+    return;
+  }
+  fail("Too many download redirects.");
 }
-QJsonArray load(){std::atomic_bool cancel=false;QByteArray data;request(secureURL(url),{},1048576,cancel,[](QNetworkReply *r){if(r->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt()!=200)fail("The Library catalog could not be downloaded.");},[&](QByteArray bytes){data+=bytes;});return parse(data);}
-static QString download(const QJsonObject &m,std::atomic_bool &cancel,const Progress &progress){
-    auto cache=Model::dataDirectory()+"/Downloads";if(!QDir().mkpath(cache))fail("Cannot create the download cache.");QString path=cache+"/"+m["sha256"].toString()+".tar.gz.part";qint64 size=qint64(m["archiveBytes"].toDouble());QFile f(path);qint64 offset=f.exists()?f.size():0;if(offset>size){if(!f.remove())fail("Cannot reset an invalid partial download.");offset=0;}
-    if(!f.open(QFile::ReadWrite))fail("Cannot open the download cache.");if(!f.seek(offset))fail("Cannot resume the download.");
-    if(offset<size){auto range=offset?"bytes="+QByteArray::number(offset)+"-":QByteArray();request(secureURL(m["archiveURL"].toString()),range,size,cancel,[&](QNetworkReply *r){int status=r->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();if(offset&&status==200){offset=0;if(!f.resize(0)||!f.seek(0))fail("Cannot restart the download.");}else if(offset){auto expected="bytes "+QByteArray::number(offset)+"-"+QByteArray::number(size-1)+"/"+QByteArray::number(size);if(status!=206||r->rawHeader("Content-Range")!=expected)fail("The server could not resume this download safely.");}else if(status!=200)fail("The archive could not be downloaded.");bool ok;auto n=r->rawHeader("Content-Length").toLongLong(&ok);if(!ok||n!=size-offset)fail("The archive size does not match the catalog.");},[&](const QByteArray &bytes){if(offset+bytes.size()>size)fail("Archive exceeds its catalog size.");if(f.write(bytes)!=bytes.size())fail("The disk stopped accepting the download.");offset+=bytes.size();progress("Downloading",offset,size);});}
-    if(offset!=size||!f.flush()||!f.seek(0))fail("The download ended early. Retry to resume.");QCryptographicHash hash(QCryptographicHash::Sha256);qint64 checked=0;while(!f.atEnd()){checkCancel(cancel);auto bytes=f.read(1048576);if(bytes.isEmpty()&&f.error()!=QFile::NoError)fail("Could not read the downloaded archive.");hash.addData(bytes);checked+=bytes.size();progress("Checking download",checked,size);}f.close();if(hash.result().toHex()!=m["sha256"].toString().toLatin1()){QFile::remove(path);fail("The archive failed its SHA-256 check. Retry the download.");}return path;
+QJsonArray load() {
+  std::atomic_bool cancel = false;
+  QByteArray data;
+  request(
+      secureURL(url), {}, 1048576, cancel,
+      [](QNetworkReply *r) {
+        if (r->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() !=
+            200)
+          fail("The Library catalog could not be downloaded.");
+      },
+      [&](QByteArray bytes) { data += bytes; });
+  return parse(data);
 }
-static qint64 number(const char *p,int len){quint64 n=0;if(quint8(p[0])&128){for(int i=0;i<len;++i){if(n>quint64(limit)/256)fail("Archive member is too large.");n=n*256+(quint8(p[i])&(i?255:127));}}else{auto s=QByteArray(p,len).split('\0').first().trimmed();if(s.isEmpty()||QString::fromLatin1(s).contains(QRegularExpression("[^0-7]")))fail("Invalid archive number.");bool ok;n=s.toULongLong(&ok,8);if(!ok)fail("Invalid archive number.");}if(n>quint64(limit))fail("Archive member is too large.");return qint64(n);}
-class Reader{gzFile gzip; qint64 readBytes=0,max;public:Reader(const QString &path,qint64 bound):max(bound){QFile f(path);if(!f.open(QFile::ReadOnly))fail("Cannot read archive.");
+static QString download(const QJsonObject &m, std::atomic_bool &cancel,
+                        const Progress &progress) {
+  auto cache = Model::dataDirectory() + "/Downloads";
+  if (!QDir().mkpath(cache))
+    fail("Cannot create the download cache.");
+  QString path = cache + "/" + m["sha256"].toString() + ".tar.gz.part";
+  qint64 size = qint64(m["archiveBytes"].toDouble());
+  QFile f(path);
+  qint64 offset = f.exists() ? f.size() : 0;
+  if (offset > size) {
+    if (!f.remove())
+      fail("Cannot reset an invalid partial download.");
+    offset = 0;
+  }
+  if (!f.open(QFile::ReadWrite))
+    fail("Cannot open the download cache.");
+  if (!f.seek(offset))
+    fail("Cannot resume the download.");
+  if (offset < size) {
+    auto range =
+        offset ? "bytes=" + QByteArray::number(offset) + "-" : QByteArray();
+    request(
+        secureURL(m["archiveURL"].toString()), range, size, cancel,
+        [&](QNetworkReply *r) {
+          int status =
+              r->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+          if (offset && status == 200) {
+            offset = 0;
+            if (!f.resize(0) || !f.seek(0))
+              fail("Cannot restart the download.");
+          } else if (offset) {
+            auto expected = "bytes " + QByteArray::number(offset) + "-" +
+                            QByteArray::number(size - 1) + "/" +
+                            QByteArray::number(size);
+            if (status != 206 || r->rawHeader("Content-Range") != expected)
+              fail("The server could not resume this download safely.");
+          } else if (status != 200)
+            fail("The archive could not be downloaded.");
+          bool ok;
+          auto n = r->rawHeader("Content-Length").toLongLong(&ok);
+          if (!ok || n != size - offset)
+            fail("The archive size does not match the catalog.");
+        },
+        [&](const QByteArray &bytes) {
+          if (offset + bytes.size() > size)
+            fail("Archive exceeds its catalog size.");
+          if (f.write(bytes) != bytes.size())
+            fail("The disk stopped accepting the download.");
+          offset += bytes.size();
+          progress("Downloading", offset, size);
+        });
+  }
+  if (offset != size || !f.flush() || !f.seek(0))
+    fail("The download ended early. Retry to resume.");
+  QCryptographicHash hash(QCryptographicHash::Sha256);
+  qint64 checked = 0;
+  while (!f.atEnd()) {
+    checkCancel(cancel);
+    auto bytes = f.read(1048576);
+    if (bytes.isEmpty() && f.error() != QFile::NoError)
+      fail("Could not read the downloaded archive.");
+    hash.addData(bytes);
+    checked += bytes.size();
+    progress("Checking download", checked, size);
+  }
+  f.close();
+  if (hash.result().toHex() != m["sha256"].toString().toLatin1()) {
+    QFile::remove(path);
+    fail("The archive failed its SHA-256 check. Retry the download.");
+  }
+  return path;
+}
+static qint64 number(const char *p, int len) {
+  quint64 n = 0;
+  if (quint8(p[0]) & 128) {
+    for (int i = 0; i < len; ++i) {
+      if (n > quint64(limit) / 256)
+        fail("Archive member is too large.");
+      n = n * 256 + (quint8(p[i]) & (i ? 255 : 127));
+    }
+  } else {
+    auto s = QByteArray(p, len).split('\0').first().trimmed();
+    if (s.isEmpty() ||
+        QString::fromLatin1(s).contains(QRegularExpression("[^0-7]")))
+      fail("Invalid archive number.");
+    bool ok;
+    n = s.toULongLong(&ok, 8);
+    if (!ok)
+      fail("Invalid archive number.");
+  }
+  if (n > quint64(limit))
+    fail("Archive member is too large.");
+  return qint64(n);
+}
+class Reader {
+  gzFile gzip;
+  qint64 readBytes = 0, max;
+
+public:
+  Reader(const QString &path, qint64 bound) : max(bound) {
+    QFile f(path);
+    if (!f.open(QFile::ReadOnly))
+      fail("Cannot read archive.");
 #ifdef Q_OS_WIN
-    gzip=gzdopen(_dup(f.handle()),"rb");
+    gzip = gzdopen(_dup(f.handle()), "rb");
 #else
-    gzip=gzdopen(dup(f.handle()),"rb");
+    gzip = gzdopen(dup(f.handle()), "rb");
 #endif
-    if(!gzip)fail("Cannot open compressed archive.");gzbuffer(gzip,1048576);}
-    ~Reader(){gzclose(gzip);}QByteArray read(int n,bool optional=false){QByteArray b(n,0);int at=0;while(at<n){int got=gzread(gzip,b.data()+at,n-at);if(got<=0){if(optional&&at==0&&got==0&&gzeof(gzip))return {};fail("Truncated or invalid compressed archive.");}at+=got;readBytes+=got;if(readBytes>max)fail("Archive expands beyond its declared size.");}return b;}};
-void extract(const QString &archive,const QString &folder,const QJsonObject &m,std::atomic_bool &cancel,const Progress &progress){
-    qint64 installed=qint64(m["installedBytes"].toDouble()),total=0;Reader reader(archive,installed+65536);QSet<QString> seen;QByteArray zero(1048576,0);
-    for(;;){checkCancel(cancel);auto h=reader.read(512);if(h==zero.left(512)){if(reader.read(512)!=zero.left(512))fail("Invalid archive end.");int padding=0;for(;;){auto tail=reader.read(512,true);if(tail.isEmpty())break;padding+=512;if(padding>10240||tail!=zero.left(512))fail("Invalid archive padding.");}break;}
-        auto checksum=number(h.data()+148,8);qint64 sum=0;for(int i=0;i<512;++i)sum+=i>=148&&i<156?32:quint8(h[i]);QString name=QString::fromUtf8(h.left(100).split('\0').first());QStringList allowed={"config.json","disk.img","preview.png"};if(m["machineFamily"].toString()=="quadra800")allowed<<"Quadra800.rom"<<"pram.img";
-        if(sum!=checksum||(h[156]!=0&&h[156]!='0')||h.mid(157,100)!=zero.left(100)||h.mid(345,155)!=zero.left(155)||!allowed.contains(name)||seen.contains(name))fail("Unsafe machine archive member.");seen.insert(name);qint64 size=number(h.data()+124,12);if(size<=0||size>installed-total||(name=="config.json"&&size>65536)||(name=="preview.png"&&size>16*1048576)||(name=="disk.img"&&(size<512||size%512||(m.contains("diskCapacityBytes")&&size!=qint64(m["diskCapacityBytes"].toDouble()))))||(name=="Quadra800.rom"&&size!=1048576)||(name=="pram.img"&&size!=256&&size!=512))fail("Archive member size does not match its catalog.");
-        QFile f(folder+"/"+name);if(!f.open(QFile::WriteOnly|QFile::NewOnly))fail("Cannot create imported machine file.");if(name=="disk.img"&&!Model::makeSparse(f))fail("The destination does not support sparse virtual disks.");qint64 pos=0;while(pos<size){checkCancel(cancel);int n=int(std::min(qint64(1048576),size-pos));auto bytes=reader.read(n);if(name!="disk.img"||memcmp(bytes.constData(),zero.constData(),n)){if(!f.seek(pos)||f.write(bytes)!=n)fail("The disk stopped accepting the imported machine.");}pos+=n;total+=n;progress("Installing",total,installed);}if(!f.resize(size)||!f.flush())fail("Could not finish the imported machine file.");int pad=int((512-size%512)%512);if(pad&&reader.read(pad)!=zero.left(pad))fail("Invalid archive member padding.");
-    }if(total!=installed||!seen.contains("disk.img")||!seen.contains("config.json"))fail("Incomplete machine archive.");
+    if (!gzip)
+      fail("Cannot open compressed archive.");
+    gzbuffer(gzip, 1048576);
+  }
+  ~Reader() { gzclose(gzip); }
+  QByteArray read(int n, bool optional = false) {
+    QByteArray b(n, 0);
+    int at = 0;
+    while (at < n) {
+      int got = gzread(gzip, b.data() + at, n - at);
+      if (got <= 0) {
+        if (optional && at == 0 && got == 0 && gzeof(gzip))
+          return {};
+        fail("Truncated or invalid compressed archive.");
+      }
+      at += got;
+      readBytes += got;
+      if (readBytes > max)
+        fail("Archive expands beyond its declared size.");
+    }
+    return b;
+  }
+};
+void extract(const QString &archive, const QString &folder,
+             const QJsonObject &m, std::atomic_bool &cancel,
+             const Progress &progress) {
+  qint64 installed = qint64(m["installedBytes"].toDouble()), total = 0;
+  Reader reader(archive, installed + 65536);
+  QSet<QString> seen;
+  QByteArray zero(1048576, 0);
+  for (;;) {
+    checkCancel(cancel);
+    auto h = reader.read(512);
+    if (h == zero.left(512)) {
+      if (reader.read(512) != zero.left(512))
+        fail("Invalid archive end.");
+      int padding = 0;
+      for (;;) {
+        auto tail = reader.read(512, true);
+        if (tail.isEmpty())
+          break;
+        padding += 512;
+        if (padding > 10240 || tail != zero.left(512))
+          fail("Invalid archive padding.");
+      }
+      break;
+    }
+    auto checksum = number(h.data() + 148, 8);
+    qint64 sum = 0;
+    for (int i = 0; i < 512; ++i)
+      sum += i >= 148 && i < 156 ? 32 : quint8(h[i]);
+    QString name = QString::fromUtf8(h.left(100).split('\0').first());
+    QStringList allowed = {"config.json", "disk.img", "preview.png"};
+    if (m["machineFamily"].toString() == "quadra800")
+      allowed << "Quadra800.rom" << "pram.img";
+    if (sum != checksum || (h[156] != 0 && h[156] != '0') ||
+        h.mid(157, 100) != zero.left(100) ||
+        h.mid(345, 155) != zero.left(155) || !allowed.contains(name) ||
+        seen.contains(name))
+      fail("Unsafe machine archive member.");
+    seen.insert(name);
+    qint64 size = number(h.data() + 124, 12);
+    if (size <= 0 || size > installed - total ||
+        (name == "config.json" && size > 65536) ||
+        (name == "preview.png" && size > 16 * 1048576) ||
+        (name == "disk.img" &&
+         (size < 512 || size % 512 ||
+          (m.contains("diskCapacityBytes") &&
+           size != qint64(m["diskCapacityBytes"].toDouble())))) ||
+        (name == "Quadra800.rom" && size != 1048576) ||
+        (name == "pram.img" && size != 256 && size != 512))
+      fail("Archive member size does not match its catalog.");
+    QFile f(folder + "/" + name);
+    if (!f.open(QFile::WriteOnly | QFile::NewOnly))
+      fail("Cannot create imported machine file.");
+    if (name == "disk.img" && !Model::makeSparse(f))
+      fail("The destination does not support sparse virtual disks.");
+    qint64 pos = 0;
+    while (pos < size) {
+      checkCancel(cancel);
+      int n = int(std::min(qint64(1048576), size - pos));
+      auto bytes = reader.read(n);
+      if (name != "disk.img" ||
+          memcmp(bytes.constData(), zero.constData(), n)) {
+        if (!f.seek(pos) || f.write(bytes) != n)
+          fail("The disk stopped accepting the imported machine.");
+      }
+      pos += n;
+      total += n;
+      progress("Installing", total, installed);
+    }
+    if (!f.resize(size) || !f.flush())
+      fail("Could not finish the imported machine file.");
+    int pad = int((512 - size % 512) % 512);
+    if (pad && reader.read(pad) != zero.left(pad))
+      fail("Invalid archive member padding.");
+  }
+  if (total != installed || !seen.contains("disk.img") ||
+      !seen.contains("config.json"))
+    fail("Incomplete machine archive.");
 }
-Model::Machine install(QJsonObject m,const QString &parent,const QString &name,std::atomic_bool &cancel,const Progress &progress){
-    if(!Model::supportedVersion(m["minimumAppVersion"].toString()))fail("Update ClassicMac to install this edition.");auto family=m.value("machineFamily").toString("powerMacG4");if(!QStringList{"powerMacG4","quadra800"}.contains(family))fail("This edition needs the macOS Copland engine.");auto archive=download(m,cancel,progress);QStorageInfo storage(parent);if(storage.isValid()&&storage.bytesAvailable()<268435456)fail("There is not enough free space to install this Mac.");auto folder=Model::uniqueFolder(parent,name.isEmpty()?m["name"].toString():name);bool complete=false;auto cleanup=qScopeGuard([&]{if(!complete)QDir(folder).removeRecursively();});extract(archive,folder,m,cancel,progress);auto source=Model::readJSON(folder+"/config.json");if(source.value("machineFamily").toString("powerMacG4")!=family||source["diskImageName"].toString()!="disk.img"||source.value("pramImageName").toString("pram.img")!="pram.img")fail("The template does not match its Library entry.");
-    if(family=="quadra800"&&QFileInfo::exists(folder+"/Quadra800.rom")){QFile rom(folder+"/Quadra800.rom");if(!rom.open(QFile::ReadOnly)||QCryptographicHash::hash(rom.readAll(),QCryptographicHash::Sha256).toHex()!="05ad753fb594e656cf078023ec189e09e2a7655a780de993b75b8c51ed6b09ca")fail("The Quadra ROM failed its integrity check.");}
-    auto c=Model::freshConfig(name.isEmpty()?m["name"].toString():name,family);for(auto key:{"ramMB","width","height","depth","networking","sound","useG4CPU","useVirtioDisk","tabletInput","classicInputHelpers","useEnhancedFramebuffer"})if(source.contains(key))c[key]=source[key];c["diskSizeGB"]=int((QFileInfo(folder+"/disk.img").size()+1073741823)/1073741824);c["toolsCDInserted"]=source.value("toolsCDInserted").toBool(family=="powerMacG4");if(QRegularExpression("^(os922-(superdeluxe|deluxe)|mac-os-9\\.2\\.1-ati-32gb)-v\\d+$").match(m["id"].toString()).hasMatch())c["graphicsCard"]="atiRadeon";Model::writeJSON(folder+"/config.json",Model::validate(c));Model::writeJSON(folder+"/template-info.json",QJsonObject{{"schemaVersion",1},{"templateID",m["id"]},{"osVersion",m["osVersion"]},{"archiveSHA256",m["sha256"]},{"importedAt",QDateTime::currentDateTimeUtc().toString(Qt::ISODate)}});complete=true;return Model::readMachine(folder);
+Model::Machine install(QJsonObject m, const QString &parent,
+                       const QString &name, std::atomic_bool &cancel,
+                       const Progress &progress) {
+  if (!Model::supportedVersion(m["minimumAppVersion"].toString()))
+    fail("Update ClassicMac to install this edition.");
+  auto family = m.value("machineFamily").toString("powerMacG4");
+  if (!QStringList{"powerMacG4", "quadra800"}.contains(family))
+    fail("This edition needs the macOS Copland engine.");
+  auto archive = download(m, cancel, progress);
+  QStorageInfo storage(parent);
+  if (storage.isValid() && storage.bytesAvailable() < 268435456)
+    fail("There is not enough free space to install this Mac.");
+  auto folder =
+      Model::uniqueFolder(parent, name.isEmpty() ? m["name"].toString() : name);
+  bool complete = false;
+  auto cleanup = qScopeGuard([&] {
+    if (!complete)
+      QDir(folder).removeRecursively();
+  });
+  extract(archive, folder, m, cancel, progress);
+  auto source = Model::readJSON(folder + "/config.json");
+  if (source.value("machineFamily").toString("powerMacG4") != family ||
+      source["diskImageName"].toString() != "disk.img" ||
+      source.value("pramImageName").toString("pram.img") != "pram.img")
+    fail("The template does not match its Library entry.");
+  if (family == "quadra800" && QFileInfo::exists(folder + "/Quadra800.rom")) {
+    QFile rom(folder + "/Quadra800.rom");
+    if (!rom.open(QFile::ReadOnly) ||
+        QCryptographicHash::hash(rom.readAll(), QCryptographicHash::Sha256)
+                .toHex() !=
+            "05ad753fb594e656cf078023ec189e09e2a7655a780de993b75b8c51ed6b09ca")
+      fail("The Quadra ROM failed its integrity check.");
+  }
+  auto c =
+      Model::freshConfig(name.isEmpty() ? m["name"].toString() : name, family);
+  for (auto key : {"ramMB", "width", "height", "depth", "networking", "sound",
+                   "useG4CPU", "useVirtioDisk", "tabletInput",
+                   "classicInputHelpers", "useEnhancedFramebuffer"})
+    if (source.contains(key))
+      c[key] = source[key];
+  c["diskSizeGB"] =
+      int((QFileInfo(folder + "/disk.img").size() + 1073741823) / 1073741824);
+  c["toolsCDInserted"] =
+      source.value("toolsCDInserted").toBool(family == "powerMacG4");
+  if (QRegularExpression(
+          "^(os922-(superdeluxe|deluxe)|mac-os-9\\.2\\.1-ati-32gb)-v\\d+$")
+          .match(m["id"].toString())
+          .hasMatch())
+    c["graphicsCard"] = "atiRadeon";
+  Model::writeJSON(folder + "/config.json", Model::validate(c));
+  Model::writeJSON(
+      folder + "/template-info.json",
+      QJsonObject{{"schemaVersion", 1},
+                  {"templateID", m["id"]},
+                  {"osVersion", m["osVersion"]},
+                  {"archiveSHA256", m["sha256"]},
+                  {"importedAt",
+                   QDateTime::currentDateTimeUtc().toString(Qt::ISODate)}});
+  complete = true;
+  return Model::readMachine(folder);
 }
-}
+} // namespace Library

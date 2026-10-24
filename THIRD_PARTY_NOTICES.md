@@ -143,3 +143,22 @@ Inc. Original Mac OS 9 resource members are preserved, including native
 32-bit colour and 8-bit alpha masks where available. These assets are separate
 from the MIT-licensed Platinum drawings and Iconfactory artwork. Provenance
 and attribution accompany every desktop package in its Licenses directory.
+
+## Native Windows/Linux frontend (4.6 and later)
+
+Qt 6 Core, Gui, Widgets, Network and Concurrent and their platform plugins are
+unmodified, dynamically linked libraries under LGPL-3.0 (or applicable Qt
+module licenses). Notices are bundled in Licenses. Corresponding upstream
+source: https://download.qt.io/official_releases/qt/ . The package manifest
+identifies every bundled binary. Extract the portable package as documented
+in native/README.md to inspect or replace compatible Qt libraries and relink.
+The ClassicMac C++ frontend source and CMake build are in this repository.
+
+OpenSSL is dynamically linked under Apache-2.0; upstream source and license:
+https://www.openssl.org/source/ and https://www.openssl.org/source/license.html .
+Its legacy DES operation is used only for the loopback RFB password challenge;
+HTTPS uses the platform Qt TLS backend with normal certificate verification.
+
+The native desktop packages contain no Electron or Chromium runtime. The
+optional browser display in the macOS edition retains its existing noVNC
+and pako notices above.

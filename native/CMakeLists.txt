@@ -10,6 +10,7 @@ add_executable(classicmac WIN32 src/main.cpp src/platinum.cpp src/widgets.cpp sr
 target_link_libraries(classicmac PRIVATE Qt6::Widgets Qt6::Network Qt6::Concurrent ZLIB::ZLIB OpenSSL::Crypto)
 target_compile_definitions(classicmac PRIVATE CLASSICMAC_VERSION="${PROJECT_VERSION}")
 if(WIN32)
+  target_compile_definitions(classicmac PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
   target_sources(classicmac PRIVATE resources/classicmac.rc)
   target_link_libraries(classicmac PRIVATE ws2_32)
 endif()
