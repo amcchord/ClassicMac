@@ -214,7 +214,7 @@ fi
 # 2. Clone mainline QEMU at the pinned tag
 # ---------------------------------------------------------------------------
 mkdir -p "$VENDOR_DIR"
-if [ -d "$QEMU_DIR/.git" ]; then
+if git -C "$QEMU_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   log "QEMU already present; resetting tracked files to pristine $QEMU_TAG"
   git -C "$QEMU_DIR" checkout -- "${PATCHED_FILES[@]}" 2>/dev/null || true
   for untracked in "${UNTRACKED_PATCH_FILES[@]}"; do
@@ -488,6 +488,11 @@ for patch in "$STARTUP_DIR/retroboot-cuda-shift-interrupt-timing" \
              "$TIMERS_DIR/retroboot-via-t2-hold"; do
   git -C "$QEMU_DIR" apply "$patch.patch" || die "Failed to apply ${patch#"$ROOT_DIR"/}.patch"
 done
+
+# Retail Mac OS 8.6 with USB disabled has no periodic external interrupt to
+# wake its main task after a lost wakeup. This property defaults off; only
+# the legacy Virtio startup profile opts in. Ported from RetroBoot.
+git -C "$QEMU_DIR" apply "$POWERMAC_DIR/mac-os-8-idle-interrupt.patch" || die "Failed to apply legacy Mac OS idle wakeup"
 
 # ---------------------------------------------------------------------------
 # 3f. Emulated ATI Radeon R100 (ati-vga,model=r100), applied last

@@ -941,3 +941,101 @@ consolidated root checks, publish and verify stable 4.1.1. Retain 4.1.0 for roll
 - No user machine, root gxmetal, unrelated worktree, Library catalog, DNS or
   hosting configuration was modified. Stable v4.4.0 remains for rollback by
   promotion to Latest. Requested work and publication are complete.
+
+## 2026-10-23 — classic base image build and delivery scope
+
+- User explicitly requests upload/catalog registration in both ClassicMac and
+  RetroBoot. No publication has occurred. Existing server catalogs were read
+  without changes; server has about 65 GB free.
+- Apple installer 7.5.5/8.1 guests pass cold Finder boots, HTTP, PASV FTP via
+  Transmit 1.2 and StuffIt 5.5 extraction with byte-exact fixture comparison.
+  Netscape 3.01 Java startup configuration remains under investigation.
+- 8.6 native MacIO/CMD646 disk trials did not qualify. A private fixed Virtio
+  driver and correct HFS boot blocks reach responsive Finder with ROM 1.4,
+  G3, 128 MB, virtual memory off. Full reinstall/apps/network gates remain.
+  Unqualified legacy IDE feature is being removed from the task branch.
+- RetroBoot source inspection confirms its importer and launcher support PPC
+  only; no Quadra emulator is shipped. Catalog compatibility must be delivered
+  with runtime support, not by advertising unbootable downloads.
+- Other work advanced root main while this contained task was in progress.
+  Preserve its release work and preexisting untracked gxmetal directory.
+
+## 2026-10-24 — 68k guest qualification and parallel runtime dependency
+
+- System 7.5.5 and Mac OS 8.1 now have native Netscape 3.04 installations.
+  Both pass warning-free cold launches, HTTP fixture loads, and earlier
+  Transmit 1.2 PASV download/StuffIt 5.5 byte-exact expansion checks.
+  Removed installers, test files, connection history and browser caches;
+  the preserved browser preference opens about:blank.
+- Allocation-aware HFS copies retain every allocated block and all partition,
+  bitmap and alternate-header bytes while zeroing free allocation blocks.
+  Private reports compact755.json/compact81.json retain geometry and matching
+  retained-byte digests. Fresh Linux q800 starts reach Finder; input and full
+  RetroBoot presenter qualification are still separate.
+- Isolated build VM175 classic-base-images-build (McHost) was created through
+  AustinLand, pinned through authenticated guest-agent SSH host-key readback.
+  Private keys/state stay in output/classic-base-images/lab. Both PPC and m68k
+  QEMU targets build from RetroBoot's pinned prepared sources on this VM.
+  Native default floppy metadata is outside that early Linux smoke profile.
+- The active RetroBoot D044 task now owns Quadra emulator/guest/hostd support
+  in its three worktrees. Do not compete with those edits. Image delivery and
+  ClassicMac support remain in this task. Permission to message its task was
+  requested; no cross-task message has been sent.
+- Corrected MacBinary transfer metadata: /usr/bin/macbinary drops the high
+  Finder flag byte (engine 0x2140 became 0x0040). Private extraction now restores
+  both flag bytes from the MacBinary header, preserving application bundles
+  and aliases. HFS tools now have project-private mount state, avoiding the
+  user's shared ~/.hcwd while other tasks prepare guests.
+- Mac OS 8.6 still does not qualify: a self-hosted full reinstall stalls in
+  synchronous File Manager SetEOF. A separate CD-to-blank-disk path uses two
+  Virtio devices with explicit paths. Placing PCI devices below the onboard
+  hardware changes MacIO BAR placement and prevents the retail ROM startup;
+  slots f/10 preserve it and reach CD Finder. The stock WinWorld image's file
+  data is not readable by this HFS/OpenBIOS path; the existing repaired local
+  CD is used for this probe. No claim of payload identity is made.
+- Focused validation: 48 config/argument tests pass; 25 download/import tests
+  pass with one optional Copland skip. No image or catalog publication yet.
+
+## 2026-10-24 — real archive import and 8.6 wakeup diagnosis
+
+- Local System 7.5.5 v1 archive: 20,511,664 bytes, SHA256
+  68b8ffb1993664644435e7c9bb4f4d58737a7da6c63e6cb794b7c48830c38246.
+  Mac OS 8.1 v1: 36,423,160 bytes, SHA256
+  779cb74e50720f263e15d9a79011d1aa1f2a8ef25c83ae55e2c1a4ffadca3d09.
+  Both production Swift imports pass checksum, capacity, hardware and firmware
+  checks and reach Finder from the imported disk with fresh PRAM.
+- A retail 8.6 core boots standalone with corrected MacBinary flags. Realtek's
+  original RTL8139x 3.20 driver (archive SHA1 a3bc1f1caa0bd27e53710312f5548f3974d41baa)
+  exposes Ethernet; configured DHCP and passive FTP through native control panels.
+- The apparent 8.6 I/O freeze is at least partly the known nanokernel wakeup
+  race: a controlled incoming network interrupt immediately wakes it; keyboard,
+  mouse and clock resume and Netscape Communicator loads the HTTP fixture.
+  Ported RetroBoot's CUDA idle interrupt as an opt-in property (default zero)
+  in a task-local QEMU build; testing 50 ms on the legacy profile. No changes
+  to the ordinary OS 9 runtime defaults. Retrial of the native full installer
+  and Transmit 1.2 PPC follows; 1.6 PPC login/LIST passes but RETR stalls.
+- No production upload, catalog promotion, shared push or release occurred.
+
+## 2026-10-24 — qualified 68k downloads published
+
+- Published immutable system-7.5.5-base-v1.tar.gz and mac-os-8.1-base-v1.tar.gz
+  under mcchord.net/classicmac, with the exact archive hashes above. Uploaded
+  to private temporary filenames, verified remote sizes and SHA256, then linked
+  to previously absent immutable final names. No existing archive replaced.
+- Published https://mcchord.net/classicmac/catalog-v2.json with all six old
+  entries retained byte-for-value, plus the two qualified Quadra entries.
+  SHA256 4b6916f25f0e95d2349415101a400d50af56278e67d146fe849735e14b8d6025.
+  Legacy catalog.json is byte-identical, SHA256
+  21661864c256e8780c50b0fefa037a8f75a038bf8cc7a77a8850be6d35ffcf85.
+  Rollback base is /root/classicmac-catalog-backups/pre-base-images-v2-20261024.json
+  (0600); restoring its entries to v2 leaves the legacy endpoint unchanged.
+- Full fresh public HTTPS downloads and HTTP 206 ranges pass. Both production
+  Swift public imports pass and their newly imported copies reach Finder and
+  respond to keyboard input. Private evidence in output/classic-base-images/hosting,
+  swift-public-{755,81}-import.log, run-public{755,81}. No Apache, DNS or other
+  site configuration change/restart. Client release/integration is still pending.
+- 8.6 remains excluded: the idle IRQ fixes Finder/Netscape lost wakeups, but
+  SetEOF during full installation still waits indefinitely after about 12 MB of
+  writes. An explicit synchronous-driver Gestalt response does not fix it.
+  SCC diagnostic builds log completed block I/O before the File Manager wait;
+  native runtime command/completion tracing is the next isolated probe.

@@ -122,12 +122,25 @@ def main():
         if os.fstat(file.fileno()).st_size > 65_536:
             parser.error("config.json must be at most 64 KiB")
         source = json.load(file)
-    if source.get("machineFamily") not in ("powerMacG4", "powerMac7500") or source.get("diskImageName", "disk.img") != "disk.img":
-        parser.error("Only Power Mac templates with disk.img are supported")
+    if source.get("machineFamily") not in ("quadra800", "powerMacG4", "powerMac7500") or source.get("diskImageName", "disk.img") != "disk.img":
+        parser.error("Use a supported machine family with disk.img")
 
     if source.get("graphicsCard", "standard") not in ("standard", "atiRadeon"):
         parser.error("Unsupported graphics card")
 
+    quadra = source.get("machineFamily") == "quadra800"
+    quadra_files = []
+    if quadra:
+        for name in ("Quadra800.rom", "pram.img"):
+            if not (bundle / name).exists():
+                continue
+            with regular_file(bundle / name) as file:
+                data = file.read(1_048_577)
+            if name == "Quadra800.rom" and (len(data) != 1_048_576 or hashlib.sha256(data).hexdigest() != "05ad753fb594e656cf078023ec189e09e2a7655a780de993b75b8c51ed6b09ca"):
+                parser.error("Quadra templates need the matched Quadra 800 ROM")
+            if name == "pram.img" and len(data) not in (256, 512):
+                parser.error("Invalid Quadra PRAM size")
+            quadra_files.append(name)
     copland = source.get("machineFamily") == "powerMac7500"
     if copland:
         version = tuple(map(int, args.minimum_app_version.split(".")))
@@ -146,12 +159,12 @@ def main():
     # Persist known hardware settings only. No developer paths or mounted media
     # are copied to the downloadable config; import sanitizes these again.
     allowed = {"ramMB", "diskSizeGB", "width", "height", "depth", "customResolution",
-               "networking", "sound", "useG4CPU", "tabletInput", "classicInputHelpers", "graphicsCard"}
+               "networking", "sound", "useG4CPU", "useVirtioDisk", "tabletInput", "classicInputHelpers", "graphicsCard"}
     config = {key: value for key, value in source.items() if key in allowed}
     config.update(id="00000000-0000-0000-0000-000000000000", name=args.name,
                   machineFamily=source["machineFamily"], diskImageName="disk.img", pramImageName="pram.img",
                   useEnhancedFramebuffer=False, useBrowserDisplay=False, bootFromCD=False,
-                  toolsCDInserted=True, toolsDeliveryVersion=1)
+                  toolsCDInserted=source.get("toolsCDInserted", True), toolsDeliveryVersion=1)
     if copland:
         config.update(ramMB=32, width=640, height=480, depth=8, customResolution=False,
                       networking=False, sound=False, useG4CPU=False, tabletInput=False,
@@ -167,7 +180,7 @@ def main():
             with gzip.GzipFile(filename="", fileobj=temp, mode="wb", compresslevel=6, mtime=0) as compressed:
                 with tarfile.open(fileobj=compressed, mode="w|", format=tarfile.GNU_FORMAT) as archive:
                     archive.addfile(header("config.json", len(config_bytes)), io.BytesIO(config_bytes))
-                    for name in ["disk.img"] + (["bootrom.bin", "nvram.bin"] if copland else []) + (["preview.png"] if args.include_preview else []):
+                    for name in ["disk.img"] + (["bootrom.bin", "nvram.bin"] if copland else []) + quadra_files + (["preview.png"] if args.include_preview else []):
                         with regular_file(bundle / name) as file:
                             before = os.fstat(file.fileno())
                             if name == "disk.img" and (before.st_size < 512 or before.st_size % 512):
@@ -201,8 +214,8 @@ def main():
                      archiveURL=args.archive_url, archiveBytes=staged.stat().st_size,
                      installedBytes=installed_bytes, diskCapacityBytes=disk_capacity_bytes,
                      requiredStorageBytes=required_storage_bytes, sha256=digest.hexdigest())
-        if copland:
-            entry["machineFamily"] = "powerMac7500"
+        if source["machineFamily"] != "powerMacG4":
+            entry["machineFamily"] = source["machineFamily"]
         os.chmod(staged, 0o644)
         publish_new_file(staged, output)
         try:

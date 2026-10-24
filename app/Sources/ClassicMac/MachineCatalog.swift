@@ -23,7 +23,7 @@ enum MachineDownloadError: LocalizedError {
 }
 
 struct MachineCatalog: Codable {
-    static let defaultURL = URL(string: "https://mcchord.net/classicmac/catalog.json")!
+    static let defaultURL = URL(string: "https://mcchord.net/classicmac/catalog-v2.json")!
     static let maximumCatalogBytes: Int64 = 1_048_576
     static var currentAppVersion: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "4.4.0"
@@ -82,9 +82,6 @@ struct DownloadableMachine: Codable, Identifiable, Hashable {
     }
 
     func validate() throws {
-        guard family == .powerMacG4 || family == .powerMac7500 else {
-            throw MachineDownloadError.invalidCatalog("This machine family is not supported by downloads.")
-        }
         let allowedID = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyz0123456789-._")
         guard !id.isEmpty, id.utf8.count <= 100,
               id.unicodeScalars.allSatisfy({ allowedID.contains($0) }),
@@ -102,7 +99,7 @@ struct DownloadableMachine: Codable, Identifiable, Hashable {
         }
         if let capacity = diskCapacityBytes {
             guard capacity >= 512, capacity % 512 == 0, capacity < installedBytes,
-                  installedBytes - capacity <= 16 * 1_048_576 + 65_536 + (family == .powerMac7500 ? 4_202_513 : 0) else {
+                  installedBytes - capacity <= 16 * 1_048_576 + 65_536 + (family == .powerMac7500 ? 4_202_513 : family == .quadra800 ? 1_049_088 : 0) else {
                 throw MachineDownloadError.invalidCatalog("Its disk capacity does not match the expanded files.")
             }
         }
@@ -111,7 +108,7 @@ struct DownloadableMachine: Codable, Identifiable, Hashable {
             // accounting chunk. Metadata never relaxes the full expansion cap.
             guard diskCapacityBytes != nil, storage >= 1_048_576,
                   storage % 1_048_576 == 0,
-                  storage <= installedBytes + (family == .powerMac7500 ? 5 : 3) * 1_048_576 else {
+                  storage <= installedBytes + (family == .powerMac7500 || family == .quadra800 ? 5 : 3) * 1_048_576 else {
                 throw MachineDownloadError.invalidCatalog("Its initial storage requirement is not valid.")
             }
         }

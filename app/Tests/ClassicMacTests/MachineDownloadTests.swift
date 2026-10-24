@@ -34,6 +34,97 @@ final class MachineDownloadTests: XCTestCase {
         XCTAssertEqual(try bundle.appendingPathComponent("disk.img").resourceValues(forKeys: [.fileSizeKey]).fileSize, Int(machine.diskCapacityBytes!))
     }
 
+    func testQualifiedClassicBaseArchiveImport() throws {
+        let env = ProcessInfo.processInfo.environment
+        guard let catalogPath = env["CLASSIC_BASE_TEST_CATALOG"],
+              let archivePath = env["CLASSIC_BASE_TEST_ARCHIVE"],
+              let id = env["CLASSIC_BASE_TEST_ID"] else {
+            throw XCTSkip("Set CLASSIC_BASE_TEST_CATALOG, ARCHIVE and ID to qualify a real template")
+        }
+        let machine = try XCTUnwrap(MachineCatalog.decode(Data(contentsOf:
+            URL(fileURLWithPath: catalogPath))).machines.first { $0.id == id })
+        let archive = URL(fileURLWithPath: archivePath)
+        try MachineDownloadTransfer.verify(archive, machine: machine)
+        let destination = env["CLASSIC_BASE_TEST_DESTINATION"].map { URL(fileURLWithPath: $0) } ?? directory!
+        try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
+        let bundle = try MachineTemplateInstaller.installVerifiedArchive(archive, machine: machine,
+            name: machine.name, in: destination)
+        let config = try JSONDecoder().decode(VMConfig.self,
+            from: Data(contentsOf: bundle.appendingPathComponent("config.json")))
+        XCTAssertEqual(config.machineFamily, machine.family)
+        XCTAssertEqual(config.ramMB, 128)
+        XCTAssertFalse(config.toolsCDInserted)
+        XCTAssertNil(config.cdImagePath)
+        XCTAssertFalse(config.bootFromCD)
+        XCTAssertEqual(try bundle.appendingPathComponent("disk.img")
+            .resourceValues(forKeys: [.fileSizeKey]).fileSize, Int(machine.diskCapacityBytes!))
+        if machine.family == .quadra800 {
+            let rom = try Data(contentsOf: bundle.appendingPathComponent("Quadra800.rom"))
+            XCTAssertEqual(SHA256.hash(data: rom).map { String(format: "%02x", $0) }.joined(),
+                "05ad753fb594e656cf078023ec189e09e2a7655a780de993b75b8c51ed6b09ca")
+        }
+        XCTAssertEqual(VMTemplateMetadata.load(from: bundle)?.templateID, machine.id)
+    }
+
+    func testClassicBaseTemplatesPreserveTheirHardwareAndOptionalMedia() throws {
+        for family in [MachineFamily.quadra800, .powerMacG4] {
+            let original = VMConfig(name: "Base source", machineFamily: family,
+                ramMB: 128, diskSizeGB: 2, width: 640, height: 480, depth: 8,
+                cdImagePath: "/private/source.iso", bootFromCD: true,
+                toolsCDInserted: false, useG4CPU: false,
+                useVirtioDisk: family == .powerMacG4, tabletInput: family == .quadra800)
+            let config = try JSONEncoder().encode(original)
+            let archive = try makeArchive([Entry("config.json", data: config),
+                Entry("disk.img", data: Data(repeating: 0, count: 512))])
+            let machine = DownloadableMachine(id: "base-\(family.rawValue.lowercased())", name: "Base Mac",
+                summary: "Base OS and Internet applications", osVersion: "Mac OS", minimumAppVersion: "4.6.0",
+                archiveURL: source, archiveBytes: Int64(try Data(contentsOf: archive).count),
+                installedBytes: Int64(config.count + 512), sha256: String(repeating: "a", count: 64),
+                diskCapacityBytes: 512, machineFamily: family)
+            XCTAssertEqual(try MachineCatalog.decode(JSONEncoder().encode(
+                MachineCatalog(schemaVersion: 1, machines: [machine]))).machines.first?.family, family)
+            let bundle = try MachineTemplateInstaller.installVerifiedArchive(archive, machine: machine,
+                name: family.rawValue, in: directory)
+            let fresh = try JSONDecoder().decode(VMConfig.self, from: Data(contentsOf: bundle.appendingPathComponent("config.json")))
+            XCTAssertEqual(fresh.machineFamily, family)
+            XCTAssertFalse(fresh.toolsCDInserted)
+            XCTAssertFalse(fresh.useG4CPU)
+            XCTAssertEqual(fresh.useVirtioDisk, family == .powerMacG4)
+            XCTAssertEqual(fresh.tabletInput, family == .quadra800)
+            XCTAssertNil(fresh.cdImagePath)
+            XCTAssertFalse(fresh.bootFromCD)
+        }
+    }
+
+    func testQuadraFirmwareIsBoundedAndIsolatedFromPowerMacArchives() throws {
+        let config = try JSONEncoder().encode(VMConfig(name: "Quadra", machineFamily: .quadra800))
+        let rom = Data(repeating: 0, count: 1_048_576)
+        let archive = try makeArchive([Entry("config.json", data: config),
+            Entry("disk.img", data: Data(repeating: 0, count: 512)), Entry("Quadra800.rom", data: rom)])
+        let staging = directory.appendingPathComponent("rom-extract")
+        try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: false)
+        XCTAssertThrowsError(try MachineTemplateInstaller.extract(archive, into: staging,
+            expectedBytes: Int64(config.count + 512 + rom.count)))
+        try FileManager.default.removeItem(at: staging)
+        try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: false)
+        XCTAssertNoThrow(try MachineTemplateInstaller.extract(archive, into: staging,
+            expectedBytes: Int64(config.count + 512 + rom.count), quadra: true))
+        let machine = DownloadableMachine(id: "quadra-bad-rom", name: "Quadra", summary: "Base",
+            osVersion: "Mac OS 8.1", minimumAppVersion: "4.6.0", archiveURL: source,
+            archiveBytes: Int64(try Data(contentsOf: archive).count),
+            installedBytes: Int64(config.count + 512 + rom.count), sha256: String(repeating: "a", count: 64),
+            diskCapacityBytes: 512, machineFamily: .quadra800)
+        XCTAssertThrowsError(try MachineTemplateInstaller.installVerifiedArchive(archive,
+            machine: machine, name: "Bad ROM", in: directory))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: directory.appendingPathComponent("Bad ROM.classic").path))
+        let short = try makeArchive([Entry("config.json", data: config),
+            Entry("disk.img", data: Data(repeating: 0, count: 512)), Entry("pram.img", data: Data([1]))])
+        try FileManager.default.removeItem(at: staging)
+        try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: false)
+        XCTAssertThrowsError(try MachineTemplateInstaller.extract(short, into: staging,
+            expectedBytes: Int64(config.count + 513), quadra: true))
+    }
+
     func testCatalogValidationAndVersionComparison() throws {
         let machine = fixtureMachine(bytes: Data("archive".utf8))
         let catalog = MachineCatalog(schemaVersion: 1, machines: [machine])

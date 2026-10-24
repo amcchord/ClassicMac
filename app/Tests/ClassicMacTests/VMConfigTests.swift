@@ -3,6 +3,19 @@ import Darwin
 @testable import ClassicMac
 
 final class VMConfigTests: XCTestCase {
+    func testVirtioStartupIsExplicitAndLimitedToPowerMac() throws {
+        let encoder = JSONEncoder(), decoder = JSONDecoder()
+        var legacy = try XCTUnwrap(JSONSerialization.jsonObject(with: encoder.encode(
+            VMConfig(name: "Legacy", machineFamily: .powerMacG4))) as? [String: Any])
+        legacy.removeValue(forKey: "useVirtioDisk")
+        XCTAssertFalse(try decoder.decode(VMConfig.self, from: JSONSerialization.data(withJSONObject: legacy)).useVirtioDisk)
+        for family in MachineFamily.allCases {
+            let config = VMConfig(name: "Template", machineFamily: family, useVirtioDisk: true)
+            XCTAssertEqual(try decoder.decode(VMConfig.self, from: encoder.encode(config)).useVirtioDisk,
+                           family == .powerMacG4)
+        }
+    }
+
     func testDiskSizeChoicesReach120GBForBothMachines() {
         for family in [MachineFamily.quadra800, .powerMacG4] {
             XCTAssertEqual(family.diskSizePresets.last, 120)

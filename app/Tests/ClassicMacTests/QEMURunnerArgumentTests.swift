@@ -38,6 +38,25 @@ final class QEMURunnerArgumentTests: XCTestCase {
         )
     }
 
+    func testVirtioStartupAndCompatibilityCDHaveSelectedBootDeviceFirst() {
+        for fromCD in [false, true] {
+            var vm = config(cdImagePath: fromCD ? "/tmp/install.iso" : nil,
+                            bootFromCD: fromCD, toolsCDInserted: false,
+                            useG4CPU: false, tabletInput: false)
+            vm.useVirtioDisk = true
+            let args = QEMUManager.buildArguments(for: vm)
+            let disks = optionValues("-device", in: args).filter { $0.hasPrefix("virtio-blk-pci,") }
+            XCTAssertEqual(disks, fromCD
+                ? ["virtio-blk-pci,drive=classicmac-cd-boot", "virtio-blk-pci,drive=startup0"]
+                : ["virtio-blk-pci,drive=startup0"])
+            XCTAssertTrue(optionValues("-prom-env", in: args).contains("boot-device=virtio0:\\\\:tbxi"))
+            XCTAssertTrue(optionValues("-device", in: args).contains { $0.hasPrefix("loader,") })
+            XCTAssertFalse(optionValues("-drive", in: args).contains { $0.contains("disk.img,format=raw,media=disk") })
+        }
+        let native = QEMUManager.buildArguments(for: config(cdImagePath: nil, bootFromCD: false))
+        XCTAssertFalse(native.contains("virtio-blk-pci,drive=startup0"))
+    }
+
     func testPowerMacIncludesInputSprocketHIDMouseWithAndWithoutTablet() {
         for tablet in [true, false] {
             let args = QEMUManager.buildArguments(for: config(tabletInput: tablet))

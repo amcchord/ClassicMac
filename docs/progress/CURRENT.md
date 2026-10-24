@@ -1,37 +1,37 @@
-# ClassicMac 4.5.0 — stable release complete
+# Classic OS base images — in progress
 
-[Stable Latest v4.5.0](https://github.com/amcchord/ClassicMac/releases/tag/v4.5.0),
-published October 23, 2026. Exact source/tag:
-`69f3d52ed721599542afe231bd5820549ba07813` (PR #35).
-All ten assets are public; all nine fresh anonymous downloads match SHA256SUMS.
-The public Mac DMG passes full exact verification, staples and Gatekeeper.
+Task branch `codex/classic-base-images`, contained worktree `worktrees/classic-base-images`.
+User requested System 7.5.5, Mac OS 8.1 and 8.6 base installs with StuffIt, Transmit,
+Netscape, and explicitly authorized uploads and catalog setup for ClassicMac and
+RetroBoot. Root/main and unrelated releases remain separate work.
 
-Windows now ships as one portable EXE and Linux as one AppImage, with an
-optional DEB. Shared Mac measurements, bitmap fonts, document/title controls
-and the home layout replace the approximate theme. All operations are in the
-window, without a host menu bar. Electron remains the internal desktop host.
-Measured components and actual captured controls/composed title frames pass
-at 1×/2× with zero differing pixels. Windows/Linux home captures are identical.
-Windows WindowShade uses an exact native 23-pixel drawing/input region.
+7.5.5 and 8.1 are scrubbed, compacted, packaged immutable local v1 archives.
+They have native Netscape 3.04, Transmit 1.2 and StuffIt 5.5. HTTP, passive FTP,
+expansion with exact payload comparisons, Mac/Linux boot and input pass.
+Production Swift checksum verification and real archive import pass for both;
+those imported copies also boot. Source disk files are frozen read-only.
+Artifacts/evidence are in the ignored root `output/classic-base-images`.
 
-Native Windows CI 40037702912 and Linux CI 40037705241 pass the complete fresh
-matrix at runtime/UI source 956dd7d. Both Proxmox hosts independently pass both
-setup routes, public ATI download/import/first Finder boot/normal shutdown,
-and exact final portable UI/boot/restart/shutdown checks. All 61 packaged
-source/UI files match. Root checks pass 131 Swift tests (two optional skips),
-all 22 desktop tests, deterministic exports and bundle syntax.
+8.6 boots from a single writable Virtio disk on G3/128 MB, VM off. Its retail
+ROM needs USB off and the RTL8139 driver for networking. An interrupt from the
+NIC wakes the observed freeze: this is the known nanokernel main-task lost
+wakeup. An opt-in port of RetroBoot's idle-interrupt patch (default off) now
+keeps it responsive; Netscape Communicator HTTP passes. Passive FTP is set
+through the native Internet panel. Transmit 1.6 stalls on a passive file
+transfer; official Transmit 1.2 PPC is being tested. Full self-hosted installer
+completion is being retried with the idle-wakeup fix. 8.6 is not qualified.
 
-Mac retains qualified 4.4 native frontend/engines with new version metadata,
-original entitlements and accepted 4.5 notarization. Prepared source archives
-remain byte-identical to qualified 4.4, with NDRV verified.
+The qualified 7.5.5 and 8.1 immutable archives and catalog-v2.json are now public.
+Full public HTTPS downloads, hashes, byte ranges, production Swift import and
+Finder input on the imported copies pass. Legacy catalog.json is unchanged.
+Mac OS 8.6 is not uploaded or listed. New ClassicMac needs catalog-v2.json,
+Quadra archive support and a qualified 8.6 runtime profile. Keep catalog.json
+unchanged because older Swift clients reject the entire catalog on Quadra.
+RetroBoot D044 is independently implementing Quadra in its three active task
+worktrees; do not edit them. No cross-task message has been sent while the
+coordination permission question is pending. Owned VM175 is a private Linux
+emulator smoke-test builder, not production appliance validation.
 
-No release work remains. Dedicated QA VMs 170/171 are stopped; task scheduled
-tasks/RDP are closed and temporary notary key files are removed. Windows QA
-storage grew from 100 to 228 GiB without deleting data; Linux QA got FUSE 3.
-Task artifacts are retained. User machines, root gxmetal and unrelated
-worktrees are preserved. No catalog, DNS, hosting or production service change.
-Windows remains unsigned; Copland remains Mac-only. Physical GPU/audio and
-untested whole-window/scrollbar/menu states retain documented coverage limits.
-
-Rollback: `gh release edit v4.4.0 --latest`; record the reason. Existing
-machines and the public Library catalog are unchanged.
+Next: qualify 8.6 installer/apps/storage and finish the matching launch profile;
+validate real imports, prepare reviewable code atop current main, upload only
+qualified immutable archives and atomically promote compatible catalogs.

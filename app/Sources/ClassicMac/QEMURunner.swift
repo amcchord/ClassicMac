@@ -934,7 +934,7 @@ final class QEMUManager: ObservableObject {
         let toolsViaVirtio = !deferToolsMedia && config.toolsCDInserted &&
             AppPaths.toolsCD != nil
         let needsNdrvLoader = sharing || tablet || bootingG3CompatibilityCD ||
-            toolsViaVirtio
+            toolsViaVirtio || config.useVirtioDisk
 
         // InputSprocket needs a real HID mouse; the seamless Virtio tablet only
         // updates the classic cursor. The engine selects HID for 3D games.
@@ -1013,8 +1013,19 @@ final class QEMUManager: ObservableObject {
         args += ["-action", "reboot=shutdown"]
         args += ["-qmp", "unix:\(QEMUManager.qmpSocketURL(for: config.id).path),server=on,wait=off"]
 
-        // Main IDE hard disk.
-        args += ["-drive", "file=\(config.diskImageURL.path),format=raw,media=disk"]
+        if config.useVirtioDisk {
+            // Add the startup disk before auxiliary Virtio media, preserving
+            // OpenBIOS's first-block-device startup alias.
+            args += ["-drive", "file=\(config.diskImageURL.path),format=raw,if=none,id=startup0"]
+            if !bootingG3CompatibilityCD {
+                args += ["-device", "virtio-blk-pci,drive=startup0"]
+            }
+            if !bootingFromUserCD {
+                args += ["-prom-env", "boot-device=virtio0:\\\\:tbxi"]
+            }
+        } else {
+            args += ["-drive", "file=\(config.diskImageURL.path),format=raw,media=disk"]
+        }
 
         // Keep a user-facing disc tray present on the optical IDE channel,
         // even when it starts empty, so the running window's Disc menu can
@@ -1043,6 +1054,10 @@ final class QEMUManager: ObservableObject {
                 "-prom-env",
                 "boot-device=virtio0:\\\\:tbxi"
             ]
+            if config.useVirtioDisk {
+                // The selected compatibility CD must be the first Virtio disk.
+                args += ["-device", "virtio-blk-pci,drive=startup0"]
+            }
         } else if bootingFromUserCD {
             // Mac OS 9 on the default G4 profile starts and installs reliably
             // from KeyLargo IDE. Keeping the image on this one path avoids a
