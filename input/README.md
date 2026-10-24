@@ -16,7 +16,7 @@ handoff avoid leaving a held click on the previous device.
 
 The patch applies after the ATI model/macOS overlay. It changes behavior only
 for the explicitly named `usb-mouse,id=classicmac-game-mouse`. The native Mac
-view and browser/Electron frontends use the engine's pointer-mode event.
+view, native Windows/Linux frontend and optional browser client use the engine's pointer-mode event.
 
 `tests/superdeluxe-quake3.py` uses the native shared-framebuffer and input
 protocol against a disposable APFS clone of an independently supplied guest

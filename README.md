@@ -109,8 +109,7 @@
 | --- | --- | --- |
 | macOS DMG | Apple Silicon, macOS 15+ | Drag ClassicMac to Applications |
 | Windows EXE | Windows 11, x64 | Run the single portable executable |
-| Linux DEB | Ubuntu 24.04+/Debian 13, x64 | Install the package with your package manager |
-| Linux AppImage | Same Linux baseline | Mark the single file executable, then run it |
+| Linux AppImage | Ubuntu 24.04+/Debian 13, x64 | Mark the single file executable, then run it |
 
 The [latest release](https://github.com/amcchord/ClassicMac/releases/latest)
 contains the applications, checksums and corresponding engine sources. The
