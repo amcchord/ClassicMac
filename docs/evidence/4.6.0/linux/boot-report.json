@@ -1,0 +1,288 @@
+{
+    "error": "",
+    "passed": true,
+    "state": {
+        "electron": false,
+        "frontend": "native-qt-cpp",
+        "height": 700,
+        "machines": [
+            {
+                "config": {
+                    "bootFromCD": false,
+                    "classicInputHelpers": true,
+                    "depth": 8,
+                    "diskImageName": "disk.img",
+                    "diskSizeGB": 2,
+                    "graphicsCard": "standard",
+                    "height": 480,
+                    "id": "0cf6bae1-8ed1-428e-a7a1-d2c86f61dada",
+                    "machineFamily": "quadra800",
+                    "name": "Native System 7.5.5",
+                    "networking": true,
+                    "pramImageName": "pram.img",
+                    "ramMB": 128,
+                    "sound": true,
+                    "tabletInput": true,
+                    "toolsCDInserted": false,
+                    "useEnhancedFramebuffer": false,
+                    "useG4CPU": false,
+                    "useVirtioDisk": false,
+                    "width": 640
+                },
+                "folder": "/opt/ClassicMac/qa46/bases/documents/Native System 7.5.5.classic",
+                "id": "0cf6bae1-8ed1-428e-a7a1-d2c86f61dada",
+                "name": "Native System 7.5.5",
+                "running": false
+            },
+            {
+                "config": {
+                    "bootFromCD": false,
+                    "classicInputHelpers": true,
+                    "depth": 8,
+                    "diskImageName": "disk.img",
+                    "diskSizeGB": 2,
+                    "graphicsCard": "standard",
+                    "height": 480,
+                    "id": "b8d7aac4-678f-4ae9-bd25-c98741877016",
+                    "machineFamily": "quadra800",
+                    "name": "Native Mac OS 8.1",
+                    "networking": true,
+                    "pramImageName": "pram.img",
+                    "ramMB": 128,
+                    "sound": true,
+                    "tabletInput": true,
+                    "toolsCDInserted": false,
+                    "useEnhancedFramebuffer": false,
+                    "useG4CPU": false,
+                    "useVirtioDisk": false,
+                    "width": 640
+                },
+                "folder": "/opt/ClassicMac/qa46/bases/documents/Native Mac OS 8.1.classic",
+                "id": "b8d7aac4-678f-4ae9-bd25-c98741877016",
+                "name": "Native Mac OS 8.1",
+                "running": false
+            },
+            {
+                "config": {
+                    "bootFromCD": false,
+                    "classicInputHelpers": false,
+                    "depth": 16,
+                    "diskImageName": "disk.img",
+                    "diskSizeGB": 2,
+                    "graphicsCard": "standard",
+                    "height": 480,
+                    "id": "79a92bcb-765c-48fb-93d4-ee5aa36f4829",
+                    "machineFamily": "powerMacG4",
+                    "name": "Native Mac OS 8.6",
+                    "networking": true,
+                    "pramImageName": "pram.img",
+                    "ramMB": 128,
+                    "sound": false,
+                    "tabletInput": false,
+                    "toolsCDInserted": false,
+                    "useEnhancedFramebuffer": false,
+                    "useG4CPU": false,
+                    "useVirtioDisk": true,
+                    "width": 640
+                },
+                "folder": "/opt/ClassicMac/qa46/bases/documents/Native Mac OS 8.6.classic",
+                "id": "79a92bcb-765c-48fb-93d4-ee5aa36f4829",
+                "name": "Native Mac OS 8.6",
+                "running": false
+            }
+        ],
+        "scale": 1,
+        "shaded": false,
+        "version": "4.6.0",
+        "webview": false,
+        "width": 940
+    },
+    "steps": [
+        {
+            "action": "open",
+            "elapsed": 100,
+            "passed": true,
+            "step": 0
+        },
+        {
+            "action": "start",
+            "elapsed": 145,
+            "passed": true,
+            "step": 1
+        },
+        {
+            "action": "guestReady",
+            "elapsed": 46,
+            "passed": true,
+            "step": 2
+        },
+        {
+            "action": "wait",
+            "elapsed": 45000,
+            "passed": true,
+            "step": 3
+        },
+        {
+            "action": "capture",
+            "elapsed": 118,
+            "passed": true,
+            "step": 4
+        },
+        {
+            "action": "pause",
+            "elapsed": 82,
+            "passed": true,
+            "step": 5
+        },
+        {
+            "action": "resume",
+            "elapsed": 99,
+            "passed": true,
+            "step": 6
+        },
+        {
+            "action": "restart",
+            "elapsed": 99,
+            "passed": true,
+            "step": 7
+        },
+        {
+            "action": "wait",
+            "elapsed": 50000,
+            "passed": true,
+            "step": 8
+        },
+        {
+            "action": "guestReady",
+            "elapsed": 99,
+            "passed": true,
+            "step": 9
+        },
+        {
+            "action": "capture",
+            "elapsed": 119,
+            "passed": true,
+            "step": 10
+        },
+        {
+            "action": "shutdown",
+            "elapsed": 80,
+            "passed": true,
+            "step": 11
+        },
+        {
+            "action": "stopped",
+            "elapsed": 1100,
+            "passed": true,
+            "step": 12
+        },
+        {
+            "action": "open",
+            "elapsed": 102,
+            "passed": true,
+            "step": 13
+        },
+        {
+            "action": "start",
+            "elapsed": 122,
+            "passed": true,
+            "step": 14
+        },
+        {
+            "action": "guestReady",
+            "elapsed": 74,
+            "passed": true,
+            "step": 15
+        },
+        {
+            "action": "wait",
+            "elapsed": 45000,
+            "passed": true,
+            "step": 16
+        },
+        {
+            "action": "capture",
+            "elapsed": 138,
+            "passed": true,
+            "step": 17
+        },
+        {
+            "action": "pause",
+            "elapsed": 62,
+            "passed": true,
+            "step": 18
+        },
+        {
+            "action": "resume",
+            "elapsed": 99,
+            "passed": true,
+            "step": 19
+        },
+        {
+            "action": "shutdown",
+            "elapsed": 99,
+            "passed": true,
+            "step": 20
+        },
+        {
+            "action": "stopped",
+            "elapsed": 1200,
+            "passed": true,
+            "step": 21
+        },
+        {
+            "action": "open",
+            "elapsed": 104,
+            "passed": true,
+            "step": 22
+        },
+        {
+            "action": "start",
+            "elapsed": 138,
+            "passed": true,
+            "step": 23
+        },
+        {
+            "action": "guestReady",
+            "elapsed": 57,
+            "passed": true,
+            "step": 24
+        },
+        {
+            "action": "wait",
+            "elapsed": 45000,
+            "passed": true,
+            "step": 25
+        },
+        {
+            "action": "capture",
+            "elapsed": 119,
+            "passed": true,
+            "step": 26
+        },
+        {
+            "action": "pause",
+            "elapsed": 80,
+            "passed": true,
+            "step": 27
+        },
+        {
+            "action": "resume",
+            "elapsed": 100,
+            "passed": true,
+            "step": 28
+        },
+        {
+            "action": "shutdown",
+            "elapsed": 100,
+            "passed": true,
+            "step": 29
+        },
+        {
+            "action": "stopped",
+            "elapsed": 1399,
+            "passed": true,
+            "step": 30
+        }
+    ]
+}

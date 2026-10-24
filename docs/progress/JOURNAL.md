@@ -1346,3 +1346,26 @@ consolidated root checks, publish and verify stable 4.1.1. Retain 4.1.0 for roll
   and the task RDP session remain running; remove own scheduled task/RDP and
   gracefully stop the QA hosts after qualification. No production catalog,
   hosting or DNS changes; root gxmetal and unrelated worktrees are preserved.
+
+## 2026-10-24 — native 4.6 integration and final preflight
+
+- PR #36 merged at 8900b7a; PR #37 at 1a5cae8. Source matches final native
+  CI ff11171 and the Mac build's 52b775e. Root gxmetal is preserved.
+- Final Windows CI 40106495101 and Linux CI 40106493052 pass. Exact final
+  EXE/AppImage repeat both setup routes, 1x/2x UI including compact sizing
+  and WindowShade, and all three Finder/lifecycle checks (24/17/17/31 steps).
+  Both pass native self-tests. Actual home scaling and active cross-platform
+  comparison have zero differing pixels. Package inventories verify every
+  file hash (Windows415/runtime238, Linux380/runtime128). Windows extraction
+  into spaces/hyphens and Debian public HTTPS catalog/TLS pass.
+- Root consolidated validation passes 136 Swift tests, two optional Copland
+  skips, no failures, including live 7.5.5 import; native rendering/model,
+  deterministic exporter, 15 packaging regressions and script syntax pass.
+- Final artwork correction replaces Qt list borders with measured Platinum
+  sunken frames. One QA recipe accidentally renamed an old installer path;
+  corrected the harness path and repeated all gates successfully. Earlier
+  failures remain in ignored output. No app regression was hidden.
+- Durable reports, selected captures, source checks and checksums are saved
+  under docs/evidence/4.6.0; current screenshots show the native apps. Nine
+  release assets are assembled. Publication and fresh public verification
+  remain next, followed by own QA task/RDP and VM cleanup. v4.5 is rollback.

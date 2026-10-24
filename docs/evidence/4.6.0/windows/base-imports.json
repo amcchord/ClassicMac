@@ -1,0 +1,354 @@
+{
+    "error": "",
+    "passed": true,
+    "state": {
+        "electron": false,
+        "frontend": "native-qt-cpp",
+        "height": 700,
+        "machines": [
+            {
+                "config": {
+                    "bootFromCD": false,
+                    "classicInputHelpers": true,
+                    "depth": 8,
+                    "diskImageName": "disk.img",
+                    "diskSizeGB": 2,
+                    "graphicsCard": "standard",
+                    "height": 480,
+                    "id": "bae55f0b-8a22-4316-bfe9-d46c282153e9",
+                    "machineFamily": "quadra800",
+                    "name": "Native System 7.5.5",
+                    "networking": true,
+                    "pramImageName": "pram.img",
+                    "ramMB": 128,
+                    "sound": true,
+                    "tabletInput": true,
+                    "toolsCDInserted": false,
+                    "useEnhancedFramebuffer": false,
+                    "useG4CPU": false,
+                    "useVirtioDisk": false,
+                    "width": 640
+                },
+                "folder": "C:/ClassicMacQA/v46/first-bases/documents/Native System 7.5.5.classic",
+                "id": "bae55f0b-8a22-4316-bfe9-d46c282153e9",
+                "name": "Native System 7.5.5",
+                "running": false
+            },
+            {
+                "config": {
+                    "bootFromCD": false,
+                    "classicInputHelpers": true,
+                    "depth": 8,
+                    "diskImageName": "disk.img",
+                    "diskSizeGB": 2,
+                    "graphicsCard": "standard",
+                    "height": 480,
+                    "id": "4f8b991a-abec-4c60-943f-0686f13b3faa",
+                    "machineFamily": "quadra800",
+                    "name": "Native Mac OS 8.1",
+                    "networking": true,
+                    "pramImageName": "pram.img",
+                    "ramMB": 128,
+                    "sound": true,
+                    "tabletInput": true,
+                    "toolsCDInserted": false,
+                    "useEnhancedFramebuffer": false,
+                    "useG4CPU": false,
+                    "useVirtioDisk": false,
+                    "width": 640
+                },
+                "folder": "C:/ClassicMacQA/v46/first-bases/documents/Native Mac OS 8.1.classic",
+                "id": "4f8b991a-abec-4c60-943f-0686f13b3faa",
+                "name": "Native Mac OS 8.1",
+                "running": false
+            },
+            {
+                "config": {
+                    "bootFromCD": false,
+                    "classicInputHelpers": false,
+                    "depth": 16,
+                    "diskImageName": "disk.img",
+                    "diskSizeGB": 2,
+                    "graphicsCard": "standard",
+                    "height": 480,
+                    "id": "636980ec-5a82-4a68-aa9b-623dfad80046",
+                    "machineFamily": "powerMacG4",
+                    "name": "Native Mac OS 8.6",
+                    "networking": true,
+                    "pramImageName": "pram.img",
+                    "ramMB": 128,
+                    "sound": false,
+                    "tabletInput": false,
+                    "toolsCDInserted": false,
+                    "useEnhancedFramebuffer": false,
+                    "useG4CPU": false,
+                    "useVirtioDisk": true,
+                    "width": 640
+                },
+                "folder": "C:/ClassicMacQA/v46/first-bases/documents/Native Mac OS 8.6.classic",
+                "id": "636980ec-5a82-4a68-aa9b-623dfad80046",
+                "name": "Native Mac OS 8.6",
+                "running": false
+            }
+        ],
+        "scale": 1,
+        "shaded": false,
+        "version": "4.6.0",
+        "webview": false,
+        "width": 940
+    },
+    "steps": [
+        {
+            "action": "download",
+            "elapsed": 4725,
+            "passed": true,
+            "step": 0
+        },
+        {
+            "action": "capture",
+            "elapsed": 31,
+            "passed": true,
+            "step": 1
+        },
+        {
+            "action": "start",
+            "elapsed": 998,
+            "passed": true,
+            "step": 2
+        },
+        {
+            "action": "guestReady",
+            "elapsed": 116,
+            "passed": true,
+            "step": 3
+        },
+        {
+            "action": "wait",
+            "elapsed": 45051,
+            "passed": true,
+            "step": 4
+        },
+        {
+            "action": "capture",
+            "elapsed": 148,
+            "passed": true,
+            "step": 5
+        },
+        {
+            "action": "nativePointer",
+            "elapsed": 86,
+            "passed": true,
+            "step": 6
+        },
+        {
+            "action": "nativeKey",
+            "elapsed": 111,
+            "passed": true,
+            "step": 7
+        },
+        {
+            "action": "wait",
+            "elapsed": 1539,
+            "passed": true,
+            "step": 8
+        },
+        {
+            "action": "capture",
+            "elapsed": 133,
+            "passed": true,
+            "step": 9
+        },
+        {
+            "action": "pause",
+            "elapsed": 98,
+            "passed": true,
+            "step": 10
+        },
+        {
+            "action": "resume",
+            "elapsed": 101,
+            "passed": true,
+            "step": 11
+        },
+        {
+            "action": "shutdown",
+            "elapsed": 110,
+            "passed": true,
+            "step": 12
+        },
+        {
+            "action": "stopped",
+            "elapsed": 1100,
+            "passed": true,
+            "step": 13
+        },
+        {
+            "action": "download",
+            "elapsed": 5093,
+            "passed": true,
+            "step": 14
+        },
+        {
+            "action": "capture",
+            "elapsed": 42,
+            "passed": true,
+            "step": 15
+        },
+        {
+            "action": "start",
+            "elapsed": 168,
+            "passed": true,
+            "step": 16
+        },
+        {
+            "action": "guestReady",
+            "elapsed": 114,
+            "passed": true,
+            "step": 17
+        },
+        {
+            "action": "wait",
+            "elapsed": 45055,
+            "passed": true,
+            "step": 18
+        },
+        {
+            "action": "capture",
+            "elapsed": 157,
+            "passed": true,
+            "step": 19
+        },
+        {
+            "action": "nativePointer",
+            "elapsed": 66,
+            "passed": true,
+            "step": 20
+        },
+        {
+            "action": "nativeKey",
+            "elapsed": 112,
+            "passed": true,
+            "step": 21
+        },
+        {
+            "action": "wait",
+            "elapsed": 1556,
+            "passed": true,
+            "step": 22
+        },
+        {
+            "action": "capture",
+            "elapsed": 159,
+            "passed": true,
+            "step": 23
+        },
+        {
+            "action": "pause",
+            "elapsed": 71,
+            "passed": true,
+            "step": 24
+        },
+        {
+            "action": "resume",
+            "elapsed": 103,
+            "passed": true,
+            "step": 25
+        },
+        {
+            "action": "shutdown",
+            "elapsed": 110,
+            "passed": true,
+            "step": 26
+        },
+        {
+            "action": "stopped",
+            "elapsed": 1199,
+            "passed": true,
+            "step": 27
+        },
+        {
+            "action": "download",
+            "elapsed": 5563,
+            "passed": true,
+            "step": 28
+        },
+        {
+            "action": "capture",
+            "elapsed": 32,
+            "passed": true,
+            "step": 29
+        },
+        {
+            "action": "start",
+            "elapsed": 435,
+            "passed": true,
+            "step": 30
+        },
+        {
+            "action": "guestReady",
+            "elapsed": 42,
+            "passed": true,
+            "step": 31
+        },
+        {
+            "action": "wait",
+            "elapsed": 45057,
+            "passed": true,
+            "step": 32
+        },
+        {
+            "action": "capture",
+            "elapsed": 135,
+            "passed": true,
+            "step": 33
+        },
+        {
+            "action": "nativePointer",
+            "elapsed": 85,
+            "passed": true,
+            "step": 34
+        },
+        {
+            "action": "nativeKey",
+            "elapsed": 109,
+            "passed": true,
+            "step": 35
+        },
+        {
+            "action": "wait",
+            "elapsed": 1542,
+            "passed": true,
+            "step": 36
+        },
+        {
+            "action": "capture",
+            "elapsed": 135,
+            "passed": true,
+            "step": 37
+        },
+        {
+            "action": "pause",
+            "elapsed": 87,
+            "passed": true,
+            "step": 38
+        },
+        {
+            "action": "resume",
+            "elapsed": 110,
+            "passed": true,
+            "step": 39
+        },
+        {
+            "action": "shutdown",
+            "elapsed": 110,
+            "passed": true,
+            "step": 40
+        },
+        {
+            "action": "stopped",
+            "elapsed": 1410,
+            "passed": true,
+            "step": 41
+        }
+    ]
+}

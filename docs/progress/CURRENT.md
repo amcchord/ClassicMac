@@ -1,17 +1,17 @@
-# ClassicMac 4.6 — final native release qualification
+# ClassicMac 4.6 — qualified, awaiting publication
 
-Owned worktree `worktrees/native-desktop`, branch `codex/native-desktop`.
-Native C++/Qt replaces Electron on Windows/Linux, preserving measured Platinum
-pixels, existing machines and single EXE/AppImage downloads. PR #36 provides
-System 7.5.5, Mac OS 8.1 and Mac OS 8.6 and the matching engine changes.
+PR #36 and PR #37 are merged on main (1a5cae8). Native C++/Qt replaces
+Electron on Windows/Linux, with measured Platinum rendering, preserved
+machines/preferences and single EXE/AppImage downloads. Library supports
+System 7.5.5, Mac OS 8.1 and Mac OS 8.6 and matching engines.
 
-Both Proxmox hosts pass the three public base imports, native input and
-lifecycle, both setup routes, 1x/2x UI, minimum size and WindowShade. Final
-renderer source ff11171 fixes list interpolation and the Qt list border;
-final package CI/qualification precedes integration and publication. Mac
-4.6 app/DMG are signed, notarized, stapled and release-verified.
+Both final files pass Proxmox setup, public image import, native input, UI
+at 1x/2x, minimum size, WindowShade and three-base lifecycle checks. Actual
+home captures have zero scaling differences; active homes match between
+platforms. All package inventories pass. Mac app/DMG are signed, notarized,
+stapled and release-verified. Consolidated root Swift/native/packaging checks
+pass; details and exact hashes are in docs/4.6.0-validation.md and evidence.
 
-Next: verify final portable files and inventories, merge PR #37, consolidate
-root validation, publish v4.6 and verify anonymous downloads. Latest remains
-v4.5 until publication. QA VMs170/171 and own RDP session are running.
-Preserve root gxmetal and unrelated worktrees; stop QA hosts after release.
+Next: tag and publish v4.6, verify all anonymous downloads and exact public
+Mac DMG, then stop task QA services and both Proxmox VMs. Latest is v4.5
+until publication. Preserve root gxmetal and unrelated worktrees.

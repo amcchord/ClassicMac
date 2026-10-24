@@ -1,0 +1,219 @@
+{
+    "error": "",
+    "passed": true,
+    "state": {
+        "electron": false,
+        "frontend": "native-qt-cpp",
+        "height": 700,
+        "machines": [
+            {
+                "config": {
+                    "bootFromCD": true,
+                    "cdImagePath": "/opt/ClassicMac/qa46/final46-wizard/documents/Mac OS 9.classic/Install CD.iso",
+                    "classicInputHelpers": true,
+                    "depth": 16,
+                    "diskImageName": "disk.img",
+                    "diskSizeGB": 32,
+                    "graphicsCard": "standard",
+                    "height": 768,
+                    "id": "3f255fb1-690e-4001-bce2-02e9933fc838",
+                    "machineFamily": "powerMacG4",
+                    "name": "Mac OS 9",
+                    "networking": true,
+                    "pramImageName": "pram.img",
+                    "ramMB": 512,
+                    "sound": true,
+                    "tabletInput": true,
+                    "toolsCDInserted": false,
+                    "useEnhancedFramebuffer": true,
+                    "useG4CPU": true,
+                    "useVirtioDisk": false,
+                    "width": 1024
+                },
+                "folder": "/opt/ClassicMac/qa46/final46-wizard/documents/Mac OS 9.classic",
+                "id": "3f255fb1-690e-4001-bce2-02e9933fc838",
+                "name": "Mac OS 9",
+                "running": false
+            },
+            {
+                "config": {
+                    "bootFromCD": false,
+                    "classicInputHelpers": true,
+                    "depth": 8,
+                    "diskImageName": "disk.img",
+                    "diskSizeGB": 2,
+                    "graphicsCard": "standard",
+                    "height": 480,
+                    "id": "a5e9d104-3669-4cbe-92ef-03a8750e4027",
+                    "machineFamily": "quadra800",
+                    "name": "System 7.5.5",
+                    "networking": true,
+                    "pramImageName": "pram.img",
+                    "ramMB": 128,
+                    "sound": true,
+                    "tabletInput": true,
+                    "toolsCDInserted": false,
+                    "useEnhancedFramebuffer": false,
+                    "useG4CPU": false,
+                    "useVirtioDisk": false,
+                    "width": 640
+                },
+                "folder": "/opt/ClassicMac/qa46/final46-wizard/documents/System 7.5.5.classic",
+                "id": "a5e9d104-3669-4cbe-92ef-03a8750e4027",
+                "name": "System 7.5.5",
+                "running": false
+            }
+        ],
+        "scale": 1,
+        "shaded": false,
+        "version": "4.6.0",
+        "webview": false,
+        "width": 940
+    },
+    "steps": [
+        {
+            "action": "setup",
+            "elapsed": 97,
+            "passed": true,
+            "step": 0
+        },
+        {
+            "action": "capture",
+            "elapsed": 111,
+            "passed": true,
+            "step": 1
+        },
+        {
+            "action": "click",
+            "elapsed": 88,
+            "passed": true,
+            "step": 2
+        },
+        {
+            "action": "click",
+            "elapsed": 100,
+            "passed": true,
+            "step": 3
+        },
+        {
+            "action": "click",
+            "elapsed": 99,
+            "passed": true,
+            "step": 4
+        },
+        {
+            "action": "click",
+            "elapsed": 99,
+            "passed": true,
+            "step": 5
+        },
+        {
+            "action": "click",
+            "elapsed": 100,
+            "passed": true,
+            "step": 6
+        },
+        {
+            "action": "file",
+            "elapsed": 100,
+            "passed": true,
+            "step": 7
+        },
+        {
+            "action": "wait",
+            "elapsed": 699,
+            "passed": true,
+            "step": 8
+        },
+        {
+            "action": "click",
+            "elapsed": 100,
+            "passed": true,
+            "step": 9
+        },
+        {
+            "action": "capture",
+            "elapsed": 110,
+            "passed": true,
+            "step": 10
+        },
+        {
+            "action": "click",
+            "elapsed": 89,
+            "passed": true,
+            "step": 11
+        },
+        {
+            "action": "setup",
+            "elapsed": 100,
+            "passed": true,
+            "step": 12
+        },
+        {
+            "action": "click",
+            "elapsed": 99,
+            "passed": true,
+            "step": 13
+        },
+        {
+            "action": "click",
+            "elapsed": 99,
+            "passed": true,
+            "step": 14
+        },
+        {
+            "action": "click",
+            "elapsed": 100,
+            "passed": true,
+            "step": 15
+        },
+        {
+            "action": "combo",
+            "elapsed": 100,
+            "passed": true,
+            "step": 16
+        },
+        {
+            "action": "click",
+            "elapsed": 99,
+            "passed": true,
+            "step": 17
+        },
+        {
+            "action": "click",
+            "elapsed": 99,
+            "passed": true,
+            "step": 18
+        },
+        {
+            "action": "capture",
+            "elapsed": 103,
+            "passed": true,
+            "step": 19
+        },
+        {
+            "action": "click",
+            "elapsed": 97,
+            "passed": true,
+            "step": 20
+        },
+        {
+            "action": "click",
+            "elapsed": 99,
+            "passed": true,
+            "step": 21
+        },
+        {
+            "action": "click",
+            "elapsed": 3699,
+            "passed": true,
+            "step": 22
+        },
+        {
+            "action": "capture",
+            "elapsed": 120,
+            "passed": true,
+            "step": 23
+        }
+    ]
+}

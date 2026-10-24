@@ -1,0 +1,13 @@
+{
+  "source": "ff111715fd5935a06083223415c5aceb2118c0ed",
+  "size": [
+    940,
+    700
+  ],
+  "platforms": [
+    "Debian 13",
+    "Windows 11"
+  ],
+  "state": "active home from packaged native self-test",
+  "differingPixels": 0
+}

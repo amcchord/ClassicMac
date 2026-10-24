@@ -1,0 +1,151 @@
+{
+    "error": "",
+    "passed": true,
+    "state": {
+        "electron": false,
+        "frontend": "native-qt-cpp",
+        "height": 700,
+        "machines": [
+            {
+                "config": {
+                    "bootFromCD": false,
+                    "cdImagePath": null,
+                    "classicInputHelpers": true,
+                    "depth": 16,
+                    "diskImageName": "disk.img",
+                    "diskSizeGB": 2,
+                    "floppyImagePath": null,
+                    "graphicsCard": "standard",
+                    "height": 768,
+                    "id": "23e1cedf-6d71-48e8-8f7a-95603bc28bc8",
+                    "machineFamily": "powerMacG4",
+                    "name": "Pixel Mac",
+                    "networking": true,
+                    "pramImageName": "pram.img",
+                    "ramMB": 512,
+                    "sharedFolderPath": null,
+                    "sound": true,
+                    "tabletInput": true,
+                    "toolsCDInserted": false,
+                    "useEnhancedFramebuffer": true,
+                    "useG4CPU": true,
+                    "useVirtioDisk": false,
+                    "width": 1024
+                },
+                "folder": "C:/ClassicMacQA/v46/final46-ui1/documents/Pixel Mac.classic",
+                "id": "23e1cedf-6d71-48e8-8f7a-95603bc28bc8",
+                "name": "Pixel Mac",
+                "running": false
+            }
+        ],
+        "scale": 1,
+        "shaded": false,
+        "version": "4.6.0",
+        "webview": false,
+        "width": 940
+    },
+    "steps": [
+        {
+            "action": "create",
+            "elapsed": 194,
+            "passed": true,
+            "step": 0
+        },
+        {
+            "action": "capture",
+            "elapsed": 54,
+            "passed": true,
+            "step": 1
+        },
+        {
+            "action": "resize",
+            "elapsed": 91,
+            "passed": true,
+            "step": 2
+        },
+        {
+            "action": "capture",
+            "elapsed": 123,
+            "passed": true,
+            "step": 3
+        },
+        {
+            "action": "resize",
+            "elapsed": 98,
+            "passed": true,
+            "step": 4
+        },
+        {
+            "action": "shade",
+            "elapsed": 102,
+            "passed": true,
+            "step": 5
+        },
+        {
+            "action": "capture",
+            "elapsed": 112,
+            "passed": true,
+            "step": 6
+        },
+        {
+            "action": "shade",
+            "elapsed": 110,
+            "passed": true,
+            "step": 7
+        },
+        {
+            "action": "click",
+            "elapsed": 116,
+            "passed": true,
+            "step": 8
+        },
+        {
+            "action": "capture",
+            "elapsed": 120,
+            "passed": true,
+            "step": 9
+        },
+        {
+            "action": "click",
+            "elapsed": 93,
+            "passed": true,
+            "step": 10
+        },
+        {
+            "action": "click",
+            "elapsed": 110,
+            "passed": true,
+            "step": 11
+        },
+        {
+            "action": "capture",
+            "elapsed": 122,
+            "passed": true,
+            "step": 12
+        },
+        {
+            "action": "click",
+            "elapsed": 99,
+            "passed": true,
+            "step": 13
+        },
+        {
+            "action": "click",
+            "elapsed": 110,
+            "passed": true,
+            "step": 14
+        },
+        {
+            "action": "capture",
+            "elapsed": 101,
+            "passed": true,
+            "step": 15
+        },
+        {
+            "action": "click",
+            "elapsed": 104,
+            "passed": true,
+            "step": 16
+        }
+    ]
+}

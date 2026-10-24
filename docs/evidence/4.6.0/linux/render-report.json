@@ -1,0 +1,427 @@
+{
+    "checks": 84,
+    "nativeWidgets": 5,
+    "pixels": [
+        {
+            "differingPixels": 0,
+            "name": "button-normal",
+            "scale": 1
+        },
+        {
+            "differingPixels": 0,
+            "name": "button-normal",
+            "scale": 2
+        },
+        {
+            "differingPixels": 0,
+            "name": "default-normal",
+            "scale": 1
+        },
+        {
+            "differingPixels": 0,
+            "name": "default-normal",
+            "scale": 2
+        },
+        {
+            "differingPixels": 0,
+            "name": "popup-normal",
+            "scale": 1
+        },
+        {
+            "differingPixels": 0,
+            "name": "popup-normal",
+            "scale": 2
+        },
+        {
+            "differingPixels": 0,
+            "name": "checkbox-mixed-normal",
+            "scale": 1
+        },
+        {
+            "differingPixels": 0,
+            "name": "checkbox-mixed-normal",
+            "scale": 2
+        },
+        {
+            "differingPixels": 0,
+            "name": "os9-bevel-normal",
+            "scale": 1
+        },
+        {
+            "differingPixels": 0,
+            "name": "os9-bevel-normal",
+            "scale": 2
+        },
+        {
+            "differingPixels": 0,
+            "name": "checkbox-off-normal",
+            "scale": 1
+        },
+        {
+            "differingPixels": 0,
+            "name": "checkbox-off-normal",
+            "scale": 2
+        },
+        {
+            "differingPixels": 0,
+            "name": "radio-off-normal",
+            "scale": 1
+        },
+        {
+            "differingPixels": 0,
+            "name": "radio-off-normal",
+            "scale": 2
+        },
+        {
+            "differingPixels": 0,
+            "name": "checkbox-on-normal",
+            "scale": 1
+        },
+        {
+            "differingPixels": 0,
+            "name": "checkbox-on-normal",
+            "scale": 2
+        },
+        {
+            "differingPixels": 0,
+            "name": "radio-on-normal",
+            "scale": 1
+        },
+        {
+            "differingPixels": 0,
+            "name": "radio-on-normal",
+            "scale": 2
+        },
+        {
+            "differingPixels": 0,
+            "name": "button-pressed",
+            "scale": 1
+        },
+        {
+            "differingPixels": 0,
+            "name": "button-pressed",
+            "scale": 2
+        },
+        {
+            "differingPixels": 0,
+            "name": "default-pressed",
+            "scale": 1
+        },
+        {
+            "differingPixels": 0,
+            "name": "default-pressed",
+            "scale": 2
+        },
+        {
+            "differingPixels": 0,
+            "name": "popup-pressed",
+            "scale": 1
+        },
+        {
+            "differingPixels": 0,
+            "name": "popup-pressed",
+            "scale": 2
+        },
+        {
+            "differingPixels": 0,
+            "name": "checkbox-mixed-pressed",
+            "scale": 1
+        },
+        {
+            "differingPixels": 0,
+            "name": "checkbox-mixed-pressed",
+            "scale": 2
+        },
+        {
+            "differingPixels": 0,
+            "name": "os9-bevel-pressed",
+            "scale": 1
+        },
+        {
+            "differingPixels": 0,
+            "name": "os9-bevel-pressed",
+            "scale": 2
+        },
+        {
+            "differingPixels": 0,
+            "name": "checkbox-off-pressed",
+            "scale": 1
+        },
+        {
+            "differingPixels": 0,
+            "name": "checkbox-off-pressed",
+            "scale": 2
+        },
+        {
+            "differingPixels": 0,
+            "name": "radio-off-pressed",
+            "scale": 1
+        },
+        {
+            "differingPixels": 0,
+            "name": "radio-off-pressed",
+            "scale": 2
+        },
+        {
+            "differingPixels": 0,
+            "name": "checkbox-on-pressed",
+            "scale": 1
+        },
+        {
+            "differingPixels": 0,
+            "name": "checkbox-on-pressed",
+            "scale": 2
+        },
+        {
+            "differingPixels": 0,
+            "name": "radio-on-pressed",
+            "scale": 1
+        },
+        {
+            "differingPixels": 0,
+            "name": "radio-on-pressed",
+            "scale": 2
+        },
+        {
+            "differingPixels": 0,
+            "name": "button-disabled",
+            "scale": 1
+        },
+        {
+            "differingPixels": 0,
+            "name": "button-disabled",
+            "scale": 2
+        },
+        {
+            "differingPixels": 0,
+            "name": "default-disabled",
+            "scale": 1
+        },
+        {
+            "differingPixels": 0,
+            "name": "default-disabled",
+            "scale": 2
+        },
+        {
+            "differingPixels": 0,
+            "name": "popup-disabled",
+            "scale": 1
+        },
+        {
+            "differingPixels": 0,
+            "name": "popup-disabled",
+            "scale": 2
+        },
+        {
+            "differingPixels": 0,
+            "name": "checkbox-mixed-disabled",
+            "scale": 1
+        },
+        {
+            "differingPixels": 0,
+            "name": "checkbox-mixed-disabled",
+            "scale": 2
+        },
+        {
+            "differingPixels": 0,
+            "name": "os9-bevel-disabled",
+            "scale": 1
+        },
+        {
+            "differingPixels": 0,
+            "name": "os9-bevel-disabled",
+            "scale": 2
+        },
+        {
+            "differingPixels": 0,
+            "name": "checkbox-off-disabled",
+            "scale": 1
+        },
+        {
+            "differingPixels": 0,
+            "name": "checkbox-off-disabled",
+            "scale": 2
+        },
+        {
+            "differingPixels": 0,
+            "name": "radio-off-disabled",
+            "scale": 1
+        },
+        {
+            "differingPixels": 0,
+            "name": "radio-off-disabled",
+            "scale": 2
+        },
+        {
+            "differingPixels": 0,
+            "name": "checkbox-on-disabled",
+            "scale": 1
+        },
+        {
+            "differingPixels": 0,
+            "name": "checkbox-on-disabled",
+            "scale": 2
+        },
+        {
+            "differingPixels": 0,
+            "name": "radio-on-disabled",
+            "scale": 1
+        },
+        {
+            "differingPixels": 0,
+            "name": "radio-on-disabled",
+            "scale": 2
+        },
+        {
+            "differingPixels": 0,
+            "name": "group",
+            "scale": 1
+        },
+        {
+            "differingPixels": 0,
+            "name": "group",
+            "scale": 2
+        },
+        {
+            "differingPixels": 0,
+            "name": "sunken",
+            "scale": 1
+        },
+        {
+            "differingPixels": 0,
+            "name": "sunken",
+            "scale": 2
+        },
+        {
+            "differingPixels": 0,
+            "name": "focus",
+            "scale": 1
+        },
+        {
+            "differingPixels": 0,
+            "name": "focus",
+            "scale": 2
+        },
+        {
+            "differingPixels": 0,
+            "name": "progress-0",
+            "scale": 1
+        },
+        {
+            "differingPixels": 0,
+            "name": "progress-0",
+            "scale": 2
+        },
+        {
+            "differingPixels": 0,
+            "name": "progress-1",
+            "scale": 1
+        },
+        {
+            "differingPixels": 0,
+            "name": "progress-1",
+            "scale": 2
+        },
+        {
+            "differingPixels": 0,
+            "name": "os8-close",
+            "scale": 1
+        },
+        {
+            "differingPixels": 0,
+            "name": "os8-close",
+            "scale": 2
+        },
+        {
+            "differingPixels": 0,
+            "name": "os9-close-pressed",
+            "scale": 1
+        },
+        {
+            "differingPixels": 0,
+            "name": "os9-close-pressed",
+            "scale": 2
+        },
+        {
+            "differingPixels": 0,
+            "name": "os8-zoom",
+            "scale": 1
+        },
+        {
+            "differingPixels": 0,
+            "name": "os8-zoom",
+            "scale": 2
+        },
+        {
+            "differingPixels": 0,
+            "name": "os9-zoom-pressed",
+            "scale": 1
+        },
+        {
+            "differingPixels": 0,
+            "name": "os9-zoom-pressed",
+            "scale": 2
+        },
+        {
+            "differingPixels": 0,
+            "name": "os8-collapse",
+            "scale": 1
+        },
+        {
+            "differingPixels": 0,
+            "name": "os8-collapse",
+            "scale": 2
+        },
+        {
+            "differingPixels": 0,
+            "name": "os9-collapse-pressed",
+            "scale": 1
+        },
+        {
+            "differingPixels": 0,
+            "name": "os9-collapse-pressed",
+            "scale": 2
+        },
+        {
+            "differingPixels": 0,
+            "name": "os9-window-active",
+            "scale": 1
+        },
+        {
+            "differingPixels": 0,
+            "name": "os9-window-active",
+            "scale": 2
+        },
+        {
+            "differingPixels": 0,
+            "name": "os9-window-inactive",
+            "scale": 1
+        },
+        {
+            "differingPixels": 0,
+            "name": "os9-window-inactive",
+            "scale": 2
+        },
+        {
+            "differingPixels": 0,
+            "name": "os9-window-collapsed",
+            "scale": 1
+        },
+        {
+            "differingPixels": 0,
+            "name": "os9-window-collapsed",
+            "scale": 2
+        },
+        {
+            "differingPixels": 0,
+            "name": "system-ascii",
+            "scale": 1
+        },
+        {
+            "differingPixels": 0,
+            "name": "system-ascii",
+            "scale": 2
+        }
+    ],
+    "result": "passed"
+}

@@ -1,0 +1,29 @@
+{
+  "integratedCommit": "1a5cae8a32bfd63aa522ea9a200f9f5cf8773006",
+  "nativeSource": "ff111715fd5935a06083223415c5aceb2118c0ed",
+  "baseImageAndMacSource": "52b775e83998b743a2585b83a9560bd2153eea17",
+  "nativeCodeMatchesQualifiedCommit": true,
+  "macCodeMatchesNotarizedBuild": true,
+  "windowsCI": 40106495101,
+  "linuxCI": 40106493052,
+  "swift": {
+    "tests": 136,
+    "skipped": 2,
+    "failures": 0,
+    "liveSystem755Import": true
+  },
+  "native": {
+    "independentPixelComparisons": 84,
+    "fontAdvances": 95,
+    "nativeComposites": 5,
+    "startupProfiles": 20,
+    "wholeHomeScaleDifferences": 0,
+    "crossPlatformActiveHomeDifferences": 0,
+    "passed": true
+  },
+  "packagingRegressionTests": 15,
+  "appNotary": "23e07921-8082-4ddb-9410-4ea75c807941",
+  "dmgNotary": "5c008529-b4d0-4fd5-8abb-2a17023617b7",
+  "dmgVerification": "passed",
+  "rollback": "v4.5.0 retained"
+}

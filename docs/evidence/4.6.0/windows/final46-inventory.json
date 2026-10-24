@@ -1,0 +1,10 @@
+{
+    "source":  "ff111715fd5935a06083223415c5aceb2118c0ed",
+    "platform":  "Windows",
+    "packagedFiles":  415,
+    "runtimeFiles":  238,
+    "allHashesMatch":  true,
+    "noElectronOrBrowser":  true,
+    "frontendMagic":  "4D-5A",
+    "singleExecutableSha256":  "a4610f6440db47993125a8ca2f76e4d67a2585c9f8f75a6191b217a3e718d7d3"
+}

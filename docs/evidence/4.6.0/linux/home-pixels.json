@@ -1,0 +1,13 @@
+{
+  "source": "ff111715fd5935a06083223415c5aceb2118c0ed",
+  "platform": "Debian 13 Proxmox",
+  "oneSize": [
+    940,
+    700
+  ],
+  "twoSize": [
+    1880,
+    1400
+  ],
+  "differingPixels": 0
+}
