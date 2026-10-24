@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Bundle the native executable, dynamic Qt libraries and QEMU in one portable EXE."""
 import hashlib,json,os,re,shutil,subprocess,sys
+from package_common import finish_runtime
 from pathlib import Path
 root=Path(__file__).resolve().parents[2]
 build=Path(sys.argv[1]).resolve(); prefix=Path(sys.executable).resolve().parents[1]
@@ -25,7 +26,7 @@ for pattern in ['libssl-*.dll','libcrypto-*.dll']:
     for source in (prefix/'bin').glob(pattern):stage(source)
 (app/'qt.conf').write_text('[Paths]\nPlugins=plugins\n')
 shutil.copytree(root/'output/desktop/runtime',app/'runtime',dirs_exist_ok=True)
-shutil.rmtree(app/'runtime/Browser',ignore_errors=True)
+finish_runtime(root,app/'runtime')
 shutil.copyfile(root/'THIRD_PARTY_NOTICES.md',app/'ThirdPartyNotices.md')
 shutil.copytree(prefix/'share/licenses',app/'Licenses/MSYS2',dirs_exist_ok=True)
 (app/'manifest-sha256.json').write_text(json.dumps({str(p.relative_to(app)).replace('\\','/'):hashlib.sha256(p.read_bytes()).hexdigest() for p in app.rglob('*') if p.is_file() and p.name!='manifest-sha256.json'},indent=2)+'\n')

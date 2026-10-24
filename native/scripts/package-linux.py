@@ -2,6 +2,7 @@
 """Stage the ELF frontend, its dynamic Qt closure and the engines as an AppImage."""
 from pathlib import Path
 import hashlib,json,os,re,shutil,subprocess,sys,urllib.request
+from package_common import finish_runtime
 root=Path(__file__).resolve().parents[2];build=Path(sys.argv[1]).resolve()
 out=root/'output/native-package';app=out/'ClassicMac.AppDir';app.mkdir(parents=True,exist_ok=True)
 lib=app/'lib';lib.mkdir(exist_ok=True);seen=set()
@@ -24,7 +25,7 @@ for group in ['platforms','platforminputcontexts','xcbglintegrations','tls','ima
         if 'eglfs' in source.name or 'vnc' in source.name or 'linuxfb' in source.name:continue
         target=app/'plugins'/group/source.name;target.parent.mkdir(parents=True,exist_ok=True);shutil.copyfile(source,target);deps(source)
 (app/'qt.conf').write_text('[Paths]\nPlugins=plugins\n')
-shutil.copytree(root/'output/desktop/runtime',app/'runtime',dirs_exist_ok=True);shutil.rmtree(app/'runtime/Browser',ignore_errors=True)
+shutil.copytree(root/'output/desktop/runtime',app/'runtime',dirs_exist_ok=True);finish_runtime(root,app/'runtime')
 shutil.copyfile(root/'THIRD_PARTY_NOTICES.md',app/'ThirdPartyNotices.md')
 notices=app/'Licenses';notices.mkdir(exist_ok=True)
 for f in lib.iterdir():

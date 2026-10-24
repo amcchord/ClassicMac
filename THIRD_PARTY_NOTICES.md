@@ -111,10 +111,10 @@ terms as described above.
 
 ## Windows and Linux desktop distributions
 
-The shared desktop front end uses Electron (MIT), Chromium and Node.js.
-Their license notices and Electron's third-party license inventory accompany
-its runtime. QEMU corresponding-source archives accompany each platform's
-release. The Windows runtime stages its MSYS2 dependency license notices;
+ClassicMac 4.6 and later use the native C++/Qt frontend described below.
+ClassicMac 4.1–4.5 used Electron (MIT), Chromium and Node.js; their notices
+and third-party inventories accompany those older releases. QEMU
+corresponding-source archives accompany each platform's release. The Windows runtime stages its MSYS2 dependency license notices;
 the Linux runtime includes distribution copyright notices for its copied
 shared libraries. Linux glibc, graphics/audio drivers and EGL/GLES libraries
 are supplied by the host distribution. Linux builds target Ubuntu 24.04's
