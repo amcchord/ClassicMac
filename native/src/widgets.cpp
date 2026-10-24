@@ -188,11 +188,26 @@ void PProgress::paintEvent(QPaintEvent *) {
   progress(p, value);
   draw(this, p.image);
 }
+class FrameBody : public QWidget {
+  PWindow *owner;
+
+public:
+  explicit FrameBody(PWindow *window) : QWidget(window), owner(window) {}
+  void paintEvent(QPaintEvent *) override {
+    if (!owner->growable || owner->shaded)
+      return;
+    Pixels pixels(17, 17);
+    pixels.sprite(measured()[owner->isActiveWindow() ? "WINDOW_GROW"
+                                                     : "WINDOW_GROW_INACTIVE"]
+                      .toArray());
+    QPainter(this).drawImage(width() - 15, height() - 15, pixels.image);
+  }
+};
 PWindow::PWindow(QString s, QSize size, QWidget *parent)
     : QWidget(parent, Qt::Window | Qt::FramelessWindowHint), title(s) {
   setWindowTitle(s);
   setAttribute(Qt::WA_OpaquePaintEvent);
-  body = new QWidget(this);
+  body = new FrameBody(this);
   body->setAutoFillBackground(true);
   auto palette = body->palette();
   palette.setColor(QPalette::Window, QColor(0xdd, 0xdd, 0xdd));
@@ -216,8 +231,10 @@ void PWindow::resizeEvent(QResizeEvent *) {
   body->setGeometry(6, 22, width() - 13, std::max(0, height() - 29));
 }
 void PWindow::changeEvent(QEvent *e) {
-  if (e->type() == QEvent::ActivationChange)
+  if (e->type() == QEvent::ActivationChange) {
     update();
+    body->update();
+  }
   QWidget::changeEvent(e);
 }
 QString PWindow::hit(QPoint p) const {

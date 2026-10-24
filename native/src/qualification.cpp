@@ -242,10 +242,38 @@ int selfTest(const QString &fixtures, const QString &output) {
     require(capture == expected,
             "Actual native button differs at scale " + QString::number(scale));
   }
+  for (int scale : {1, 2}) {
+    PWindow native("", {333, 169});
+    native.show();
+    QApplication::setActiveWindow(&native);
+    QApplication::processEvents();
+    QImage capture(333 * scale, 169 * scale, QImage::Format_ARGB32);
+    capture.setDevicePixelRatio(scale);
+    capture.fill(face);
+    native.render(&capture);
+    QImage expected(fixtures + "/os9-window-active.png");
+    expected = expected.convertToFormat(QImage::Format_ARGB32)
+                   .scaled(capture.size(), Qt::IgnoreAspectRatio,
+                           Qt::FastTransformation);
+    qint64 differences = 0;
+    for (int y = 0; y < capture.height(); ++y)
+      for (int x = 0; x < capture.width(); ++x) {
+        if (y >= scale && y < 21 * scale && x >= scale && x < 331 * scale)
+          continue;
+        differences += capture.pixel(x, y) != expected.pixel(x, y);
+      }
+    require(
+        differences == 0,
+        QString(
+            "Actual native window/content/grow frame differs at %1x: %2 pixels")
+            .arg(scale)
+            .arg(differences));
+    native.close();
+  }
   if (!output.isEmpty())
     Model::writeJSON(output + "/self-test.json",
                      QJsonObject{{"checks", count},
-                                 {"nativeWidgets", 2},
+                                 {"nativeWidgets", 4},
                                  {"pixels", reports},
                                  {"result", "passed"}});
   std::printf("Passed %d independent pixel captures, 95 glyph advances, native "

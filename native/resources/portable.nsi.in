@@ -19,10 +19,29 @@ Section
   SetOutPath "$PLUGINSDIR\ClassicMac"
   File /r "@APP@"
   ${GetParameters} $R0
-  ClearErrors
-  ${GetOptions} "$R0" "--extract=" $R1
-  IfErrors run
-  StrCmp $R1 "" run
+  # Parse our one extraction option without FileFunc's option-separator rule,
+  # which treats unquoted hyphens inside directory names as new options.
+  StrCpy $R3 $R0
+  StrCpy $R4 $R3 1
+  StrCmp $R4 '$"' 0 checkoption
+  StrCpy $R4 $R3 1 -1
+  StrCmp $R4 '$"' 0 checkoption
+  StrLen $R4 $R3
+  IntOp $R4 $R4 - 2
+  StrCpy $R3 $R3 $R4 1
+checkoption:
+  StrCpy $R4 $R3 10
+  StrCmp $R4 "--extract=" 0 run
+  StrCpy $R1 $R3 "" 10
+  StrCpy $R4 $R1 1
+  StrCmp $R4 '$"' 0 extract
+  StrCpy $R4 $R1 1 -1
+  StrCmp $R4 '$"' 0 failed
+  StrLen $R4 $R1
+  IntOp $R4 $R4 - 2
+  StrCpy $R1 $R1 $R4 1
+extract:
+  StrCmp $R1 "" failed
   ClearErrors
   CreateDirectory "$R1"
   CopyFiles /SILENT "$PLUGINSDIR\ClassicMac\*.*" "$R1"

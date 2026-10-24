@@ -385,7 +385,7 @@ PWindow *App::guest(Engine *e) {
   screen->helpers = e->machine.config["classicInputHelpers"].toBool();
   v->addWidget(screen, 1);
   auto controls = new QHBoxLayout;
-  controls->setContentsMargins(8, 0, 8, 6);
+  controls->setContentsMargins(8, 0, 24, 6);
   controls->setSpacing(10);
   auto pause = button(
       "Pause",
