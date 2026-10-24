@@ -12,6 +12,20 @@ int main(int argc, char **argv) {
   installPlatinumStyle();
   auto args = app.arguments();
   try {
+    if (args.contains("--catalog-check")) {
+      auto rows = Library::load();
+      QSet<QString> ids;
+      for (auto row : rows)
+        ids.insert(row.toObject()["id"].toString());
+      for (auto id :
+           {"system-7.5.5-base-v1", "mac-os-8.1-base-v1", "mac-os-8.6-base-v1"})
+        if (!ids.contains(id))
+          Model::fail("Missing public base image.");
+      std::printf("Native HTTPS catalog check passed: %lld editions, including "
+                  "all three classic bases.\n",
+                  static_cast<long long>(rows.size()));
+      return 0;
+    }
     if (args.contains("--self-test")) {
       int i = args.indexOf("--self-test");
       return selfTest(args.value(i + 1), args.value(i + 2));

@@ -236,7 +236,7 @@ QStringList argumentsFor(const Machine &m, int port, bool silent) {
     fail("Copland requires the macOS edition.");
 #ifdef Q_OS_WIN
   if (!s("sharedFolderPath").isEmpty())
-    fail("Host folder sharing requires Linux or macOS. Turn it off in Get Info "
+    fail("Host folder sharing requires Linux or macOS. Turn it off in Media "
          "for Windows.");
   QString audio = "dsound";
 #elif defined(Q_OS_MACOS)

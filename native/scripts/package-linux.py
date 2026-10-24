@@ -11,6 +11,13 @@ def deps(source):
         if f.name in seen or f.name.startswith(('libc.so','libm.so','libdl.so','libpthread.so','librt.so','libresolv.so','ld-linux')):continue
         seen.add(f.name);shutil.copyfile(f,lib/f.name);deps(f)
 shutil.copyfile(build/'classicmac',app/'classicmac');(app/'classicmac').chmod(0o755);deps(build/'classicmac')
+# Qt's OpenSSL backend dlopens libssl, so ldd does not report it. Bundle the
+# matching pair; a newer host libssl cannot use this build's older libcrypto.
+listing=subprocess.check_output(['ldconfig','-p'],text=True)
+for soname in ['libssl.so.3','libcrypto.so.3']:
+    match=re.search(r'\s'+re.escape(soname)+r' .* => (/\S+)',listing)
+    if not match:raise SystemExit('Missing TLS runtime '+soname)
+    source=Path(match[1]);shutil.copyfile(source,lib/soname);seen.add(soname);deps(source)
 plugin=Path(subprocess.check_output(['qtpaths6','--query','QT_INSTALL_PLUGINS'],text=True).strip())
 for group in ['platforms','platforminputcontexts','xcbglintegrations','tls','imageformats','wayland-shell-integration','wayland-decoration-client','wayland-graphics-integration-client']:
     for source in (plugin/group).glob('*.so'):

@@ -704,6 +704,10 @@ void App::showMedia() {
   };
   for (auto key :
        QStringList{"cdImagePath", "floppyImagePath", "sharedFolderPath"}) {
+#ifdef Q_OS_WIN
+    if (key == "sharedFolderPath" && m->config[key].toString().isEmpty())
+      continue;
+#endif
     QString title = key == "cdImagePath"       ? "CD image"
                     : key == "floppyImagePath" ? "Floppy image"
                                                : "Shared folder";
@@ -737,8 +741,12 @@ void App::showMedia() {
     chooseButton->setEnabled(!currentEngine() && (key != "floppyImagePath" ||
                                                   m->family() == "quadra800"));
     row->addWidget(chooseButton);
+#ifdef Q_OS_WIN
+    if (key == "sharedFolderPath")
+      chooseButton->hide();
+#endif
     auto eject = button(
-        "Eject",
+        key == "sharedFolderPath" ? "Turn Off" : "Eject",
         [&, key] {
           auto c = m->config;
           c.remove(key);
