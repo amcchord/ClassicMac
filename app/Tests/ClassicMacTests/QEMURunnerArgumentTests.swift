@@ -38,6 +38,33 @@ final class QEMURunnerArgumentTests: XCTestCase {
         )
     }
 
+    func testVirtioStartupAndCompatibilityCDHaveSelectedBootDeviceFirst() {
+        for fromCD in [false, true] {
+            var vm = config(cdImagePath: fromCD ? "/tmp/install.iso" : nil,
+                            bootFromCD: fromCD, toolsCDInserted: false,
+                            useG4CPU: false, tabletInput: false)
+            vm.useVirtioDisk = true
+            let args = QEMUManager.buildArguments(for: vm)
+            let disks = optionValues("-device", in: args).filter { $0.hasPrefix("virtio-blk-pci,") }
+            XCTAssertEqual(disks, fromCD
+                ? ["virtio-blk-pci,drive=classicmac-cd-boot,addr=0xf", "virtio-blk-pci,drive=startup0,addr=0x10"]
+                : ["virtio-blk-pci,drive=startup0,addr=0xf"])
+            XCTAssertTrue(optionValues("-prom-env", in: args).contains("boot-device=/pci@f2000000/scsi@f/disk:\\\\:tbxi"))
+            XCTAssertTrue(optionValues("-device", in: args).contains { $0.hasPrefix("loader,") })
+            XCTAssertTrue(args.contains("-nodefaults"))
+            XCTAssertFalse(args.contains("-icount"))
+            XCTAssertEqual(optionValues("-M", in: args), ["mac99,via=cuda,usb=off,audiodev=snd0"])
+            XCTAssertEqual(optionValues("-nic", in: args), ["user,model=rtl8139"])
+            XCTAssertTrue(optionValues("-global", in: args).contains("cuda.idle-irq-ms=50"))
+            XCTAssertTrue(optionValues("-global", in: args).contains("rtl8139.tx-delay-ns=1000000"))
+            XCTAssertFalse(args.contains("usb-mouse,id=classicmac-game-mouse"))
+            if !fromCD { XCTAssertFalse(optionValues("-drive", in: args).contains { $0.contains("if=ide") }) }
+            XCTAssertFalse(optionValues("-drive", in: args).contains { $0.contains("disk.img,format=raw,media=disk") })
+        }
+        let native = QEMUManager.buildArguments(for: config(cdImagePath: nil, bootFromCD: false))
+        XCTAssertFalse(native.contains("virtio-blk-pci,drive=startup0"))
+    }
+
     func testPowerMacIncludesInputSprocketHIDMouseWithAndWithoutTablet() {
         for tablet in [true, false] {
             let args = QEMUManager.buildArguments(for: config(tabletInput: tablet))

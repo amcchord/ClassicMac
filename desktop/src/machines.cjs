@@ -32,9 +32,11 @@ function validate(value) {
   if (!['standard', 'atiRadeon'].includes(c.graphicsCard)) throw new Error('Unknown graphics card.');
   for (const key of ['sound', 'networking', 'tabletInput', 'classicInputHelpers', 'useG4CPU', 'useEnhancedFramebuffer']) c[key] ??= true;
   for (const key of ['bootFromCD', 'toolsCDInserted']) c[key] ??= false;
-  for (const key of ['sound', 'networking', 'tabletInput', 'classicInputHelpers', 'useG4CPU', 'useEnhancedFramebuffer', 'bootFromCD', 'toolsCDInserted']) {
+  c.useVirtioDisk ??= false;
+  for (const key of ['sound', 'networking', 'tabletInput', 'classicInputHelpers', 'useG4CPU', 'useVirtioDisk', 'useEnhancedFramebuffer', 'bootFromCD', 'toolsCDInserted']) {
     if (typeof c[key] !== 'boolean') throw new Error(`Invalid ${key} option.`);
   }
+  if (c.machineFamily !== 'powerMacG4') c.useVirtioDisk = false;
   for (const key of ['cdImagePath', 'floppyImagePath', 'sharedFolderPath']) {
     if (c[key] != null && (typeof c[key] !== 'string' || c[key].includes('\0'))) throw new Error(`Invalid ${key}.`);
   }

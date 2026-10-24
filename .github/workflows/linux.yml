@@ -71,11 +71,11 @@ jobs:
           sudo chown root:root output/desktop/packages/linux-unpacked/chrome-sandbox
           sudo chmod 4755 output/desktop/packages/linux-unpacked/chrome-sandbox
       - name: Qualify the AppImage UI at 1x and 2x
-        run: xvfb-run -a node desktop/tests/ui-smoke.cjs output/desktop/packages/ClassicMac-4.5.0-linux-x64.AppImage output/desktop/ui-smoke
+        run: xvfb-run -a node desktop/tests/ui-smoke.cjs output/desktop/packages/ClassicMac-4.6.0-linux-x64.AppImage output/desktop/ui-smoke
       - name: Smoke test packaged Linux application
-        run: xvfb-run -a node desktop/tests/smoke-desktop.cjs output/desktop/packages/ClassicMac-4.5.0-linux-x64.AppImage output/desktop/smoke
+        run: xvfb-run -a node desktop/tests/smoke-desktop.cjs output/desktop/packages/ClassicMac-4.6.0-linux-x64.AppImage output/desktop/smoke
       - name: Test first-run setup through the packaged application
-        run: xvfb-run -a node desktop/tests/setup-smoke.cjs output/desktop/packages/ClassicMac-4.5.0-linux-x64.AppImage output/desktop/setup-smoke
+        run: xvfb-run -a node desktop/tests/setup-smoke.cjs output/desktop/packages/ClassicMac-4.6.0-linux-x64.AppImage output/desktop/setup-smoke
       - uses: actions/upload-artifact@v4
         if: always()
         with:

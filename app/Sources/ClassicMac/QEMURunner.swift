@@ -350,7 +350,7 @@ final class QEMUManager: ObservableObject {
             config.cdImagePath?.isEmpty == false
         // ATI starts run in real time from power-on (no instruction clock).
         let acceleratedHardDiskBoot = config.machineFamily == .powerMacG4 &&
-            !bootingFromUserCD && Self.effectiveGraphicsCard(for: config) == .standard
+            !bootingFromUserCD && !config.useVirtioDisk && Self.effectiveGraphicsCard(for: config) == .standard
         if Self.effectiveGraphicsCard(for: config) == .atiRadeon {
             probeATIRenderer(for: config.id)
         }
@@ -871,7 +871,7 @@ final class QEMUManager: ObservableObject {
             // drivers ignore the advertised feature and keep their software
             // cursor.
             args += ["-global", "VGA.hardware-cursor=on"]
-            if !bootingFromUserCD {
+            if !bootingFromUserCD && !config.useVirtioDisk {
                 // Let QEMU recognize Finder directly in guest VRAM and perform
                 // the clock handoff without full-frame screenshots or a VNC
                 // client. BootClockHandoff above remains a 15-second fallback.
@@ -924,21 +924,26 @@ final class QEMUManager: ObservableObject {
         // before its IDE driver is active. Default G4/Mac OS 9 starts use the
         // ordinary IDE CD directly so Installer keeps its native source path.
         let bootingFromUserCD = config.bootFromCD && config.cdImagePath?.isEmpty == false
-        let bootingG3CompatibilityCD = bootingFromUserCD && !config.useG4CPU
+        let bootingG3CompatibilityCD = bootingFromUserCD && (!config.useG4CPU || config.useVirtioDisk)
         let deferToolsMedia = bootingFromUserCD
         let sharing = config.hasSharedFolder && !bootingFromUserCD
         let tablet = config.tabletInput
+        let legacy = config.useVirtioDisk
         // On Power Macs the Tools HFS image is a read-only Virtio block disk.
         // It uses the same startup NDRV loader as folder sharing and mounts as
         // a normal desktop volume without relying on IDE hot-plug detection.
         let toolsViaVirtio = !deferToolsMedia && config.toolsCDInserted &&
             AppPaths.toolsCD != nil
         let needsNdrvLoader = sharing || tablet || bootingG3CompatibilityCD ||
-            toolsViaVirtio
+            toolsViaVirtio || config.useVirtioDisk
 
         // InputSprocket needs a real HID mouse; the seamless Virtio tablet only
         // updates the classic cursor. The engine selects HID for 3D games.
-        args += ["-device", "usb-mouse,id=classicmac-game-mouse"]
+        if legacy {
+            args += ["-nodefaults", "-global", "cuda.idle-irq-ms=50"]
+        } else {
+            args += ["-device", "usb-mouse,id=classicmac-game-mouse"]
+        }
 
         // Input configuration. QEMU treats whichever pointing device the guest
         // touched last as "the mouse", and the cocoa display only releases the
@@ -956,7 +961,7 @@ final class QEMUManager: ObservableObject {
         // churn across longer sessions and multiple maps.
         args += ["-accel", "tcg,tb-size=512"]
         let ati = effectiveGraphicsCard(for: config) == .atiRadeon
-        if !bootingFromUserCD && !ati {
+        if !bootingFromUserCD && !ati && !legacy {
             // Mac OS 9 spends much of hard-disk startup polling timers for
             // hardware that mac99 does not expose. Instruction timing lets
             // those waits finish without sleeping on the host. The Finder
@@ -966,7 +971,7 @@ final class QEMUManager: ObservableObject {
             // ATI starts run in real time from power-on, as on RetroBoot.
             args += ["-icount", "shift=4,sleep=off"]
         }
-        args += ["-M", "mac99,via=cuda,audiodev=snd0"]
+        args += ["-M", legacy ? "mac99,via=cuda,usb=off,audiodev=snd0" : "mac99,via=cuda,audiodev=snd0"]
         args += ["-cpu", config.useG4CPU ? "7400" : "g3"]
         args += ["-m", String(config.ramMB)]
         args += ["-L", AppPaths.pcBiosDir.path]
@@ -1013,8 +1018,19 @@ final class QEMUManager: ObservableObject {
         args += ["-action", "reboot=shutdown"]
         args += ["-qmp", "unix:\(QEMUManager.qmpSocketURL(for: config.id).path),server=on,wait=off"]
 
-        // Main IDE hard disk.
-        args += ["-drive", "file=\(config.diskImageURL.path),format=raw,media=disk"]
+        if config.useVirtioDisk {
+            // Pin the startup device: OpenBIOS reuses virtio0 for every
+            // block device, so an auxiliary disk must not select the boot disk.
+            args += ["-drive", "file=\(config.diskImageURL.path),format=raw,if=none,id=startup0"]
+            if !bootingG3CompatibilityCD {
+                args += ["-device", "virtio-blk-pci,drive=startup0,addr=0xf"]
+            }
+            if !bootingFromUserCD {
+                args += ["-prom-env", "boot-device=/pci@f2000000/scsi@f/disk:\\\\:tbxi"]
+            }
+        } else {
+            args += ["-drive", "file=\(config.diskImageURL.path),format=raw,media=disk"]
+        }
 
         // Keep a user-facing disc tray present on the optical IDE channel,
         // even when it starts empty, so the running window's Disc menu can
@@ -1027,7 +1043,7 @@ final class QEMUManager: ObservableObject {
         if let escapedCDPath, !escapedCDPath.isEmpty {
             userDisc += ",file=\(escapedCDPath),format=raw"
         }
-        args += ["-drive", userDisc]
+        if !legacy || escapedCDPath?.isEmpty == false { args += ["-drive", userDisc] }
         if bootingG3CompatibilityCD {
             // Mac OS 8.5/8.6 cannot use mac99's KeyLargo IDE controller while
             // the ROM is starting. Mirror the selected disc read-only through
@@ -1039,10 +1055,14 @@ final class QEMUManager: ObservableObject {
                 "-blockdev",
                 "driver=raw,node-name=classicmac-cd-boot,file=classicmac-cd-file,read-only=on",
                 "-device",
-                "virtio-blk-pci,drive=classicmac-cd-boot",
+                legacy ? "virtio-blk-pci,drive=classicmac-cd-boot,addr=0xf" : "virtio-blk-pci,drive=classicmac-cd-boot",
                 "-prom-env",
-                "boot-device=virtio0:\\\\:tbxi"
+                legacy ? "boot-device=/pci@f2000000/scsi@f/disk:\\\\:tbxi" : "boot-device=virtio0:\\\\:tbxi"
             ]
+            if config.useVirtioDisk {
+                // Keep the compatibility CD on the selected, explicit PCI path.
+                args += ["-device", "virtio-blk-pci,drive=startup0,addr=0x10"]
+            }
         } else if bootingFromUserCD {
             // Mac OS 9 on the default G4 profile starts and installs reliably
             // from KeyLargo IDE. Keeping the image on this one path avoids a
@@ -1054,12 +1074,11 @@ final class QEMUManager: ObservableObject {
         // notice live changes to this QEMU IDE tray, so the actual Tools image
         // is exposed below through the reliable Virtio block path instead.
         let toolsDiscIndex = bootingFromUserCD ? 3 : 2
-        args += ["-drive", toolsDriveSpec(
-            for: config,
-            iface: "ide",
-            index: toolsDiscIndex,
-            loadMedia: false
-        )]
+        if !legacy {
+            args += ["-drive", toolsDriveSpec(
+                for: config, iface: "ide", index: toolsDiscIndex, loadMedia: false
+            )]
+        }
 
         if toolsViaVirtio, let toolsCD = AppPaths.toolsCD {
             let escapedToolsPath = toolsCD.path
@@ -1076,7 +1095,8 @@ final class QEMUManager: ObservableObject {
 
         // User-mode networking through the mac99 onboard sungem ethernet.
         if config.networking {
-            args += ["-nic", "user,model=sungem"]
+            args += ["-nic", legacy ? "user,model=rtl8139" : "user,model=sungem"]
+            if legacy { args += ["-global", "rtl8139.romfile=", "-global", "rtl8139.tx-delay-ns=1000000"] }
         } else {
             // QEMU otherwise creates the mac99 machine's default Sungem NIC.
             args += ["-nic", "none"]
