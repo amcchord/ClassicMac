@@ -108,6 +108,7 @@ protected:
   void paintEvent(QPaintEvent *) override;
   void resizeEvent(QResizeEvent *) override;
   void showEvent(QShowEvent *) override;
+  bool event(QEvent *) override;
   void changeEvent(QEvent *) override;
   void mousePressEvent(QMouseEvent *) override;
   void mouseMoveEvent(QMouseEvent *) override;
@@ -122,6 +123,8 @@ private:
   QSize startSize;
   bool resizing = false;
   bool screenConnected = false;
+  QMetaObject::Connection workAreaConnection;
+  void followWorkArea();
   QString hit(QPoint) const;
 };
 class PDialog : public PWindow {

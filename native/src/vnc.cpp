@@ -354,7 +354,7 @@ GuestView::GuestView(VNC *client, QWidget *p) : QWidget(p), vnc(client) {
       if (observedSize == pendingSize) {
         resizeDeadline.stop();
         resizeNotice.clear();
-      } else if (resizeAttempts < 3)
+      } else if (wantsResize && resizeAttempts < 3)
         resizeDebounce.start();
       emit displayChanged();
     }
@@ -372,10 +372,13 @@ QSize GuestView::desiredSize() const {
                                 widthAlignment, fitWindow ? 1 : pixelZoom);
 }
 void GuestView::scheduleResize() {
+  wantsResize = true;
   resizeAttempts = 0;
   resizeDebounce.start();
 }
 void GuestView::requestResize() {
+  if (!wantsResize)
+    return;
   if (desiredSize() == vnc->frame.size()) {
     resizeDeadline.stop();
     if (!resizeNotice.isEmpty()) {
@@ -400,16 +403,24 @@ void GuestView::requestResize() {
 }
 void GuestView::resizeEvent(QResizeEvent *e) {
   QWidget::resizeEvent(e);
-  scheduleResize();
+  if (resizeArmed)
+    scheduleResize();
 }
 void GuestView::showEvent(QShowEvent *e) {
   QWidget::showEvent(e);
-  scheduleResize();
+  if (!shownOnce) {
+    shownOnce = true;
+    // Initial layout/work-area fitting must not ask a classic video driver
+    // to hot-plug its screen while Display Manager is still starting up.
+    QTimer::singleShot(500, this, [this] { resizeArmed = true; });
+  } else if (wantsResize)
+    resizeDebounce.start();
 }
 bool GuestView::event(QEvent *e) {
 #if QT_VERSION >= QT_VERSION_CHECK(6, 6, 0)
   if (e->type() == QEvent::DevicePixelRatioChange) {
-    scheduleResize();
+    if (resizeArmed)
+      scheduleResize();
     update();
   }
 #endif

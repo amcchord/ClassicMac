@@ -108,6 +108,24 @@ public:
 }
 
 void displayTests(const QString &fixtures, const QString &output) {
+  {
+    PDialog dialog("Small display", {420, 250}, nullptr);
+    auto v = dialogLayout(&dialog);
+    auto tall = new QWidget;
+    tall->setMinimumHeight(1000);
+    v->addWidget(tall);
+    auto save = button("Save", [] {}, &dialog, true);
+    buttonRow(v, {save});
+    dialog.show();
+    QApplication::processEvents();
+    check(dialog.rect().contains(QRect(save->mapTo(&dialog, QPoint()), save->size())),
+          "Dialog footer is clipped on a short scaled desktop");
+    auto scroll = dialog.body->findChild<QScrollArea *>();
+    check(scroll && scroll->verticalScrollBar()->maximum() > 0,
+          "Oversized dialog content is unreachable");
+    if (!output.isEmpty()) dialog.grab().save(output + "/small-dialog.png");
+    dialog.close();
+  }
   const QList<qreal> scales = {1, 1.25, 1.5, 1.75, 2, 2.5, 3};
   for (qreal scale : scales) {
     PButton native("", nullptr);

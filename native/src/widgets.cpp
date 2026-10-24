@@ -250,10 +250,26 @@ void PWindow::showEvent(QShowEvent *e) {
   if (!screenConnected && windowHandle()) {
     screenConnected = true;
     connect(windowHandle(), &QWindow::screenChanged, this, [this] {
+      followWorkArea();
       QTimer::singleShot(0, this, &PWindow::fitToScreen);
     });
+    followWorkArea();
   }
   QTimer::singleShot(0, this, &PWindow::fitToScreen);
+}
+void PWindow::followWorkArea() {
+  disconnect(workAreaConnection);
+  if (screen())
+    workAreaConnection = connect(screen(), &QScreen::availableGeometryChanged, this, [this] {
+      QTimer::singleShot(0, this, &PWindow::fitToScreen);
+    });
+}
+bool PWindow::event(QEvent *e) {
+#if QT_VERSION >= QT_VERSION_CHECK(6, 6, 0)
+  if (e->type() == QEvent::DevicePixelRatioChange)
+    QTimer::singleShot(0, this, &PWindow::fitToScreen);
+#endif
+  return QWidget::event(e);
 }
 void PWindow::changeEvent(QEvent *e) {
   if (e->type() == QEvent::ActivationChange) {
@@ -281,6 +297,7 @@ void PWindow::shade() {
     body->show();
     setMinimumSize(expandedMinimum);
     resize(expanded);
+    QTimer::singleShot(0, this, &PWindow::fitToScreen);
   } else {
     if (isMaximized() || isFullScreen())
       showNormal();
@@ -418,13 +435,26 @@ QHBoxLayout *buttonRow(QVBoxLayout *v, const QList<QWidget *> &widgets) {
   h->addStretch();
   for (auto w : widgets)
     h->addWidget(w);
-  v->addLayout(h);
+  auto footer = qobject_cast<QVBoxLayout *>(v->property("dialogFooter").value<QObject *>());
+  (footer ? footer : v)->addLayout(h);
   return h;
 }
 QVBoxLayout *dialogLayout(PWindow *d) {
-  auto v = new QVBoxLayout(d->body);
-  v->setContentsMargins(12, 12, 12, 12);
+  auto outer = new QVBoxLayout(d->body);
+  outer->setContentsMargins(12, 12, 12, 12);
+  outer->setSpacing(12);
+  auto area = new QScrollArea(d->body);
+  area->setFrameShape(QFrame::NoFrame);
+  area->setWidgetResizable(true);
+  area->setAutoFillBackground(false);
+  area->viewport()->setAutoFillBackground(false);
+  auto content = new QWidget;
+  auto v = new QVBoxLayout(content);
+  v->setContentsMargins(0, 0, 0, 0);
   v->setSpacing(12);
+  v->setProperty("dialogFooter", QVariant::fromValue<QObject *>(outer));
+  area->setWidget(content);
+  outer->addWidget(area, 1);
   return v;
 }
 bool question(QWidget *p, const QString &title, const QString &message,
@@ -453,7 +483,8 @@ public:
   PStyle() : QProxyStyle("Fusion") {}
   void drawControl(ControlElement ce, const QStyleOption *o, QPainter *q,
                    const QWidget *w = nullptr) const override {
-    if (ce == CE_ShapedFrame && qobject_cast<const QListWidget *>(w)) {
+    if (ce == CE_ShapedFrame && (qobject_cast<const QListWidget *>(w) ||
+                                qobject_cast<const QPlainTextEdit *>(w))) {
       Pixels p(o->rect.width(), o->rect.height(), 0);
       sunken(p);
       q->save();

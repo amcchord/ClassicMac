@@ -74,6 +74,7 @@ private:
   QSize observedSize, pendingSize;
   QPoint lastPointer;
   int resizeAttempts = 0, wheelRemainder = 0;
+  bool resizeArmed = false, wantsResize = false, shownOnce = false;
   void requestResize();
   quint32 keySym(QKeyEvent *) const;
 };

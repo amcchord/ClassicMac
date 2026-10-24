@@ -1,4 +1,5 @@
 #include "app.h"
+#include "display.h"
 #include <QtConcurrent>
 #include <optional>
 #ifdef Q_OS_WIN
@@ -385,11 +386,19 @@ void App::render() {
 PWindow *App::guest(Engine *e) {
   if (guests.contains(e->machine.id()))
     return guests[e->machine.id()];
-  auto w =
-      new PWindow(e->machine.name(),
-                  {std::max(653, e->machine.config["width"].toInt() + 13),
-                   std::max(550, e->machine.config["height"].toInt() + 84)},
-                  this);
+  const auto display = this->screen();
+  const qreal dpi = display ? display->devicePixelRatio() : devicePixelRatioF();
+  int zoom = NativeDisplay::preferredZoom(dpi);
+  const QSize source(e->machine.config["width"].toInt(), e->machine.config["height"].toInt());
+  auto initialSize = [&](int factor) {
+    return QSize(qCeil(source.width() * factor / dpi) + 13,
+                  qCeil(source.height() * factor / dpi) + 87);
+  };
+  while (zoom > 1 && display &&
+         (initialSize(zoom).width() > display->availableGeometry().width() - 8 ||
+          initialSize(zoom).height() > display->availableGeometry().height() - 8))
+    --zoom;
+  auto w = new PWindow(e->machine.name(), initialSize(zoom), this);
   w->setMinimumSize(480, 240);
   auto v = new QVBoxLayout(w->body);
   v->setContentsMargins(0, 0, 0, 0);
@@ -454,7 +463,7 @@ PWindow *App::guest(Engine *e) {
   controls->addWidget(button("Shut Down", [e] { e->shutdown(); }, w));
   controls->addWidget(button("Paste…", [this, e] { showPaste(e); }, w));
   controls->addStretch();
-  auto fullScreen = button("Full Screen", [] {}, w);
+  auto fullScreen = new PButton("Full Screen", w);
   auto toggleFullScreen = [w, screen, fullScreen] {
         screen->release();
         if (w->isFullScreen())
@@ -475,6 +484,8 @@ PWindow *App::guest(Engine *e) {
     pause->setText(e->paused ? "Resume" : "Pause");
     bool wasPaused = screen->paused;
     screen->paused = e->paused;
+    if (screen->paused)
+      screen->release();
     if (wasPaused && !screen->paused)
       screen->scheduleResize();
   });
@@ -850,6 +861,8 @@ void App::showPaste(Engine *e) {
                      "its US keyboard layout.",
                      &d, "regular", true));
   auto edit = new QPlainTextEdit(&d);
+  edit->setFrameShape(QFrame::Box);
+  edit->setLineWidth(2);
   QFont bitmapFont("RetroBoot Regular");
   bitmapFont.setPixelSize(12);
   bitmapFont.setStyleStrategy(QFont::NoAntialias);

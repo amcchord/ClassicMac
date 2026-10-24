@@ -419,10 +419,23 @@ public:
       } else if (action == "fitScreen") {
         auto w = step["window"].toString() == "guest" && app->currentEngine() ?
                    app->guest(app->currentEngine()) : app;
+        if (step["window"].toString() == "modal")
+          w = qobject_cast<PWindow *>(QApplication::activeModalWidget());
+        require(w, "No window to fit");
         w->fitToScreen();
         QApplication::processEvents();
         require(w->screen()->availableGeometry().contains(w->frameGeometry()),
                 "A window extends outside the Windows work area");
+        for (auto b : w->body->findChildren<PButton *>())
+          if (b->isVisible() && b->parentWidget() == w->body)
+            require(w->rect().contains(QRect(b->mapTo(w, QPoint()), b->size())),
+                    "A dialog/guest footer action is clipped: " + b->text());
+        done = true;
+      } else if (action == "maximize" || action == "restore") {
+        auto w = step["window"].toString() == "guest" && app->currentEngine() ?
+                   app->guest(app->currentEngine()) : app;
+        if (action == "maximize") w->showMaximized();
+        else w->showNormal();
         done = true;
       } else if (action == "assertDpi") {
         const auto scale = step["scale"].toDouble();
@@ -557,14 +570,21 @@ public:
         if (step["window"].toString() == "guest" && app->currentEngine())
           w = app->guest(app->currentEngine());
         w->grab().save(output + "/" + step["name"].toString() + ".png");
+        if (step["nativeScreen"].toBool() && w->screen()) {
+          const auto origin = w->mapToGlobal(QPoint());
+          w->screen()->grabWindow(0, origin.x(), origin.y(), w->width(), w->height())
+              .save(output + "/" + step["name"].toString() + "-desktop.png");
+        }
         Model::writeJSON(output + "/" + step["name"].toString() + ".json", app->evidence());
         if (auto e = app->currentEngine(); e && !e->vnc.frame.isNull())
           e->vnc.frame.save(output + "/" + step["name"].toString() +
                             "-guest.png");
         done = true;
       } else if (action == "shade") {
-        app->shade();
-        require(app->height() == (app->shaded ? 23 : app->expanded.height()),
+        auto w = step["window"].toString() == "guest" && app->currentEngine() ?
+                   app->guest(app->currentEngine()) : app;
+        w->shade();
+        require(w->height() == (w->shaded ? 23 : w->expanded.height()),
                 "WindowShade height");
         done = true;
       } else if (action == "pause" || action == "resume" ||
