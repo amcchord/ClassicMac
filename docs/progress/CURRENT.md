@@ -29,3 +29,10 @@ QA VMs170/171 are running (originally stopped). VM170 has isolated qa462 sources
 runtime and sparse fixture copies and owned Xvfb99. Original fixtures/configs and
 user machines untouched. End own resources and restore both VMs to stopped after
 publication. Root gxmetal and unrelated worktrees preserved.
+
+Latest qualification: see the newest journal entry. Quadra passes all depths and
+real Windows DPI scales. Clean Windows ATI100/125% pass,150% mode changes pass
+but the short shutdown chord missed;500ms hold is being qualified. Readiness must
+be latched before the first resize, so games launched first can service later
+requests. All callback/timer/debug experiments are removed. Fresh b41c9f3 firmware
+and final Windows lifecycle/live-DPI qualification remain. Do not publish yet.

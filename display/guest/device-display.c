@@ -258,7 +258,20 @@ static void apply(void) {
   Handle state = 0;
   Wanted w = {0};
   OSErr err;
-  if (!mailbox || busy || !mailbox[3] || mailbox[3] == lastSerial)
+  if (!mailbox || busy || CurrentExecutionLevel() != kTaskLevel)
+    return;
+  /* Observe Finder even when no resize is pending. A user can launch a game
+   * before the first host resize; later application event loops must then be
+   * allowed to service the request without waiting for Finder again. */
+  if (!finderReady) {
+    memset(&pi, 0, sizeof(pi));
+    pi.processInfoLength = sizeof(pi);
+    if (GetCurrentProcess(&psn) != noErr || psn.lowLongOfPSN <= 2 ||
+        GetProcessInformation(&psn, &pi) != noErr || pi.processSignature != 'MACS')
+      return;
+    finderReady = true;
+  }
+  if (!mailbox[3] || mailbox[3] == lastSerial)
     return;
   if (mailbox[3] != pendingSerial) {
     pendingSerial = mailbox[3];

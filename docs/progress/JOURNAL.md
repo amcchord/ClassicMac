@@ -1546,3 +1546,42 @@ consolidated root checks, publish and verify stable 4.1.1. Retain 4.1.0 for roll
   no diagnostic firmware or CPU fault tracing remains in release sources.
 -914a01b Windows/Linux CI both pass; the retry fix is the next candidate and
   requires fresh builds/qualification. PR39 is draft and attached. No publication.
+
+## 2026-10-24 — final package and depth qualification; ATI application coverage pending
+
+- ad2d158 Windows CI40138862065 and Linux CI40138864040 pass. Exact Linux
+  AppImage passes54 ATI steps and25 enhanced Quadra8.1 steps; inventories
+  verify380/128 Linux and415/238 Windows files. Firmware hashes match tracked
+  cc5c9b6/9eb2bcb. Signed Mac app/DMG notarization and full verifier pass.
+- Quadra7.5.5 passes25 steps at each of six depths1/2/4/8/16/32; all reboots
+  display healthy Finder. Windows exact EXE passes real100/125/150/175/200%
+  DPI Quadra lifecycle/fullscreen/zoom checks (37/43/37/37/37 steps).
+ 62 complete integral guest/window captures compare with zero different pixels.
+- Windowed Quake III keeps a pending mailbox request and applies it on return
+  to Finder. SystemTask and GetOSEvent trap prototypes did not improve it and
+  are removed. A task-level guard and interrupt-safe Finder wakeup prototype
+  are uncommitted/unqualified; do not ship current shared/ndrvloader yet.
+- The older Windows ATI fixture stalls during startup even without a resize.
+  Qualification is switching to the clean106MiB-allocated sparse fixture that
+  passed Linux54 steps. Only isolated QA clones are modified. Standard8.6's
+  owned dirty clone needed its Disk First Aid Done action; it then passes27
+  exact-package resize/reboot steps. Timeout/recovery attempts are retained.
+- PR39 remains draft; no release/tag published. Mac packages must be rebuilt
+  if the firmware prototype qualifies. VM170/171 remain running for testing.
+
+## 2026-10-24 — first-resize readiness defect isolated
+
+- The callback experiments did not address the cause: apply() returned on an
+  empty mailbox before observing Finder. Starting a game before ever resizing
+  therefore left finderReady false. Readiness is now observed independently
+  of a pending request, with an explicit task-level guard. All SystemTask,
+  GetOSEvent and timer/wakeup/debug prototypes are removed from source.
+  Fresh firmware b41c9f3 is under game qualification; it must pass before release.
+- Clean Windows ATI fixture passes37 steps at100% and43 at125% including reboot.
+ 150% passes all resize/fullscreen/zoom checks but loses the short shutdown
+  chord; the native chord now holds500ms to allow four ADB key-downs on busy
+  hosts. Final Windows lifecycle requalification is required. The older stalled
+  ATI fixture is retained separately, not used to claim package qualification.
+- Standard8.6 exact AppImage passes27 steps after the owned clone's Disk First
+  Aid Done action. No original guest files/configs were changed.113 whole
+  integral guest captures currently compare with zero different pixels.

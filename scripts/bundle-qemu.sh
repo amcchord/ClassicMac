@@ -14,6 +14,7 @@
 #   DIST_DIR                         output directory (default dist/); the app is
 #                                    always DIST_DIR/ClassicMac.app
 #   VENDOR_DIR                       prepared engines and licenses (read in place)
+#   QEMU_VENDOR_DIR                  independently prepared QEMU source/build
 #   TOOLS_CD_SRC                     Tools CD image (default dist/ClassicMacTools.iso)
 #   SIGN_IDENTITY                    signing identity, "-" for ad-hoc
 
@@ -22,8 +23,9 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 APP_SRC_DIR="$ROOT_DIR/app"
 VENDOR_DIR="${VENDOR_DIR:-$ROOT_DIR/vendor}"
-QEMU_BUILD_DIR="$VENDOR_DIR/qemu/build"
-QEMU_PCBIOS_DIR="$VENDOR_DIR/qemu/pc-bios"
+QEMU_VENDOR_DIR="${QEMU_VENDOR_DIR:-$VENDOR_DIR/qemu}"
+QEMU_BUILD_DIR="$QEMU_VENDOR_DIR/build"
+QEMU_PCBIOS_DIR="$QEMU_VENDOR_DIR/pc-bios"
 ROM_SRC="$ROOT_DIR/Resources/Quadra800.rom"
 ICON_PNG="$ROOT_DIR/Resources/AppIcon.png"
 ICON_DOC="$ROOT_DIR/Resources/AppIcon.icon"
@@ -149,9 +151,9 @@ done
 [ -f "$BROWSER_SRC/novnc/core/rfb.js" ] || die "Bundled noVNC client is missing."
 [ -f "$BROWSER_SRC/novnc/LICENSE.txt" ] || die "Bundled noVNC license is missing."
 [ -f "$BROWSER_SRC/novnc/vendor/pako/LICENSE" ] || die "Bundled pako license is missing."
-[ -f "$VENDOR_DIR/qemu/LICENSE" ] || die "QEMU LICENSE not found. Run scripts/build-qemu.sh first."
-[ -f "$VENDOR_DIR/qemu/COPYING" ] || die "QEMU GPL license not found. Run scripts/build-qemu.sh first."
-[ -f "$VENDOR_DIR/qemu/COPYING.LIB" ] || die "QEMU LGPL license not found. Run scripts/build-qemu.sh first."
+[ -f "$QEMU_VENDOR_DIR/LICENSE" ] || die "QEMU LICENSE not found. Run scripts/build-qemu.sh first."
+[ -f "$QEMU_VENDOR_DIR/COPYING" ] || die "QEMU GPL license not found. Run scripts/build-qemu.sh first."
+[ -f "$QEMU_VENDOR_DIR/COPYING.LIB" ] || die "QEMU LGPL license not found. Run scripts/build-qemu.sh first."
 command -v dylibbundler >/dev/null 2>&1 || die "dylibbundler is required (brew install dylibbundler)."
 
 # ---------------------------------------------------------------------------
@@ -270,9 +272,9 @@ cp "$VENDOR_DIR/dingusppc/thirdparty/capstone/LICENSE.TXT" "$LICENSES_DIR/Capsto
 cp "$VENDOR_DIR/dingusppc/thirdparty/capstone/LICENSE_LLVM.TXT" "$LICENSES_DIR/Capstone-LLVM.txt"
 cp "$VENDOR_DIR/dingusppc/thirdparty/cubeb/LICENSE" "$LICENSES_DIR/cubeb.txt"
 cp "$THIRD_PARTY_NOTICES" "$RES_DIR/ThirdPartyNotices.md"
-cp "$VENDOR_DIR/qemu/LICENSE" "$LICENSES_DIR/QEMU-LICENSE.txt"
-cp "$VENDOR_DIR/qemu/COPYING" "$LICENSES_DIR/GPL-2.0.txt"
-cp "$VENDOR_DIR/qemu/COPYING.LIB" "$LICENSES_DIR/LGPL-2.1.txt"
+cp "$QEMU_VENDOR_DIR/LICENSE" "$LICENSES_DIR/QEMU-LICENSE.txt"
+cp "$QEMU_VENDOR_DIR/COPYING" "$LICENSES_DIR/GPL-2.0.txt"
+cp "$QEMU_VENDOR_DIR/COPYING.LIB" "$LICENSES_DIR/LGPL-2.1.txt"
 cp "$BROWSER_SRC/novnc/LICENSE.txt" "$LICENSES_DIR/noVNC-MPL-2.0.txt"
 cp "$BROWSER_SRC/novnc/vendor/pako/LICENSE" "$LICENSES_DIR/pako-MIT.txt"
 

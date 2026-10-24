@@ -29,6 +29,17 @@
   <img src="docs/screenshots/powermacg4-macos92.png" width="410" alt="Mac OS 9.2 on the emulated Power Mac G4">
 </p>
 
+## New in ClassicMac 4.6.2
+
+- **ATI and Quadra change their actual resolution.** Resizing the window now
+  changes the Mac desktop through its video driver, including repeated changes,
+  full screen and Windows display scaling. Quadra requires Enhanced Video.
+- **Safer Quadra mode switches.** A bounded gray-screen fill fixes memory
+  corruption at awkward widths and color depths. Requests survive startup.
+- **ATI keeps accelerated graphics.** A firmware display service programs real
+  Radeon modes without installing files in the guest. Modes range from
+  640 × 480 through 1920 × 1440, with widths aligned to eight pixels.
+
 ## New in ClassicMac 4.6.1
 
 - **Windows display scaling.** Fractional scales and Per-Monitor V2 awareness
@@ -377,7 +388,7 @@ Requirements: an Apple Silicon Mac (M1 or later) running macOS 15 or newer.
 # 3. Build the app and bundle QEMU + firmware + dylibs into
 #    dist/ClassicMac.app (code-signed). APP_VERSION, APP_BUILD_VERSION and
 #    DIST_DIR override the version and output folder.
-APP_VERSION=4.6.1 APP_BUILD_VERSION=4.6.1 ./scripts/bundle-qemu.sh
+APP_VERSION=4.6.2 APP_BUILD_VERSION=4.6.2 ./scripts/bundle-qemu.sh
 
 # 4. Notarize and package a distributable disk image (DIST_NAME and
 #    DMG_VOLUME_NAME name the outputs)
@@ -385,7 +396,7 @@ APP_VERSION=4.6.1 APP_BUILD_VERSION=4.6.1 ./scripts/bundle-qemu.sh
 
 # 5. Verify the exact signed/stapled artifact, including versions, Gatekeeper,
 #    the bundled Tools CD and both Power Mac display cards
-./scripts/verify-release.sh dist/ClassicMac.dmg 4.6.1 4.6.1
+./scripts/verify-release.sh dist/ClassicMac.dmg 4.6.2 4.6.2
 ```
 
 All scripts are idempotent and safe to re-run. Building needs the Xcode command line tools and [Homebrew](https://brew.sh).

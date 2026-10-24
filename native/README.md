@@ -56,7 +56,7 @@ with Per-Monitor V2 awareness. Bitmap chrome uses nearest-neighbor rendering.
 Initial windows fit the work area; long dialogs scroll while their action
 buttons stay visible. Moving between DPI/work-area settings updates the view.
 
-Standard Power Macs can change the Mac's resolution
+Standard and ATI Power Macs and Enhanced Video Quadras change the Mac's resolution
 when their window is resized. Requests are debounced and asynchronous; initial
 boot sizing is preserved while classic Display Manager starts. The driver also
 invalidates an earlier dynamic mode during each subsequent mode switch.
@@ -65,10 +65,12 @@ The guest scale menu remembers each Mac's choice in the desktop profile's
 `view.ini`. Sharp Pixels uses integral physical-pixel zoom, adapting the guest
 resolution to the viewport. 1×/2× offer explicit pixel zoom; Fit Window allows
 fractional fitting. A screen too large for the available view is reduced to fit.
-ATI Radeon and all Quadra video retain the resolution selected by Mac OS;
-choose Standard Power Mac graphics after shutdown for live resolution changes.
+ATI uses a firmware PCI display service and the Radeon driver's programmable
+timings, preserving acceleration and the current color depth. Its supported
+range is 640×480–1920×1440, with widths aligned to eight pixels. Enhanced Quadra
+supports arbitrary widths; a bounded gray-screen fill prevents memory corruption
+during Display Manager's temporary depth switches. Pending requests survive startup.
+Built-in Quadra video stays fixed; enable Enhanced Video after shutdown to resize.
 Fixed displays default to Fit Window; an existing saved scale choice is preserved.
-Enhanced Quadra hot-plug is disabled in the native frontend because early mode
-switching can crash classic Display Manager. The shared Quadra firmware is unchanged.
 Alt+Enter toggles full screen;
 Escape releases mouse capture, then exits full screen when no capture is held.
