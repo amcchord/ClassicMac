@@ -1,0 +1,97 @@
+--- a/hw/misc/macio/cuda.c
++++ b/hw/misc/macio/cuda.c
+@@ -661,6 +661,50 @@
+     adb_set_autopoll_enabled(adb_bus, false);
+ }
+ 
++/*
++ * Idle interrupt (RetroBoot).  Mac OS 9 sometimes loses the wakeup of its
++ * main ("blue") task, which runs the 68k interrupt work: Time Manager and
++ * VBL tasks, the cursor, the extension parade, Cuda's own 3 s TIMER_TICKLE.
++ * Lab traces (emulator/reports/startup-stall-20261011.md) show it after a
++ * Cuda transaction during which the decrementer expired inside the 68k Cuda
++ * interrupt handler: the nanokernel keeps handling its decrementer, but the
++ * blue task only runs again after the next *external* interrupt.  A real
++ * Mac has a steady supply of those (the graphics card's VBL interrupt, among
++ * others); QEMU's mac99 has none while Mac OS starts up, so the guest stayed
++ * frozen until the USB controller's frame-number-overflow interrupt, up to
++ * 33 s later.  Any external interrupt ends the freeze at once.
++ *
++ * So while Cuda is idle and the guest uses its shift-register interrupt,
++ * pulse the interrupt line every idle_irq_ms.  The guest sees an interrupt
++ * with nothing to report in IFR, exactly like the empty interrupt it already
++ * takes after every Cuda transaction (the edge latched while its handler
++ * polls the last byte), reads IFR/IER and returns.  idle-irq-ms=0 restores
++ * QEMU's behaviour (guests whose Cuda driver treats an empty interrupt as an
++ * error, e.g. Linux, should use it).
++ */
++static bool cuda_is_idle(CUDAState *s)
++{
++    MOS6522State *ms = MOS6522(&s->mos6522_cuda);
++
++    return (ms->ier & SR_INT) && !(ms->ifr & ms->ier) && (ms->b & TIP) &&
++           s->data_out_index == 0 && s->data_in_index >= s->data_in_size &&
++           !timer_pending(s->sr_delay_timer);
++}
++
++static void cuda_idle_irq(void *opaque)
++{
++    CUDAState *s = opaque;
++    MOS6522State *ms = MOS6522(&s->mos6522_cuda);
++
++    if (cuda_is_idle(s)) {
++        trace_cuda_idle_irq();
++        qemu_irq_raise(ms->irq);
++        qemu_irq_lower(ms->irq);
++    }
++    timer_mod(s->idle_irq_timer,
++              qemu_clock_get_ms(QEMU_CLOCK_VIRTUAL) + s->idle_irq_ms);
++}
++
+ static void cuda_realize(DeviceState *dev, Error **errp)
+ {
+     CUDAState *s = CUDA(dev);
+@@ -682,6 +726,12 @@
+     s->sr_delay_timer = timer_new_ns(QEMU_CLOCK_VIRTUAL, cuda_set_sr_int, s);
+     s->sr_delay_ns = 20 * SCALE_US;
+ 
++    if (s->idle_irq_ms) {
++        s->idle_irq_timer = timer_new_ms(QEMU_CLOCK_VIRTUAL, cuda_idle_irq, s);
++        timer_mod(s->idle_irq_timer,
++                  qemu_clock_get_ms(QEMU_CLOCK_VIRTUAL) + s->idle_irq_ms);
++    }
++
+     adb_register_autopoll_callback(adb_bus, cuda_adb_poll, s);
+ }
+ 
+@@ -702,6 +752,7 @@
+ 
+ static const Property cuda_properties[] = {
+     DEFINE_PROP_UINT64("timebase-frequency", CUDAState, tb_frequency, 0),
++    DEFINE_PROP_UINT32("idle-irq-ms", CUDAState, idle_irq_ms, 0),
+     DEFINE_PROP_BOOL("sr-int-on-access", CUDAState, sr_int_on_access, true),
+     DEFINE_PROP_BOOL("sync-sr-hold", CUDAState, sync_sr_hold, true),
+ };
+--- a/hw/misc/macio/trace-events
++++ b/hw/misc/macio/trace-events
+@@ -9,6 +9,7 @@
+ cuda_packet_receive_data(int i, const uint8_t data) "[%d] 0x%02x"
+ cuda_packet_send(int len) "length %d"
+ cuda_packet_send_data(int i, const uint8_t data) "[%d] 0x%02x"
++cuda_idle_irq(void) ""
+ cuda_sync_response(int tack) "TACK=%d with TIP negated: TREQ follows, shift interrupt delayed"
+ cuda_sync_sr_kept(void) "SR read before the host saw the sync shift interrupt: interrupt kept"
+ cuda_sr_int_due(int64_t late_ns) "shift interrupt due %" PRId64 " ns ago delivered on a VIA read"
+--- a/include/hw/misc/macio/cuda.h
++++ b/include/hw/misc/macio/cuda.h
+@@ -95,6 +95,10 @@
+     uint64_t sr_delay_ns;
+     QEMUTimer *sr_delay_timer;
+ 
++    /* Optional legacy Mac OS idle wakeup, in milliseconds (0 = off). */
++    uint32_t idle_irq_ms;
++    QEMUTimer *idle_irq_timer;
++
+     /* Shift interrupt timing vs guest progress, see mos6522_cuda_read() */
+     bool sr_int_on_access;  /* deliver a due shift interrupt when the VIA is read */
+     bool sync_sr_hold;      /* keep an unseen sync shift interrupt over one SR read */

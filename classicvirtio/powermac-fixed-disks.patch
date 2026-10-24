@@ -1,0 +1,171 @@
+--- a/device-block.c
++++ b/device-block.c
+@@ -216,6 +216,11 @@
+ 	 * ready to consume its first diskEvt. Keep accRun enabled so cAccRun can
+ 	 * retry the mount notification at a bounded rate until a VCB appears.
+ 	 */
++	/* Apple DV35 forbids dNeedTime for native drivers. Keep only the
++	 * existing read-only Tools workaround; startup disks need no retry. */
++#if GENERATINGCFM
++	if (dqe.writeProt)
++#endif
+ 	(*GetDCtlEntry(drvrRefNum))->dCtlFlags |= dNeedTimeMask;
+ 	PostEvent(diskEvt, dqe.dQDrive);
+ 
+@@ -471,6 +476,16 @@
+ 	refreshMedia(true);
+ }
+ 
++/* Power Mac block devices are fixed disks (Tools and legacy startup disks).
++ * The 68k transport also carries the app's removable floppy-image drive. */
++static bool fixedMedia(void) {
++#if GENERATINGCFM
++	return true;
++#else
++	return dqe.writeProt != 0;
++#endif
++}
++
+ static void refreshMedia(bool postEvent) {
+ 	struct config *config = VConfig;
+ 	uint64_t capacity = config->capacity;
+@@ -481,7 +496,7 @@
+ 	numblocks = capacity > UINT32_MAX ? UINT32_MAX : capacity;
+ 	dqe.driveSize = numblocks;
+ 	dqe.driveS1 = numblocks >> 16;
+-	dqe.diskInPlace = inserted ? (dqe.writeProt ? 8 : 1) : 0;
++	dqe.diskInPlace = inserted ? (fixedMedia() ? 8 : 1) : 0;
+ 
+ 	printf("Device size: %#llx bytes, %#llx blocks\n", capacity*512, capacity);
+ 	if (inserted && !postEvent) {
+@@ -531,8 +546,8 @@
+ static OSErr cDriveInfo(struct CntrlParam *pb) {
+ 	uint32_t ret =
+ 		(0 << 8) |  // set for external, clear for internal
+-		((dqe.writeProt != 0) << 9) |  // set if SCSI, clear if IWM
+-		((dqe.writeProt != 0) << 10) | // set if fixed, clear if removable
++		(fixedMedia() << 9) |  // set if SCSI, clear if IWM
++		(fixedMedia() << 10) | // set if fixed, clear if removable
+ 		(1 << 11) | // set for secondary drives, clear for primary drive
+ 		1;
+ 
+@@ -548,12 +563,12 @@
+ static OSErr cAccRun(struct CntrlParam *pb) {
+ 	/*
+ 	 * Mac OS 9 reliably opens a Virtio startup disk, but may drop the one
+-	 * diskEvt posted while an auxiliary read-only device is loading. Repost it
++	 * diskEvt posted while an auxiliary fixed device is loading. Repost it
+ 	 * occasionally until File Manager has mounted this drive. This turns the
+ 	 * bundled Tools image into a dependable startup volume without flooding
+ 	 * the event queue.
+ 	 */
+-	if (dqe.writeProt && dqe.diskInPlace && !mediaIsMounted()) {
++	if (fixedMedia() && dqe.diskInPlace && !mediaIsMounted()) {
+ 		if (mountRetryCountdown == 0) {
+ 			PostEvent(diskEvt, dqe.dQDrive);
+ 			mountRetryCountdown = 30;
+@@ -679,7 +694,11 @@
+ 		err = sDriveStatus(pb);
+ 	} else if (pb->csCode == kDriverGestaltCode) {
+ 		DriverGestaltParam *gpb = (DriverGestaltParam *)pb;
+-		if (gpb->driverGestaltSelector == 'nmrg') {
++		if (gpb->driverGestaltSelector == kdgSync) {
++			gpb->driverGestaltResponse = 0;
++			GetDriverGestaltSyncResponse(gpb)->behavesSynchronously = true;
++			err = noErr;
++		} else if (gpb->driverGestaltSelector == 'nmrg') {
+ 			err = dgNameRegistryEntry(gpb);
+ 		} else if (gpb->driverGestaltSelector == 'ofpt' || gpb->driverGestaltSelector == 'ofbt') {
+ 			err = dgOpenFirmwareBoot(gpb);
+--- a/ndrvloader.c
++++ b/ndrvloader.c
+@@ -260,48 +260,46 @@
+ 		0);
+ }
+ 
+-/* A normal hard-drive start can still have the read-only ClassicMac Tools
+- * volume on Virtio. Only publish a Virtio Mac OS boot path when OpenBIOS was
+- * explicitly directed to start from one. */
+-static int virtioStartupRequested(void) {
++/* Resolve the selected startup disk, not the first Virtio device in the tree.
++ * Tools, the install CD, and the hard disk can all be Virtio block devices.
++ * Open Firmware aliases resolve to the disk child; Mac OS's NDRV lives on
++ * its PCI parent. Ordinary IDE starts must not inherit a Tools boot path. */
++static long virtioStartupDevice(void) {
+ 	char bootdevice[512] = {};
+-	long optionsph = 0;
+-	long length = 0;
+-
+-	of("finddevice",
+-		1, "/options",
+-		1, &optionsph);
++	long optionsph = 0, length = 0, ph = 0;
++	of("finddevice", 1, "/options", 1, &optionsph);
+ 	if (optionsph == 0 || optionsph == -1) return 0;
+-
+-	of("getprop",
+-		4, optionsph, "boot-device", bootdevice, sizeof bootdevice - 1,
+-		1, &length);
+-	if (length < 6) return 0;
+-	if (length >= sizeof bootdevice) length = sizeof bootdevice - 1;
++	of("getprop", 4, optionsph, "boot-device", bootdevice,
++		sizeof bootdevice - 1, 1, &length);
++	if (length <= 0 || length >= sizeof bootdevice) return 0;
+ 	bootdevice[length] = 0;
+-
+-	return strncmp(bootdevice, "virtio", 6) == 0;
++	for (long i = 0; i < length; i++) {
++		if (bootdevice[i] == ':' || bootdevice[i] == ' ') {
++			bootdevice[i] = 0;
++			break;
++		}
++	}
++	of("finddevice", 1, bootdevice, 1, &ph);
++	for (int depth = 0; depth < 2 && ph != 0 && ph != -1; depth++) {
++		long vendorid = 0, deviceid = 0;
++		of("getprop", 4, ph, "vendor-id", &vendorid, sizeof vendorid, 1, NULL);
++		of("getprop", 4, ph, "device-id", &deviceid, sizeof deviceid, 1, NULL);
++		if (vendorid == 0x1af4 && virtiotype(deviceid) == 2) return ph;
++		of("parent", 1, ph, 1, &ph);
++	}
++	return 0;
+ }
+ 
+ void chainNormalBoot(void) {
+ 	char path[512] = {};
+ 	long pathlen = 0;
+ 
+-	for (long ph=virtioStartupRequested() ? dtroot() : 0;
+-		ph!=0; ph=dtstep(ph)) {
+-		long vendorid = 0, deviceid = 0;
+-		of("getprop",
+-			4, ph, "vendor-id", &vendorid, sizeof vendorid,
+-			1, NULL);
+-		of("getprop",
+-			4, ph, "device-id", &deviceid, sizeof deviceid,
+-			1, NULL);
+-		if (vendorid != 0x1af4 || virtiotype(deviceid) != 2) continue;
+-
++	long ph = virtioStartupDevice();
++	if (ph != 0) {
+ 		of("package-to-path",
+ 			3, ph, path, sizeof path,
+ 			1, &pathlen);
+-		if (pathlen <= 0 || pathlen + 12 >= sizeof path) break;
++		if (pathlen <= 0 || pathlen + 12 >= sizeof path) goto boot;
+ 		path[pathlen] = 0;
+ 		strcat(path, ":,\\\\:tbxi");
+ 
+@@ -318,9 +316,9 @@
+ 		ofprint("Mac OS Virtio startup disk: ");
+ 		ofprint(path);
+ 		ofprint("\n");
+-		break;
+-	}
+-
++	}
++
++boot:
+ 	of("interpret",
+ 		1, "boot",
+ 		0);

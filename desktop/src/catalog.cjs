@@ -5,7 +5,8 @@ const path=require('node:path');
 const {createHash,randomUUID}=require('node:crypto');
 const {createGunzip}=require('node:zlib');
 const {freshConfig,validate,writeJSON}=require('./machines.cjs');
-const CATALOG_URL='https://mcchord.net/classicmac/catalog.json';
+const CATALOG_URL='https://mcchord.net/classicmac/catalog-v2.json';
+const QUADRA_ROM_SHA256='05ad753fb594e656cf078023ec189e09e2a7655a780de993b75b8c51ed6b09ca';
 const limit=140*1073741824;
 const currentVersion=require('../package.json').version;
 function supportedVersion(minimum){const a=currentVersion.split('.').map(Number),b=minimum.split('.').map(Number);for(let i=0;i<3;i++){if((a[i]||0)!==(b[i]||0))return(a[i]||0)>(b[i]||0);}return true;}
@@ -18,6 +19,7 @@ function catalog(data) {
  for(const m of d.machines) {
   if(!/^[a-z0-9][a-z0-9._-]{0,99}$/.test(m.id)||seen.has(m.id)||typeof m.name!=='string'||!m.name.trim()||m.name.length>100||typeof m.summary!=='string'||m.summary.length>1000||!/^\d{1,6}\.\d{1,6}(\.\d{1,6})?$/.test(m.minimumAppVersion)||!Number.isSafeInteger(m.archiveBytes)||m.archiveBytes<=0||m.archiveBytes>limit||!Number.isSafeInteger(m.installedBytes)||m.installedBytes<512||m.installedBytes>limit||! /^[a-f0-9]{64}$/.test(m.sha256)) throw new Error('Invalid Library entry.');
   secureURL(m.archiveURL);seen.add(m.id);
+  if(!['powerMacG4','powerMac7500','quadra800'].includes(m.machineFamily||'powerMacG4'))throw new Error('Unknown Library Mac model.');
  }
  return d.machines;
 }
@@ -89,9 +91,11 @@ async function extract(archive,folder,m,{signal,progress=()=>{}}={}) {
    const checksum=number(header.subarray(148,156));let sum=0;header.forEach((b,i)=>{sum+=i>=148&&i<156?32:b;});
    const name=new TextDecoder('utf-8',{fatal:true}).decode(header.subarray(0,100)).split('\0')[0];
    const allowed=['config.json','disk.img','preview.png'];
+   if(m.machineFamily==='quadra800')allowed.push('Quadra800.rom','pram.img');
    if(checksum!==sum||![0,48].includes(header[156])||header.subarray(157,257).some(Boolean)||header.subarray(345,500).some(Boolean)||!allowed.includes(name)||seen.has(name))throw new Error('Unsafe machine archive member.');
    seen.add(name);const size=number(header.subarray(124,136));
    if(size<=0||size>m.installedBytes-total||(name==='config.json'&&size>65536)||(name==='preview.png'&&size>16*1048576)||(name==='disk.img'&&(size<512||size%512||(m.diskCapacityBytes&&size!==m.diskCapacityBytes))))throw new Error('Archive member size does not match its catalog.');
+   if((name==='Quadra800.rom'&&size!==1048576)||(name==='pram.img'&&![256,512].includes(size)))throw new Error('Invalid Quadra firmware size.');
    const file=await fs.open(path.join(folder,name),'wx',0o600);
    try{
     let position=0;
@@ -109,7 +113,8 @@ async function extract(archive,folder,m,{signal,progress=()=>{}}={}) {
 }
 async function install(m,parent,name,cache,options={}) {
  if(!supportedVersion(m.minimumAppVersion))throw new Error('Update ClassicMac to install this Library edition.');
- if((m.machineFamily||'powerMacG4')!=='powerMacG4')throw new Error('This edition needs the macOS Copland engine.');
+ const family=m.machineFamily||'powerMacG4';
+ if(!['powerMacG4','quadra800'].includes(family))throw new Error('This edition needs the macOS Copland engine.');
  const archive=await download(m,cache,options);
  const stats=await fs.statfs(parent);if(stats.bavail*stats.bsize<m.installedBytes+268435456)throw new Error('There is not enough space to install this Mac.');
  let folder;
@@ -119,13 +124,17 @@ async function install(m,parent,name,cache,options={}) {
  try{
   await extract(archive,folder,m,options);
   const source=JSON.parse(await fs.readFile(path.join(folder,'config.json'),'utf8'));
-  if((source.machineFamily||'powerMacG4')!=='powerMacG4'||source.diskImageName!=='disk.img'||(source.pramImageName||'pram.img')!=='pram.img')throw new Error('The template does not match its Library entry.');
-  const c=freshConfig(name||m.name);for(const key of ['ramMB','width','height','depth','networking','sound','useG4CPU','tabletInput','classicInputHelpers'])if(Object.hasOwn(source,key))c[key]=source[key];
-  c.diskSizeGB=Math.ceil((await fs.stat(path.join(folder,'disk.img'))).size/1073741824);c.toolsCDInserted=true;
+  if((source.machineFamily||'powerMacG4')!==family||source.diskImageName!=='disk.img'||(source.pramImageName||'pram.img')!=='pram.img')throw new Error('The template does not match its Library entry.');
+  if(family==='quadra800'){
+   let rom;try{rom=await fs.readFile(path.join(folder,'Quadra800.rom'));}catch(error){if(error.code!=='ENOENT')throw error;}
+   if(rom&&createHash('sha256').update(rom).digest('hex')!==QUADRA_ROM_SHA256)throw new Error('The Quadra ROM failed its integrity check.');
+  }
+  const c=freshConfig(name||m.name,family);for(const key of ['ramMB','width','height','depth','networking','sound','useG4CPU','useVirtioDisk','tabletInput','classicInputHelpers','useEnhancedFramebuffer'])if(Object.hasOwn(source,key))c[key]=source[key];
+  c.diskSizeGB=Math.ceil((await fs.stat(path.join(folder,'disk.img'))).size/1073741824);c.toolsCDInserted=source.toolsCDInserted??(family==='powerMacG4');
   if(/^(?:os922-(?:superdeluxe|deluxe)|mac-os-9\.2\.1-ati-32gb)-v\d+$/.test(m.id))c.graphicsCard='atiRadeon';
   await writeJSON(path.join(folder,'config.json'),validate(c));
   await writeJSON(path.join(folder,'template-info.json'),{schemaVersion:1,templateID:m.id,osVersion:m.osVersion,archiveSHA256:m.sha256,importedAt:new Date().toISOString()});
   return folder;
- }catch(error){for(const file of ['config.json','disk.img','preview.png','template-info.json'])await fs.rm(path.join(folder,file),{force:true});await fs.rmdir(folder);throw error;}
+ }catch(error){for(const file of ['config.json','disk.img','preview.png','template-info.json','Quadra800.rom','pram.img'])await fs.rm(path.join(folder,file),{force:true});await fs.rmdir(folder);throw error;}
 }
 module.exports={CATALOG_URL,catalog,loadCatalog,download,extract,install,number,supportedVersion};

@@ -26,6 +26,32 @@ test('Archive extraction preserves logical disk size and rejects traversal, link
  }
  await assert.rejects(fs.access(path.join(dir,'escape')));
 });
+test('Quadra archives bound and isolate optional ROM and PRAM',async t=>{
+ const dir=await temp(t),config=Buffer.from('{}'),disk=Buffer.alloc(512),rom=Buffer.alloc(1048576);
+ const archive=path.join(dir,'quadra.gz');
+ for(const [index,firmware] of [[member('Quadra800.rom',rom)],[member('pram.img',Buffer.alloc(256))],[member('pram.img',Buffer.alloc(3))]].entries()){
+  const bytes=gzipSync(Buffer.concat([member('config.json',config),member('disk.img',disk),...firmware,Buffer.alloc(1024)]));
+  await fs.writeFile(archive,bytes);
+  const size=index===0?rom.length:index===1?256:3,m={...entry,installedBytes:config.length+disk.length+size};
+  const ppc=path.join(dir,'ppc'+index);await fs.mkdir(ppc);await assert.rejects(extract(archive,ppc,m),/Unsafe/);
+  const quadra=path.join(dir,'quadra'+index);await fs.mkdir(quadra);
+  if(index===2)await assert.rejects(extract(archive,quadra,{...m,machineFamily:'quadra800'}),/firmware size/);
+  else await extract(archive,quadra,{...m,machineFamily:'quadra800'});
+ }
+});
+
+test('Qualified public classic base archive imports with prepared hardware',async t=>{
+ const env=process.env;
+ if(!env.CLASSIC_BASE_TEST_CATALOG||!env.CLASSIC_BASE_TEST_ARCHIVE||!env.CLASSIC_BASE_TEST_ID){t.skip('Set CLASSIC_BASE_TEST_CATALOG, ARCHIVE and ID');return;}
+ const dir=await temp(t),m=catalog(await fs.readFile(env.CLASSIC_BASE_TEST_CATALOG)).find(m=>m.id===env.CLASSIC_BASE_TEST_ID);assert.ok(m);
+ const cache=path.join(dir,'cache');await fs.mkdir(cache);await fs.copyFile(env.CLASSIC_BASE_TEST_ARCHIVE,path.join(cache,m.sha256+'.tar.gz.part'));
+ const folder=await install(m,dir,m.name,cache),c=JSON.parse(await fs.readFile(path.join(folder,'config.json')));
+ assert.equal(c.machineFamily,m.machineFamily||'powerMacG4');assert.equal(c.ramMB,128);assert.equal(c.toolsCDInserted,false);assert.equal(c.useEnhancedFramebuffer,false);
+ assert.equal(c.width,640);assert.equal(c.height,480);assert.equal(c.depth,c.machineFamily==='quadra800'?8:16);assert.equal(c.cdImagePath,undefined);
+ assert.equal((await fs.stat(path.join(folder,'disk.img'))).size,m.diskCapacityBytes);
+ if(c.machineFamily==='quadra800')assert.equal(createHash('sha256').update(await fs.readFile(path.join(folder,'Quadra800.rom'))).digest('hex'),'05ad753fb594e656cf078023ec189e09e2a7655a780de993b75b8c51ed6b09ca');
+ else {assert.equal(c.useVirtioDisk,true);assert.equal(c.useG4CPU,false);assert.equal(c.tabletInput,false);}
+});
 test('Resumed download requires an exact range and verifies its SHA256',async t=>{
  const dir=await temp(t),bytes=Buffer.from('archive bytes for a resume'),hash=createHash('sha256').update(bytes).digest('hex'),m={...entry,sha256:hash,archiveBytes:bytes.length};
  await fs.writeFile(path.join(dir,hash+'.tar.gz.part'),bytes.subarray(0,7));const original=global.fetch;

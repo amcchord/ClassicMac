@@ -208,7 +208,7 @@ function installHandlers() {
     await engine.forceOff();
   });
   handle('reveal', id => shell.showItemInFolder(lookup(id).folder));
-  handle('catalog', async () => { catalogRows=await catalog.loadCatalog(); return catalogRows.map(m=>({...m,available:(m.machineFamily||'powerMacG4')==='powerMacG4'&&catalog.supportedVersion(m.minimumAppVersion)})); });
+  handle('catalog', async () => { catalogRows=await catalog.loadCatalog(); return catalogRows.map(m=>({...m,available:['powerMacG4','quadra800'].includes(m.machineFamily||'powerMacG4')&&catalog.supportedVersion(m.minimumAppVersion)})); });
   handle('download', async (id,name,quickSetup=false) => {
     if(downloadJob)throw new Error('Finish or pause the current download first.');
     const entry=catalogRows.find(m=>m.id===id);if(!entry)throw new Error('Reload the Library and choose an edition.');
