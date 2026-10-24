@@ -14,13 +14,16 @@ Display Manager startup and rejected attempts.
 ATI uses a dedicated PCI mailbox and a firmware NDRV service; nothing is installed
 in guest disks. Two inactive programmable timing slots alternate through ATI's
 own video driver and Display Manager. Six exact grow/shrink modes plus clean
-shutdown/reboot pass on VM170 (37 steps). Production cleanup adds bounded retries,
-verified completion, safe filter ownership and a 500ms debounce. Qualify this final
-source on Windows/Linux including limits, startup, pause, DPI, full screen and3D.
+shutdown/reboot pass on VM170 (37 steps). Production cleanup passes54 Proxmox steps including early boot,1920×1440, portrait,
+pause/resume, fullscreen, zoom/minimum and clean reboot. Startup trace exposed the
+old helper restoring its boot mode after our first adoption; identical retries
+now reach the guest, bounded requests expire after stable adoption. Final Windows/
+Linux package, DPI, Quadra depth and3D qualification remains.
 
 Mac engines build and pass gates; focused Swift34 tests, native pixels/RFB/input/
 models/export, and bounded-fill test pass. Fresh shared firmware is rebuilt.
-Version4.6.2 is being prepared; no tag/release/PR yet. Start Windows/Linux CI.
+Version4.6.2 is being prepared. PR39 is draft/attached; no tag or release.
+914a01b Windows/Linux CI pass. Build/qualify the final retry-fix candidate.
 
 QA VMs170/171 are running (originally stopped). VM170 has isolated qa462 sources,
 runtime and sparse fixture copies and owned Xvfb99. Original fixtures/configs and

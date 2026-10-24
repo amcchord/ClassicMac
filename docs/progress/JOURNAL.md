@@ -1529,3 +1529,20 @@ consolidated root checks, publish and verify stable 4.1.1. Retain 4.1.0 for roll
   Mac engine rebuild/gates pass. Shared firmware rebuilds from tracked sources;
   package staging refreshes QFB and service firmware. New version4.6.2 staged,
   CI/release validation/publication pending. No release/production change yet.
+
+## 2026-10-24 — startup override and identical-request retry verified
+
+- Production startup trace captured640×480 ->1024×768 ->requested1144×797
+  ->1024×768: the older installed startup helper runs after the first Finder
+  event and restores its configured boot size. QEMU discarded identical host
+  UI-info retries, so a healthy guest could remain at the wrong resolution.
+- Console UI-info now forwards identical requests when the actual surface has
+  left that mode; QFB likewise re-arms its latch. Native retries remain bounded
+  (12 at5s), and relinquish the request after5s of stable adoption so later
+  guest/application mode changes are respected. No fixed boot delay added.
+- Clean final engine/frontend passes54 Proxmox170 steps: early resize, repeated
+  exact modes,1920×1440, portrait, pause/resume, fullscreen, pixel zoom/minimum,
+  clean shutdown and reboot. Earlier54-step failure retained in ignored output;
+  no diagnostic firmware or CPU fault tracing remains in release sources.
+-914a01b Windows/Linux CI both pass; the retry fix is the next candidate and
+  requires fresh builds/qualification. PR39 is draft and attached. No publication.

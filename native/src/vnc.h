@@ -71,7 +71,8 @@ private:
   QSet<quint32> keys;
   int mask = 0;
   bool controlClick = false;
-  QTimer resizeDebounce, resizeDeadline;
+  QTimer resizeDebounce, resizeDeadline, resizeSettled;
+  static constexpr int maxResizeAttempts = 12;
   QSize observedSize, pendingSize;
   QPoint lastPointer;
   int resizeAttempts = 0, wheelRemainder = 0;

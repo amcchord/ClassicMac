@@ -339,10 +339,20 @@ GuestView::GuestView(VNC *client, QWidget *p) : QWidget(p), vnc(client) {
   resizeDebounce.setInterval(250);
   resizeDeadline.setSingleShot(true);
   resizeDeadline.setInterval(5000);
+  resizeSettled.setSingleShot(true);
+  resizeSettled.setInterval(5000);
   connect(&resizeDebounce, &QTimer::timeout, this, &GuestView::requestResize);
+  connect(&resizeSettled, &QTimer::timeout, this, [this] {
+    if (vnc->frame.size() == desiredSize())
+      wantsResize = false;
+  });
   connect(&resizeDeadline, &QTimer::timeout, this, [this] {
     if (vnc->frame.size() != pendingSize) {
-      resizeNotice = "This Mac has kept its current screen size.";
+      if (wantsResize && resizeAttempts < maxResizeAttempts) {
+        resizeNotice = "Waiting for the Mac to change its screen size…";
+        resizeDebounce.start();
+      } else
+        resizeNotice = "This Mac has kept its current screen size.";
       emit displayChanged();
     }
   });
@@ -354,8 +364,12 @@ GuestView::GuestView(VNC *client, QWidget *p) : QWidget(p), vnc(client) {
       if (observedSize == pendingSize) {
         resizeDeadline.stop();
         resizeNotice.clear();
-      } else if (wantsResize && resizeAttempts < 3)
-        resizeDebounce.start();
+        if (wantsResize) resizeSettled.start();
+      } else {
+        resizeSettled.stop();
+        if (wantsResize && resizeAttempts < maxResizeAttempts)
+          resizeDebounce.start();
+      }
       emit displayChanged();
     }
     update();
@@ -373,6 +387,7 @@ QSize GuestView::desiredSize() const {
                                 minimumResolution, maximumResolution);
 }
 void GuestView::scheduleResize() {
+  resizeSettled.stop();
   wantsResize = true;
   resizeAttempts = 0;
   resizeDebounce.start();
@@ -382,6 +397,7 @@ void GuestView::requestResize() {
     return;
   if (desiredSize() == vnc->frame.size()) {
     resizeDeadline.stop();
+    if (!resizeSettled.isActive()) resizeSettled.start();
     if (!resizeNotice.isEmpty()) {
       resizeNotice.clear();
       emit displayChanged();
@@ -390,7 +406,7 @@ void GuestView::requestResize() {
   }
   if (!followsWindow || paused || !isVisible() || !vnc->ready ||
       window()->isMinimized() || desiredSize() == vnc->frame.size() ||
-      resizeAttempts >= 3)
+      resizeAttempts >= maxResizeAttempts)
     return;
   if (vnc->resizeDesktop(desiredSize())) {
     pendingSize = desiredSize();

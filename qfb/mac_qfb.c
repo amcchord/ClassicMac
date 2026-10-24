@@ -596,8 +596,9 @@ static void qfb_ui_info(void *opaque, uint32_t head, QemuUIInfo *info)
         h = QFB_MAX_HEIGHT;
     }
     if (s->regs[QFB_HOST_REQ_WIDTH >> 2] == w &&
-        s->regs[QFB_HOST_REQ_HEIGHT >> 2] == h) {
-        return; /* unchanged: don't nudge the guest */
+        s->regs[QFB_HOST_REQ_HEIGHT >> 2] == h &&
+        s->width == w && s->height == h) {
+        return; /* the guest is still showing the requested mode */
     }
     s->regs[QFB_HOST_REQ_WIDTH >> 2] = w;
     s->regs[QFB_HOST_REQ_HEIGHT >> 2] = h;

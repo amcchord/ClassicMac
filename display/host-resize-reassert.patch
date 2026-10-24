@@ -1,0 +1,17 @@
+--- a/ui/console.c
++++ b/ui/console.c
+@@ -756,8 +756,12 @@
+     if (!dpy_ui_info_supported(con)) {
+         return -1;
+     }
+-    if (memcmp(&con->ui_info, info, sizeof(con->ui_info)) == 0) {
+-        /* nothing changed -- ignore */
++    if (memcmp(&con->ui_info, info, sizeof(con->ui_info)) == 0 &&
++        con->surface && surface_width(con->surface) == info->width &&
++        surface_height(con->surface) == info->height) {
++        /* Ignore only when the guest still shows the requested mode.
++         * Startup helpers and applications can leave that mode after a
++         * successful switch. An explicit retry must reach the device. */
+         return 0;
+     }
+ 
