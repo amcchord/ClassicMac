@@ -1279,3 +1279,8 @@ consolidated root checks, publish and verify stable 4.1.1. Retain 4.1.0 for roll
   application release or physical device change. Existing clients still need the
   companion updates. Next is explicit permission to publish client source and
   integration with D044; image/catalog upload was already authorized.
+
+- Cleanup: every owned guest Mac stopped through native Shut Down. Local network
+  fixtures and the VM175 SSH tunnel stopped after command/PID verification.
+  AustinLand accepted graceful shutdown for owned VM175; private build and proof
+  files remain on its disk. No unrelated VM, worktree or service was changed.
