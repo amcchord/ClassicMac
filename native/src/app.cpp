@@ -389,8 +389,12 @@ PWindow *App::guest(Engine *e) {
   const auto display = this->screen();
   const qreal dpi = display ? display->devicePixelRatio() : devicePixelRatioF();
   QSettings viewSettings(Model::dataDirectory() + "/view.ini", QSettings::IniFormat);
+  const auto &config = e->machine.config;
+  const bool ppc = e->machine.family() == "powerMacG4";
+  const bool cdBoot = config["bootFromCD"].toBool() && !config["cdImagePath"].toString().isEmpty();
+  const bool followsWindow = ppc && (cdBoot || config["graphicsCard"].toString() != "atiRadeon");
   const QString scaleKey = "display/" + e->machine.id() + "/scale";
-  const int savedScale = std::clamp(viewSettings.value(scaleKey, 0).toInt(), 0, 3);
+  const int savedScale = std::clamp(viewSettings.value(scaleKey, followsWindow ? 0 : 3).toInt(), 0, 3);
   int zoom = savedScale == 1 ? 1 : savedScale == 2 ? 2 : NativeDisplay::preferredZoom(dpi);
   const QSize source(e->machine.config["width"].toInt(), e->machine.config["height"].toInt());
   auto initialSize = [&](int factor) {
@@ -409,11 +413,7 @@ PWindow *App::guest(Engine *e) {
   v->setSpacing(6);
   auto screen = new GuestView(&e->vnc, w->body);
   screen->helpers = e->machine.config["classicInputHelpers"].toBool();
-  const auto config = e->machine.config;
-  const bool ppc = e->machine.family() == "powerMacG4";
-  const bool cdBoot = config["bootFromCD"].toBool() && !config["cdImagePath"].toString().isEmpty();
-  screen->followsWindow = ppc ? (cdBoot || config["graphicsCard"].toString() != "atiRadeon")
-                              : config["useEnhancedFramebuffer"].toBool();
+  screen->followsWindow = followsWindow;
   screen->widthAlignment = ppc ? 8 : 1;
   screen->fitWindow = savedScale == 3;
   screen->pixelZoom = savedScale == 1 ? 1 : savedScale == 2 ? 2 : 0;
@@ -702,6 +702,9 @@ void App::showEditor(bool create) {
   v->addLayout(form);
   if (!create && m->family() == "powerMacG4")
     v->addWidget(label("Standard graphics follows the window. ATI Radeon keeps the Mac's selected resolution; use Fit Window to fill the view.",
+                        &d, "small", true));
+  if (!create && m->family() == "quadra800")
+    v->addWidget(label("Quadra video keeps the Mac's selected resolution. Fit Window follows the window; choose Sharp Pixels for integral pixel zoom.",
                         &d, "small", true));
   QMap<QString, PButton *> checks;
   if (!create) {
