@@ -1,6 +1,7 @@
 #pragma once
 #include <QRectF>
 #include <QSize>
+#include <QtMath>
 #include <algorithm>
 #include <cmath>
 
