@@ -268,6 +268,7 @@ int selfTest(const QString &fixtures, const QString &output) {
             "Actual native window/content/grow frame differs at %1x: %2 pixels")
             .arg(scale)
             .arg(differences));
+    native.setMinimumSize(320, 160);
     const auto minimum = native.minimumSize();
     native.shade();
     require(native.height() == 23, "Native window does not shade to 23 pixels");
