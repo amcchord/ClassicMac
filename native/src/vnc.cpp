@@ -365,10 +365,10 @@ GuestView::~GuestView() { release(); }
 QRectF GuestView::screenRect() const {
   if (vnc->frame.isNull())
     return rect();
-  return Display::imageRect(size(), vnc->frame.size(), devicePixelRatioF(), fitWindow, pixelZoom);
+  return NativeDisplay::imageRect(size(), vnc->frame.size(), devicePixelRatioF(), fitWindow, pixelZoom);
 }
 QSize GuestView::desiredSize() const {
-  return Display::requestedSize(size(), fitWindow ? 1 : devicePixelRatioF(),
+  return NativeDisplay::requestedSize(size(), fitWindow ? 1 : devicePixelRatioF(),
                                 widthAlignment, fitWindow ? 1 : pixelZoom);
 }
 void GuestView::scheduleResize() {

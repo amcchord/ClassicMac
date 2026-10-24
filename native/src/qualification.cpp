@@ -416,6 +416,14 @@ public:
           }
         }
         done = true;
+      } else if (action == "fitScreen") {
+        auto w = step["window"].toString() == "guest" && app->currentEngine() ?
+                   app->guest(app->currentEngine()) : app;
+        w->fitToScreen();
+        QApplication::processEvents();
+        require(w->screen()->availableGeometry().contains(w->frameGeometry()),
+                "A window extends outside the Windows work area");
+        done = true;
       } else if (action == "assertDpi") {
         const auto scale = step["scale"].toDouble();
         require(qAbs(app->devicePixelRatioF() - scale) < 0.02, "Qt did not honor the requested display scale");

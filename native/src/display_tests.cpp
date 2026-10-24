@@ -127,13 +127,13 @@ void displayTests(const QString &fixtures, const QString &output) {
     }
     check(actual == expected, "Native button changed reference pixels at DPI " + QString::number(scale));
     for (QSize viewport : {QSize(643, 487), QSize(1001, 713), QSize(1900, 1300)}) {
-      auto target = Display::requestedSize(viewport, scale, 8);
+      auto target = NativeDisplay::requestedSize(viewport, scale, 8);
       check(target.width() % 8 == 0 && target.width() >= 512 && target.height() >= 384,
              "Invalid guest resolution alignment/minimum");
-      auto r = Display::imageRect(viewport, target, scale);
+      auto r = NativeDisplay::imageRect(viewport, target, scale);
       qreal zoom = r.width() * scale / target.width();
-      if (target.width() * Display::preferredZoom(scale) <= qRound(viewport.width() * scale) &&
-          target.height() * Display::preferredZoom(scale) <= qRound(viewport.height() * scale))
+      if (target.width() * NativeDisplay::preferredZoom(scale) <= qRound(viewport.width() * scale) &&
+          target.height() * NativeDisplay::preferredZoom(scale) <= qRound(viewport.height() * scale))
         check(qAbs(zoom - qRound(zoom)) < 0.000001, "Nonintegral guest pixel zoom");
       check(qAbs(r.x() * scale - qRound(r.x() * scale)) < 0.000001 &&
              qAbs(r.y() * scale - qRound(r.y() * scale)) < 0.000001,
@@ -142,7 +142,7 @@ void displayTests(const QString &fixtures, const QString &output) {
     if (!output.isEmpty())
       actual.save(output + "/button-dpi-" + QString::number(scale) + ".png");
   }
-  check(Display::requestedSize({99999, 99999}, 3, 8) == QSize(3840, 2160),
+  check(NativeDisplay::requestedSize({99999, 99999}, 3, 8) == QSize(3840, 2160),
         "Guest resize exceeds display/VRAM limits");
   Peer peer;
   VNC client;

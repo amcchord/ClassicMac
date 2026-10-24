@@ -390,7 +390,7 @@ PWindow *App::guest(Engine *e) {
                   {std::max(653, e->machine.config["width"].toInt() + 13),
                    std::max(550, e->machine.config["height"].toInt() + 84)},
                   this);
-  w->setMinimumSize(480, 360);
+  w->setMinimumSize(480, 240);
   auto v = new QVBoxLayout(w->body);
   v->setContentsMargins(0, 0, 0, 0);
   v->setSpacing(6);
@@ -1109,9 +1109,11 @@ QJsonObject App::evidence() const {
     if (!view)
       continue;
     const auto image = view->screenRect();
+    const auto origin = view->mapTo(w, QPoint());
     displays.append(QJsonObject{
         {"name", e->machine.name()}, {"windowWidth", w->width()}, {"windowHeight", w->height()},
         {"viewportWidth", view->width()}, {"viewportHeight", view->height()},
+        {"viewX", origin.x()}, {"viewY", origin.y()},
         {"frameWidth", e->vnc.frame.width()}, {"frameHeight", e->vnc.frame.height()},
         {"desiredWidth", view->desiredSize().width()}, {"desiredHeight", view->desiredSize().height()},
         {"requestedWidth", e->vnc.lastRequestedSize.width()}, {"requestedHeight", e->vnc.lastRequestedSize.height()},

@@ -4,12 +4,15 @@
 #include <algorithm>
 #include <cmath>
 
-namespace Display {
+namespace NativeDisplay {
 // Windows chrome follows the exact OS DPI. Guest pixels use the closest
 // integral device-pixel zoom; the driver changes resolution to fill the view.
 inline int preferredZoom(qreal dpr) { return std::max(1, qRound(dpr)); }
 inline QSize requestedSize(QSize viewport, qreal dpr, int alignment, int zoomOverride = 0) {
-  const int zoom = zoomOverride > 0 ? zoomOverride : preferredZoom(dpr);
+  int zoom = zoomOverride > 0 ? zoomOverride : preferredZoom(dpr);
+  while (zoom > 1 && (qRound(viewport.width() * dpr) < 512 * zoom ||
+                       qRound(viewport.height() * dpr) < 384 * zoom))
+    --zoom;
   int w = std::clamp(qRound(viewport.width() * dpr) / zoom, 512, 3840);
   int h = std::clamp(qRound(viewport.height() * dpr) / zoom, 384, 2160);
   return {w / alignment * alignment, h};
@@ -29,4 +32,4 @@ inline QRectF imageRect(QSize viewport, QSize source, qreal dpr,
           std::floor((pixels.height() - target.height()) / 2.0) / dpr,
           target.width() / dpr, target.height() / dpr};
 }
-} // namespace Display
+} // namespace NativeDisplay
