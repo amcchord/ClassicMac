@@ -109,6 +109,9 @@ protected:
   void resizeEvent(QResizeEvent *) override;
   void showEvent(QShowEvent *) override;
   bool event(QEvent *) override;
+#ifdef Q_OS_WIN
+  bool nativeEvent(const QByteArray &, void *, qintptr *) override;
+#endif
   void changeEvent(QEvent *) override;
   void mousePressEvent(QMouseEvent *) override;
   void mouseMoveEvent(QMouseEvent *) override;

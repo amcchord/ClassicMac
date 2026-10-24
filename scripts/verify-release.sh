@@ -107,6 +107,20 @@ if [ "$SKIP_REPO_FRESHNESS" != "1" ] && \
   cmp -s "$ROOT_DIR/ppcvid/qemu_vga.ndrv" "$PPC_NDRV" || \
     die "Bundled Power Mac NDRV differs from the freshly built driver"
 fi
+if [ "$SKIP_REPO_FRESHNESS" != "1" ]; then
+  cmp -s "$ROOT_DIR/qfb/mac_qfb.rom" "$APP/Contents/Resources/qemu/pc-bios/mac_qfb.rom" || \
+    die "Bundled Quadra ROM differs from the tracked driver"
+  cmp -s "$ROOT_DIR/shared/ndrvloader" "$APP/Contents/Resources/ndrvloader" || \
+    die "Bundled driver loader differs from the tracked firmware"
+  if [ -f "$ROOT_DIR/ati/host_display.c" ]; then
+    RESIZE_DEVICES="$("$PPC_QEMU" -device help 2>&1)"
+    grep -q 'classicmac-display-control' <<< "$RESIZE_DEVICES" || \
+      die "Bundled Power Mac QEMU lacks the ATI display controller"
+    ATI_RESIZE_HELP="$("$PPC_QEMU" -device ati-vga,help 2>&1)"
+    grep -q 'host-resize-request' <<< "$ATI_RESIZE_HELP" || \
+      die "Bundled ATI device lacks host resize requests"
+  fi
+fi
 
 VERSION="$(plutil -extract CFBundleShortVersionString raw "$PLIST")"
 BUILD="$(plutil -extract CFBundleVersion raw "$PLIST")"

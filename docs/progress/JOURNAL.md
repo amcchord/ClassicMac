@@ -1598,3 +1598,22 @@ consolidated root checks, publish and verify stable 4.1.1. Retain 4.1.0 for roll
 - Fresh final Windows40141731053 and Linux40141732363 builds are dispatched at
  138f56d. Mac app is being repackaged/notarized with b41c9f3 firmware. No
   publication; all final package lifecycle/public checks still required.
+
+## 2026-10-24 — user chooses whole-pixel interface zoom
+
+- User identified uneven title-bar stripes in fractional-DPI captures and
+  explicitly chose whole-pixel UI zoom. The interface now rounds OS scaling to
+  nearest integer zoom (100/125%→1×;150/175/200%→2×), while retaining actual
+  Windows Per-Monitor V2 DPI awareness. Native resize tracking snaps client
+  dimensions to the same grid; X11 size increments use logical pixels.
+- UI evidence separates windowsDpi/windowsScale from uiPixelZoom. Qualification
+  accepts an explicit pixelScale alongside native OS DPI. A new independent
+  checker requires uniform square title-bar blocks and exact matching desktop
+  captures, with a five-real-DPI matrix option. Old125% captures fail as expected;
+  old200% captures pass. Native84-reference/render/protocol/input tests pass.
+-138f56d final Windows ATI150/175/200/125% and Quadra125% lifecycle checks pass,
+  confirming500ms ADB shutdown fixes the previously missed chord. Standard8.6
+  dirty-fixture startup needs a clean clone. These packages are superseded by
+  the whole-pixel UI candidate; no release is published.
+- Final Linux138f package passes54 ATI,25 Quadra,27 Standard steps and all four
+  3D resize modes with clean exit0.135 complete guest captures are exact.

@@ -1,5 +1,8 @@
 #include "widgets.h"
 #include <QStyledItemDelegate>
+#ifdef Q_OS_WIN
+#include <windows.h>
+#endif
 using namespace Platinum;
 static void draw(QWidget *w, const QImage &image) {
   QPainter p(w);
@@ -218,6 +221,7 @@ PWindow::PWindow(QString s, QSize size, QWidget *parent)
   resize(size);
   setMinimumSize(300, 150);
   setFocusPolicy(Qt::StrongFocus);
+  setSizeIncrement(1, 1);
 }
 void PWindow::paintEvent(QPaintEvent *) {
   Pixels p(width(), height());
@@ -271,6 +275,32 @@ bool PWindow::event(QEvent *e) {
 #endif
   return QWidget::event(e);
 }
+#ifdef Q_OS_WIN
+bool PWindow::nativeEvent(const QByteArray &type, void *message, qintptr *result) {
+  auto msg = static_cast<MSG *>(message);
+  const qreal dpr = devicePixelRatioF();
+  const int zoom = qRound(dpr);
+  if (msg->message == WM_SIZING && zoom > 1 && qAbs(dpr - zoom) < 0.001) {
+    auto r = reinterpret_cast<RECT *>(msg->lParam);
+    RECT outer{}, client{};
+    GetWindowRect(msg->hwnd, &outer);
+    GetClientRect(msg->hwnd, &client);
+    const int borderW = outer.right - outer.left - client.right;
+    const int borderH = outer.bottom - outer.top - client.bottom;
+    const int width = qRound(qreal(r->right - r->left - borderW) / zoom) * zoom + borderW;
+    const int height = qRound(qreal(r->bottom - r->top - borderH) / zoom) * zoom + borderH;
+    const bool left = msg->wParam == WMSZ_LEFT || msg->wParam == WMSZ_TOPLEFT || msg->wParam == WMSZ_BOTTOMLEFT;
+    const bool top = msg->wParam == WMSZ_TOP || msg->wParam == WMSZ_TOPLEFT || msg->wParam == WMSZ_TOPRIGHT;
+    if (left) r->left = r->right - width;
+    else r->right = r->left + width;
+    if (top) r->top = r->bottom - height;
+    else r->bottom = r->top + height;
+    *result = TRUE;
+    return true;
+  }
+  return QWidget::nativeEvent(type, message, result);
+}
+#endif
 void PWindow::changeEvent(QEvent *e) {
   if (e->type() == QEvent::ActivationChange) {
     update();

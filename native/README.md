@@ -51,8 +51,11 @@ native widgets and engine and records screenshots, state and results. It
 has no remote listener. Keep qualification output and disposable guests in
 ignored `output/` directories.
 
-Windows honors the OS's exact display scale (including 125%, 150% and 175%)
-with Per-Monitor V2 awareness. Bitmap chrome uses nearest-neighbor rendering.
+Windows tracks OS DPI with Per-Monitor V2 awareness. The pixel-art interface
+snaps to the nearest whole physical-pixel zoom:1× at100/125%,2× at150/175/200%.
+Stripes, glyphs, controls and bevels keep uniform square pixels. Native resize
+tracking also snaps the client size to this grid. Bitmap chrome uses
+nearest-neighbor rendering.
 Initial windows fit the work area; long dialogs scroll while their action
 buttons stay visible. Moving between DPI/work-area settings updates the view.
 

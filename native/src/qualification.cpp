@@ -454,7 +454,9 @@ public:
         done = true;
       } else if (action == "assertDpi") {
         const auto scale = step["scale"].toDouble();
-        require(qAbs(app->devicePixelRatioF() - scale) < 0.02, "Qt did not honor the requested display scale");
+        const auto pixelScale = step["pixelScale"].toDouble(scale);
+        require(qAbs(app->devicePixelRatioF() - pixelScale) < 0.02,
+                "The UI did not use the requested whole-pixel zoom");
 #ifdef Q_OS_WIN
         auto state = app->evidence();
         require(state["perMonitorV2"].toBool(), "The Windows window is not Per-Monitor V2 aware");

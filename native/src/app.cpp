@@ -1165,6 +1165,8 @@ QJsonObject App::evidence() const {
 #ifdef Q_OS_WIN
   const auto hwnd = reinterpret_cast<HWND>(winId());
   result["windowsDpi"] = int(GetDpiForWindow(hwnd));
+  result["windowsScale"] = GetDpiForWindow(hwnd) / 96.0;
+  result["uiPixelZoom"] = devicePixelRatioF();
   result["perMonitorV2"] = bool(AreDpiAwarenessContextsEqual(
       GetWindowDpiAwarenessContext(hwnd), DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2));
   RECT client;

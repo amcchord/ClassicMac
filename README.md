@@ -31,6 +31,9 @@
 
 ## New in ClassicMac 4.6.2
 
+- **Whole-pixel interface zoom.** The Platinum interface snaps to1×,2× and
+  larger whole zoom levels so title-bar stripes, text and bevels stay even at
+  fractional Windows display scales.
 - **ATI and Quadra change their actual resolution.** Resizing the window now
   changes the Mac desktop through its video driver, including repeated changes,
   full screen and Windows display scaling. Quadra requires Enhanced Video.

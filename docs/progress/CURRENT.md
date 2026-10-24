@@ -30,9 +30,9 @@ runtime and sparse fixture copies and owned Xvfb99. Original fixtures/configs an
 user machines untouched. End own resources and restore both VMs to stopped after
 publication. Root gxmetal and unrelated worktrees preserved.
 
-Latest qualification:138f56d fixes first-resize readiness and passes four actual
-mode changes during Quake III rendering. The final Linux CI40141732363 passes;
-Windows40141731053 is building. Mac repackage/notarization/verifier pass with
-b41c9f3 firmware. Final Linux package lifecycle/game tests are running. Finish
-Windows lifecycle/live DPI, integration/preflight, publish and verify all nine
-assets, then restore QA VMs to stopped. No release/tag published yet.
+Latest: user explicitly chose whole-pixel interface zoom after seeing fractional
+hatch distortion. UI now snaps OS scale to integer zoom, with native resize-grid
+snapping and a checker for uniform title bars / exact desktop captures. Focused
+native tests pass; new Windows/Linux packages and five-real-DPI UI qualification
+are next.138f56d ATI/Quadra resizing,3D, Mac packages are qualified, including
+Windows500ms shutdown. Do not publish before the refreshed UI checks. No tag yet.
