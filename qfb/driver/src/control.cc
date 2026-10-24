@@ -1,4 +1,5 @@
 #include "qfb_driver.hh"
+#include "GrayPattern.h"
 
 void qfb_gray_clut(HLocker<Locals>& locals) {
   volatile QFB* qfb = locals->qfb;
@@ -25,14 +26,7 @@ void qfb_gray_pixels(HLocker<Locals>& locals, uint32_t page) {
   uint32_t* row_pointer = reinterpret_cast<uint32_t*>(locals->vram + QFB_VRAM_SLOT_BASE);
   row_pointer += page * qfb->height * (qfb->rowbytes / 4);
   for(uint32_t y = 0; y < qfb->height; ++y) {
-    uint32_t rowbytes_left = qfb->rowbytes;
-    uint32_t* p = row_pointer;
-    while(rowbytes_left > 0) {
-      p[0] = a;
-      p[1] = b;
-      p += 2;
-      rowbytes_left -= 8;
-    }
+    qfb_fill_pattern_row(row_pointer, qfb->rowbytes, a, b);
     uint32_t new_a = ~b, new_b = ~a;
     a = new_a; b = new_b;
     row_pointer += (qfb->rowbytes / 4);
@@ -310,6 +304,8 @@ int qfb_gray_page(CntrlParam* params, DCtlPtr dce) {
   HLocker<Locals> locals(dce->dCtlStorage);
   VDSwitchInfoRec* si
     = *reinterpret_cast<VDSwitchInfoRec**>(params->csParam);
+  if (si->csPage >= qfb_calculate_num_pages(locals->qfb->width, locals->qfb->height, locals->qfb->depth))
+    return controlErr;
   qfb_gray_pixels(locals, si->csPage);
   return noErr;
 }
@@ -406,7 +402,6 @@ int qfb_periodic(CntrlParam* params, DCtlPtr dce) {
 
   uint32_t rw = locals->qfb->host_req_width;
   uint32_t rh = locals->qfb->host_req_height;
-  locals->last_req_serial = serial; /* consider this request handled */
   if(rw == 0 || rh == 0) {
     return noErr;
   }
@@ -427,6 +422,7 @@ int qfb_periodic(CntrlParam* params, DCtlPtr dce) {
   /* Already showing exactly the requested size? Nothing to do. */
   const QfbResolution* cur = qfb_resolution_for_id(*locals, locals->cur_resolution);
   if(cur != nullptr && cur->width == rw && cur->height == rh) {
+    locals->last_req_serial = serial;
     return noErr;
   }
 
@@ -449,7 +445,8 @@ int qfb_periodic(CntrlParam* params, DCtlPtr dce) {
     return noErr; /* the Display Manager won't allow this switch */
   }
   dprintf("\x1B[1mHOST RESIZE -> mode %i (%ux%u)\x1B[0m\n", (int)target, rw, rh);
-  DMSetDisplayMode(gd, target, &depthMode, 0, nullptr);
+  if (DMSetDisplayMode(gd, target, &depthMode, 0, nullptr) == noErr)
+    locals->last_req_serial = serial;
   return noErr;
 }
 

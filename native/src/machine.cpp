@@ -291,6 +291,7 @@ QStringList argumentsFor(const Machine &m, int port, bool silent) {
     } else
       a << "-drive" << "file=" + disk + ",format=raw,media=disk";
     if (ati) {
+      a << "-device" << "classicmac-display-control";
       int w = std::clamp(c["width"].toInt() / 8 * 8, 640, 1920),
           h = std::clamp(c["height"].toInt(), 480, 1440);
       a << "-vga" << "none" << "-device"
@@ -331,14 +332,14 @@ QStringList argumentsFor(const Machine &m, int port, bool silent) {
         << "if=none,id=classicmac-tools,file=" +
                opt(r + "/ClassicMacTools.iso") + ",format=raw,readonly=on"
         << "-device" << "virtio-blk-pci,drive=classicmac-tools";
-    if (b("tabletInput") || tools || legacy) {
+    if (b("tabletInput") || tools || legacy || ati) {
       a << "-device" << "loader,addr=0x4000000,file=" + opt(r + "/ndrvloader")
         << "-prom-env" << "boot-command=init-program go";
       if (b("tabletInput"))
         a << "-device" << "virtio-tablet-pci";
     }
     if (compatCD) {
-      if (!b("tabletInput") && !tools && !legacy)
+      if (!b("tabletInput") && !tools && !legacy && !ati)
         a << "-device" << "loader,addr=0x4000000,file=" + opt(r + "/ndrvloader")
           << "-prom-env" << "boot-command=init-program go";
       a << "-drive"
@@ -407,7 +408,7 @@ QStringList argumentsFor(const Machine &m, int port, bool silent) {
       << "-device"
       << QString(ppc ? "virtio-9p-pci" : "virtio-9p-device") +
              ",fsdev=share0,mount_tag=" + opt(tag);
-    if (ppc && !legacy && !b("tabletInput") && !b("toolsCDInserted"))
+    if (ppc && !legacy && !ati && !b("tabletInput") && !b("toolsCDInserted"))
       a << "-device" << "loader,addr=0x4000000,file=" + opt(r + "/ndrvloader")
         << "-prom-env" << "boot-command=init-program go";
   }

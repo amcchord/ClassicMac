@@ -1497,3 +1497,35 @@ consolidated root checks, publish and verify stable 4.1.1. Retain 4.1.0 for roll
 - Public verification and cleanup records are retained in docs/evidence/4.6.1.
   v4.6.0 remains rollback. Requested implementation, qualification and publication
   are complete, with the explicit Standard-versus-fixed display boundary.
+
+## 2026-10-24 — actual ATI/Quadra resize follow-up started
+
+- User explicitly requests actual guest resolution changes for both cards,
+  Proxmox testing and publication. Owned branch/worktree ati-quadra-resize from
+  root86e7fc0; unrelated root gxmetal and all other worktrees preserved.
+- Started existing QA VMs170/171 (originally stopped), isolated qa462 sources,
+  runtime extraction and sparse test-fixture copies on170. New owned Xvfb99.
+- ATI monitor-change prototype acknowledges HPD but retains its current mode.
+  Testing bundled firmware service with a PCI mailbox and Display Manager calls;
+  no guest disk installation required. QEMU/NDRV changes remain experimental.
+- Quadra first resize reaches normal Finder; second raises error10, identified
+  in MacErrors.h as line-F/FPU exception. Earlier unimplemented-trap terminology
+  was inaccurate. Context, dynamic-ID and SRT variations have not fixed it;
+  now tracing the actual CPU fault. No release or production artifact changed.
+
+## 2026-10-24 — ATI/Quadra actual modes reproduced and corrected
+
+- Quadra fault tracing found an unsigned gray-fill loop underflow on scanlines
+  with four bytes left: it scribbled across guest memory. Original driver plus
+  bounded fill passes real early/grow/shrink/Finder/shutdown;19,974 canary rows
+  cover every width512–3840 at all six depths. Removed experimental event/ROM/
+  ID changes; moved request acknowledgement after successful mode adoption.
+- ATI HPD/EDID alone kept cached modes. Firmware PCI service uses ATI's actual
+  programmable-timing API in application event context, alternates two inactive
+  slots, keeps depth and changes desktop through Display Manager. No guest disk
+  installation. Proxmox170 passes six exact modes and clean reboot (37 steps).
+  Production cleanup/retry/limits still needs final host qualification.
+- Focused Swift34 tests and native pixel/model/RFB/input/export tests pass.
+  Mac engine rebuild/gates pass. Shared firmware rebuilds from tracked sources;
+  package staging refreshes QFB and service firmware. New version4.6.2 staged,
+  CI/release validation/publication pending. No release/production change yet.

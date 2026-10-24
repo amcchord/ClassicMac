@@ -16,9 +16,9 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VENDOR_DIR="$ROOT_DIR/vendor"
 DRIVER_DIR="$ROOT_DIR/qfb/driver"
-RETRO68_SRC="$VENDOR_DIR/Retro68"
-RETRO68_BUILD="$VENDOR_DIR/Retro68-build"
-RETRO68_TOOLCHAIN="$RETRO68_BUILD/toolchain"
+RETRO68_SRC="${RETRO68_SRC:-$VENDOR_DIR/Retro68}"
+RETRO68_BUILD="${RETRO68_BUILD:-$VENDOR_DIR/Retro68-build}"
+RETRO68_TOOLCHAIN="${RETRO68_TOOLCHAIN:-$RETRO68_BUILD/toolchain}"
 RETRO68_REPO="${RETRO68_REPO:-https://github.com/autc04/Retro68.git}"
 
 log() { printf '\n==> %s\n' "$*"; }
@@ -77,6 +77,7 @@ fi
   die "Retro68 toolchain build did not produce m68k-apple-macos-gcc"
 
 export PATH="$RETRO68_TOOLCHAIN/bin:$PATH"
+export CPLUS_INCLUDE_PATH="$RETRO68_TOOLCHAIN/multiversal/CIncludes${CPLUS_INCLUDE_PATH:+:$CPLUS_INCLUDE_PATH}"
 
 # ---------------------------------------------------------------------------
 # 3. Build the driver ROM

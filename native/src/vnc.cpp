@@ -369,7 +369,8 @@ QRectF GuestView::screenRect() const {
 }
 QSize GuestView::desiredSize() const {
   return NativeDisplay::requestedSize(size(), fitWindow ? 1 : devicePixelRatioF(),
-                                widthAlignment, fitWindow ? 1 : pixelZoom);
+                                widthAlignment, fitWindow ? 1 : pixelZoom,
+                                minimumResolution, maximumResolution);
 }
 void GuestView::scheduleResize() {
   wantsResize = true;

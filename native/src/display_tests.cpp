@@ -108,6 +108,10 @@ public:
 }
 
 void displayTests(const QString &fixtures, const QString &output) {
+  check(NativeDisplay::requestedSize({400, 300}, 1, 8, 0, {640, 480}, {1920, 1440}) == QSize(640, 480), "ATI minimum mode");
+  check(NativeDisplay::requestedSize({5000, 4000}, 2, 8, 1, {640, 480}, {1920, 1440}) == QSize(1920, 1440), "ATI hardware envelope");
+  check(NativeDisplay::requestedSize({900, 1400}, 1, 8, 1, {640, 480}, {1920, 1440}) == QSize(896, 1400), "ATI portrait/alignment");
+
   {
     QWidget host;
     host.resize(933, 725);

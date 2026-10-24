@@ -39,6 +39,7 @@ public:
   bool paused = false;
   int widthAlignment = 1;
   int pixelZoom = 0;
+  QSize minimumResolution = {512, 384}, maximumResolution = {3840, 2160};
   QString resizeNotice;
   QString notice = "Starting up…";
   explicit GuestView(VNC *, QWidget *parent = nullptr);

@@ -391,8 +391,7 @@ PWindow *App::guest(Engine *e) {
   QSettings viewSettings(Model::dataDirectory() + "/view.ini", QSettings::IniFormat);
   const auto &config = e->machine.config;
   const bool ppc = e->machine.family() == "powerMacG4";
-  const bool cdBoot = config["bootFromCD"].toBool() && !config["cdImagePath"].toString().isEmpty();
-  const bool followsWindow = ppc && (cdBoot || config["graphicsCard"].toString() != "atiRadeon");
+  const bool followsWindow = ppc || config["useEnhancedFramebuffer"].toBool();
   const QString scaleKey = "display/" + e->machine.id() + "/scale";
   const int savedScale = std::clamp(viewSettings.value(scaleKey, followsWindow ? 0 : 3).toInt(), 0, 3);
   int zoom = savedScale == 1 ? 1 : savedScale == 2 ? 2 : NativeDisplay::preferredZoom(dpi);
@@ -415,6 +414,10 @@ PWindow *App::guest(Engine *e) {
   screen->helpers = e->machine.config["classicInputHelpers"].toBool();
   screen->followsWindow = followsWindow;
   screen->widthAlignment = ppc ? 8 : 1;
+  if (ppc && config["graphicsCard"].toString() == "atiRadeon" && !config["bootFromCD"].toBool()) {
+    screen->minimumResolution = {640, 480};
+    screen->maximumResolution = {1920, 1440};
+  }
   screen->fitWindow = savedScale == 3;
   screen->pixelZoom = savedScale == 1 ? 1 : savedScale == 2 ? 2 : 0;
   v->addWidget(screen, 1);
@@ -701,10 +704,10 @@ void App::showEditor(bool create) {
   }
   v->addLayout(form);
   if (!create && m->family() == "powerMacG4")
-    v->addWidget(label("Standard graphics follows the window. ATI Radeon keeps the Mac's selected resolution; use Fit Window to fill the view.",
+    v->addWidget(label("Standard and ATI Radeon graphics change the Mac's resolution with the window. ATI requires the guest's ATI display software.",
                         &d, "small", true));
   if (!create && m->family() == "quadra800")
-    v->addWidget(label("Quadra video keeps the Mac's selected resolution. Fit Window follows the window; choose Sharp Pixels for integral pixel zoom.",
+    v->addWidget(label("Enhanced Quadra video changes the Mac's resolution with the window. Sharp Pixels keeps complete pixels; built-in video uses a fixed resolution.",
                         &d, "small", true));
   QMap<QString, PButton *> checks;
   if (!create) {
@@ -1147,7 +1150,7 @@ QJsonObject App::evidence() const {
         {"fitWindow", view->fitWindow}, {"pixelZoom", view->pixelZoom},
         {"imageX", image.x()}, {"imageY", image.y()}, {"imageWidth", image.width()}, {"imageHeight", image.height()},
         {"captured", view->captured}, {"relative", e->vnc.relative},
-        {"resizeNotice", view->resizeNotice}});
+        {"resizeNotice", view->resizeNotice}, {"engineLog", e->log}});
   }
   QJsonObject result = {{"frontend", "native-qt-cpp"},
           {"processId", qint64(QCoreApplication::applicationPid())},

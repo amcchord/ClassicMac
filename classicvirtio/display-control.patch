@@ -1,0 +1,39 @@
+--- a/ndrvloader.c
++++ b/ndrvloader.c
+@@ -159,7 +159,7 @@
+ 				break;
+ 			}
+ 
+-			if (!memcmp(mtej, "mtej" "\0\0\0\0" "\x0cpci1af4,", 17)) break;
++			if (!memcmp(mtej, "mtej" "\0\0\0\0" "\x0cpci1af4,", 17) || !memcmp(mtej, "mtej" "\0\0\0\0" "\x0cpci1234,", 17)) break;
+ 		}
+ 		if (!mtej) continue;
+ 
+@@ -185,7 +185,7 @@
+ 
+ 		// Virtio devices only
+ 		int vid = virtiotype(deviceid);
+-		if (vendorid != 0x1af4 || vid == 0) continue;
++		if ((vendorid != 0x1af4 && !(vendorid == 0x1234 && deviceid == 0x1112)) || vid == 0) continue;
+ 
+ 		if (supported[vid].ndrv) {
+ 			long len = 0;
+@@ -338,6 +338,7 @@
+ }
+ 
+ int virtiotype(int deviceid) {
++    if (deviceid == 0x1112) return 63;
+ 	// Legacy Virtio range
+ 	if (deviceid >= 0x1000 && deviceid <= 0x1009) {
+ 		const char table[] = {1, 2, 5, 3, 8, 4, 0, 0, 0, 9};
+--- a/Makefile
++++ b/Makefile
+@@ -18,7 +18,7 @@
+ #     "CLASSIC" means a 68k DRVR for a NuBus device under qemu-system-m68k
+ #     "NDRV" means a PowerPC NDRV for a PCI device under qemu-system-ppc
+ DEVICES_CLASSIC = block 9p input
+-DEVICES_NDRV = block 9p input
++DEVICES_NDRV = block 9p input display
+ 
+ # And these are the C files that each device-*.c depends on (some are arch-specific)
+ SUPPORT := $(filter-out device-%.c,$(wildcard *.c))

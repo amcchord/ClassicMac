@@ -145,6 +145,11 @@ enum ATIDisplay {
     static let startupSize = (width: 640, height: 480)
     static let minimum = (width: 640, height: 480)
     static let maximum = (width: 1920, height: 1440)
+    /// Live modes use the Radeon driver's programmable timings, including portrait.
+    static func windowSize(width: Int, height: Int) -> (width: Int, height: Int) {
+        (min(max(width, minimum.width), maximum.width) / 8 * 8,
+         min(max(height, minimum.height), maximum.height))
+    }
     static let maxPixelClockKHz = 162_000
     static let refreshRates = [75, 60, 50]
 

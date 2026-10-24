@@ -1,24 +1,28 @@
-# Windows display follow-up complete — ClassicMac 4.6.1
+# Actual ATI and Quadra resizing — release qualification
 
-Published stable Latest [v4.6.1](https://github.com/amcchord/ClassicMac/releases/tag/v4.6.1)
-on October 24, 2026. Tagged source431e087; qualified native functional source
-bf9a749. PR #38 merged. All nine fresh anonymous downloads match their checksums;
-the downloaded Mac DMG passes full release verification.
+Owner: `codex/ati-quadra-resize`, contained worktree `worktrees/ati-quadra-resize`.
+User requests actual guest mode changes for ATI and Quadra, Proxmox testing,
+and a new stable release. v4.6.1 / root86e7fc0 remains published Latest/rollback.
 
-Windows honors fractional DPI with Per-Monitor V2. Standard Power Macs change
-resolution with the window; ATI and Quadra displays default to automatic fitting,
-preserving the OS video mode and saved scale choices. Integral physical painting
-preserves complete guest pixels. Dialog actions stay reachable and input releases
-survive focus changes. The repeated-mode Power Mac NDRV fix ships on all hosts.
+Quadra root cause: gray-screen fill subtracts8 from an unsigned byte count.
+A four-byte remainder wraps the counter and overwrites guest memory. The bounded
+word fill passes19,974 width/depth canary cases. The original driver plus the
+fill fix passes early resize, grow/shrink, healthy Finder and shutdown on VM170.
+Experimental callback/ROM/ID changes were removed. Pending requests now survive
+Display Manager startup and rejected attempts.
 
-Final Windows tests pass49/32/16/18 steps and Linux46. All23 complete integral
-guest frames and four Windows desktop captures have zero differing pixels. Both
-package inventories pass. Root consolidated tests pass136 Swift cases (two
-optional Copland skips), native rendering/model/RFB/input/export,15 packaging
-regressions, mode/gamma contracts and syntax. Signed/notarized/stapled Mac passes.
-See [validation](../4.6.1-validation.md) and [evidence](../evidence/4.6.1).
+ATI uses a dedicated PCI mailbox and a firmware NDRV service; nothing is installed
+in guest disks. Two inactive programmable timing slots alternate through ATI's
+own video driver and Display Manager. Six exact grow/shrink modes plus clean
+shutdown/reboot pass on VM170 (37 steps). Production cleanup adds bounded retries,
+verified completion, safe filter ownership and a 500ms debounce. Qualify this final
+source on Windows/Linux including limits, startup, pause, DPI, full screen and3D.
 
-Restored task-only QA configs, removed own scheduled task, ended own RDP/Xvfb,
-and verified VMs170/171 stopped. No temporary notary keys remain. User files,
-root gxmetal and unrelated worktrees are preserved. No catalog/DNS/hosting change.
-v4.6.0 remains available for rollback by promotion to Latest. No required work remains.
+Mac engines build and pass gates; focused Swift34 tests, native pixels/RFB/input/
+models/export, and bounded-fill test pass. Fresh shared firmware is rebuilt.
+Version4.6.2 is being prepared; no tag/release/PR yet. Start Windows/Linux CI.
+
+QA VMs170/171 are running (originally stopped). VM170 has isolated qa462 sources,
+runtime and sparse fixture copies and owned Xvfb99. Original fixtures/configs and
+user machines untouched. End own resources and restore both VMs to stopped after
+publication. Root gxmetal and unrelated worktrees preserved.

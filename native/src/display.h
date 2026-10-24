@@ -9,13 +9,14 @@ namespace NativeDisplay {
 // Windows chrome follows the exact OS DPI. Guest pixels use the closest
 // integral device-pixel zoom; the driver changes resolution to fill the view.
 inline int preferredZoom(qreal dpr) { return std::max(1, qRound(dpr)); }
-inline QSize requestedSize(QSize viewport, qreal dpr, int alignment, int zoomOverride = 0) {
+inline QSize requestedSize(QSize viewport, qreal dpr, int alignment, int zoomOverride = 0,
+                           QSize minimum = {512, 384}, QSize maximum = {3840, 2160}) {
   int zoom = zoomOverride > 0 ? zoomOverride : preferredZoom(dpr);
-  while (zoom > 1 && (qFloor(viewport.width() * dpr) < 512 * zoom ||
-                       qFloor(viewport.height() * dpr) < 384 * zoom))
+  while (zoom > 1 && (qFloor(viewport.width() * dpr) < minimum.width() * zoom ||
+                       qFloor(viewport.height() * dpr) < minimum.height() * zoom))
     --zoom;
-  int w = std::clamp(qFloor(viewport.width() * dpr) / zoom, 512, 3840);
-  int h = std::clamp(qFloor(viewport.height() * dpr) / zoom, 384, 2160);
+  int w = std::clamp(qFloor(viewport.width() * dpr) / zoom, minimum.width(), maximum.width());
+  int h = std::clamp(qFloor(viewport.height() * dpr) / zoom, minimum.height(), maximum.height());
   return {w / alignment * alignment, h};
 }
 inline QRectF imageRect(QSize viewport, QSize source, qreal dpr,

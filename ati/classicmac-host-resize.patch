@@ -1,0 +1,78 @@
+--- a/hw/display/ati.c
++++ b/hw/display/ati.c
+@@ -1290,6 +1290,35 @@
+     .endianness = DEVICE_LITTLE_ENDIAN,
+ };
+ 
++/* Guest software owns the CRTC, mode list and desktop geometry. */
++#include "classicmac_host_display.h"
++static void ati_host_resize(ATIVGAState *s, uint32_t width, uint32_t height)
++{
++    if (ati_is_radeon(s)) {
++        classicmac_display_request(MAX(640, MIN(width, 1920) & ~7U),
++                                  MAX(480, MIN(height, 1440)));
++    }
++}
++static void ati_ui_info(void *opaque, uint32_t head, QemuUIInfo *info)
++{
++    VGACommonState *vga = opaque;
++    ATIVGAState *s = container_of(vga, ATIVGAState, vga);
++    if (!head && info->width && info->height) {
++        ati_host_resize(s, info->width, info->height);
++    }
++}
++static void ati_set_host_resize(Object *o, const char *value, Error **errp)
++{
++    uint32_t width, height;
++    char extra;
++    if (sscanf(value, "%ux%u%c", &width, &height, &extra) != 2 ||
++        !width || !height) {
++        error_setg(errp, "Expected WIDTHxHEIGHT");
++        return;
++    }
++    ati_host_resize(ATI_VGA(o), width, height);
++}
++
+ static void ati_vga_realize(PCIDevice *dev, Error **errp)
+ {
+     ATIVGAState *s = ATI_VGA(dev);
+@@ -1336,7 +1365,9 @@
+     }
+     vga_init(vga, OBJECT(s), pci_address_space(dev),
+              pci_address_space_io(dev), true);
+-    vga->con = graphic_console_init(DEVICE(s), 0, s->vga.hw_ops, vga);
++    s->resize_ops = *vga->hw_ops;
++    s->resize_ops.ui_info = ati_ui_info;
++    vga->con = graphic_console_init(DEVICE(s), 0, &s->resize_ops, vga);
+     if (s->cursor_guest_mode) {
+         vga->cursor_invalidate = ati_cursor_invalidate;
+         vga->cursor_draw_line = ati_cursor_draw_line;
+@@ -1518,6 +1549,7 @@
+ {
+     ATIVGAState *s = ATI_VGA(o);
+ 
++    object_property_add_str(o, "host-resize-request", NULL, ati_set_host_resize);
+     object_property_add_str(o, "x-accel-stats", ati_get_accel_stats, NULL);
+     object_property_add_str(o, "x-gl-renderer", ati_get_gl_renderer, NULL);
+     object_property_add_str(o, "x-cursor-state", ati_get_cursor_state, NULL);
+--- a/hw/display/ati_int.h
++++ b/hw/display/ati_int.h
+@@ -151,6 +151,7 @@
+     uint32_t regfile[0x4000 / 4];
+     uint32_t pll[64];
+     VGACommonState vga;
++    GraphicHwOps resize_ops;
+     char *model;
+     uint16_t dev_id;
+     uint8_t mode;
+--- a/hw/display/meson.build
++++ b/hw/display/meson.build
+@@ -60,7 +60,7 @@
+ 
+ system_ss.add(when: 'CONFIG_ARTIST', if_true: files('artist.c'))
+ 
+-system_ss.add(when: 'CONFIG_ATI_VGA', if_true: [files('ati.c', 'ati_2d.c', 'ati_dbg.c', 'ati_cp.c', 'ati_3d.c', 'ati_glr.c', 'ati_gl.c'), pixman])
++system_ss.add(when: 'CONFIG_ATI_VGA', if_true: [files('classicmac_host_display.c', 'ati.c', 'ati_2d.c', 'ati_dbg.c', 'ati_cp.c', 'ati_3d.c', 'ati_glr.c', 'ati_gl.c'), pixman])
+ 
+ system_ss.add(when: [pvg, 'CONFIG_MAC_PVG_PCI'],     if_true: [files('apple-gfx.m', 'apple-gfx-pci.m')])
+ system_ss.add(when: [pvg, 'CONFIG_MAC_PVG_MMIO'],    if_true: [files('apple-gfx.m', 'apple-gfx-mmio.m')])
