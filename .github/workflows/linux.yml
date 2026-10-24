@@ -47,46 +47,18 @@ jobs:
         run: python3 ati/tests/test_qemu_ati.py --gl-api gles --gl-optional output/desktop/runtime/bin/qemu-system-ppc output/desktop/runtime/qemu/pc-bios
       - name: Check Power Mac sound DMA timing
         run: python3 screamer/tests/qtest_screamer.py --qemu output/desktop/runtime/bin/qemu-system-ppc --share output/desktop/runtime/qemu/pc-bios --run output/desktop/screamer-timing
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: desktop/package-lock.json
-      - name: Package Linux desktop
-        working-directory: desktop
+      - name: Build native C++ frontend
         run: |
-          npm ci
-          npm test
-          npm run package:linux
+          sudo apt-get install -y qt6-base-dev qt6-base-dev-tools qt6-qpa-plugins qt6-wayland libssl-dev zlib1g-dev cmake
+          cmake -S native -B output/native-build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build output/native-build -j 4
+          QT_QPA_PLATFORM=offscreen output/native-build/classicmac --self-test app/Tests/ClassicMacTests/Fixtures/Platinum output/native-pixels
+          python3 native/scripts/package-linux.py output/native-build
       - uses: actions/upload-artifact@v4
         with:
           name: ClassicMac-Linux-app
           path: |
             output/desktop/packages/*.AppImage
-            output/desktop/packages/*.deb
             output/desktop/ClassicMac-Linux-QEMU-source.tar.gz
-          retention-days: 30
-      - name: Install test sandbox ownership
-        run: |
-          sudo chown root:root output/desktop/packages/linux-unpacked/chrome-sandbox
-          sudo chmod 4755 output/desktop/packages/linux-unpacked/chrome-sandbox
-      - name: Qualify the AppImage UI at 1x and 2x
-        run: xvfb-run -a node desktop/tests/ui-smoke.cjs output/desktop/packages/ClassicMac-4.6.0-linux-x64.AppImage output/desktop/ui-smoke
-      - name: Smoke test packaged Linux application
-        run: xvfb-run -a node desktop/tests/smoke-desktop.cjs output/desktop/packages/ClassicMac-4.6.0-linux-x64.AppImage output/desktop/smoke
-      - name: Test first-run setup through the packaged application
-        run: xvfb-run -a node desktop/tests/setup-smoke.cjs output/desktop/packages/ClassicMac-4.6.0-linux-x64.AppImage output/desktop/setup-smoke
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: ClassicMac-Linux-smoke
-          path: |
-            output/desktop/ui-smoke/*/*.png
-            output/desktop/ui-smoke/*/*.json
-            output/desktop/smoke/desktop.png*
-            output/desktop/smoke/desktop.log
-            output/desktop/smoke/isolated-home/guest.ppm
-            output/desktop/setup-smoke/*/*.png
-            output/desktop/setup-smoke/*/*.json
-            output/desktop/setup-smoke/*/desktop.log
+            output/native-pixels/*.json
           retention-days: 30

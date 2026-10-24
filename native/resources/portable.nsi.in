@@ -1,0 +1,60 @@
+Unicode true
+!include "FileFunc.nsh"
+Name "ClassicMac"
+OutFile "@OUTPUT@"
+RequestExecutionLevel user
+SilentInstall silent
+# Supply a valid silent-launch directory; payload files are unpacked only
+# into $PLUGINSDIR, without installing into the host filesystem.
+InstallDir "$TEMP"
+SetCompressor /SOLID lzma
+VIProductVersion "4.6.0.0"
+VIAddVersionKey /LANG=1033 "ProductName" "ClassicMac"
+VIAddVersionKey /LANG=1033 "FileDescription" "ClassicMac native portable application"
+VIAddVersionKey /LANG=1033 "FileVersion" "4.6.0"
+VIAddVersionKey /LANG=1033 "LegalCopyright" "Austin McChord"
+Icon "@ICON@"
+Section
+  InitPluginsDir
+  SetOutPath "$PLUGINSDIR\ClassicMac"
+  File /r "@APP@"
+  ${GetParameters} $R0
+  # Parse our one extraction option without FileFunc's option-separator rule,
+  # which treats unquoted hyphens inside directory names as new options.
+  StrCpy $R3 $R0
+  StrCpy $R4 $R3 1
+  StrCmp $R4 '"' 0 checkoption
+  StrCpy $R4 $R3 1 -1
+  StrCmp $R4 '"' 0 checkoption
+  StrLen $R4 $R3
+  IntOp $R4 $R4 - 2
+  StrCpy $R3 $R3 $R4 1
+checkoption:
+  StrCpy $R4 $R3 10
+  StrCmp $R4 "--extract=" 0 run
+  StrCpy $R1 $R3 "" 10
+  StrCpy $R4 $R1 1
+  StrCmp $R4 '"' 0 extract
+  StrCpy $R4 $R1 1 -1
+  StrCmp $R4 '"' 0 failed
+  StrLen $R4 $R1
+  IntOp $R4 $R4 - 2
+  StrCpy $R1 $R1 $R4 1
+extract:
+  StrCmp $R1 "" failed
+  ClearErrors
+  CreateDirectory "$R1"
+  CopyFiles /SILENT "$PLUGINSDIR\ClassicMac\*.*" "$R1"
+  IfErrors failed
+  Goto done
+run:
+  ClearErrors
+  ExecWait '"$PLUGINSDIR\ClassicMac\classicmac.exe" $R0' $R2
+  IfErrors failed
+  SetErrorLevel $R2
+  Goto done
+failed:
+  MessageBox MB_OK|MB_ICONSTOP "ClassicMac could not start or extract its native application. Check that your temporary folder has enough free space."
+  SetErrorLevel 1
+done:
+SectionEnd

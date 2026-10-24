@@ -111,10 +111,10 @@ terms as described above.
 
 ## Windows and Linux desktop distributions
 
-The shared desktop front end uses Electron (MIT), Chromium and Node.js.
-Their license notices and Electron's third-party license inventory accompany
-its runtime. QEMU corresponding-source archives accompany each platform's
-release. The Windows runtime stages its MSYS2 dependency license notices;
+ClassicMac 4.6 and later use the native C++/Qt frontend described below.
+ClassicMac 4.1–4.5 used Electron (MIT), Chromium and Node.js; their notices
+and third-party inventories accompany those older releases. QEMU
+corresponding-source archives accompany each platform's release. The Windows runtime stages its MSYS2 dependency license notices;
 the Linux runtime includes distribution copyright notices for its copied
 shared libraries. Linux glibc, graphics/audio drivers and EGL/GLES libraries
 are supplied by the host distribution. Linux builds target Ubuntu 24.04's
@@ -143,3 +143,22 @@ Inc. Original Mac OS 9 resource members are preserved, including native
 32-bit colour and 8-bit alpha masks where available. These assets are separate
 from the MIT-licensed Platinum drawings and Iconfactory artwork. Provenance
 and attribution accompany every desktop package in its Licenses directory.
+
+## Native Windows/Linux frontend (4.6 and later)
+
+Qt 6 Core, Gui, Widgets, Network and Concurrent and their platform plugins are
+unmodified, dynamically linked libraries under LGPL-3.0 (or applicable Qt
+module licenses). Notices are bundled in Licenses. Corresponding upstream
+source: https://download.qt.io/official_releases/qt/ . The package manifest
+identifies every bundled binary. Extract the portable package as documented
+in native/README.md to inspect or replace compatible Qt libraries and relink.
+The ClassicMac C++ frontend source and CMake build are in this repository.
+
+OpenSSL is dynamically linked under Apache-2.0; upstream source and license:
+https://www.openssl.org/source/ and https://www.openssl.org/source/license.html .
+Its legacy DES operation is used only for the loopback RFB password challenge;
+HTTPS uses the platform Qt TLS backend with normal certificate verification.
+
+The native desktop packages contain no Electron or Chromium runtime. The
+optional browser display in the macOS edition retains its existing noVNC
+and pako notices above.

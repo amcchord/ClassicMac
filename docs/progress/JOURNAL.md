@@ -1313,3 +1313,36 @@ consolidated root checks, publish and verify stable 4.1.1. Retain 4.1.0 for roll
   Packaging workflows are manual/branch-filtered and were not dispatched here.
   The existing local/import/guest qualification and two repeat source-preparation
   passes are documented in the PR. Next: review and coordinated integration.
+
+## 2026-10-24 — native 4.6 desktop release candidates qualified
+
+- Worktree `worktrees/native-desktop`, branch `codex/native-desktop`, incorporates
+  PR #36 at 52b775e and PR #37. Replaced Electron with compiled C++/Qt, integer
+  Platinum/BDF rendering, native guest windows, direct authenticated RFB/QMP,
+  complete machine/setup/Library/media/settings/lifecycle/paste operations,
+  portable EXE and AppImage. Existing libraries remain compatible; Windows
+  raw disks use NTFS sparse files. Runtime notices/inventories are refreshed.
+- Both Proxmox hosts pass all three public base imports, Finder/native input,
+  pause/resume and clean shutdown (42 steps per host). Exact candidate packages
+  additionally pass both setup routes with pause/resume, 1x/2x UI, all three
+  guest boots/restart/shutdown (24/14/14/31 steps per host). A last sizing check
+  adds minimum-window coverage and preserves resize limits across WindowShade.
+- Native fixtures pass 84 reference comparisons, 95 advances, four actual widget/
+  frame composites, 20 startup profiles, bounded archive, sparse disk, paste and
+  RFB checks. Final capture comparison caught inherited item-view smoothing at
+  2x; it is disabled explicitly and a whole-home integer-scaling gate is added.
+  Release candidates are being rebuilt for this final renderer correction.
+- Real testing fixed a normal RFB disconnect/dialog lifetime crash (ASAN passes),
+  silent NSIS launch-directory/error handling and quoted extraction paths, and
+  a Debian 13 TLS mismatch by bundling matching libssl/libcrypto. No failures
+  are hidden; earlier evidence remains under ignored output/4.6.0.
+- Mac is freshly built with PR #36, Developer ID signed, accepted/stapled app
+  notary 23e07921-8082-4ddb-9410-4ea75c807941 and DMG notary
+  5c008529-b4d0-4fd5-8abb-2a17023617b7. Full DMG verification passes. Focused Swift
+  checks pass 136 tests/3 optional skips; real public 7.5.5 import also passes.
+- No public release or main merge yet. Next: check final UI pixels/package
+  inventories, integrate both PRs, run consolidated root validation, publish
+  v4.6 and verify fresh downloads. v4.5 stays Latest until then. QA VMs170/171
+  and the task RDP session remain running; remove own scheduled task/RDP and
+  gracefully stop the QA hosts after qualification. No production catalog,
+  hosting or DNS changes; root gxmetal and unrelated worktrees are preserved.

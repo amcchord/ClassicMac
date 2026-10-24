@@ -83,12 +83,16 @@ working directory (Startup Items when launched at startup) without resampling.
 Icon Services also invokes the native Resource Manager decompressor for older
 members. These are artwork acquisition aids, not guest runtime patches.
 
-## Shared Windows/Linux renderer (4.5)
+## Native Windows/Linux renderer (4.6)
 
-`desktop/scripts/export-platinum.py` exports the Mac measurement tables and
-BDF glyphs deterministically. `desktop/tests/platinum.test.cjs` compares the
-shared pixel renderer with these same independent fixtures at 1×/2×.
-`desktop/tests/ui-smoke.cjs` also launches the actual portable application at
-both device scales and compares 21 captured DOM control states against the
-guest reference PNGs, with zero differing pixels. See the [4.5 qualification
-record](../../docs/4.5.0-validation.md) for actual-host coverage and limits.
+`native/scripts/export-assets.py` exports the Mac measurement tables and BDF
+fonts deterministically. The compiled C++ renderer compares 42 independent
+captures at 1×/2× (84 zero-difference comparisons), 95 font advances, actual
+native button/window compositing, and the complete home's exact integer
+expansion at 2×. Item delegates and scrollbars explicitly disable smoothing.
+The same checks run inside the portable packages on the Proxmox hosts.
+
+See the [4.6 qualification record](../../docs/4.6.0-validation.md) for actual
+host coverage and remaining limits. The [4.5 record](../../docs/4.5.0-validation.md)
+retains the qualification of the retired Electron renderer. Independent guest
+fixtures remain reference material; they are never substituted for shipping UI.
