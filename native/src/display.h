@@ -29,7 +29,7 @@ inline QRectF imageRect(QSize viewport, QSize source, qreal dpr,
   const qreal fit = std::min(qreal(pixels.width()) / source.width(),
                             qreal(pixels.height()) / source.height());
   const qreal zoom = fitWindow || fit < 1 ? fit :
-                     zoomOverride > 0 ? std::min(fit, qreal(zoomOverride)) : std::floor(fit);
+                     zoomOverride > 0 ? std::min(std::floor(fit), qreal(zoomOverride)) : std::floor(fit);
   QSize target(qRound(source.width() * zoom), qRound(source.height() * zoom));
   return {std::floor((pixels.width() - target.width()) / 2.0) / dpr,
           std::floor((pixels.height() - target.height()) / 2.0) / dpr,

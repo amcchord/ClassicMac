@@ -388,9 +388,13 @@ PWindow *App::guest(Engine *e) {
     return guests[e->machine.id()];
   const auto display = this->screen();
   const qreal dpi = display ? display->devicePixelRatio() : devicePixelRatioF();
-  int zoom = NativeDisplay::preferredZoom(dpi);
+  QSettings viewSettings(Model::dataDirectory() + "/view.ini", QSettings::IniFormat);
+  const QString scaleKey = "display/" + e->machine.id() + "/scale";
+  const int savedScale = std::clamp(viewSettings.value(scaleKey, 0).toInt(), 0, 3);
+  int zoom = savedScale == 1 ? 1 : savedScale == 2 ? 2 : NativeDisplay::preferredZoom(dpi);
   const QSize source(e->machine.config["width"].toInt(), e->machine.config["height"].toInt());
   auto initialSize = [&](int factor) {
+    if (savedScale == 3) return QSize(source.width() + 13, source.height() + 87);
     return QSize(qCeil(source.width() * factor / dpi) + 13,
                   qCeil(source.height() * factor / dpi) + 87);
   };
@@ -411,6 +415,8 @@ PWindow *App::guest(Engine *e) {
   screen->followsWindow = ppc ? (cdBoot || config["graphicsCard"].toString() != "atiRadeon")
                               : config["useEnhancedFramebuffer"].toBool();
   screen->widthAlignment = ppc ? 8 : 1;
+  screen->fitWindow = savedScale == 3;
+  screen->pixelZoom = savedScale == 1 ? 1 : savedScale == 2 ? 2 : 0;
   v->addWidget(screen, 1);
   auto displayRow = new QHBoxLayout;
   displayRow->setContentsMargins(8, 0, 24, 0);
@@ -420,6 +426,7 @@ PWindow *App::guest(Engine *e) {
   auto scale = new PCombo(w);
   scale->setAccessibleName("Guest display scale");
   scale->addItems({"Sharp Pixels", "1× Pixels", "2× Pixels", "Fit Window"});
+  scale->setCurrentIndex(savedScale);
   scale->setFixedWidth(126);
   displayRow->addWidget(scale);
   v->addLayout(displayRow);
@@ -440,6 +447,8 @@ PWindow *App::guest(Engine *e) {
     screen->pixelZoom = mode == 1 ? 1 : mode == 2 ? 2 : 0;
     screen->scheduleResize();
     screen->update();
+    QSettings settings(Model::dataDirectory() + "/view.ini", QSettings::IniFormat);
+    settings.setValue(scaleKey, mode);
   });
   connect(screen, &GuestView::displayChanged, w, updateDisplayStatus);
   connect(screen, &GuestView::captureChanged, w, updateDisplayStatus);
@@ -1138,6 +1147,7 @@ QJsonObject App::evidence() const {
         {"resizeNotice", view->resizeNotice}});
   }
   QJsonObject result = {{"frontend", "native-qt-cpp"},
+          {"processId", qint64(QCoreApplication::applicationPid())},
           {"version", CLASSICMAC_VERSION},
           {"machines", rows},
           {"width", width()},

@@ -191,6 +191,8 @@ void displayTests(const QString &fixtures, const QString &output) {
   }
   check(NativeDisplay::requestedSize({99999, 99999}, 3, 8) == QSize(3840, 2160),
         "Guest resize exceeds display/VRAM limits");
+  check(NativeDisplay::imageRect({1000, 800}, {640, 480}, 1, false, 2).width() == 640,
+        "A fixed screen that cannot fit 2x used a fractional sharp-pixel zoom");
   Peer peer;
   VNC client;
   bool failed = false;
