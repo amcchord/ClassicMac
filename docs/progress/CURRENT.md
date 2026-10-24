@@ -42,14 +42,18 @@ public 8.6 import adds a real Swift pass and all 8 parity tests pass. Packager 3
 pass. Matching Linux emulator build and capability verification pass; 43 Linux
 hardware/catalog tests pass. No physical/appliance presenter qualification claimed.
 
-Client source is local and has not been pushed, integrated or released. Existing
-installed apps need companion updates to display all three bases. RetroBoot D044
+Client branches are pushed and integration PRs are open:
+ClassicMac https://github.com/amcchord/ClassicMac/pull/36 (ready for review),
+RetroBoot https://github.com/amcchord/RetroBoot/pull/1 (draft pending D044).
+Existing installed apps need merged/released companion updates to display all
+three bases. No app binaries or physical deployments were published. RetroBoot D044
 emulator/guest/hostd workstreams remain owned by their coordinator; do not edit
 them. No cross-task messages or physical device changes occurred. VM175 retains
 its private build/proof files. All owned guest Macs shut down natively.
 
-User approved pushing both prepared client branches and opening integration PRs.
-Next: publish those PRs; the RetroBoot PR remains a draft until D044 integration
-and appliance validation. This approval does not publish app binaries or deploy
-physical devices. Two repeated QEMU source-preparation passes verify the RTL
-reset-list fix, and both CI smoke paths now match package version 4.6.0.
+User approved pushing both prepared client branches and opening integration PRs;
+that work is complete. Next: review/integrate ClassicMac #36 and coordinate
+RetroBoot #1 with D044 integration and appliance validation. Two repeated QEMU
+source-preparation passes verify the RTL reset-list fix, and both CI smoke paths
+now match package version 4.6.0. Native Windows/Linux app packaging CI has not
+been dispatched for this PR; the retained Linux emulator proof is separate.

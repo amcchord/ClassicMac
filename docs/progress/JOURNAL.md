@@ -1296,3 +1296,20 @@ consolidated root checks, publish and verify stable 4.1.1. Retain 4.1.0 for roll
   worktree. Linux/Windows smoke paths now match desktop package version 4.6.0.
   Bash syntax, version/path consistency and diff checks pass. Guest image bytes
   and the public catalogs are unchanged.
+
+
+## 2026-10-24 — approved client branches and integration PRs published
+
+- Pushed ClassicMac codex/classic-base-images at 4e2124a and RetroBoot's matching
+  branch at 44b781b using the user's explicit approval. Both remote refs verified.
+- Opened ClassicMac PR #36, ready for review:
+  https://github.com/amcchord/ClassicMac/pull/36.
+- Opened RetroBoot PR #1 as draft:
+  https://github.com/amcchord/RetroBoot/pull/1. Its description names unmerged D044
+  hostd dependency e473f4c and the appliance presentation/lifecycle gates. It must
+  be integrated with the coordinator's complete Quadra work.
+- Both PRs are attached to this task. Images/catalog remain as previously
+  published. No application release, merge or physical-device deployment occurred.
+  Packaging workflows are manual/branch-filtered and were not dispatched here.
+  The existing local/import/guest qualification and two repeat source-preparation
+  passes are documented in the PR. Next: review and coordinated integration.
