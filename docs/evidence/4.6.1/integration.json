@@ -1,0 +1,43 @@
+{
+  "integrationCommit": "670bb1849544bc204fd4bfaafcfb684d0802a6dc",
+  "functionalSource": "bf9a749caa8cfba1f11a2437859ac35be72e5a95",
+  "compiledSourceMatchesCI": true,
+  "swift": {
+    "executed": 136,
+    "skipped": 2,
+    "failures": 0,
+    "liveClassicBaseImport": true
+  },
+  "native": {
+    "referenceComparisons": 84,
+    "glyphAdvances": 95,
+    "dpiScales": [
+      1,
+      1.25,
+      1.5,
+      1.75,
+      2,
+      2.5,
+      3
+    ],
+    "fractionalBackingStores": "passed",
+    "wholeGuestCompositing": "passed",
+    "RFBAndInput": "passed"
+  },
+  "packagingTests": 15,
+  "driverModeAndGamma": "passed",
+  "deterministicAssets": "passed",
+  "syntax": "passed",
+  "macReleaseVerifier": "passed",
+  "windowsFinalSteps": [
+    49,
+    32,
+    16,
+    18
+  ],
+  "linuxFinalSteps": 46,
+  "integralGuestCaptures": 23,
+  "desktopCaptures": 4,
+  "differentPixels": 0,
+  "allReleaseChecksumsMatch": true
+}

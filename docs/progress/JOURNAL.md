@@ -1465,3 +1465,17 @@ consolidated root checks, publish and verify stable 4.1.1. Retain 4.1.0 for roll
   qualified functional source; the cache-setting cleanup changes no compiled code.
 - Next: merge PR38, consolidated root validation, publish4.6.1, fresh downloads,
   restore own QA configs/task/RDP and stop VMs170/171. No public release yet.
+
+## 2026-10-24 — 4.6.1 integrated release preflight complete
+
+- PR38 merged670bb18. Root compiled files match functional BF9a749 CI inputs.
+  Root passes136 Swift tests/two optional Copland skips/live7.5.5 import, native
+  full suite/export,15 packaging tests, NDRV mode/gamma and syntax. Mac DMG full
+  verifier passes with qualified Tools CD23a42184 and NDRV0bb2f227.
+- Exact final artifacts pass all Windows49/32/16/18 and Linux46 steps. All23
+  complete integral guest captures and4 actual desktop captures have zero
+  differences. Package file sets and every hash pass415/238 Windows,380/128 Linux.
+- Nine release assets are staged with checked SHA256SUMS. No experimental Quadra
+  firmware ships. Original4.6 remains Latest until publication. Root gxmetal
+  and all unrelated worktrees are preserved. Next: publish and public verification,
+  restore QA configurations and stop task-owned test resources.

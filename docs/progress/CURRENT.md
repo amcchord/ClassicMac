@@ -22,5 +22,6 @@ Power Mac NDRV is signed/notarized/stapled; full verification passes.
 
 QA VMs170/171 and own RDP/task ClassicMac461QA remain running. Task-only
 backed-up configs need restoration. No user disk/catalog/DNS/hosting change.
-Next: collect final evidence/inventories, merge, root validation, publish4.6.1,
-fresh public verification, then own task/RDP and VM cleanup.
+Integrated at670bb18; root consolidated validation and full Mac verifier pass.
+All nine staged release asset checksums match. Next: publish4.6.1, verify fresh
+public downloads, restore QA configs and stop own task/RDP/VM resources.
