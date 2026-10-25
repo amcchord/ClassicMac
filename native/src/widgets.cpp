@@ -513,6 +513,16 @@ public:
   PStyle() : QProxyStyle("Fusion") {}
   void drawControl(ControlElement ce, const QStyleOption *o, QPainter *q,
                    const QWidget *w = nullptr) const override {
+    if (ce == CE_SizeGrip) {
+      Pixels p(o->rect.width(), o->rect.height());
+      p.sprite(measured()[o->state & State_Active ? "WINDOW_GROW"
+                                                : "WINDOW_GROW_INACTIVE"].toArray());
+      q->save();
+      q->setRenderHint(QPainter::SmoothPixmapTransform, false);
+      q->drawImage(o->rect.topLeft(), p.image);
+      q->restore();
+      return;
+    }
     if (ce == CE_ShapedFrame && (qobject_cast<const QListWidget *>(w) ||
                                 qobject_cast<const QPlainTextEdit *>(w))) {
       Pixels p(o->rect.width(), o->rect.height(), 0);
@@ -613,6 +623,10 @@ public:
   }
   void drawPrimitive(PrimitiveElement pe, const QStyleOption *o, QPainter *p,
                      const QWidget *w = nullptr) const override {
+    if (pe == PE_PanelScrollAreaCorner) {
+      p->fillRect(o->rect, QColor(face));
+      return;
+    }
     if (pe == PE_PanelMenu || pe == PE_PanelItemViewItem ||
         pe == PE_FrameFocusRect) {
       p->fillRect(o->rect,

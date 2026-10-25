@@ -33,6 +33,12 @@ for meta in sorted(a.root.rglob('*.json')):
     base = title.resize((title.width // zoom, title.height // zoom), Image.Resampling.NEAREST)
     repeated = base.resize(title.size, Image.Resampling.NEAREST)
     assert ImageChops.difference(title, repeated).getbbox() is None, (meta, 'uneven title-bar pixel blocks')
+    # Pure UI captures also cover text, buttons, fields, icons and scrollbars.
+    # Running guest displays have their own explicitly selected pixel zoom.
+    full_ui = not state.get('displays')
+    if full_ui:
+        base = image.resize((image.width // zoom, image.height // zoom), Image.Resampling.NEAREST)
+        assert ImageChops.difference(image, base.resize(image.size, Image.Resampling.NEAREST)).getbbox() is None, (meta, 'uneven control/text pixel blocks')
     desktop = meta.with_name(meta.stem + '-desktop.png')
     actual_desktop = desktop.exists()
     if actual_desktop:
@@ -42,6 +48,7 @@ for meta in sorted(a.root.rglob('*.json')):
         assert ImageChops.difference(screen, image).getbbox() is None, (meta, 'desktop compositor changed UI pixels')
     rows.append({'capture': str(meta.relative_to(a.root)), 'windowsDpi': state.get('windowsDpi'),
                  'uiPixelZoom': zoom, 'uniformTitleBarPixels': True,
+                 'uniformFullUI': True if full_ui else None,
                  'desktopMatches': True if actual_desktop else None})
 assert rows, 'No captures were checked'
 if a.windows_matrix:
