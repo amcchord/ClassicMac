@@ -1,38 +1,25 @@
-# Actual ATI and Quadra resizing — release qualification
+# Actual guest resizing and whole-pixel UI — final release qualification
 
-Owner: `codex/ati-quadra-resize`, contained worktree `worktrees/ati-quadra-resize`.
-User requests actual guest mode changes for ATI and Quadra, Proxmox testing,
-and a new stable release. v4.6.1 / root86e7fc0 remains published Latest/rollback.
+Owner:codex/ati-quadra-resize, contained worktree worktrees/ati-quadra-resize.
+User explicitly requests actual ATI/Quadra modes, robust Windows pixel-art UI,
+Proxmox testing and publication. User chose whole-pixel UI zoom at fractional
+Windows DPI. v4.6.1 remains Latest/rollback; no4.6.2 tag/release yet.
 
-Quadra root cause: gray-screen fill subtracts8 from an unsigned byte count.
-A four-byte remainder wraps the counter and overwrites guest memory. The bounded
-word fill passes19,974 width/depth canary cases. The original driver plus the
-fill fix passes early resize, grow/shrink, healthy Finder and shutdown on VM170.
-Experimental callback/ROM/ID changes were removed. Pending requests now survive
-Display Manager startup and rejected attempts.
+Final compiled candidate:c5184eadda364e5b95428709095bb811f3cc965e. ATI service
+b41c9f3 changes real modes during Quake III; QFB9eb2bcb bounds gray fills and
+passes19,974 canary rows plus six real guest depths. Whole UI uses1×/2×,
+Per-Monitor V2 reports real OS DPI; full-UI checker caught/fixed stock grip.
+Native drag preserves2× client grid. Resizes now fit the work area. VGA explicit
+retries re-arm late requests; five-minute budget covers older booting guests.
 
-ATI uses a dedicated PCI mailbox and a firmware NDRV service; nothing is installed
-in guest disks. Two inactive programmable timing slots alternate through ATI's
-own video driver and Display Manager. Six exact grow/shrink modes plus clean
-shutdown/reboot pass on VM170 (37 steps). Production cleanup passes54 Proxmox steps including early boot,1920×1440, portrait,
-pause/resume, fullscreen, zoom/minimum and clean reboot. Startup trace exposed the
-old helper restoring its boot mode after our first adoption; identical retries
-now reach the guest, bounded requests expire after stable adoption. Final Windows/
-Linux package, DPI, Quadra depth and3D qualification remains.
+Focused native tests and Mac engine gates pass. Final Mac signing/notary/verifier
+pass (DMG8a336e5). Final Linux CI40146327957 passes; Windows40146326685 builds.
+Owned Linux prototype passes25 early8.6 resize/reboot steps with the retry fix.
+Final package Linux lifecycle/UI/game tests and Windows confirmation are active.
+PR39 is draft/attached. Finish package checks, integrate, run consolidated root
+preflight once, publish/verify all nine assets, then restore QA state.
 
-Mac engines build and pass gates; focused Swift34 tests, native pixels/RFB/input/
-models/export, and bounded-fill test pass. Fresh shared firmware is rebuilt.
-Version4.6.2 is being prepared. PR39 is draft/attached; no tag or release.
-914a01b Windows/Linux CI pass. Build/qualify the final retry-fix candidate.
-
-QA VMs170/171 are running (originally stopped). VM170 has isolated qa462 sources,
-runtime and sparse fixture copies and owned Xvfb99. Original fixtures/configs and
-user machines untouched. End own resources and restore both VMs to stopped after
-publication. Root gxmetal and unrelated worktrees preserved.
-
-Latest: user explicitly chose whole-pixel interface zoom after seeing fractional
-hatch distortion. UI now snaps OS scale to integer zoom, with native resize-grid
-snapping and a checker for uniform title bars / exact desktop captures. Focused
-native tests pass; new Windows/Linux packages and five-real-DPI UI qualification
-are next.138f56d ATI/Quadra resizing,3D, Mac packages are qualified, including
-Windows500ms shutdown. Do not publish before the refreshed UI checks. No tag yet.
+VM170/171 originally stopped, currently running. Own Xvfb99 and100;100 uses
+-noreset for Xft DPI tests. Own Windows tasks462QA/Capture/Drag and RDP/SSH
+forward must end. All guest tests use isolated clones; originals untouched.
+Root untracked gxmetal and unrelated worktrees remain intact.
