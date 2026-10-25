@@ -18,7 +18,7 @@ jobs:
           path: |
             output/desktop/runtime
             output/desktop/ClassicMac-Windows-QEMU-source.tar.gz
-          key: windows-engine-${{ hashFiles('**/*.patch', 'qfb/*.c', 'qfb/*.h', 'qfb/*.rom', 'screamer/*', 'ppcvid/qemu_vga.ndrv', 'shared/*', 'scripts/build-qemu.sh', 'desktop/ati_gl_windows.inc', 'desktop/scripts/build-engine.sh', 'desktop/scripts/stage-runtime.py', 'desktop/scripts/prepare-windows-gl.py', '.github/workflows/windows.yml') }}
+          key: windows-engine-${{ hashFiles('ati/*.c', 'ati/*.h', '**/*.patch', 'qfb/*.c', 'qfb/*.h', 'qfb/*.rom', 'screamer/*', 'ppcvid/qemu_vga.ndrv', 'shared/*', 'scripts/build-qemu.sh', 'desktop/ati_gl_windows.inc', 'desktop/scripts/build-engine.sh', 'desktop/scripts/stage-runtime.py', 'desktop/scripts/prepare-windows-gl.py', '.github/workflows/windows.yml') }}
       - uses: msys2/setup-msys2@v2
         with:
           msystem: UCRT64

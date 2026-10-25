@@ -103,6 +103,8 @@ final class QEMURunnerArgumentTests: XCTestCase {
         XCTAssertTrue(optionValues("-prom-env", in: arguments).contains("classicmac-display=1024x768"))
         XCTAssertTrue(optionValues("-prom-env", in: arguments).contains("retroboot-display=1024x768"))
         XCTAssertEqual(optionValues("-g", in: arguments), ["640x480x32"])
+        XCTAssertTrue(optionValues("-device", in: arguments).contains("classicmac-display-control"))
+        XCTAssertTrue(optionValues("-device", in: arguments).contains { $0.contains("file=\(AppPaths.ndrvLoader.path)") })
         // ATI starts run in real time and never use the VGA-only Finder detector.
         XCTAssertTrue(optionValues("-icount", in: arguments).isEmpty)
         XCTAssertFalse(optionValues("-global", in: arguments).contains { $0.hasPrefix("VGA.") })
@@ -122,6 +124,9 @@ final class QEMURunnerArgumentTests: XCTestCase {
     }
 
     func testATIDisplaySizesFollowTheDriverLimits() {
+        XCTAssertEqual(ATIDisplay.windowSize(width: 907, height: 656).width, 904)
+        XCTAssertEqual(ATIDisplay.windowSize(width: 900, height: 1400).height, 1400)
+        XCTAssertEqual(ATIDisplay.windowSize(width: 3840, height: 2160).height, 1440)
         XCTAssertEqual(ATIDisplay.refresh(width: 1024, height: 768), 75)
         XCTAssertEqual(ATIDisplay.refresh(width: 1920, height: 1080), 50, "60 Hz would need 173.7 MHz")
         // 1922 rounds down to an 8-pixel width; portrait and oversize fall back.

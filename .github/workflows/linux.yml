@@ -18,7 +18,7 @@ jobs:
           path: |
             output/desktop/runtime
             output/desktop/ClassicMac-Linux-QEMU-source.tar.gz
-          key: linux-engine-${{ hashFiles('**/*.patch','qfb/*','screamer/*','shared/*','ppcvid/qemu_vga.ndrv','scripts/build-qemu.sh','desktop/scripts/build-linux.sh','desktop/scripts/stage-linux.py') }}
+          key: linux-engine-${{ hashFiles('ati/*.c', 'ati/*.h', '**/*.patch','qfb/*','screamer/*','shared/*','ppcvid/qemu_vga.ndrv','scripts/build-qemu.sh','desktop/scripts/build-linux.sh','desktop/scripts/stage-linux.py') }}
       - name: Install build and desktop dependencies
         run: |
           sudo apt-get update

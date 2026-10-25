@@ -201,7 +201,8 @@ void Engine::shutdown(bool restart) {
   // Ask the classic OS to quit applications and shut down. Sending Power
   // followed by a timed Return races the confirmation dialog on busy guests
   // and can instead accept an unrelated document dialog.
-  hmp("sendkey ctrl-alt-meta_l-power");
+  // Leave time for ADB to poll all four key-downs on a busy emulated Mac.
+  hmp("sendkey ctrl-alt-meta_l-power 500");
 }
 void Engine::forceOff() {
   restarting = false;

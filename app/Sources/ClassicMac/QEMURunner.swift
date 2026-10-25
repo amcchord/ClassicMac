@@ -935,7 +935,7 @@ final class QEMUManager: ObservableObject {
         let toolsViaVirtio = !deferToolsMedia && config.toolsCDInserted &&
             AppPaths.toolsCD != nil
         let needsNdrvLoader = sharing || tablet || bootingG3CompatibilityCD ||
-            toolsViaVirtio || config.useVirtioDisk
+            toolsViaVirtio || config.useVirtioDisk || effectiveGraphicsCard(for: config) == .atiRadeon
 
         // InputSprocket needs a real HID mouse; the seamless Virtio tablet only
         // updates the classic cursor. The engine selects HID for 3D games.
@@ -961,6 +961,7 @@ final class QEMUManager: ObservableObject {
         // churn across longer sessions and multiple maps.
         args += ["-accel", "tcg,tb-size=512"]
         let ati = effectiveGraphicsCard(for: config) == .atiRadeon
+        if ati { args += ["-device", "classicmac-display-control"] }
         if !bootingFromUserCD && !ati && !legacy {
             // Mac OS 9 spends much of hard-disk startup polling timers for
             // hardware that mac99 does not expose. Instruction timing lets

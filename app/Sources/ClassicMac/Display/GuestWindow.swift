@@ -142,7 +142,7 @@ final class GuestWindows {
     private func followsWindow(_ id: UUID) -> Bool {
         guard let config = VMStore.shared.vms.first(where: { $0.id == id }) else { return false }
         switch config.machineFamily {
-        case .powerMacG4: return QEMUManager.effectiveGraphicsCard(for: config) == .standard
+        case .powerMacG4: return true
         case .quadra800: return config.useEnhancedFramebuffer
         case .powerMac7500: return false
         }
@@ -158,7 +158,11 @@ final class GuestWindows {
             let isPowerMac = VMStore.shared.vms.first { $0.id == id }?.machineFamily == .powerMacG4
             var width = Int(content.width)
             if isPowerMac { width = width / 8 * 8 }
-            let height = Int(content.height - Self.toolbarHeight)
+            var height = Int(content.height - Self.toolbarHeight)
+            if let config = VMStore.shared.vms.first(where: { $0.id == id }),
+               QEMUManager.effectiveGraphicsCard(for: config) == .atiRadeon {
+                (width, height) = ATIDisplay.windowSize(width: width, height: height)
+            }
             guard width >= VMConfig.minWidth, height >= VMConfig.minHeight else { return }
             let size = CGSize(width: width, height: height)
             guard size != entry.session.state.surfaceSize else { return }

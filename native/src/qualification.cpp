@@ -277,6 +277,25 @@ int selfTest(const QString &fixtures, const QString &output) {
             "WindowShade changed the resize minimum");
     native.close();
   }
+  // A real style grip must use the Mac's measured pixels, including when Qt
+  // creates one in a constrained scroll area. Fusion's diagonal strokes are
+  // cosmetic device-pixel lines and break the UI's 2x pixel grid.
+  for (int scale : {1, 2}) {
+    QImage capture(17 * scale, 17 * scale, QImage::Format_ARGB32);
+    capture.setDevicePixelRatio(scale);
+    capture.fill(face);
+    QPainter painter(&capture);
+    QStyleOptionSizeGrip option;
+    option.rect = QRect(0, 0, 17, 17);
+    option.state = QStyle::State_Enabled | QStyle::State_Active;
+    qApp->style()->drawControl(QStyle::CE_SizeGrip, &option, &painter);
+    painter.end();
+    QImage expected(fixtures + "/os9-window-active.png");
+    expected = expected.convertToFormat(QImage::Format_ARGB32)
+                   .copy(311, 147, 17, 17)
+                   .scaled(capture.size(), Qt::IgnoreAspectRatio, Qt::FastTransformation);
+    require(capture == expected, "Native size grip differs from the Mac pixels");
+  }
   {
     auto oldHome = qgetenv("CLASSICMAC_TEST_HOME"),
          oldQualification = qgetenv("CLASSICMAC_QUALIFY");
@@ -454,7 +473,9 @@ public:
         done = true;
       } else if (action == "assertDpi") {
         const auto scale = step["scale"].toDouble();
-        require(qAbs(app->devicePixelRatioF() - scale) < 0.02, "Qt did not honor the requested display scale");
+        const auto pixelScale = step["pixelScale"].toDouble(scale);
+        require(qAbs(app->devicePixelRatioF() - pixelScale) < 0.02,
+                "The UI did not use the requested whole-pixel zoom");
 #ifdef Q_OS_WIN
         auto state = app->evidence();
         require(state["perMonitorV2"].toBool(), "The Windows window is not Per-Monitor V2 aware");

@@ -52,6 +52,7 @@ PATCHED_FILES=(
   ui/input.c
   hw/usb/dev-hid.c
   include/ui/input.h
+  ui/console.c
   qapi/ui.json
   hw/audio/asc.c
   audio/coreaudio.m
@@ -524,6 +525,11 @@ fi
 # a shared memory buffer announced over an AF_UNIX stream socket (the app
 # listens, QEMU connects), together with the std-VGA hardware cursor, and the
 # app's keyboard and pointer input comes back. See display/README.md.
+cp "$ATI_DIR/host_display.c" "$QEMU_DIR/hw/display/classicmac_host_display.c"
+cp "$ATI_DIR/host_display.h" "$QEMU_DIR/hw/display/classicmac_host_display.h"
+git -C "$QEMU_DIR" apply "$ATI_DIR/classicmac-host-resize.patch" || die "Failed to apply ATI host resize patch"
+
+git -C "$QEMU_DIR" apply "$DISPLAY_DIR/host-resize-reassert.patch" || die "Failed to apply display resize retry patch"
 log "Installing the ClassicMac display backend (-display classicmac)"
 git -C "$QEMU_DIR" apply "$DISPLAY_DIR/classicmac-display.patch" || die "Failed to apply ClassicMac display backend patch"
 

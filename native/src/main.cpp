@@ -2,8 +2,11 @@
 #include "qualification.h"
 #include <cstdio>
 int main(int argc, char **argv) {
+  // The Platinum artwork is pixel art: fractional UI zoom makes alternate
+  // stripes, glyph strokes and bevels different widths. Keep OS DPI awareness
+  // while snapping the interface to the nearest whole physical-pixel zoom.
   QGuiApplication::setHighDpiScaleFactorRoundingPolicy(
-      Qt::HighDpiScaleFactorRoundingPolicy::PassThrough);
+      Qt::HighDpiScaleFactorRoundingPolicy::Round);
   QApplication app(argc, argv);
   app.setApplicationName("ClassicMac");
   app.setApplicationVersion(CLASSICMAC_VERSION);

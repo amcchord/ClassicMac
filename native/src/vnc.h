@@ -39,6 +39,7 @@ public:
   bool paused = false;
   int widthAlignment = 1;
   int pixelZoom = 0;
+  QSize minimumResolution = {512, 384}, maximumResolution = {3840, 2160};
   QString resizeNotice;
   QString notice = "Starting up…";
   explicit GuestView(VNC *, QWidget *parent = nullptr);
@@ -70,7 +71,8 @@ private:
   QSet<quint32> keys;
   int mask = 0;
   bool controlClick = false;
-  QTimer resizeDebounce, resizeDeadline;
+  QTimer resizeDebounce, resizeDeadline, resizeSettled;
+  static constexpr int maxResizeAttempts = 60;
   QSize observedSize, pendingSize;
   QPoint lastPointer;
   int resizeAttempts = 0, wheelRemainder = 0;

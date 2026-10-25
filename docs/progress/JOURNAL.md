@@ -1497,3 +1497,152 @@ consolidated root checks, publish and verify stable 4.1.1. Retain 4.1.0 for roll
 - Public verification and cleanup records are retained in docs/evidence/4.6.1.
   v4.6.0 remains rollback. Requested implementation, qualification and publication
   are complete, with the explicit Standard-versus-fixed display boundary.
+
+## 2026-10-24 — actual ATI/Quadra resize follow-up started
+
+- User explicitly requests actual guest resolution changes for both cards,
+  Proxmox testing and publication. Owned branch/worktree ati-quadra-resize from
+  root86e7fc0; unrelated root gxmetal and all other worktrees preserved.
+- Started existing QA VMs170/171 (originally stopped), isolated qa462 sources,
+  runtime extraction and sparse test-fixture copies on170. New owned Xvfb99.
+- ATI monitor-change prototype acknowledges HPD but retains its current mode.
+  Testing bundled firmware service with a PCI mailbox and Display Manager calls;
+  no guest disk installation required. QEMU/NDRV changes remain experimental.
+- Quadra first resize reaches normal Finder; second raises error10, identified
+  in MacErrors.h as line-F/FPU exception. Earlier unimplemented-trap terminology
+  was inaccurate. Context, dynamic-ID and SRT variations have not fixed it;
+  now tracing the actual CPU fault. No release or production artifact changed.
+
+## 2026-10-24 — ATI/Quadra actual modes reproduced and corrected
+
+- Quadra fault tracing found an unsigned gray-fill loop underflow on scanlines
+  with four bytes left: it scribbled across guest memory. Original driver plus
+  bounded fill passes real early/grow/shrink/Finder/shutdown;19,974 canary rows
+  cover every width512–3840 at all six depths. Removed experimental event/ROM/
+  ID changes; moved request acknowledgement after successful mode adoption.
+- ATI HPD/EDID alone kept cached modes. Firmware PCI service uses ATI's actual
+  programmable-timing API in application event context, alternates two inactive
+  slots, keeps depth and changes desktop through Display Manager. No guest disk
+  installation. Proxmox170 passes six exact modes and clean reboot (37 steps).
+  Production cleanup/retry/limits still needs final host qualification.
+- Focused Swift34 tests and native pixel/model/RFB/input/export tests pass.
+  Mac engine rebuild/gates pass. Shared firmware rebuilds from tracked sources;
+  package staging refreshes QFB and service firmware. New version4.6.2 staged,
+  CI/release validation/publication pending. No release/production change yet.
+
+## 2026-10-24 — startup override and identical-request retry verified
+
+- Production startup trace captured640×480 ->1024×768 ->requested1144×797
+  ->1024×768: the older installed startup helper runs after the first Finder
+  event and restores its configured boot size. QEMU discarded identical host
+  UI-info retries, so a healthy guest could remain at the wrong resolution.
+- Console UI-info now forwards identical requests when the actual surface has
+  left that mode; QFB likewise re-arms its latch. Native retries remain bounded
+  (12 at5s), and relinquish the request after5s of stable adoption so later
+  guest/application mode changes are respected. No fixed boot delay added.
+- Clean final engine/frontend passes54 Proxmox170 steps: early resize, repeated
+  exact modes,1920×1440, portrait, pause/resume, fullscreen, pixel zoom/minimum,
+  clean shutdown and reboot. Earlier54-step failure retained in ignored output;
+  no diagnostic firmware or CPU fault tracing remains in release sources.
+-914a01b Windows/Linux CI both pass; the retry fix is the next candidate and
+  requires fresh builds/qualification. PR39 is draft and attached. No publication.
+
+## 2026-10-24 — final package and depth qualification; ATI application coverage pending
+
+- ad2d158 Windows CI40138862065 and Linux CI40138864040 pass. Exact Linux
+  AppImage passes54 ATI steps and25 enhanced Quadra8.1 steps; inventories
+  verify380/128 Linux and415/238 Windows files. Firmware hashes match tracked
+  cc5c9b6/9eb2bcb. Signed Mac app/DMG notarization and full verifier pass.
+- Quadra7.5.5 passes25 steps at each of six depths1/2/4/8/16/32; all reboots
+  display healthy Finder. Windows exact EXE passes real100/125/150/175/200%
+  DPI Quadra lifecycle/fullscreen/zoom checks (37/43/37/37/37 steps).
+ 62 complete integral guest/window captures compare with zero different pixels.
+- Windowed Quake III keeps a pending mailbox request and applies it on return
+  to Finder. SystemTask and GetOSEvent trap prototypes did not improve it and
+  are removed. A task-level guard and interrupt-safe Finder wakeup prototype
+  are uncommitted/unqualified; do not ship current shared/ndrvloader yet.
+- The older Windows ATI fixture stalls during startup even without a resize.
+  Qualification is switching to the clean106MiB-allocated sparse fixture that
+  passed Linux54 steps. Only isolated QA clones are modified. Standard8.6's
+  owned dirty clone needed its Disk First Aid Done action; it then passes27
+  exact-package resize/reboot steps. Timeout/recovery attempts are retained.
+- PR39 remains draft; no release/tag published. Mac packages must be rebuilt
+  if the firmware prototype qualifies. VM170/171 remain running for testing.
+
+## 2026-10-24 — first-resize readiness defect isolated
+
+- The callback experiments did not address the cause: apply() returned on an
+  empty mailbox before observing Finder. Starting a game before ever resizing
+  therefore left finderReady false. Readiness is now observed independently
+  of a pending request, with an explicit task-level guard. All SystemTask,
+  GetOSEvent and timer/wakeup/debug prototypes are removed from source.
+  Fresh firmware b41c9f3 is under game qualification; it must pass before release.
+- Clean Windows ATI fixture passes37 steps at100% and43 at125% including reboot.
+ 150% passes all resize/fullscreen/zoom checks but loses the short shutdown
+  chord; the native chord now holds500ms to allow four ADB key-downs on busy
+  hosts. Final Windows lifecycle requalification is required. The older stalled
+  ATI fixture is retained separately, not used to claim package qualification.
+- Standard8.6 exact AppImage passes27 steps after the owned clone's Disk First
+  Aid Done action. No original guest files/configs were changed.113 whole
+  integral guest captures currently compare with zero different pixels.
+
+## 2026-10-24 — ATI game resizing verified
+
+-138f56d observes Finder readiness even with an empty mailbox. The clean
+  service then changes the real desktop1144×797 →896×656 →1600×1200 →1024×768
+  while windowed Quake III continues rendering. Each switch records39k–42k
+  additional3D draws and338–353 uploads. Screenshots show a healthy game,
+  desktop and return to Finder. The harness mistook expected shutdown socket
+  closure for failure; final-package repetition will handle closure and require
+  exit0. No trap/timer/wakeup/debug code is present in production source.
+- Fresh final Windows40141731053 and Linux40141732363 builds are dispatched at
+ 138f56d. Mac app is being repackaged/notarized with b41c9f3 firmware. No
+  publication; all final package lifecycle/public checks still required.
+
+## 2026-10-24 — user chooses whole-pixel interface zoom
+
+- User identified uneven title-bar stripes in fractional-DPI captures and
+  explicitly chose whole-pixel UI zoom. The interface now rounds OS scaling to
+  nearest integer zoom (100/125%→1×;150/175/200%→2×), while retaining actual
+  Windows Per-Monitor V2 DPI awareness. Native resize tracking snaps client
+  dimensions to the same grid; X11 size increments use logical pixels.
+- UI evidence separates windowsDpi/windowsScale from uiPixelZoom. Qualification
+  accepts an explicit pixelScale alongside native OS DPI. A new independent
+  checker requires uniform square title-bar blocks and exact matching desktop
+  captures, with a five-real-DPI matrix option. Old125% captures fail as expected;
+  old200% captures pass. Native84-reference/render/protocol/input tests pass.
+-138f56d final Windows ATI150/175/200/125% and Quadra125% lifecycle checks pass,
+  confirming500ms ADB shutdown fixes the previously missed chord. Standard8.6
+  dirty-fixture startup needs a clean clone. These packages are superseded by
+  the whole-pixel UI candidate; no release is published.
+- Final Linux138f package passes54 ATI,25 Quadra,27 Standard steps and all four
+  3D resize modes with clean exit0.135 complete guest captures are exact.
+
+## 2026-10-24 — physical pixel-grid validation and final grip correction
+
+-2e593d1 real Windows DPI matrix reports96/120/144/168/192 native DPI with
+  UI zoom1/1/2/2/2. Actual desktop/title-bar capture matches at150%; five-scale
+  UI, constrained1920×1080 UI and native drag scenarios pass. The native drag
+  changes1880×1400 client pixels to1920×1418, both aligned to2× pixels.
+- Live150→175→125→200% DPI changes pass23 ATI steps with exact guest modes;
+  all four whole title bars and desktop captures match. Whole-pixel UI ATI150%
+  passes37 steps and Quadra125% passes43. Linux Xft120/144/192 maps1/2/2
+  after disabling reset on the task-only Xvfb100 server.
+- The strengthened full-UI grid checker caught Fusion's cosmetic diagonal grip
+  in a constrained scroll corner.35e8030 replaces size grips with the measured
+  Mac artwork and paints scroll corners on the bitmap grid. A1×/2× style-grip
+  regression compares with independent Mac window pixels. Native tests pass;
+  final35e Windows/Linux package UI matrix is being collected. No release/tag.
+
+## 2026-10-24 — final work-area and late-start retry fixes
+
+- Full desktop comparison caught a deliberately oversized constrained-window
+  resize extending below the work area. PWindow now rechecks bounds after resize,
+  while leaving already-contained windows (including snapped placement) alone.
+- A clean Windows8.6 guest reaches a healthy Finder but retains640×480 after an
+  early request. The VGA device's duplicate-size guard swallowed explicit retries
+  even though console forwarding was fixed. Explicit VGA retries now bump serial
+  (skipping zero), and native retry budget covers five minutes of slow startup.
+  This is the same stale-request class already fixed for ATI/Quadra.
+- Focused native tests pass. Mac and Linux owned engines are rebuilding; final
+  Windows/Linux packages and early-startup verification are next. No publication.

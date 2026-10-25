@@ -23,6 +23,14 @@ endif
 
 all: bin/mac_qfb.rom
 
+HOST_CC ?= cc
+test: bin/test_gray_pattern
+	./bin/test_gray_pattern
+
+bin/test_gray_pattern: tests/test_gray_pattern.c include/GrayPattern.h
+	@mkdir -p bin
+	$(HOST_CC) -std=c99 -O2 -Wall -Wextra -Werror -Iinclude $< -o $@
+
 clean:
 	rm -rf bin obj
 
@@ -53,6 +61,6 @@ obj/%.o: src/%.c $(wildcard include/*) GNUmakefile
 	@mkdir -p obj
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
 
-.PHONY: all clean
+.PHONY: all clean test
 .SECONDARY: # keep all secondary files
 MAKEFLAGS += --no-builtin-rules

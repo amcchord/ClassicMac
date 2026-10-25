@@ -203,7 +203,7 @@ struct SettingsDialog: View {
         case .standard:
             return "Any screen size, following the window as you resize it, and every color depth from Black & White to Millions."
         case .atiRadeon:
-            return "An emulated Radeon that uses Mac OS 9's own ATI drivers, so 3D games are drawn by this computer's GPU. Needs ATI's software in Mac OS, as in the Library's Deluxe Macs; without it the Mac starts at 640 × 480. The screen size is fixed while the Mac runs, and CD starts use the Standard card."
+            return "An emulated Radeon that uses Mac OS 9's own ATI drivers, so 3D games are drawn by this computer's GPU. Needs ATI's software in Mac OS, as in the Library's Deluxe Macs; without it the Mac starts at 640 × 480. Resizing the window changes the Mac’s resolution, up to 1920 × 1440. CD starts use the Standard card."
         }
     }
 
