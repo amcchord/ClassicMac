@@ -236,11 +236,15 @@ void PWindow::paintEvent(QPaintEvent *) {
 }
 void PWindow::resizeEvent(QResizeEvent *) {
   body->setGeometry(6, 22, width() - 13, std::max(0, height() - 29));
+  QTimer::singleShot(0, this, &PWindow::fitToScreen);
 }
 void PWindow::fitToScreen() {
   if (isFullScreen() || isMaximized() || shaded || !screen())
     return;
-  auto available = screen()->availableGeometry().adjusted(4, 4, -4, -4);
+  const auto workArea = screen()->availableGeometry();
+  if (workArea.contains(frameGeometry()))
+    return;
+  auto available = workArea.adjusted(4, 4, -4, -4);
   if (available.isEmpty())
     return;
   resize(size().boundedTo(available.size()).expandedTo(minimumSize()));

@@ -15,3 +15,23 @@
          return 0;
      }
  
+--- a/hw/display/vga-pci.c
++++ b/hw/display/vga-pci.c
+@@ -410,12 +410,13 @@
+     if (h > VBE_DISPI_MAX_YRES) {
+         h = VBE_DISPI_MAX_YRES;
+     }
+-    if (d->host_req_width == w && d->host_req_height == h) {
+-        return; /* unchanged: don't nudge the guest */
+-    }
++    /* Re-arm explicit retries, including a size requested before the guest's
++     * Display Manager was ready or one later overridden by an application. */
+     d->host_req_width = w;
+     d->host_req_height = h;
+-    d->host_req_serial++;
++    if (++d->host_req_serial == 0) {
++        ++d->host_req_serial;
++    }
+ }
+ 
+ static void pci_std_vga_ui_info(void *opaque, uint32_t idx, QemuUIInfo *info)

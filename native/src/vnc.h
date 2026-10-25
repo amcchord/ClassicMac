@@ -72,7 +72,7 @@ private:
   int mask = 0;
   bool controlClick = false;
   QTimer resizeDebounce, resizeDeadline, resizeSettled;
-  static constexpr int maxResizeAttempts = 12;
+  static constexpr int maxResizeAttempts = 60;
   QSize observedSize, pendingSize;
   QPoint lastPointer;
   int resizeAttempts = 0, wheelRemainder = 0;

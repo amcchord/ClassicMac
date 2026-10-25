@@ -1617,3 +1617,32 @@ consolidated root checks, publish and verify stable 4.1.1. Retain 4.1.0 for roll
   the whole-pixel UI candidate; no release is published.
 - Final Linux138f package passes54 ATI,25 Quadra,27 Standard steps and all four
   3D resize modes with clean exit0.135 complete guest captures are exact.
+
+## 2026-10-24 — physical pixel-grid validation and final grip correction
+
+-2e593d1 real Windows DPI matrix reports96/120/144/168/192 native DPI with
+  UI zoom1/1/2/2/2. Actual desktop/title-bar capture matches at150%; five-scale
+  UI, constrained1920×1080 UI and native drag scenarios pass. The native drag
+  changes1880×1400 client pixels to1920×1418, both aligned to2× pixels.
+- Live150→175→125→200% DPI changes pass23 ATI steps with exact guest modes;
+  all four whole title bars and desktop captures match. Whole-pixel UI ATI150%
+  passes37 steps and Quadra125% passes43. Linux Xft120/144/192 maps1/2/2
+  after disabling reset on the task-only Xvfb100 server.
+- The strengthened full-UI grid checker caught Fusion's cosmetic diagonal grip
+  in a constrained scroll corner.35e8030 replaces size grips with the measured
+  Mac artwork and paints scroll corners on the bitmap grid. A1×/2× style-grip
+  regression compares with independent Mac window pixels. Native tests pass;
+  final35e Windows/Linux package UI matrix is being collected. No release/tag.
+
+## 2026-10-24 — final work-area and late-start retry fixes
+
+- Full desktop comparison caught a deliberately oversized constrained-window
+  resize extending below the work area. PWindow now rechecks bounds after resize,
+  while leaving already-contained windows (including snapped placement) alone.
+- A clean Windows8.6 guest reaches a healthy Finder but retains640×480 after an
+  early request. The VGA device's duplicate-size guard swallowed explicit retries
+  even though console forwarding was fixed. Explicit VGA retries now bump serial
+  (skipping zero), and native retry budget covers five minutes of slow startup.
+  This is the same stale-request class already fixed for ATI/Quadra.
+- Focused native tests pass. Mac and Linux owned engines are rebuilding; final
+  Windows/Linux packages and early-startup verification are next. No publication.
