@@ -83,3 +83,14 @@ On the same guest without restarting Quake or sound, changing only the mask
 from zero to `0x30000` restores 30 uploads/s and clearing it restores the
 slowdown. Fresh-launch, replay and game-input checks use
 `input/tests/superdeluxe-quake3.py`; no game executable or preferences change.
+
+## Texel byte order
+
+`classicmac-texture-swap.patch` makes the swap undone when reading a surface
+depend on the size of its elements. VRAM holds what the big-endian CPU wrote,
+and `SURFACE_CNTL` only shows the swap set for the desktop's aperture. On a
+16-bit desktop (`0x400000`), a 32-bit ARGB texel took the 16-bit swap, which
+reads it as (B, A, R, G): alpha landed in green, and any `GL_RGB8` or
+`GL_RGBA8` texture came out green. On a 32-bit desktop (`0x800000`), 16-bit
+texels took the 32-bit swap, which exchanges neighbouring texels. 8-bit formats
+keep the aperture's swap, as no tested guest uses them.
