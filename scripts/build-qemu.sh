@@ -511,6 +511,7 @@ git -C "$QEMU_DIR" apply "$ATI_DIR/retroboot-ati-r100.patch" || die "Failed to a
 git -C "$QEMU_DIR" apply "$ATI_DIR/classicmac-ati-macos.patch" || die "Failed to apply ATI Radeon macOS GL patch"
 git -C "$QEMU_DIR" apply "$ROOT_DIR/input/classicmac-game-mouse.patch" || die "Failed to apply game mouse routing patch"
 git -C "$QEMU_DIR" apply "$ATI_DIR/classicmac-radeon-idle.patch" || die "Failed to apply Radeon initial idle state patch"
+git -C "$QEMU_DIR" apply "$ATI_DIR/classicmac-texture-swap.patch" || die "Failed to apply ATI Radeon texture swap patch"
 if [ -f "$PPCVID_DIR/qemu_vga.ndrv" ]; then
   cp "$PPCVID_DIR/qemu_vga.ndrv" "$QEMU_DIR/pc-bios/qemu_vga.ndrv"
 else
