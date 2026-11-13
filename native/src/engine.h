@@ -11,6 +11,7 @@ public:
   int port = 0;
   explicit Engine(Model::Machine, QObject *parent = nullptr);
   ~Engine() override;
+  qint64 processId() const { return process.processId(); }
   void start();
   QJsonValue command(QString name, QJsonObject args = {});
   QJsonValue hmp(const QString &);

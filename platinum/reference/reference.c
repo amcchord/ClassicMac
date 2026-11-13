@@ -1,6 +1,7 @@
 /* A reference fixture, drawn by the guest's own Appearance Manager.
  * No production ClassicMac renderer code or artwork is used here. */
 #include <Quickdraw.h>
+#include <Palettes.h>
 #include <Fonts.h>
 #include <Windows.h>
 #include <Menus.h>
@@ -11,11 +12,13 @@
 #include <Resources.h>
 #include <Files.h>
 #include <Folders.h>
+#include <Gestalt.h>
 #include <stdio.h>
 #include <string.h>
 
 static WindowPtr window;
 static short page = 1;
+static long systemVersion;
 static void exportIconServices(void) {
     OSType types[] = { 'cddr', 'flpy', 'fldr', 'ofld', 'CLIP', 'caut', 'note', 'stop', 'hdsk', 'pref', 'trsh', 'gnet' };
     short i;
@@ -52,6 +55,103 @@ static void draw(void) {
     SetRect(&area, 0, 0, 800, 600); EraseRect(&area);
     RGBColor black = { 0, 0, 0 }; RGBForeColor(&black);
     UseThemeFont(kThemeSystemFont, smSystemScript);
+    {
+        char version[60];
+        sprintf(version, "Mac OS %lx, depth %d", systemVersion,
+                (**(**GetMainDevice()).gdPMap).pixelSize);
+        text(20, 42, version);
+    }
+    if (page >= 10 && page <= 12) {
+        Rect cell;
+        short ch, bit, advance;
+        RGBColor white = {65535, 65535, 65535};
+        SetAntiAliasedTextEnabled(false, 0);
+        text(20, 25, page == 10 ? "Charcoal 12" : page == 11 ? "Geneva 12" : "Geneva 9");
+        SetRect(&cell, 16, 50, 536, 386);
+        RGBBackColor(&white); EraseRect(&cell);
+        if (page != 10) { TextFont(3); TextSize(page == 11 ? 12 : 9); TextFace(0); }
+        for (ch = 32; ch < 256; ++ch) {
+            x = 20 + ((ch - 32) % 16) * 32;
+            y = 50 + ((ch - 32) / 16) * 24;
+            MoveTo(x, y + 16); DrawChar(ch);
+            advance = CharWidth(ch);
+            for (bit = 0; bit < 8; ++bit) {
+                if (advance & (1 << bit)) {
+                    SetRect(&cell, x + 22 + bit, y + 21, x + 23 + bit, y + 22);
+                    PaintRect(&cell);
+                }
+            }
+        }
+        return;
+    }
+    if (page == 8 || page == 9) {
+        text(20, 25, "Native indeterminate progress phases");
+        for (i = 0; i < 8; ++i) {
+            ThemeTrackDrawInfo t;
+            memset(&t, 0, sizeof(t)); t.kind = kThemeMediumIndeterminateBar;
+            SetRect(&t.bounds, 30, 60 + 32 * i, 280, 72 + 32 * i);
+            t.min = 0; t.max = 100; t.attributes = kThemeTrackHorizontal;
+            t.enableState = kThemeTrackActive;
+            t.trackInfo.progress.phase = i + (page == 9 ? 8 : 0);
+            DrawThemeTrack(&t, NULL, NULL, 0);
+        }
+        return;
+    }
+    if (page == 5 || page == 7) {
+        ThemeWindowMetrics m;
+        Rect item;
+        memset(&m, 0, sizeof(m)); m.metricSize = sizeof(m);
+        m.titleHeight = 16; m.titleWidth = 70;
+        text(20, 25, "Native menus and movable modal dialog");
+        SetRect(&r, 30, 60, 180, 180);
+        DrawThemeMenuBackground(&r, kThemeMenuTypePopUp);
+        SetRect(&item, 30, 79, 180, 95);
+        DrawThemeMenuItem(&r, &item, r.top, r.bottom, kThemeMenuSelected,
+                         kThemeMenuItemPlain | kThemeMenuItemPopUpBackground, NULL, 0);
+        SetRect(&item, 30, 111, 180, 117); DrawThemeMenuSeparator(&item);
+        SetRect(&r, 230, 80, 490, 230);
+        DrawThemeWindowFrame(kThemeMovableDialogWindow, &r,
+                             page == 7 ? kThemeStateInactive : kThemeStateActive,
+                             &m, kThemeWindowHasTitleText, NULL, 0);
+        return;
+    }
+    if (page == 6) {
+        ThemeTrackDrawInfo t;
+        text(20, 25, "Native scrollbars and focused edit frame");
+        for (i = 0; i < 4; ++i) {
+            Rect track;
+            memset(&t, 0, sizeof(t)); t.kind = kThemeMediumScrollBar;
+            SetRect(&t.bounds, 30 + i * 30, 60, 46 + i * 30, 260);
+            t.min = 0; t.max = 100; t.value = 30;
+            t.attributes = kThemeTrackShowThumb;
+            t.enableState = i == 3 ? kThemeTrackNothingToScroll : kThemeTrackActive;
+            t.trackInfo.scrollbar.pressState = i == 1 ? kThemeTopOutsideArrowPressed : i == 2 ? kThemeBottomOutsideArrowPressed : 0;
+            t.trackInfo.scrollbar.viewsize = 0;
+            DrawThemeScrollBarArrows(&t.bounds, t.enableState,
+                                     t.trackInfo.scrollbar.pressState, false, &track);
+            t.bounds = track;
+            DrawThemeTrack(&t, NULL, NULL, 0);
+        }
+        memset(&t, 0, sizeof(t)); t.kind = kThemeMediumScrollBar;
+        SetRect(&t.bounds, 170, 60, 370, 76); t.min = 0; t.max = 100; t.value = 30;
+        t.attributes = kThemeTrackShowThumb | kThemeTrackHorizontal;
+        t.enableState = kThemeTrackActive;
+        { Rect track; DrawThemeScrollBarArrows(&t.bounds, t.enableState, 0, true, &track); t.bounds = track; }
+        DrawThemeTrack(&t, NULL, NULL, 0);
+        for (i = 0; i < 2; ++i) {
+            SetRect(&r, 170, 120 + 70 * i, 420, 140 + 70 * i);
+            RGBColor white = {65535, 65535, 65535}; RGBBackColor(&white); EraseRect(&r);
+            DrawThemeEditTextFrame(&r, kThemeStateActive);
+            if (i) DrawThemeFocusRect(&r, true);
+        }
+        button(170, 280, 80, 20, kThemePushButton, kThemeStateActive,
+               kThemeButtonOff, kThemeAdornmentFocus);
+        button(310, 280, 14, 12, kThemeCheckBox, kThemeStateActive,
+               kThemeButtonOff, kThemeAdornmentFocus | kThemeAdornmentDrawIndicatorOnly);
+        button(350, 280, 12, 12, kThemeRadioButton, kThemeStateActive,
+               kThemeButtonOff, kThemeAdornmentFocus | kThemeAdornmentDrawIndicatorOnly);
+        return;
+    }
     if (page == 3 || page == 4) {
         ThemeWindowMetrics m; ThemeWindowAttributes a;
         memset(&m, 0, sizeof(m)); m.metricSize = sizeof(m);
@@ -121,6 +221,11 @@ int main(void) {
     Rect bounds; Str255 title; EventRecord event; Boolean done = false;
     InitGraf(&qd.thePort); InitFonts(); InitWindows(); InitMenus(); TEInit(); InitDialogs(NULL); InitCursor();
     RegisterAppearanceClient();
+    Gestalt(gestaltSystemVersion, &systemVersion);
+    /* Reference colors must come from a true-color framebuffer, not an
+       indexed palette's nearest-color substitutions. Only the disposable
+       reference guest is changed. */
+    SetDepth(GetMainDevice(), 32, 1, 1);
     exportIconServices();
     title[0] = 18; BlockMoveData("Platinum Reference", title + 1, 18);
     SetRect(&bounds, 50, 70, 850, 670);
@@ -133,7 +238,8 @@ int main(void) {
         if (event.what == keyDown) {
             char key = event.message & charCodeMask;
             if (key == 'q' || key == 'Q') done = true;
-            else if (key >= '1' && key <= '4') { page = key - '0'; draw(); }
+            else if (key >= '1' && key <= '9') { page = key - '0'; draw(); }
+            else if (key >= 'a' && key <= 'c') { page = 10 + key - 'a'; draw(); }
         }
         if (event.what == mouseDown) {
             WindowPtr hit; short part = FindWindow(event.where, &hit);

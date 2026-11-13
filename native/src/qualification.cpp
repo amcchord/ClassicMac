@@ -27,6 +27,10 @@ int selfTest(const QString &fixtures, const QString &output) {
       for (int y = 0; y < actual.height(); ++y)
         for (int x = 0; x < actual.width(); ++x)
           differing += actual.pixel(x, y) != want.pixel(x, y);
+      if (differing && !output.isEmpty()) {
+        QDir().mkpath(output);
+        actual.save(output + "/" + name + "-actual-" + QString::number(scale) + "x.png");
+      }
       require(differing == 0, name + QString(" at %1x: %2 differing pixels")
                                          .arg(scale)
                                          .arg(differing));
@@ -75,6 +79,61 @@ int selfTest(const QString &fixtures, const QString &output) {
       int i = c - 32;
       text(p, QString(QChar(c)), i % 16 * 16, i / 16 * 20 + 14);
     }
+  });
+  QFile fontManifest(fixtures + "/native-fonts.json");
+  require(fontManifest.open(QFile::ReadOnly), "Missing native font provenance");
+  const auto fontCodes = QJsonDocument::fromJson(fontManifest.readAll()).object()["codes"].toArray();
+  for (const auto &font : QStringList{"system", "regular", "small"})
+    check("native-font-" + font, 520, 336, [font, fontCodes](Pixels &p) {
+      p.image.fill(0xffffffff);
+      for (int i = 0; i < fontCodes.size(); ++i) {
+        const auto ch = QString(QChar(fontCodes[i].toInt()));
+        const int x = 4 + i % 16 * 32, y = i / 16 * 24;
+        text(p, ch, x, y + 16, 0xff000000, font);
+        const int advance = textWidth(ch, font);
+        for (int bit = 0; bit < 8; ++bit)
+          if (advance & (1 << bit)) p.pixel(x + 22 + bit, y + 21, 0xff000000);
+      }
+    });
+  check("os9-window-movable", 267, 178, [](Pixels &p) { movableDialog(p); });
+  check("os9-window-movable-inactive", 267, 178, [](Pixels &p) { movableDialog(p, 70, false); });
+  check("os9-menu-panel", 153, 123, [](Pixels &p) {
+    menuFrame(p);
+    p.fill(1, 20, 150, 16, 0xff333399);
+    p.vertical(1, 20, 16, 0xff6666cc);
+    p.vertical(150, 20, 16, 0xff000088);
+    p.line(1, 54, 150, 0xff888888);
+    p.line(1, 55, 150, 0xffffffff);
+  });
+  check("os9-field-normal", 254, 24, [](Pixels &p) {
+    sunken(p);
+    p.fill(2, 2, 250, 20, 0xffffffff);
+  });
+  check("os9-field-focused", 256, 26, [](Pixels &p) {
+    p.stretch(measured()["FIELD_FOCUS"].toArray(), 3);
+    p.fill(3, 3, 250, 20, 0xffffffff);
+  });
+  check("os9-button-focused", 84, 24, [](Pixels &p) {
+    p.stretch(measured()["BUTTON_FOCUS"].toArray(), 6);
+  });
+  check("os9-checkbox-focused", 16, 16, [](Pixels &p) {
+    p.fill(0, 0, 16, 16, 0xff6666cc);
+    Pixels indicator(14, 12, 0);
+    toggle(indicator, false, false);
+    QPainter(&p.image).drawImage(2, 2, indicator.image);
+  });
+  for (int phase = 0; phase < 4; ++phase)
+    check("os9-progress-phase-" + QString::number(phase), 250, 14,
+           [phase](Pixels &p) { progress(p, -1, phase); });
+  for (const auto &state : QStringList{"normal", "up-pressed", "down-pressed", "disabled"})
+    check("os9-scroll-" + state, 16, 200, [state](Pixels &p) {
+      scrollBar(p, state == "disabled" ? -1 : 46,
+                 state == "up-pressed" ? -1 : state == "down-pressed" ? 1 : 0);
+    });
+  check("os9-scroll-horizontal", 200, 16, [](Pixels &p) {
+    Pixels vertical(16, 200);
+    scrollBar(vertical, 46);
+    p.image = vertical.image.transformed(QTransform(0, 1, 1, 0, 0, 0));
   });
   QFile advances(fixtures + "/system-advances.json");
   require(advances.open(QFile::ReadOnly), "Missing font advances");
@@ -229,18 +288,73 @@ int selfTest(const QString &fixtures, const QString &output) {
   // that Qt compositing did not introduce platform styling or interpolation.
   for (int scale : {1, 2}) {
     PButton native("", nullptr);
-    native.resize(80, 20);
+    native.resize(84, 24);
     native.setFocusPolicy(Qt::NoFocus);
-    QImage capture(80 * scale, 20 * scale, QImage::Format_ARGB32);
+    QImage capture(84 * scale, 24 * scale, QImage::Format_ARGB32);
     capture.setDevicePixelRatio(scale);
     capture.fill(face);
     native.render(&capture);
-    QImage expected(fixtures + "/button-normal.png");
+    QImage expected(84, 24, QImage::Format_ARGB32);
+    expected.fill(face);
+    QPainter(&expected).drawImage(2, 2, QImage(fixtures + "/button-normal.png"));
     expected = expected.convertToFormat(QImage::Format_ARGB32)
                    .scaled(capture.size(), Qt::IgnoreAspectRatio,
                            Qt::FastTransformation);
     require(capture == expected,
             "Actual native button differs at scale " + QString::number(scale));
+  }
+  for (int scale : {1, 2}) {
+    for (const auto &kind : QStringList{"push", "checkbox", "radio"}) {
+      const bool checkbox = kind != "push";
+      PButton native("", nullptr);
+      native.toggleButton = checkbox;
+      native.radio = kind == "radio";
+      native.setCheckable(checkbox);
+      native.resize(checkbox ? QSize(16, 16) : QSize(84, 24));
+      native.show();
+      native.activateWindow();
+      native.setFocus();
+      QApplication::processEvents();
+      require(native.hasFocus(), "Keyboard focus did not reach the test button");
+      QImage capture(native.size() * scale, QImage::Format_ARGB32);
+      capture.setDevicePixelRatio(scale);
+      capture.fill(face);
+      native.render(&capture);
+      QImage expected(fixtures + (kind == "radio" ? "/os9-radio-focused.png" :
+                         checkbox ? "/os9-checkbox-focused.png" : "/os9-button-focused.png"));
+      expected = expected.convertToFormat(QImage::Format_ARGB32).scaled(
+          capture.size(), Qt::IgnoreAspectRatio, Qt::FastTransformation);
+      require(capture == expected, "Focused native widget differs from the Mac");
+    }
+    Pixels panel(153, 123);
+    menuFrame(panel);
+    QPainter painter(&panel.image);
+    QStyleOptionMenuItem item;
+    item.rect = QRect(2, 20, 149, 16);
+    item.state = QStyle::State_Enabled | QStyle::State_Selected;
+    qApp->style()->drawControl(QStyle::CE_MenuItem, &item, &painter);
+    item.rect = QRect(2, 52, 149, 6);
+    item.menuItemType = QStyleOptionMenuItem::Separator;
+    qApp->style()->drawControl(QStyle::CE_MenuItem, &item, &painter);
+    painter.end();
+    if (!output.isEmpty()) panel.image.save(output + "/qt-menu-panel.png");
+    require(panel.image == QImage(fixtures + "/os9-menu-panel.png").convertToFormat(QImage::Format_ARGB32),
+            "The Qt menu delegate changed the native selected row or separator");
+  }
+  {
+    PEdit field(QString(100, 'W'));
+    field.resize(100, field.height());
+    field.selectAll();
+    QImage capture(field.size(), QImage::Format_ARGB32);
+    capture.fill(face);
+    field.render(&capture);
+    Pixels frame(field.width(), field.height());
+    sunken(frame);
+    for (int y = 0; y < field.height(); ++y)
+      for (int x = 0; x < field.width(); ++x)
+        if (x < 2 || x >= field.width() - 2 || y < 2 || y >= field.height() - 2)
+          require(capture.pixel(x, y) == frame.image.pixel(x, y),
+                  "A long field selection painted over its frame");
   }
   for (int scale : {1, 2}) {
     PWindow native("", {333, 169});
@@ -308,8 +422,8 @@ int selfTest(const QString &fixtures, const QString &output) {
       native.show();
       QApplication::setActiveWindow(&native);
       QApplication::processEvents();
-      QImage one(940, 700, QImage::Format_ARGB32),
-          two(1880, 1400, QImage::Format_ARGB32);
+      QImage one(native.size(), QImage::Format_ARGB32),
+          two(native.size() * 2, QImage::Format_ARGB32);
       two.setDevicePixelRatio(2);
       one.fill(face);
       two.fill(face);
@@ -354,7 +468,8 @@ int selfTest(const QString &fixtures, const QString &output) {
   if (!output.isEmpty())
     Model::writeJSON(output + "/self-test.json",
                      QJsonObject{{"checks", count},
-                                 {"nativeWidgets", 5},
+                                 {"nativeWidgetGroups", 7},
+                                 {"nativeFontGlyphs", 672},
                                  {"dpiScales", QJsonArray{1, 1.25, 1.5, 1.75, 2, 2.5, 3}},
                                  {"displayProtocolAndInput", "passed"},
                                  {"pixels", reports},
@@ -368,6 +483,7 @@ int selfTest(const QString &fixtures, const QString &output) {
 class Qualification : public QObject {
 public:
   App *app;
+  qint64 markedEnginePid = 0;
   QJsonArray steps, results;
   QString output;
   int index = 0;
@@ -595,9 +711,50 @@ public:
       } else if (action == "guestReady") {
         auto e = app->currentEngine();
         done = e && e->vnc.ready && !e->vnc.frame.isNull();
+      } else if (action == "markEngine") {
+        auto e = app->currentEngine();
+        require(e && e->processId() > 0, "No engine process to mark");
+        markedEnginePid = e->processId();
+        done = true;
+      } else if (action == "engineReplaced") {
+        auto e = app->currentEngine();
+        done = e && e->processId() > 0 &&
+            e->processId() != markedEnginePid && e->vnc.ready;
+      } else if (action == "window") {
+        for (auto w : QApplication::topLevelWidgets())
+          if (w->isVisible() && w->windowTitle() == step["title"].toString())
+            done = true;
+      } else if (action == "popup") {
+        auto w = QApplication::activeModalWidget();
+        if (!w) w = QApplication::activeWindow();
+        if (w) {
+          auto combos = w->findChildren<PCombo *>();
+          combos.erase(std::remove_if(combos.begin(), combos.end(),
+              [](PCombo *combo) { return !combo->isVisible(); }), combos.end());
+          const int i = step.value("index").toInt();
+          if (i >= 0 && i < combos.size()) {
+            combos[i]->showPopup();
+            done = true;
+          }
+        }
+      } else if (action == "uiKey") {
+        auto w = QApplication::activePopupWidget();
+        if (!w) w = QApplication::focusWidget();
+        if (!w) w = QApplication::activeModalWidget();
+        if (w) {
+          auto sequence = QKeySequence::fromString(step["key"].toString());
+          require(sequence.count() == 1, "Qualification UI key must be one chord");
+          auto chord = sequence[0];
+          QKeyEvent down(QEvent::KeyPress, chord.key(), chord.keyboardModifiers());
+          QKeyEvent up(QEvent::KeyRelease, chord.key(), chord.keyboardModifiers());
+          QApplication::sendEvent(w, &down);
+          QApplication::sendEvent(w, &up);
+          done = true;
+        }
       } else if (action == "capture") {
         auto w = step["window"].toString() == "home"
                      ? static_cast<QWidget *>(app)
+                     : QApplication::activePopupWidget() ? QApplication::activePopupWidget()
                      : (QApplication::activeModalWidget()
                             ? QApplication::activeModalWidget()
                             : QApplication::activeWindow());
@@ -611,7 +768,13 @@ public:
           w->screen()->grabWindow(0, origin.x(), origin.y(), w->width(), w->height())
               .save(output + "/" + step["name"].toString() + "-desktop.png");
         }
-        Model::writeJSON(output + "/" + step["name"].toString() + ".json", app->evidence());
+        auto state = app->evidence();
+        state["captureKind"] = w == app ? "home" : qobject_cast<PDialog *>(w) ? "dialog" :
+            qobject_cast<QMenu *>(w) ? "menu" : "guest";
+        state["captureWidth"] = w->width();
+        state["captureHeight"] = w->height();
+        state["captureTitle"] = w->windowTitle();
+        Model::writeJSON(output + "/" + step["name"].toString() + ".json", state);
         if (auto e = app->currentEngine(); e && !e->vnc.frame.isNull())
           e->vnc.frame.save(output + "/" + step["name"].toString() +
                             "-guest.png");
@@ -682,6 +845,8 @@ public:
           w = app->guest(app->currentEngine());
         if (w) {
           auto combos = w->findChildren<PCombo *>();
+          combos.erase(std::remove_if(combos.begin(), combos.end(),
+              [](PCombo *combo) { return !combo->isVisible(); }), combos.end());
           int i = step.value("index").toInt();
           if (i < combos.size()) {
             int j = combos[i]->findText(step["text"].toString());

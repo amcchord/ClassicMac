@@ -45,9 +45,16 @@ protected:
   void paintEvent(QPaintEvent *) override;
   void mousePressEvent(QMouseEvent *) override;
   void mouseMoveEvent(QMouseEvent *) override;
+  void mouseDoubleClickEvent(QMouseEvent *) override;
+  void focusInEvent(QFocusEvent *) override;
+  void focusOutEvent(QFocusEvent *) override;
+  QVariant inputMethodQuery(Qt::InputMethodQuery) const override;
 
 private:
   int scroll = 0, anchor = 0;
+  QTimer caretTimer;
+  bool caretVisible = true;
+  void resetCaret();
   int position(int x) const;
 };
 class PCombo : public QComboBox {
@@ -55,9 +62,14 @@ class PCombo : public QComboBox {
 public:
   explicit PCombo(QWidget *parent = nullptr);
   QSize sizeHint() const override;
+  void showPopup() override;
+  void hidePopup() override;
 
 protected:
   void paintEvent(QPaintEvent *) override;
+
+private:
+  QPointer<QMenu> menu;
 };
 class PGroup : public QWidget {
   Q_OBJECT
@@ -72,24 +84,25 @@ class PProgress : public QWidget {
   Q_OBJECT
 public:
   double value = 0;
-  explicit PProgress(QWidget *parent = nullptr) : QWidget(parent) {
-    setFixedHeight(14);
-    setAccessibleName("Progress");
-  }
-  void setValue(double v) {
-    value = v;
-    update();
-  }
+  explicit PProgress(QWidget *parent = nullptr);
+  void setValue(double v);
 
 protected:
   void paintEvent(QPaintEvent *) override;
+  void showEvent(QShowEvent *) override;
+  void hideEvent(QHideEvent *) override;
+
+private:
+  QTimer animation;
+  int phase = 0;
 };
 class PWindow : public QWidget {
   Q_OBJECT
 public:
   QWidget *body;
   QString title;
-  bool shaded = false, allowShade = true, growable = true;
+  bool shaded = false, allowShade = true, growable = true, dialogFrame = false;
+  bool contentOnlyFullScreen = false;
   QSize expanded;
   QSize expandedMinimum;
   std::function<bool()> canClose;
@@ -122,6 +135,8 @@ protected:
 
 private:
   QString held;
+  bool heldInside = false;
+  QWidget *growOverlay;
   QPoint drag, origin;
   QSize startSize;
   bool resizing = false;
@@ -140,6 +155,24 @@ public:
 private:
   QEventLoop loop;
   int result = 0;
+};
+// A toolbar keeps every action accessible when the screen window narrows.
+class PFlowLayout : public QLayout {
+public:
+  explicit PFlowLayout(QWidget *parent);
+  ~PFlowLayout() override;
+  void addItem(QLayoutItem *) override;
+  int count() const override { return items.size(); }
+  QLayoutItem *itemAt(int i) const override { return items.value(i); }
+  QLayoutItem *takeAt(int i) override;
+  bool hasHeightForWidth() const override { return true; }
+  int heightForWidth(int width) const override;
+  QSize sizeHint() const override { return minimumSize(); }
+  QSize minimumSize() const override;
+  void setGeometry(const QRect &) override;
+private:
+  QList<QLayoutItem *> items;
+  int arrange(const QRect &, bool apply) const;
 };
 PLabel *label(QString text, QWidget *parent = nullptr, QString font = "system",
               bool wrap = false);

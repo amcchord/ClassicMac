@@ -30,6 +30,8 @@ void titleBox(Pixels &, const QString &kind, bool pressed = false, int x = 0,
 void windowFrame(Pixels &, bool active = true, bool collapsed = false,
                  int titleWidth = 70, bool boxes = true, bool growable = true,
                  bool modal = false);
+void movableDialog(Pixels &, int titleWidth = 70, bool active = true);
+void menuFrame(Pixels &);
 void group(Pixels &, int labelWidth = 0);
 void sunken(Pixels &);
 void focus(Pixels &);

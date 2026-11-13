@@ -6,12 +6,11 @@ licensed. Original Apple Mac OS 9 artwork in `macos-icons/` has separate
 provenance and copyright; it is not MIT licensed. Reference screenshot crops are test evidence, kept separate from
 shipping app resources; their provenance is recorded in `reference/README.md`.
 
-- `fonts/` — RetroBoot System 12, Regular 12 and Small 10 bitmap fonts:
-  original pixel art "in the spirit of" the classic system fonts (see
-  `LICENSE-fonts.txt`). Source: RetroBoot `presenter/ui/assets/fonts`
-  at `531f953` (2026-10-11). The system font’s printable ASCII glyphs now
-  use the Charcoal 12 pixel recreation measured in M5Tab-Macintosh; the BDF
-  records its source hash. Extended glyphs retain the original artwork.
+- `fonts/` — System 12, Regular 12 and Small 10 bitmap recreations (see
+  `LICENSE-fonts.txt`). The 224 Mac Roman glyphs and advances in each font
+  are independently measured from Mac OS 9.2.1 QuickDraw: Charcoal 12,
+  Geneva 12 and Geneva 9. Small 10 keeps the existing UI role name.
+  Non-Mac-Roman fallback artwork comes from RetroBoot at `531f953`.
 - `icons/` — the matching icon set and palette (see `LICENSE-icons.txt`),
   from RetroBoot `presenter/ui/assets/icons` at the same revision.
 - `tools/build_platinum_swift.py` — compiles the bitmap fonts to pixel-square
@@ -27,6 +26,14 @@ artwork, pop-up arrows, title boxes, default rings and determinate progress.
 (MIT), with fresh native captures for the formerly approximate disabled
 radios, mixed checkbox, pressed pop-up and disabled default ring. See
 [the reference lab](reference/README.md) for exact coverage and limitations.
+
+The November 2026 pass adds independently measured movable dialogs, menus,
+focused controls, paired-arrow scrollbars and indeterminate progress phases
+in `MeasuredAuxiliaryChrome.swift`. The font measurement tool reads native
+QuickDraw screenshots; it does not read Apple font resources. The older
+M5Tab ASCII atlas is retained as `m5-system-ascii-legacy.png` for provenance.
+Native captures corrected its one-pixel bearing error. Both the Swift and
+C++ gates compare all 672 Mac Roman glyphs and their advances at 1×/2×.
 
 One Mac pixel is one point. PixelPainter controls and direct system text are
 tested at both 1× and 2× device scales. SwiftUI Text and whole application

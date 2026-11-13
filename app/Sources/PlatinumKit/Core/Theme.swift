@@ -41,7 +41,7 @@ public enum Platinum {
     /// List and text selection.
     public static let highlight = RGB(0xCCCCFF)
     /// A highlighted menu item.
-    public static let menuHighlight = RGB(0x6666CC)
+    public static let menuHighlight = RGB(0x333399)
     /// Secondary detail text.
     public static let dimText = gray73
     /// Disabled text and glyphs.

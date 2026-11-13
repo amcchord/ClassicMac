@@ -104,9 +104,10 @@ Artist and collections: <https://freeware.iconfactory.com>
 
 PlatinumKit includes MIT-licensed fonts, icons and control tables shared
 with RetroBoot. Their notices are in `platinum/fonts/LICENSE-fonts.txt`
-and `platinum/icons/LICENSE-icons.txt`. System 12 printable ASCII uses the
-M5Tab-Macintosh screenshot-traced pixel recreation; the original Apple font
-program is not included. Iconfactory artwork has its own
+and `platinum/icons/LICENSE-icons.txt`. The three fonts' Mac Roman strikes
+are bitmap recreations measured from unsmoothed Mac OS 9.2.1 QuickDraw output;
+the original Apple font programs are not included. Reference hashes and the
+measurement method are in `platinum/reference/README.md`. Iconfactory artwork has its own
 terms as described above.
 
 ## Windows and Linux desktop distributions
@@ -129,11 +130,17 @@ of those licenses. The application contains no additional guest OS disk.
 
 ## RetroBoot Power Mac sound timing
 
-The Screamer timing patches in `screamer/patches/` and their device-level test
-are from RetroBoot commit `1860881266449ca2575061e0bd4055c1265cf217`.
+The original Screamer timing patches and their device-level test are from
+RetroBoot commit `1860881266449ca2575061e0bd4055c1265cf217`.
 The patches are GPL-2.0-or-later, matching the modified QEMU integration.
 Original source notices are retained; provenance and hashes are in
 `screamer/README.md`. Corresponding prepared engine sources accompany releases.
+
+The November engine import, including the additional strict pre-roll patch,
+is from RetroBoot `432a43d4ba8502a7afeaa5dd25ecf959c23aed1c` (2.0.1).
+`docs/retroboot-2.0.1-import.json` records all CPU, VGA, Quadra, ATI and sound
+patch hashes and video-driver adaptations. Upstream QEMU/driver copyright
+and GPL notices are retained in the patches and sources.
 
 ## Original Mac OS icons
 

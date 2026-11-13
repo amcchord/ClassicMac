@@ -4,15 +4,23 @@ RetroBoot bitmap fonts
   RetroBoot Regular 12 (src/rb-regular-12.glyphs -> RetroBoot-Regular-12.bdf)
   RetroBoot Small 10   (src/rb-small-10.glyphs   -> RetroBoot-Small-10.bdf)
 
-Provenance: Regular 12, Small 10 and the System 12 extended glyphs are
-original pixel art drawn for RetroBoot in October 2026. ClassicMac replaced
-System 12's printable ASCII with the user's M5Tab-Macintosh Charcoal12 pixel
-recreation (bcfa1649bcbd5a6c433ad4d09b93b543ae768275), traced from Mac OS 8
-SimpleText screenshots. The source BDF records the reference hash. This is
-not Apple's original font program. BDF files are the editable sources in
-ClassicMac; rebuild embedded TrueType with build_platinum_swift.py.
+Provenance: the original fonts were pixel art drawn for RetroBoot in
+October 2026. An earlier System 12 ASCII revision used the M5Tab-Macintosh
+Charcoal12 recreation (bcfa1649bcbd5a6c433ad4d09b93b543ae768275).
+
+In November 2026 ClassicMac measured the 224 Mac Roman characters and their
+advances independently from unsmoothed QuickDraw DrawChar/CharWidth output
+in Mac OS 9.2.1: Charcoal 12, Geneva 12 and Geneva 9, respectively. Small 10
+retains its existing UI role name but contains the native Geneva 9 bitmap.
+Non-Mac-Roman fallback glyphs retain the original RetroBoot artwork.
+The reference utility, bitmap measurement tool, source-frame hashes and
+independent test atlases are documented in platinum/reference/README.md
+and Fixtures/Platinum/native-fonts.json. No original Apple font program was
+extracted or included. BDF files are the editable bitmap recreations;
+rebuild embedded TrueType with build_platinum_swift.py.
 
 Copyright (c) 2026 RetroBoot contributors
+Copyright (c) 2026 ClassicMac contributors
 
 MIT License
 

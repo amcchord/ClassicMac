@@ -33,7 +33,7 @@ public enum PlatinumMenu {
         guard !items.isEmpty else { return nil }
         let view = MenuView(items: items)
         let contentWidth = max(Int(anchor.width) + 11 - 2, view.naturalWidth)
-        let size = NSSize(width: contentWidth + 2, height: view.naturalHeight + 2)   // +2 shadow
+        let size = NSSize(width: contentWidth + 1, height: view.naturalHeight + 1)
         view.frame = NSRect(origin: .zero, size: size)
 
         // Line the selected item's text up with the button's text.
@@ -54,7 +54,7 @@ public enum PlatinumMenu {
     public static func pullDown(items: [Item], anchor: NSRect, event: NSEvent?, in parent: NSWindow?) -> Int? {
         guard !items.isEmpty else { return nil }
         let view = MenuView(items: items)
-        let size = NSSize(width: max(Int(anchor.width), view.naturalWidth) + 2, height: view.naturalHeight + 2)
+        let size = NSSize(width: max(Int(anchor.width), view.naturalWidth) + 1, height: view.naturalHeight + 1)
         view.frame = NSRect(origin: .zero, size: size)
         var origin = NSPoint(x: anchor.minX, y: anchor.minY - size.height + 1)
         if let screen = parent?.screen ?? NSScreen.main {
@@ -189,7 +189,7 @@ public enum PlatinumMenu {
         }
 
         func item(at point: NSPoint) -> Int? {
-            let menuWidth = bounds.width - 2
+            let menuWidth = bounds.width - 1
             guard point.x >= 1, point.x < menuWidth - 1 else { return nil }
             var y = PlatinumMenu.topMargin
             for (i, item) in items.enumerated() {
@@ -216,7 +216,7 @@ public enum PlatinumMenu {
             guard let cg = NSGraphicsContext.current?.cgContext else { return }
             cg.clear(bounds)
             let p = PixelPainter(cg)
-            let w = Int(bounds.width) - 2, h = Int(bounds.height) - 2
+            let w = Int(bounds.width) - 1, h = Int(bounds.height) - 1
             Chrome.menu(p, PixelRect(0, 0, w, h))
             var y = PlatinumMenu.topMargin
             for (i, item) in items.enumerated() {
@@ -227,7 +227,11 @@ public enum PlatinumMenu {
                     continue
                 }
                 let hot = i == highlighted
-                if hot { p.fill(1, y, w - 2, PlatinumMenu.itemHeight, Platinum.menuHighlight) }
+                if hot {
+                    p.fill(1, y, w - 2, PlatinumMenu.itemHeight, Platinum.menuHighlight)
+                    p.vline(1, y, PlatinumMenu.itemHeight, RGB(0x6666CC))
+                    p.vline(w - 2, y, PlatinumMenu.itemHeight, RGB(0x000088))
+                }
                 let ink: RGB = hot ? Platinum.white : item.enabled ? Platinum.black : Platinum.disabledText
                 if item.checked { Chrome.checkmark(p, x: 6, y: y + 4, color: ink) }
                 p.text(item.title, font: .system, x: PlatinumMenu.textX, baseline: y + 12, color: ink)

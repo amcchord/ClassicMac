@@ -1,6 +1,7 @@
 #pragma once
 #include <QImage>
 #include <QWidget>
+#include <QScrollBar>
 #include <QtNetwork>
 class VNC : public QObject {
   Q_OBJECT
@@ -46,6 +47,7 @@ public:
   ~GuestView() override;
   void release();
   QRectF screenRect() const;
+  QRect displayViewport() const;
   QSize desiredSize() const;
   void scheduleResize();
 signals:
@@ -67,6 +69,8 @@ protected:
   bool event(QEvent *) override;
 
 private:
+  QScrollBar *horizontalScroll, *verticalScroll;
+  void updateScrollbars();
   void mouse(QMouseEvent *);
   QSet<quint32> keys;
   int mask = 0;

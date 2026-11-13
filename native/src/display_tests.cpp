@@ -127,6 +127,7 @@ void displayTests(const QString &fixtures, const QString &output) {
       for (int y = 0; y < size.height(); ++y)
         for (int x = 0; x < size.width(); ++x)
           framebuffer.frame.setPixel(x, y, qRgb(x % 251, y % 251, (x + y) % 251));
+      emit framebuffer.changed();
       host.show();
       QApplication::processEvents();
       auto captured = host.grab().toImage();
@@ -139,6 +140,8 @@ void displayTests(const QString &fixtures, const QString &output) {
       check(zoom >= 1, "Synthetic guest cannot fit at integral zoom");
       for (int y = 0; y < size.height() * zoom; ++y)
         for (int x = 0; x < size.width() * zoom; ++x)
+          if (x + qRound(r.x() * dpi) < qFloor(view.displayViewport().width() * dpi) &&
+              y + qRound(r.y() * dpi) < qFloor(view.displayViewport().height() * dpi))
           check(captured.valid(at.x() + x, at.y() + y) &&
                   captured.pixel(at.x() + x, at.y() + y) == framebuffer.frame.pixel(x / zoom, y / zoom),
                   "Guest framebuffer pixels were clipped/resampled at DPR " + QString::number(dpi) +
@@ -168,9 +171,9 @@ void displayTests(const QString &fixtures, const QString &output) {
   const QList<qreal> scales = {1, 1.25, 1.5, 1.75, 2, 2.5, 3};
   for (qreal scale : scales) {
     PButton native("", nullptr);
-    native.resize(80, 20);
+    native.resize(84, 24);
     native.setFocusPolicy(Qt::NoFocus);
-    QImage actual(qCeil(80 * scale), qCeil(20 * scale), QImage::Format_ARGB32);
+    QImage actual(qCeil(84 * scale), qCeil(24 * scale), QImage::Format_ARGB32);
     actual.setDevicePixelRatio(scale);
     actual.fill(Platinum::face);
     native.render(&actual);
@@ -180,7 +183,7 @@ void displayTests(const QString &fixtures, const QString &output) {
     {
       QPainter p(&expected);
       p.setRenderHint(QPainter::SmoothPixmapTransform, false);
-      p.drawImage(0, 0, QImage(fixtures + "/button-normal.png"));
+      p.drawImage(2, 2, QImage(fixtures + "/button-normal.png"));
     }
     check(actual == expected, "Native button changed reference pixels at DPI " + QString::number(scale));
     for (QSize viewport : {QSize(643, 487), QSize(1001, 713), QSize(1900, 1300)}) {
@@ -203,6 +206,44 @@ void displayTests(const QString &fixtures, const QString &output) {
         "Guest resize exceeds display/VRAM limits");
   check(NativeDisplay::imageRect({1000, 800}, {640, 480}, 1, false, 2).width() == 640,
         "A fixed screen that cannot fit 2x used a fractional sharp-pixel zoom");
+  check(NativeDisplay::imageRect({400, 300}, {640, 480}, 1).width() == 640,
+        "Sharp Pixels silently shrank an oversized guest");
+  check(NativeDisplay::imageRect({400, 300}, {640, 480}, 1, true).width() == 400,
+        "Fit Window stopped fitting the complete guest");
+  {
+    VNC frame;
+    frame.ready = true;
+    frame.frame = QImage(640, 480, QImage::Format_RGB32);
+    for (int y = 0; y < 480; ++y)
+      for (int x = 0; x < 640; ++x)
+        frame.frame.setPixel(x, y, qRgb(x % 251, y % 251, (x + y) % 251));
+    GuestView view(&frame);
+    view.resize(400, 300);
+    view.show();
+    emit frame.changed();
+    QApplication::processEvents();
+    const auto dpr = view.devicePixelRatioF();
+    if (640 > view.width() * dpr || 480 > view.height() * dpr) {
+      auto bars = view.findChildren<QScrollBar *>();
+      check(bars.size() == 2, "Sharp Pixels has no screen scrollbars");
+      for (auto bar : bars) {
+        check(bar->isVisible() && bar->maximum() > 0, "Oversized guest edge is unreachable");
+        bar->setValue(bar->maximum());
+      }
+      QApplication::processEvents();
+      auto image = view.grab().toImage();
+      const auto r = view.screenRect();
+      const int x = qRound(r.x() * dpr) + 639, y = qRound(r.y() * dpr) + 479;
+      check(image.valid(x, y) && image.pixel(x, y) == frame.frame.pixel(639, 479),
+            "Scrolling did not expose the final guest pixel intact");
+      if (!output.isEmpty()) view.grab().save(output + "/guest-sharp-scrolled.png");
+    }
+    view.fitWindow = true;
+    view.scheduleResize();
+    QApplication::processEvents();
+    for (auto bar : view.findChildren<QScrollBar *>())
+      check(!bar->isVisible(), "Fit Window left unnecessary scrollbars");
+  }
   Peer peer;
   VNC client;
   bool failed = false;

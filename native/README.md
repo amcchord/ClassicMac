@@ -7,8 +7,9 @@ and `classicmac-desktop/library.json` preferences remain compatible.
 
 The UI draws integer pixels from the Mac PlatinumKit measurement tables and
 the shared MIT BDF fonts. Host themes and font rasterizers do not draw the
-window chrome, labels, buttons, toggles, popup buttons or fields. Scrollbars
-use the Mac renderer's original tables. Qt supplies native window/input,
+window chrome, labels, buttons, toggles, popup buttons or fields. Menus,
+movable dialogs, focus rings and paired-arrow scrollbars use independently
+measured Mac OS 9 tables. Qt supplies native window/input,
 accessibility, editing, file-dialog, TLS, networking and process services.
 
 Build with Qt 6.4+ Widgets/Network/Concurrent, OpenSSL Crypto, zlib and CMake:
@@ -67,7 +68,9 @@ invalidates an earlier dynamic mode during each subsequent mode switch.
 The guest scale menu remembers each Mac's choice in the desktop profile's
 `view.ini`. Sharp Pixels uses integral physical-pixel zoom, adapting the guest
 resolution to the viewport. 1×/2× offer explicit pixel zoom; Fit Window allows
-fractional fitting. A screen too large for the available view is reduced to fit.
+fractional fitting. Sharp Pixels and explicit 1×/2× preserve their minimum
+integral zoom when the screen is too large; Platinum scrollbars expose the
+remaining screen. Fit Window explicitly permits fractional fitting.
 ATI uses a firmware PCI display service and the Radeon driver's programmable
 timings, preserving acceleration and the current color depth. Its supported
 range is 640×480–1920×1440, with widths aligned to eight pixels. Enhanced Quadra
@@ -75,5 +78,15 @@ supports arbitrary widths; a bounded gray-screen fill prevents memory corruption
 during Display Manager's temporary depth switches. Pending requests survive startup.
 Built-in Quadra video stays fixed; enable Enhanced Video after shutdown to resize.
 Fixed displays default to Fit Window; an existing saved scale choice is preserved.
+The guest action bar wraps in narrow windows and includes Media. Full screen
+contains only the guest display. Closing a running guest requests shutdown.
 Alt+Enter toggles full screen;
 Escape releases mouse capture, then exits full screen when no capture is held.
+
+The current independent gate compares 61 fixtures at 1×/2×, all 672 native
+Mac Roman glyphs and advances, actual focused widgets/menu delegates, and
+opaque-content window compositing. `check-ui-pixel-grid.py` checks entire UI
+captures; `check-guest-pixels.py` compares every visible Sharp Pixels device
+pixel with the captured RFB frame. Modeled DPI tests on macOS are distinct
+from actual Windows desktop tests. See
+[`docs/ui-fidelity-audit-2026-11.md`](../docs/ui-fidelity-audit-2026-11.md).

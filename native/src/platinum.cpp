@@ -214,6 +214,25 @@ void group(Pixels &p, int labelWidth) {
   if (labelWidth)
     p.fill(8, top, labelWidth + 6, 2, face);
 }
+void movableDialog(Pixels &p, int titleWidth, bool active) {
+  p.stretch(table(active ? "MOVABLE_DIALOG" : "MOVABLE_DIALOG_INACTIVE"), 24);
+  if (!active) return;
+  const int w = p.w() - 1, tx = (w - titleWidth) / 2;
+  auto stripes = [&](int a, int b) {
+    if (b - a < 2) return;
+    for (int i = 0; i < 6; ++i) {
+      p.line(a - 1, 4 + i * 2, b - a, 0xffffffff);
+      p.line(a, 5 + i * 2, b - a, 0xff777777);
+    }
+  };
+  if (titleWidth > 0) {
+    stripes(6, tx - 3);
+    stripes(tx + titleWidth + 4, w - 5);
+  } else stripes(6, w - 5);
+}
+void menuFrame(Pixels &p) {
+  p.stretch(table("MENU_PANEL"), 2);
+}
 void sunken(Pixels &p) {
   p.line(0, 0, p.w() - 1, 0xff888888);
   p.vertical(0, 0, p.h() - 1, 0xff888888);
@@ -234,17 +253,22 @@ void bevel(Pixels &p, const QString &state) {
 void progress(Pixels &p, double value, int phase) {
   sunken(p);
   int x = 2, y = 2, w = p.w() - 4, h = p.h() - 4;
-  if (value < 0) {
-    for (int j = 0; j < h; ++j)
-      for (int i = 0; i < w; ++i)
-        p.pixel(x + i, y + j,
-                ((i - j + phase) % 16 + 16) % 16 < 8 ? 0xff6666cc : 0xffccccff);
-    return;
-  }
   p.line(0, 0, p.w() - 1, color('a'));
   p.vertical(0, 0, p.h() - 1, color('a'));
   p.pixel(0, p.h() - 1, face);
   p.pixel(p.w() - 1, 0, face);
+  if (value < 0) {
+    const auto tile = table("INDETERMINATE_" + QString::number((phase % 4 + 4) % 4));
+    const auto end = table("INDETERMINATE_END_" + QString::number((phase % 4 + 4) % 4));
+    for (int j = 0; j < h; ++j) {
+      const int row = std::min(9, j);
+      const auto pattern = tile[row].toString();
+      for (int i = 0; i < w; ++i)
+        p.pixel(x + i, y + j, color(pattern[i % 16]));
+      p.pixel(x + w - 1, y + j, color(end[row].toString()[0]));
+    }
+    return;
+  }
   QString track = "8bbbbbbbbd", trackEnd = "bddddddddd", second = "DCBAAABCDE",
           body = "EDCBABCDEG";
   QStringList end = {"EEEK5", "DDGK5", "CEGK5", "BEGK5", "BEGK5",
@@ -275,97 +299,26 @@ static QJsonArray glyph(uint code, const QString &font) {
              : f[QString::number(code)].toArray();
 }
 void scrollBar(Pixels &p, int thumb, int pressed) {
-  auto code = [](QChar ch) -> QRgb {
-    switch (ch.unicode()) {
-    case 'K':
-      return 0xff000000;
-    case 'W':
-      return 0xffffffff;
-    case '3':
-      return 0xff222222;
-    case '6':
-      return 0xff444444;
-    case '7':
-      return 0xff555555;
-    case '9':
-      return 0xff777777;
-    case 'A':
-      return 0xff888888;
-    case 'B':
-      return 0xff999999;
-    case 'C':
-      return 0xffaaaaaa;
-    case 'c':
-      return 0xffbbbbbb;
-    case 'D':
-      return 0xffcccccc;
-    case 'E':
-      return 0xffdddddd;
-    case 'F':
-      return 0xffeeeeee;
-    case 'l':
-      return 0xffccccff;
-    case 'a':
-      return 0xff9999ff;
-    case 's':
-      return 0xff6666cc;
-    case 'd':
-      return 0xff333399;
-    default:
-      return 0;
+  const bool active = thumb >= 0;
+  const int arrowTop = std::max(0, p.h() - 31);
+  p.frame(0, 0, 16, p.h(), 0xff000000);
+  if (active) {
+    for (int y = 1; y < arrowTop; ++y) {
+      p.sprite({y == 1 ? "K7777777777777cK" : y == 2 ? "K788888888888bcK"
+                                                             : "K78aaaaaaaaaabcK"}, 0, y);
     }
-  };
-  bool active = thumb >= 0;
-  auto rows = table("SCROLL_UP");
-  for (int direction : {-1, 1}) {
-    bool down = direction == 1, held = pressed == direction;
-    int y = down ? p.h() - 16 : 0;
-    for (int j = 0; j < 16; ++j) {
-      auto row = rows[down && j >= 6 && j <= 9 ? 15 - j : j].toString();
-      for (int i = 0; i < 16; ++i) {
-        auto c = code(row[i]);
-        if (j >= 6 && j <= 9 && c == 0xff000000 && i > 1 && i < 14) {
-          if (!active)
-            c = 0xff888888;
-          else if (held)
-            c = 0xffffffff;
-        } else if (held && c != 0xff000000)
-          c = c == 0xffffffff ? 0xff444444 : 0xff555555;
-        else if (!active && c != 0xff000000)
-          c = 0xffeeeeee;
-        else if (!active && i > 0 && i < 15 && j == (down ? 0 : 15))
-          c = 0xff555555;
-        p.pixel(i, y + j, c);
-      }
+    if (arrowTop >= 18) {
+      const int ty = std::clamp(thumb, 0, arrowTop - 17);
+      p.sprite(table("SCROLLBAR_THUMB"), 0, ty);
+      if (ty + 17 < arrowTop) p.sprite({"K7777777777777cK"}, 0, ty + 17);
+      if (ty + 18 < arrowTop) p.sprite({"K788888888888bcK"}, 0, ty + 18);
     }
+  } else {
+    p.fill(1, 1, 14, std::max(0, arrowTop - 1), 0xffeeeeee);
+    p.line(1, 0, 14, 0xff555555);
   }
-  int height = p.h() - 32;
-  if (height <= 0)
-    return;
-  p.vertical(0, 16, height, 0xff000000);
-  p.vertical(15, 16, height, 0xff000000);
-  if (!active) {
-    p.fill(1, 16, 14, height, 0xffeeeeee);
-    return;
-  }
-  for (int y = 16; y < p.h() - 16; ++y) {
-    p.pixel(1, y, 0xff777777);
-    p.pixel(2, y, 0xff888888);
-    p.line(3, y, 10, 0xffaaaaaa);
-    p.pixel(13, y, 0xffbbbbbb);
-    p.pixel(14, y, 0xffcccccc);
-  }
-  p.line(1, 16, 13, 0xff777777);
-  p.line(2, 17, 11, 0xff888888);
-  if (height < 17)
-    return;
-  int ty = std::clamp(thumb, 16, p.h() - 33);
-  auto sprite = table("SCROLL_THUMB");
-  for (int j = 0; j < sprite.size(); ++j) {
-    auto row = sprite[j].toString();
-    for (int i = 0; i < row.size(); ++i)
-      p.pixel(i, ty + j, code(row[i]));
-  }
+  p.sprite(table(!active ? "SCROLLBAR_UP_DISABLED" : pressed == -1 ? "SCROLLBAR_UP_HELD" : "SCROLLBAR_UP"), 0, arrowTop);
+  p.sprite(table(!active ? "SCROLLBAR_DOWN_DISABLED" : pressed == 1 ? "SCROLLBAR_DOWN_HELD" : "SCROLLBAR_DOWN"), 0, arrowTop + 15);
 }
 int textWidth(const QString &s, const QString &font) {
   int x = 0;

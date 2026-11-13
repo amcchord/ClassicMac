@@ -10,7 +10,7 @@ struct ScrollMetrics: Equatable {
     var canScroll: Bool { maxOffset > 0.5 }
 }
 
-/// A vertical Platinum scroll bar: arrows at both ends, a sunken channel and
+/// A vertical Platinum scroll bar: paired lower arrows, a sunken channel and
 /// the lavender thumb. Arrows and the channel auto-repeat while held.
 struct PlatinumScrollBar: View {
     let metrics: ScrollMetrics
@@ -41,7 +41,7 @@ struct PlatinumScrollBar: View {
 
     private func thumbTop(height: Int) -> Int? {
         guard metrics.canScroll else { return nil }
-        let trackY = 16, trackH = height - 32
+        let trackY = 0, trackH = height - 31
         let span = trackH - Chrome.thumbHeight
         guard span > 0 else { return trackY }
         return trackY + Int((metrics.offset / metrics.maxOffset * CGFloat(span)).rounded())
@@ -51,7 +51,7 @@ struct PlatinumScrollBar: View {
         guard metrics.canScroll else { return }
         if let start = dragStart {
             // Dragging the thumb: map pointer motion onto the scroll range.
-            let span = CGFloat(height - 32 - Chrome.thumbHeight)
+            let span = CGFloat(height - 31 - Chrome.thumbHeight)
             guard span > 0 else { return }
             let delta = (value.location.y - start.y) / span * metrics.maxOffset
             scrollTo(min(max(0, start.offset + delta), metrics.maxOffset))
@@ -61,14 +61,15 @@ struct PlatinumScrollBar: View {
             // Track whether the pointer is still over the pressed arrow.
             if let arrow = pressedArrow, arrow != 0 {
                 let y = value.location.y
-                let inside = arrow < 0 ? y < 16 : y >= CGFloat(height - 16)
+                let inside = arrow < 0 ? y >= CGFloat(height - 31) && y < CGFloat(height - 16)
+                                      : y >= CGFloat(height - 16)
                 if !inside { stopRepeat() }
             }
             return
         }
         let y = value.startLocation.y
         let thumb = CGFloat(thumbTop(height: height) ?? 0)
-        if y < 16 {
+        if y >= CGFloat(height - 31) && y < CGFloat(height - 16) {
             begin(arrow: -1) { step(-line) }
         } else if y >= CGFloat(height - 16) {
             begin(arrow: 1) { step(line) }

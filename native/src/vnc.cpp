@@ -332,6 +332,14 @@ bool VNC::resizeDesktop(QSize size) {
   return true;
 }
 GuestView::GuestView(VNC *client, QWidget *p) : QWidget(p), vnc(client) {
+  horizontalScroll = new QScrollBar(Qt::Horizontal, this);
+  verticalScroll = new QScrollBar(Qt::Vertical, this);
+  horizontalScroll->setAccessibleName("Mac screen horizontal scroll");
+  verticalScroll->setAccessibleName("Mac screen vertical scroll");
+  horizontalScroll->hide();
+  verticalScroll->hide();
+  connect(horizontalScroll, &QScrollBar::valueChanged, this, qOverload<>(&QWidget::update));
+  connect(verticalScroll, &QScrollBar::valueChanged, this, qOverload<>(&QWidget::update));
   setFocusPolicy(Qt::StrongFocus);
   setMouseTracking(true);
   setAccessibleName("Mac screen");
@@ -357,6 +365,7 @@ GuestView::GuestView(VNC *client, QWidget *p) : QWidget(p), vnc(client) {
     }
   });
   connect(vnc, &VNC::changed, this, [this] {
+    updateScrollbars();
     if (captured && !vnc->relative)
       release();
     if (vnc->ready && observedSize != vnc->frame.size()) {
@@ -379,7 +388,31 @@ GuestView::~GuestView() { release(); }
 QRectF GuestView::screenRect() const {
   if (vnc->frame.isNull())
     return rect();
-  return NativeDisplay::imageRect(size(), vnc->frame.size(), devicePixelRatioF(), fitWindow, pixelZoom);
+  const auto dpi = devicePixelRatioF();
+  return NativeDisplay::imageRect(displayViewport().size(), vnc->frame.size(), dpi, fitWindow, pixelZoom)
+      .translated(-qRound(horizontalScroll->value() * dpi) / dpi,
+                   -qRound(verticalScroll->value() * dpi) / dpi);
+}
+QRect GuestView::displayViewport() const {
+  return rect().adjusted(0, 0, verticalScroll->isHidden() ? 0 : -16,
+                                horizontalScroll->isHidden() ? 0 : -16);
+}
+void GuestView::updateScrollbars() {
+  const auto target = NativeDisplay::imageRect(size(), vnc->frame.size(), devicePixelRatioF(), fitWindow, pixelZoom);
+  bool h = false, v = false;
+  for (int i = 0; i < 3 && !fitWindow && !vnc->frame.isNull(); ++i) {
+    h = target.width() > width() - (v ? 16 : 0) + 0.001;
+    v = target.height() > height() - (h ? 16 : 0) + 0.001;
+  }
+  horizontalScroll->setVisible(h);
+  verticalScroll->setVisible(v);
+  const auto area = displayViewport();
+  horizontalScroll->setGeometry(0, area.height(), area.width(), 16);
+  verticalScroll->setGeometry(area.width(), 0, 16, area.height());
+  horizontalScroll->setRange(0, h ? std::max(0, qCeil(target.width() - area.width())) : 0);
+  verticalScroll->setRange(0, v ? std::max(0, qCeil(target.height() - area.height())) : 0);
+  horizontalScroll->setPageStep(area.width());
+  verticalScroll->setPageStep(area.height());
 }
 QSize GuestView::desiredSize() const {
   return NativeDisplay::requestedSize(size(), fitWindow ? 1 : devicePixelRatioF(),
@@ -387,6 +420,7 @@ QSize GuestView::desiredSize() const {
                                 minimumResolution, maximumResolution);
 }
 void GuestView::scheduleResize() {
+  updateScrollbars();
   resizeSettled.stop();
   wantsResize = true;
   resizeAttempts = 0;
@@ -420,6 +454,7 @@ void GuestView::requestResize() {
 }
 void GuestView::resizeEvent(QResizeEvent *e) {
   QWidget::resizeEvent(e);
+  updateScrollbars();
   if (resizeArmed)
     scheduleResize();
 }
@@ -447,6 +482,9 @@ void GuestView::paintEvent(QPaintEvent *) {
   QPainter q(this);
   q.fillRect(rect(), vnc->ready ? Qt::black : QColor(0x63639c));
   q.setRenderHint(QPainter::SmoothPixmapTransform, false);
+  if (!horizontalScroll->isHidden() && !verticalScroll->isHidden())
+    q.fillRect(QRect(width() - 16, height() - 16, 16, 16), QColor(Platinum::face));
+  q.setClipRect(displayViewport());
   if (!vnc->frame.isNull()) {
     // Rasterize in integral device coordinates. A logical QRectF whose height
     // is 768 / 1.75 can round just below 768 and drop a source row even with

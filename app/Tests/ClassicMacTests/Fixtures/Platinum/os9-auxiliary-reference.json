@@ -1,0 +1,190 @@
+{
+  "source": "platinum/reference/reference.c",
+  "method": "DrawThemeMenuBackground/DrawThemeMenuItem/DrawThemeWindowFrame/DrawThemeTrack/DrawThemeEditTextFrame/DrawThemeFocusRect/DrawThemeButton; no ClassicMac drawing code",
+  "depth": 32,
+  "os": "Mac OS 9.2.1 (Gestalt 0x0921)",
+  "contentOrigin": [
+    50,
+    70
+  ],
+  "utilitySHA256": "65e715e689c23f69768dce4c3c70c2702edfafa2243f802cc5ae816b29282ac4",
+  "frames": {
+    "menus-modal-final": "bad6af9d7f67a5ad1c73e32b50cee3cba4b2db26fe821091bc4062ff7c0feb59",
+    "scroll-fields-final": "0e657a757eb4b998526137dab3703f80a0b75f3ab9f22700dd8701fd9d7c58ce",
+    "movable-inactive-final": "3982ac5ba38d8e68169686d87bbd3bd17a6481512a8d6b958062fcf1cae99812",
+    "progress-0-7": "fb92fad0db6db7858551d7acee2dba4a7bc30b9fbd67eed82ee63bc42a45a886",
+    "progress-8-15": "fb92fad0db6db7858551d7acee2dba4a7bc30b9fbd67eed82ee63bc42a45a886"
+  },
+  "fixtures": {
+    "os9-menu-panel": {
+      "frame": "menus-modal-final",
+      "rect": [
+        79,
+        129,
+        153,
+        123
+      ],
+      "sha256": "30fc80568b02e98bfa38d7ddaa0d12d028acf89fe6b5ef31744cb4fdb477c6d7"
+    },
+    "os9-window-movable": {
+      "frame": "menus-modal-final",
+      "rect": [
+        277,
+        126,
+        267,
+        178
+      ],
+      "sha256": "600f656d21404c3c18c4af937bbb3f54c47a5de433a8e6a4ede5e1dc0b5a8867"
+    },
+    "os9-field-normal": {
+      "frame": "scroll-fields-final",
+      "rect": [
+        218,
+        188,
+        254,
+        24
+      ],
+      "sha256": "32e858fbcfd2e63b5a4236a6920dc352c355fe54a7591cccbdebba413101ba0a"
+    },
+    "os9-field-focused": {
+      "frame": "scroll-fields-final",
+      "rect": [
+        217,
+        257,
+        256,
+        26
+      ],
+      "sha256": "737c71f266d033e950616246f54e705116428e3e46cb9670587e5903fd6a675a"
+    },
+    "os9-button-focused": {
+      "frame": "scroll-fields-final",
+      "rect": [
+        218,
+        348,
+        84,
+        24
+      ],
+      "sha256": "d42b396e68a7a16754079733c683fff2d1eff8ee2998dab43897732e4e26ae41"
+    },
+    "os9-checkbox-focused": {
+      "frame": "scroll-fields-final",
+      "rect": [
+        360,
+        348,
+        16,
+        16
+      ],
+      "sha256": "1c48998f1ca3802c7b0668dbf43f5f43c606aefb1e30fbb30c1a638530e98274"
+    },
+    "os9-radio-focused": {
+      "frame": "scroll-fields-final",
+      "rect": [
+        400,
+        348,
+        16,
+        16
+      ],
+      "sha256": "992cdf30622a1e230a0e55c7c3487e61ce18e3aaa855dcba2e1db07af20f9aa9"
+    },
+    "os9-window-movable-inactive": {
+      "frame": "movable-inactive-final",
+      "rect": [
+        277,
+        126,
+        267,
+        178
+      ],
+      "sha256": "ddd631d44bf39daeabdf1a9bb948981c9c8b15815f79e7acc5dc30340e613b82"
+    },
+    "os9-scroll-normal": {
+      "frame": "scroll-fields-final",
+      "rect": [
+        80,
+        130,
+        16,
+        200
+      ],
+      "sha256": "bfb5412e7c0b3cef4614162c491b0d8abeda54e450479660441f506b68223cd4"
+    },
+    "os9-scroll-up-pressed": {
+      "frame": "scroll-fields-final",
+      "rect": [
+        110,
+        130,
+        16,
+        200
+      ],
+      "sha256": "bfb5412e7c0b3cef4614162c491b0d8abeda54e450479660441f506b68223cd4"
+    },
+    "os9-scroll-down-pressed": {
+      "frame": "scroll-fields-final",
+      "rect": [
+        140,
+        130,
+        16,
+        200
+      ],
+      "sha256": "c9826ad2a1f54e68279b6c4ec6abea26317bb496a4e9d96fc26ae9d2c8e3c94c"
+    },
+    "os9-scroll-disabled": {
+      "frame": "scroll-fields-final",
+      "rect": [
+        170,
+        130,
+        16,
+        200
+      ],
+      "sha256": "c213abb608d0339086ea7ec014ffc2cc374c2e2b9c2699ce2d610d0e1d6831ec"
+    },
+    "os9-scroll-horizontal": {
+      "frame": "scroll-fields-final",
+      "rect": [
+        220,
+        130,
+        200,
+        16
+      ],
+      "sha256": "59f32e7f144ab159b8222704a1436f8eb06d74ad0b31fb5e99232ada1eb00318"
+    },
+    "os9-progress-phase-0": {
+      "frame": "progress-0-7",
+      "rect": [
+        80,
+        130,
+        250,
+        14
+      ],
+      "sha256": "32721ca87221052aeb933f37afdf1b904873f63dcae9202479d4215ea1ab40bc"
+    },
+    "os9-progress-phase-1": {
+      "frame": "progress-0-7",
+      "rect": [
+        80,
+        162,
+        250,
+        14
+      ],
+      "sha256": "f8f2291f4fb89ce0da046cca088c357f671490bb53b64163b0b3293551885924"
+    },
+    "os9-progress-phase-2": {
+      "frame": "progress-0-7",
+      "rect": [
+        80,
+        194,
+        250,
+        14
+      ],
+      "sha256": "a86d59c0c19feaf875726be5a9a35dd9e2ae23841080c9213388747d73173a0d"
+    },
+    "os9-progress-phase-3": {
+      "frame": "progress-0-7",
+      "rect": [
+        80,
+        226,
+        250,
+        14
+      ],
+      "sha256": "f4f7e94a880fe635e3333b16016b88d4ec457d0918c8924dc6935c4c1d5301aa"
+    }
+  }
+}

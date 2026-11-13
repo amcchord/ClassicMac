@@ -154,21 +154,24 @@ public enum Chrome {
         p.frame(r, Platinum.black)
         let inner = r.inset(1)
         guard !inner.isEmpty else { return }
-        let n = inner.h - 1
         guard let value else {
+            p.hline(r.x - 1, r.y - 1, r.w + 1, RGB(0xAAAAAA))
+            p.vline(r.x - 1, r.y - 1, r.h + 1, RGB(0xAAAAAA))
+            let frames = [MeasuredChrome.INDETERMINATE_0, MeasuredChrome.INDETERMINATE_1,
+                          MeasuredChrome.INDETERMINATE_2, MeasuredChrome.INDETERMINATE_3]
+            let ends = [MeasuredChrome.INDETERMINATE_END_0, MeasuredChrome.INDETERMINATE_END_1,
+                        MeasuredChrome.INDETERMINATE_END_2, MeasuredChrome.INDETERMINATE_END_3]
+            let frame = ((phase % 4) + 4) % 4
+            p.pixel(r.x - 1, r.y + r.h, Platinum.face)
+            p.pixel(r.x + r.w, r.y - 1, Platinum.face)
             for y in 0..<inner.h {
-                var dark = RGB(0x8C8AEF).mix(RGB(0x4A4DA5), y, n)
-                var light = RGB(0xF2F1FF).mix(RGB(0xB5B2FF), y, n)
-                if y == 0 { dark = RGB(0xB5B2FF); light = Platinum.white }
-                // Runs of 8 pixels alternate along the row, shifted one pixel per row.
-                var x = 0
-                while x < inner.w {
-                    let s = (((x - y + phase) % 16) + 16) % 16
-                    let run = min(s < 8 ? 8 - s : 16 - s, inner.w - x)
-                    let c = s < 8 ? dark : light
-                    p.hline(inner.x + x, inner.y + y, run, disabled ? c.dimmed : c)
-                    x += run
+                let row = min(9, y), pattern = Array(frames[frame][row])
+                for x in 0..<inner.w {
+                    let c = MeasuredChrome.color(pattern[x % 16])!
+                    p.pixel(inner.x + x, inner.y + y, disabled ? c.dimmed : c)
                 }
+                let c = MeasuredChrome.color(ends[frame][row].first!)!
+                p.pixel(inner.x + inner.w - 1, inner.y + y, disabled ? c.dimmed : c)
             }
             return
         }
@@ -199,91 +202,40 @@ public enum Chrome {
 
     // MARK: - Scroll bar
 
-    static let scrollUp = [
-        "KKKKKKKKKKKKKKKK",
-        "KWWWWWWWWWWWWWEK",
-        "KWEEEEEEEEEEEEcK",
-        "KWEEEEEEEEEEEEcK",
-        "KWEEEEEEEEEEEEcK",
-        "KWEEEEEEEEEEEEcK",
-        "KWEEEEEKKEEEEEcK",
-        "KWEEEEKKKKEEEEcK",
-        "KWEEEKKKKKKEEEcK",
-        "KWEEKKKKKKKKEEcK",
-        "KWEEEEEEEEEEEEcK",
-        "KWEEEEEEEEEEEEcK",
-        "KWEEEEEEEEEEEEcK",
-        "KWEEEEEEEEEEEEcK",
-        "KEcccccccccccccK",
-        "KKKKKKKKKKKKKKKK",
-    ]
-    static let thumb = [
-        "KKKKKKKKKKKKKKKK",
-        "KFllllllllllllaK",
-        "KlaaaaaaaaaaaasK",
-        "KlaaaaaaaaaaaasK",
-        "KlaaFllllllaaasK",
-        "KlaaadddddddaasK",
-        "KlaaFllllllaaasK",
-        "KlaaadddddddaasK",
-        "KlaaFllllllaaasK",
-        "KlaaadddddddaasK",
-        "KlaaFllllllaaasK",
-        "KlaaadddddddaasK",
-        "KlaaaaaaaaaaaasK",
-        "KlaaaaaaaaaaaasK",
-        "KlaaaaaaaaaaaasK",
-        "KasssssssssssssK",
-        "KKKKKKKKKKKKKKKK",
-    ]
     public static let thumbHeight = 17
 
-    /// One 16x16 arrow box of a vertical scroll bar.
-    public static func scrollArrow(_ p: PixelPainter, x: Int, y: Int, up: Bool, active: Bool, pressed: Bool) {
-        for row in 0..<16 {
-            let src = (!up && row >= 6 && row <= 9) ? 15 - row : row
-            for (col, ch) in scrollUp[src].enumerated() {
-                guard var c = PlatinumCode.color(ch) else { continue }
-                if row >= 6 && row <= 9 && c == Platinum.black && col > 1 && col < 14 {
-                    if !active { c = Platinum.grayA5 } else if pressed { c = Platinum.white }
-                } else if pressed && c != Platinum.black {
-                    c = c == Platinum.white ? Platinum.gray63 : Platinum.gray73
-                } else if !active && c != Platinum.black {
-                    c = Platinum.grayF7
-                } else if !active && col > 0 && col < 15 && row == (up ? 15 : 0) {
-                    c = Platinum.gray73
-                }
-                p.pixel(x + col, y + row, c)
-            }
-        }
-    }
-
-    /// A vertical scroll bar filling r (16 wide). `thumbY` is the thumb's
-    /// top within r, or nil when there is nothing to scroll.
+    /// Native 16-pixel scrollbar with its paired arrows at the lower end.
     public static func scrollBar(_ p: PixelPainter, _ r: PixelRect, thumbY: Int?, pressedArrow: Int?) {
-        let active = thumbY != nil
-        scrollArrow(p, x: r.x, y: r.y, up: true, active: active, pressed: pressedArrow == -1)
-        scrollArrow(p, x: r.x, y: r.y + r.h - 16, up: false, active: active, pressed: pressedArrow == 1)
-        let trackY = r.y + 16, trackH = r.h - 32
-        guard trackH > 0 else { return }
-        p.vline(r.x, trackY, trackH, Platinum.black)
-        p.vline(r.x + 15, trackY, trackH, Platinum.black)
-        guard let thumbY else {
-            p.fill(r.x + 1, trackY, 14, trackH, Platinum.grayF7)
-            return
+        guard r.h > 0 else { return }
+        let arrowTop = max(0, r.h - 31)
+        p.frame(r, Platinum.black)
+        if let thumbY {
+            if arrowTop > 1 {
+                for y in 1..<arrowTop {
+                    let row = y == 1 ? "K7777777777777cK" : y == 2 ? "K788888888888bcK" : "K78aaaaaaaaaabcK"
+                    MeasuredChrome.sprite(p, [row], x: r.x, y: r.y + y)
+                }
+            }
+            if arrowTop >= 18 {
+                let ty = min(max(0, thumbY), arrowTop - thumbHeight)
+                MeasuredChrome.sprite(p, MeasuredChrome.SCROLLBAR_THUMB, x: r.x, y: r.y + ty)
+                if ty + 17 < arrowTop {
+                    MeasuredChrome.sprite(p, ["K7777777777777cK"], x: r.x, y: r.y + ty + 17)
+                }
+                if ty + 18 < arrowTop {
+                    MeasuredChrome.sprite(p, ["K788888888888bcK"], x: r.x, y: r.y + ty + 18)
+                }
+            }
+        } else {
+            p.fill(r.x + 1, r.y + 1, 14, max(0, arrowTop - 1), RGB(0xEEEEEE))
+            p.hline(r.x + 1, r.y, 14, RGB(0x555555))
         }
-        for y in trackY..<(trackY + trackH) {
-            p.pixel(r.x + 1, y, Platinum.gray94)
-            p.pixel(r.x + 2, y, Platinum.grayA5)
-            p.hline(r.x + 3, y, 10, Platinum.grayC5)
-            p.pixel(r.x + 13, y, Platinum.grayCE)
-            p.pixel(r.x + 14, y, Platinum.grayDE)
-        }
-        p.hline(r.x + 1, trackY, 13, Platinum.gray94)
-        p.hline(r.x + 2, trackY + 1, 11, Platinum.grayA5)
-        guard trackH >= thumbHeight else { return }
-        let ty = min(max(thumbY, trackY), trackY + trackH - thumbHeight)
-        p.coded(thumb, x: r.x, y: ty)
+        let up = thumbY == nil ? MeasuredChrome.SCROLLBAR_UP_DISABLED :
+            pressedArrow == -1 ? MeasuredChrome.SCROLLBAR_UP_HELD : MeasuredChrome.SCROLLBAR_UP
+        let down = thumbY == nil ? MeasuredChrome.SCROLLBAR_DOWN_DISABLED :
+            pressedArrow == 1 ? MeasuredChrome.SCROLLBAR_DOWN_HELD : MeasuredChrome.SCROLLBAR_DOWN
+        MeasuredChrome.sprite(p, up, x: r.x, y: r.y + arrowTop)
+        MeasuredChrome.sprite(p, down, x: r.x, y: r.y + arrowTop + 15)
     }
 
     // MARK: - Menus
@@ -299,19 +251,10 @@ public enum Chrome {
         "..#......",
     ]
 
-    /// A menu's frame and face, with a soft two-pixel shadow outside r.
+    /// A menu's frame and face, with the native one-pixel opaque shadow.
     public static func menu(_ p: PixelPainter, _ r: PixelRect) {
-        for i in 1...2 {
-            let a: CGFloat = i == 1 ? 0.5 : 0.25
-            p.shade(r.x + r.w - 1 + i, r.y + i + 1, 1, r.h - 1, alpha: a)
-            p.shade(r.x + i + 1, r.y + r.h - 1 + i, r.w - 2, 1, alpha: a)
-        }
-        p.frame(r, Platinum.black)
-        p.fill(r.inset(1), Platinum.face)
-        p.hline(r.x + 1, r.y + 1, r.w - 2, Platinum.white)
-        p.vline(r.x + 1, r.y + 1, r.h - 2, Platinum.white)
-        p.hline(r.x + 2, r.y + r.h - 2, r.w - 3, Platinum.grayB5)
-        p.vline(r.x + r.w - 2, r.y + 2, r.h - 3, Platinum.grayB5)
+        MeasuredChrome.stretch(p, PixelRect(r.x, r.y, r.w + 1, r.h + 1),
+                               MeasuredChrome.MENU_PANEL, repeatAt: 2)
     }
 
     public static func checkmark(_ p: PixelPainter, x: Int, y: Int, color: RGB) {
@@ -347,7 +290,8 @@ public enum Chrome {
     /// kind: rbui's PT_TITLE_H + 1 at the top and PT_FRAME at the sides.
     public static func contentInsets(_ kind: WindowKind) -> (top: Int, left: Int, bottom: Int, right: Int) {
         switch kind {
-        case .document, .movableModal: return (22, 6, 6, 6)
+        case .document: return (22, 6, 6, 6)
+        case .movableModal: return (24, 3, 3, 3)
         case .modal: return (6, 6, 6, 6)
         case .utility: return (14, 4, 4, 4)
         }
@@ -384,6 +328,18 @@ public enum Chrome {
     public static func window(_ p: PixelPainter, _ full: PixelRect, kind: WindowKind, active: Bool,
                               titleWidth: Int, boxes: TitleBoxes = .none,
                               collapsed: Bool = false, growable: Bool = false) -> (x: Int, baseline: Int) {
+        if kind == .movableModal {
+            MeasuredChrome.stretch(p, full, active ? MeasuredChrome.MOVABLE_DIALOG : MeasuredChrome.MOVABLE_DIALOG_INACTIVE, repeatAt: 24)
+            let w = full.w - 1, tx = (w - titleWidth) / 2
+            guard active else { return (full.x + tx, full.y + 16) }
+            if titleWidth > 0 {
+                pinstripes(p, x0: full.x + 6, x1: full.x + tx - 3, y: full.y + 4)
+                pinstripes(p, x0: full.x + tx + titleWidth + 4, x1: full.x + w - 5, y: full.y + 4)
+            } else {
+                pinstripes(p, x0: full.x + 6, x1: full.x + w - 5, y: full.y + 4)
+            }
+            return (full.x + tx, full.y + 16)
+        }
         let f = PixelRect(full.x, full.y, full.w - 1, full.h - 1)
         let x0 = f.x, y0 = f.y, x1 = f.x + f.w - 1, y1 = f.y + f.h - 1
         // Outline plus a one-pixel drop shadow on the right and bottom.

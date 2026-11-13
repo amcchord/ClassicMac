@@ -25,7 +25,7 @@ import base64
 import pathlib
 import struct
 import sys
-import time
+import calendar
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 FONTS = ROOT / "platinum" / "fonts"
@@ -323,7 +323,7 @@ def build_ttf(strike: Strike, family: str, style: str, postscript: str, weight: 
     loca_table = b"".join(struct.pack(">I", v) for v in loca)
 
     mac_epoch = 2082844800
-    stamp = int(time.mktime((2026, 10, 17, 0, 0, 0, 0, 0, 0))) + mac_epoch
+    stamp = calendar.timegm((2026, 10, 17, 0, 0, 0)) + mac_epoch
     head = struct.pack(">IIII", 0x00010000, 0x00010000, 0, 0x5F0F3CF5)
     head += struct.pack(">HH", 0b1011, upem)
     head += struct.pack(">qq", stamp, stamp)

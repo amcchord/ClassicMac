@@ -71,8 +71,13 @@ public:
       }
     }
     QPainter q(&p.image);
-    if (!image.isNull())
-      q.drawImage(QRect(2, 2, width() - 4, height() - 4), image);
+    q.setRenderHint(QPainter::SmoothPixmapTransform, false);
+    if (!image.isNull()) {
+      auto size = image.size();
+      size.scale(width() - 4, height() - 4, Qt::KeepAspectRatio);
+      q.drawImage(QRect(QPoint((width() - size.width()) / 2,
+                               (height() - size.height()) / 2), size), image);
+    }
     else {
       q.drawImage(
           (width() - 32) / 2, height() / 2 - 30,
@@ -312,8 +317,7 @@ void App::buildHome() {
       [&] {
         problem(this,
                 "ClassicMac " CLASSICMAC_VERSION
-                "\n\nNative C++ application with QEMU emulation and the "
-                "measured Platinum appearance.\n\nSystem icons © Apple "
+                "\n\nSystem icons © Apple "
                 "Computer, Inc. Machine artwork © The Iconfactory, included "
                 "with permission.\n\nCopland requires the macOS edition.");
       },
@@ -352,9 +356,9 @@ void App::render() {
   list->setCurrentRow(selected);
   auto m = current();
   auto e = currentEngine();
-  nameLabel->setText(m ? m->name() : "Your classic Macs, on your PC.");
-  statusLabel->setText(e ? (e->paused ? "Paused" : "Running now")
-                         : "Shut down");
+  nameLabel->setText(m ? m->name() : "No Macs");
+  statusLabel->setText(e ? (e->paused ? "Paused" : "Running")
+                         : m ? "Shut down" : "");
   QString detail;
   if (m) {
     auto c = m->config;
@@ -406,10 +410,16 @@ PWindow *App::guest(Engine *e) {
           initialSize(zoom).height() > display->availableGeometry().height() - 8))
     --zoom;
   auto w = new PWindow(e->machine.name(), initialSize(zoom), this);
+  w->contentOnlyFullScreen = true;
+  w->canClose = [e] {
+    if (!e->running) return true;
+    e->shutdown();
+    return false;
+  };
   w->setMinimumSize(480, 240);
   auto v = new QVBoxLayout(w->body);
   v->setContentsMargins(0, 0, 0, 0);
-  v->setSpacing(6);
+  v->setSpacing(0);
   auto screen = new GuestView(&e->vnc, w->body);
   screen->helpers = e->machine.config["classicInputHelpers"].toBool();
   screen->followsWindow = followsWindow;
@@ -421,6 +431,10 @@ PWindow *App::guest(Engine *e) {
   screen->fitWindow = savedScale == 3;
   screen->pixelZoom = savedScale == 1 ? 1 : savedScale == 2 ? 2 : 0;
   v->addWidget(screen, 1);
+  auto footer = new QWidget(w->body);
+  auto footerLayout = new QVBoxLayout(footer);
+  footerLayout->setContentsMargins(0, 6, 0, 0);
+  footerLayout->setSpacing(6);
   auto displayRow = new QHBoxLayout;
   displayRow->setContentsMargins(8, 0, 24, 0);
   auto status = label("Starting up…", w, "small");
@@ -432,7 +446,7 @@ PWindow *App::guest(Engine *e) {
   scale->setCurrentIndex(savedScale);
   scale->setFixedWidth(126);
   displayRow->addWidget(scale);
-  v->addLayout(displayRow);
+  footerLayout->addLayout(displayRow);
   auto updateDisplayStatus = [=] {
     QString s = e->vnc.frame.isNull() ? "Starting up…" :
         QString("%1 × %2").arg(e->vnc.frame.width()).arg(e->vnc.frame.height());
@@ -456,9 +470,8 @@ PWindow *App::guest(Engine *e) {
   connect(screen, &GuestView::displayChanged, w, updateDisplayStatus);
   connect(screen, &GuestView::captureChanged, w, updateDisplayStatus);
   connect(&e->vnc, &VNC::changed, w, updateDisplayStatus);
-  auto controls = new QHBoxLayout;
-  controls->setContentsMargins(8, 0, 24, 6);
-  controls->setSpacing(10);
+  auto toolbar = new QWidget(footer);
+  auto controls = new PFlowLayout(toolbar);
   auto pause = button(
       "Pause",
       [e, p = QPointer<PWindow>(w)] {
@@ -474,15 +487,20 @@ PWindow *App::guest(Engine *e) {
   controls->addWidget(button("Restart", [e] { e->shutdown(true); }, w));
   controls->addWidget(button("Shut Down", [e] { e->shutdown(); }, w));
   controls->addWidget(button("Paste…", [this, e] { showPaste(e); }, w));
-  controls->addStretch();
+  controls->addWidget(button("Media…", [this, e] {
+    for (int i = 0; i < machines.size(); ++i)
+      if (machines[i].id() == e->machine.id()) { select(i); break; }
+    showMedia();
+  }, w));
   auto fullScreen = new PButton("Full Screen", w);
-  auto toggleFullScreen = [w, screen, fullScreen] {
+  auto toggleFullScreen = [w, screen, fullScreen, footer] {
         screen->release();
         if (w->isFullScreen())
           w->showNormal();
         else
           w->showFullScreen();
         fullScreen->setText(w->isFullScreen() ? "Window" : "Full Screen");
+        footer->setVisible(!w->isFullScreen());
         screen->setFocus();
       };
   connect(fullScreen, &PButton::clicked, w, toggleFullScreen);
@@ -490,7 +508,8 @@ PWindow *App::guest(Engine *e) {
   auto shortcut = new QShortcut(QKeySequence("Alt+Return"), w);
   connect(shortcut, &QShortcut::activated, w, toggleFullScreen);
   controls->addWidget(fullScreen);
-  v->addLayout(controls);
+  footerLayout->addWidget(toolbar);
+  v->addWidget(footer);
   guests[e->machine.id()] = w;
   connect(e, &Engine::changed, w, [=] {
     pause->setText(e->paused ? "Resume" : "Pause");
@@ -667,8 +686,11 @@ void App::showEditor(bool create) {
   for (auto s :
        {"640x480", "800x600", "1024x768", "1280x960", "1600x1200", "1920x1080"})
     resolution->addItem(s);
-  resolution->setCurrentText(
-      QString("%1x%2").arg(c["width"].toInt()).arg(c["height"].toInt()));
+  const auto currentResolution =
+      QString("%1x%2").arg(c["width"].toInt()).arg(c["height"].toInt());
+  if (resolution->findText(currentResolution) < 0)
+    resolution->addItem(currentResolution);
+  resolution->setCurrentText(currentResolution);
   auto depth = new PCombo(&d);
   for (int n : {1, 2, 4, 8, 16, 32})
     depth->addItem(n == 1    ? "Black & White"
@@ -681,6 +703,7 @@ void App::showEditor(bool create) {
   graphics->addItem("Standard", "standard");
   graphics->addItem("ATI Radeon (3D acceleration)", "atiRadeon");
   graphics->setCurrentIndex(graphics->findData(c["graphicsCard"].toString()));
+  graphics->setEnabled(create || m->family() == "powerMacG4");
   if (create) {
     ram->hide();
     resolution->hide();
@@ -727,6 +750,11 @@ void App::showEditor(bool create) {
       check->setCheckable(true);
       check->setChecked(c[pair.first].toBool());
       checks[pair.first] = check;
+      if ((pair.first == "useG4CPU" && m->family() != "powerMacG4") ||
+          (pair.first == "useEnhancedFramebuffer" && m->family() != "quadra800")) {
+        check->hide();
+        continue;
+      }
       v->addWidget(check);
     }
     v->addWidget(
@@ -1139,8 +1167,11 @@ QJsonObject App::evidence() const {
     const auto image = view->screenRect();
     const auto origin = view->mapTo(w, QPoint());
     displays.append(QJsonObject{
+        {"engineProcessId", qint64(e->processId())},
         {"name", e->machine.name()}, {"windowWidth", w->width()}, {"windowHeight", w->height()},
         {"viewportWidth", view->width()}, {"viewportHeight", view->height()},
+        {"displayViewportWidth", view->displayViewport().width()},
+        {"displayViewportHeight", view->displayViewport().height()},
         {"viewX", origin.x()}, {"viewY", origin.y()},
         {"frameWidth", e->vnc.frame.width()}, {"frameHeight", e->vnc.frame.height()},
         {"desiredWidth", view->desiredSize().width()}, {"desiredHeight", view->desiredSize().height()},

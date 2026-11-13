@@ -35,7 +35,7 @@ for meta in sorted(a.root.rglob('*.json')):
     assert ImageChops.difference(title, repeated).getbbox() is None, (meta, 'uneven title-bar pixel blocks')
     # Pure UI captures also cover text, buttons, fields, icons and scrollbars.
     # Running guest displays have their own explicitly selected pixel zoom.
-    full_ui = not state.get('displays')
+    full_ui = state['captureKind'] != 'guest' if 'captureKind' in state else not state.get('displays')
     if full_ui:
         base = image.resize((image.width // zoom, image.height // zoom), Image.Resampling.NEAREST)
         assert ImageChops.difference(image, base.resize(image.size, Image.Resampling.NEAREST)).getbbox() is None, (meta, 'uneven control/text pixel blocks')

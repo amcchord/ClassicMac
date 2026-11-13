@@ -121,6 +121,27 @@ final class PlatinumRenderTests: XCTestCase {
         }
     }
 
+    func testNativeMacRomanFontPixelsAndAdvances() throws {
+        let url = try XCTUnwrap(Bundle.module.url(forResource: "native-fonts", withExtension: "json", subdirectory: "Platinum"))
+        let data = try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as! [String: Any]
+        let codes = data["codes"] as! [Int]
+        for scale in [1, 2] {
+            for (name, font) in [("system", PlatinumFont.system), ("regular", .regular), ("small", .small)] {
+                try assertReference(bitmap(520, 336, scale: scale) { p, r in
+                    p.fill(r, Platinum.white)
+                    for (i, code) in codes.enumerated() {
+                        let ch = String(UnicodeScalar(code)!), x = 4 + i % 16 * 32, y = i / 16 * 24
+                        p.text(ch, font: font, x: x, baseline: y + 16, color: Platinum.black)
+                        let advance = Int(PlatinumFonts.width(ch, font: font))
+                        for bit in 0..<8 where advance & (1 << bit) != 0 {
+                            p.pixel(x + 22 + bit, y + 21, Platinum.black)
+                        }
+                    }
+                }, name: "native-font-" + name, scale: scale)
+            }
+        }
+    }
+
     func testNativeDocumentWindowPixels() throws {
         for scale in [1, 2] {
             for (name, active, collapsed) in [("active", true, false), ("inactive", false, false), ("collapsed", true, true)] {
@@ -134,6 +155,37 @@ final class PlatinumRenderTests: XCTestCase {
                     }
                     if active && !collapsed { Chrome.growBox(p, x: 311, y: 147, active: true) }
                 }, name: "os9-window-" + name, scale: scale)
+            }
+        }
+    }
+
+    func testNativeMenusDialogsScrollbarsAndAnimation() throws {
+        for scale in [1, 2] {
+            for active in [true, false] {
+                try assertReference(bitmap(267, 178, scale: scale) { p, r in
+                    Chrome.window(p, r, kind: .movableModal, active: active, titleWidth: 70)
+                }, name: active ? "os9-window-movable" : "os9-window-movable-inactive", scale: scale)
+            }
+            try assertReference(bitmap(153, 123, scale: scale) { p, _ in
+                Chrome.menu(p, PixelRect(0, 0, 152, 122))
+                p.fill(1, 20, 150, 16, RGB(0x333399))
+                p.vline(1, 20, 16, RGB(0x6666CC))
+                p.vline(150, 20, 16, RGB(0x000088))
+                p.hline(1, 54, 150, RGB(0x888888))
+                p.hline(1, 55, 150, Platinum.white)
+            }, name: "os9-menu-panel", scale: scale)
+            for (name, thumb, pressed) in [("normal", Optional(46), Optional<Int>.none),
+                                            ("up-pressed", Optional(46), Optional(-1)),
+                                            ("down-pressed", Optional(46), Optional(1)),
+                                            ("disabled", Optional<Int>.none, Optional<Int>.none)] {
+                try assertReference(bitmap(16, 200, scale: scale) { p, r in
+                    Chrome.scrollBar(p, r, thumbY: thumb, pressedArrow: pressed)
+                }, name: "os9-scroll-" + name, scale: scale)
+            }
+            for phase in 0..<16 {
+                try assertReference(bitmap(250, 14, scale: scale) { p, r in
+                    Chrome.progress(p, r.inset(1), value: nil, phase: phase, disabled: false)
+                }, name: "os9-progress-phase-\(phase % 4)", scale: scale)
             }
         }
     }
