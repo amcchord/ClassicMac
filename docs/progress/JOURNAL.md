@@ -1693,3 +1693,65 @@ consolidated root checks, publish and verify stable 4.1.1. Retain 4.1.0 for roll
 - Next: actual Windows package validation when a usable execution channel
   exists. Existing 4.6.2 publication remains unfinished and is not authorized
   by this task. Worktree/output retained; cleanup is a separate operation.
+
+
+## 2026-11-13 — local Proxmox Windows validation and ATI startup fix
+
+- Work: codex/windows-proxmox-qa in worktrees/windows-proxmox-qa, from 88ca9e4.
+  User explicitly requests local Proxmox 192.168.1.100. Trusted n5 had no QEMU
+  VMs; created dedicated Windows 11 Pro VM 401 (8CPU/16GiB/128GiB sparse disk).
+  Existing RetroBoot container 300 and old cluster VMs/templates are untouched.
+  AustinLand supplied the key and retains new VM credentials under
+  ClassicMac-Windows-QA-n5-401. Activation returns0xC004C020/status5; unresolved.
+- Both patched QEMU 11.0.2 engines and native Qt app build on Windows/MSYS2.
+  Actual portable EXE, without runtime overrides, passes 122 native reference
+  comparisons/672 glyphs and the display/input/model contracts. WGL compiles;
+  the virtual adapter lacks OpenGL 4.1, so 3D drawing is explicitly unavailable.
+- Qualification fixes 2d467e7/7aa1fe0 use the actual scrolled guest viewport for
+  pointer input and distinguish content-only full screen in pixel checks.
+  886c336 makes the Screamer test portable with loopback TCP and LF protocol
+  lines; all 7 Windows checks pass (44,136 frames/s). Mac TCP and Unix pass too.
+  ea2d039/4f6351f retain a reusable real Windows portable/native-input flow,
+  distinct initial text and explicit longer boot-wait deadlines.
+- Real default configuration exposed a startup freeze missed by muted UI
+  tests. Snapshot-controlled probes show network alone and Tools alone boot,
+  while their combination with ATI/tablet stalls. The pre-import Windows
+  artifact c5184ead also stalls. PCI state shows Sungem slot 14 and tablet 18
+  share interrupt 29. Original-order A/B fails; tablet slot 19/interrupt 30 boots
+  with Tools mounted. 52b61d8 pins only that Windows configuration and adds
+  an independent Windows argument expectation. No guest driver/disk patch.
+- Rebuilt final package repeats all 59 steps at actual 100/125/150/175/200% OS
+  DPI with sound/network/CD/tablet ON. All pass, including real Win32 accented
+  text input, guest mouse input, healthy Finder after distinct restart PIDs,
+  narrow/full-screen display and clean shutdown. DirectSound initializes in
+  remote-audio mode 1. 75 exact desktop captures/70 title bars and 30 raw guest
+  captures/19,201,136 visible pixels pass. One 56-pixel caret-blink transition
+  is retained and replaced by an 8-step static selected-field capture; no
+  pixel tolerance/mask. A preliminary muted matrix is retained separately.
+- Other real Windows models pass 33/34/29 steps for built-in Quadra, enhanced
+  Quadra and Standard Mac OS8.6. Enhanced resizes 800x600 to 887x559; 8.6 resizes
+  to 880x559; both reach 960x720 full screen. Quadra host/guest reset replace
+  processes and return to Finder. 17 more exact desktop captures and 13 raw
+  guest captures/15,979,812 pixels pass; one menu-clock transition is retained
+  and recaptured paused. These unaffected model flows precede the ATI-only fix.
+- Source commits fast-forwarded into local main. After 52b61d8, consolidated
+  checks pass: 138 Swift tests, 3 optional skips, 0 failures; native build/self-test
+  with 122 references; 11 Python tests; UTC/Honolulu exports; syntax; 7 Unix
+  Screamer checks. Windows final self-test passes. Compiled source/firmware
+  hashes and portable artifact hash match the local files.
+- Final local EXE 42,643,673 bytes, SHA256
+  b2f60d9fbb3536828121385d09dab76789c3a10321fc093a0d6e82e70647763a,
+  retained under artifacts/windows-proxmox-2026-11-13. Report and sanitized
+  evidence: docs/windows-proxmox-validation-2026-11-13.md and
+  docs/evidence/2026-11-windows. Full recipes/captures/builds stay in task output
+  and C:\ClassicMacQA on the VM. No original user guest disk was used.
+- Final cleanup: owned guest engines/jobs/RDP/setup HTTP stopped, automatic
+  Administrator logon disabled, cached logon password and owned unattended
+  XML/ISO removed. VM 401 gracefully stopped and retained; container 300 still
+  running. Unrelated root gxmetal/AustinLand changes preserved. No push,
+  tag, release or public artifact upload.
+- Remaining: physical GPU/accelerated 3D, audible sound/loopback, guest network
+  transfer/performance, mixed-monitor/native-drag/IME/other layouts and the
+  earlier Mac whole-layout/scaling/appearance gaps. Windows activation also
+  needs a usable license. Next is physical device/input qualification; the
+  repository is integrated and the disposable test system is stopped.

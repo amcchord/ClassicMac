@@ -1,0 +1,96 @@
+{
+  "oldWindowsRun": 40146326685,
+  "oldWindowsCommit": "c5184eadda364e5b95428709095bb811f3cc965e",
+  "probes": [
+    {
+      "name": "muted-control",
+      "snapshot": true,
+      "seconds": 55,
+      "finderVisibleOnReview": true,
+      "soundBackend": "none",
+      "network": false,
+      "toolsCD": false,
+      "rawFrameSHA256": "4876b1e8c833c4c6f46fe87e99b6b52e9f3be73237773b8ec8bef380d84be728"
+    },
+    {
+      "name": "tools-only",
+      "snapshot": true,
+      "seconds": 55,
+      "finderVisibleOnReview": true,
+      "soundBackend": "none",
+      "network": false,
+      "toolsCD": true,
+      "rawFrameSHA256": "a85b6e48a86dfd9842251c0e318d201bda486b8cc8495a849af419a6e8346893"
+    },
+    {
+      "name": "network-only",
+      "snapshot": true,
+      "seconds": 55,
+      "finderVisibleOnReview": true,
+      "soundBackend": "none",
+      "network": true,
+      "toolsCD": false,
+      "rawFrameSHA256": "74597f2bcb8f708fa36a2464fdd042d9b141382273aa158dc25e666421005a5e"
+    },
+    {
+      "name": "combined-current-original-order",
+      "snapshot": true,
+      "seconds": 55,
+      "finderVisibleOnReview": false,
+      "soundBackend": "none",
+      "network": true,
+      "toolsCD": true,
+      "rawFrameSHA256": "17d38395c80f54dec1b747c599e0c448cb74c54de6395d0cd8d2fbc429f8208c"
+    },
+    {
+      "name": "combined-c5184e-probe-order",
+      "snapshot": true,
+      "seconds": 55,
+      "finderVisibleOnReview": false,
+      "soundBackend": "none",
+      "network": true,
+      "toolsCD": true,
+      "rawFrameSHA256": "17d38395c80f54dec1b747c599e0c448cb74c54de6395d0cd8d2fbc429f8208c"
+    },
+    {
+      "name": "virtio-on-sungem-line",
+      "snapshot": true,
+      "seconds": 55,
+      "finderVisibleOnReview": false,
+      "soundBackend": "none",
+      "network": true,
+      "toolsCD": true,
+      "rawFrameSHA256": "9ff59591a76b08470f4985d7ab71fdde6a6275f0786609a60ef4a9a4c7324b56"
+    },
+    {
+      "name": "virtio-on-quiet-line",
+      "snapshot": true,
+      "seconds": 55,
+      "finderVisibleOnReview": true,
+      "soundBackend": "none",
+      "network": true,
+      "toolsCD": true,
+      "rawFrameSHA256": "d52fd22bc3b226c257bc4c4a6b057f3edf8f0bb4e742b9e695a813cc1b5b2764"
+    },
+    {
+      "name": "exact-native-original-order",
+      "snapshot": true,
+      "seconds": 55,
+      "finderVisibleOnReview": false,
+      "soundBackend": "none",
+      "network": true,
+      "toolsCD": true,
+      "rawFrameSHA256": "17d38395c80f54dec1b747c599e0c448cb74c54de6395d0cd8d2fbc429f8208c"
+    },
+    {
+      "name": "exact-native-tablet-slot19",
+      "snapshot": true,
+      "seconds": 55,
+      "finderVisibleOnReview": true,
+      "soundBackend": "none",
+      "network": true,
+      "toolsCD": true,
+      "rawFrameSHA256": "dc6e2fb51fde36ed1de3ea4ae88920a8380447a699cdf47093f9b346979f0f1c"
+    }
+  ]
+}

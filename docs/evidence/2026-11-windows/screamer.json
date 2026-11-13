@@ -1,0 +1,54 @@
+{
+  "origin": "synthetic-qtest",
+  "apple_software_run": false,
+  "expect": "paced",
+  "transport": "tcp",
+  "screamer": "0x80014000",
+  "dbdma": "0x80008000",
+  "flag_while_stopped": "0xffffffff",
+  "half_done_ms": {
+    "0": 7.54,
+    "1": 19.0
+  },
+  "frame_stamps": [
+    0,
+    512
+  ],
+  "half_gap_ms": 11.46,
+  "pace_frames_per_s": 44136,
+  "hold_frames_per_s": {
+    "unserviced": 5120,
+    "serviced": 46080
+  },
+  "checks": [
+    {
+      "check": "no half completes while the virtual clock is stopped",
+      "ok": true
+    },
+    {
+      "check": "frame-counter stamps one half (512 frames) apart",
+      "ok": true
+    },
+    {
+      "check": "both halves complete once the VM runs",
+      "ok": true
+    },
+    {
+      "check": "half B completes about one half (11.6 ms) after half A",
+      "ok": true
+    },
+    {
+      "check": "the looping program takes 44100 frames per second within 0.5 % (no slip)",
+      "ok": true
+    },
+    {
+      "check": "output waits while the last interrupt is unserviced",
+      "ok": true
+    },
+    {
+      "check": "serviced interrupts: output at full speed",
+      "ok": true
+    }
+  ],
+  "pass": true
+}

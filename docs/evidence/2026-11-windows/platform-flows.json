@@ -1,0 +1,110 @@
+[
+  {
+    "kind": "quadra",
+    "passed": true,
+    "stepCount": 33,
+    "stoppedAtEnd": true,
+    "captures": {
+      "boot": {
+        "frameWidth": 640,
+        "frameHeight": 480,
+        "engineProcessId": 9244,
+        "fitWindow": true
+      },
+      "resized": {
+        "frameWidth": 640,
+        "frameHeight": 480,
+        "engineProcessId": 9244,
+        "fitWindow": false
+      },
+      "fullscreen": {
+        "frameWidth": 640,
+        "frameHeight": 480,
+        "engineProcessId": 9244,
+        "fitWindow": false
+      },
+      "restarted": {
+        "frameWidth": 640,
+        "frameHeight": 480,
+        "engineProcessId": 8076,
+        "fitWindow": false
+      },
+      "guest-reset": {
+        "frameWidth": 640,
+        "frameHeight": 480,
+        "engineProcessId": 5100,
+        "fitWindow": false
+      }
+    }
+  },
+  {
+    "kind": "enhanced",
+    "passed": true,
+    "stepCount": 34,
+    "stoppedAtEnd": true,
+    "captures": {
+      "boot": {
+        "frameWidth": 800,
+        "frameHeight": 600,
+        "engineProcessId": 7960,
+        "fitWindow": false
+      },
+      "resized": {
+        "frameWidth": 887,
+        "frameHeight": 559,
+        "engineProcessId": 7960,
+        "fitWindow": false
+      },
+      "fullscreen": {
+        "frameWidth": 960,
+        "frameHeight": 720,
+        "engineProcessId": 7960,
+        "fitWindow": false
+      },
+      "restarted": {
+        "frameWidth": 800,
+        "frameHeight": 600,
+        "engineProcessId": 6832,
+        "fitWindow": false
+      },
+      "guest-reset": {
+        "frameWidth": 800,
+        "frameHeight": 600,
+        "engineProcessId": 1956,
+        "fitWindow": false
+      }
+    }
+  },
+  {
+    "kind": "os86",
+    "passed": true,
+    "stepCount": 29,
+    "stoppedAtEnd": true,
+    "captures": {
+      "boot": {
+        "frameWidth": 640,
+        "frameHeight": 480,
+        "engineProcessId": 7500,
+        "fitWindow": false
+      },
+      "resized": {
+        "frameWidth": 880,
+        "frameHeight": 559,
+        "engineProcessId": 7500,
+        "fitWindow": false
+      },
+      "fullscreen": {
+        "frameWidth": 960,
+        "frameHeight": 720,
+        "engineProcessId": 7500,
+        "fitWindow": false
+      },
+      "restarted": {
+        "frameWidth": 640,
+        "frameHeight": 480,
+        "engineProcessId": 8136,
+        "fitWindow": false
+      }
+    }
+  }
+]

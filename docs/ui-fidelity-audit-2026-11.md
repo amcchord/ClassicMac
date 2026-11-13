@@ -5,8 +5,11 @@ fonts, menus, dialog frames, focus rings, scrollbars and progress animation.
 This pass corrects those components and several configuration/running-guest
 behaviors. The covered components now compare with zero differing pixels
 against independent guest captures. The whole application is not yet
-certified pixel-perfect on Windows: this task ran the shared C++ renderer on
-macOS, and the available Windows VM did not have a working guest agent.
+certified pixel-perfect across every platform/state. The November 12 pass ran
+the shared C++ renderer on macOS. The [November 13 Windows follow-up](windows-proxmox-validation-2026-11-13.md)
+then built both engines and the portable app on local Proxmox and passed the
+actual five-DPI desktop/input matrix; physical host-device and mixed-monitor
+qualification remain open.
 
 The target for ClassicMac's host interface remains Mac OS 8.1 Platinum,
 default Lavender, unsmoothed bitmap text. Native Mac OS 9.2.1 at 32-bit depth
@@ -111,7 +114,7 @@ under `worktrees/retroboot-ui-audit/output/`; original user machines are untouch
 | Drivers and audio device | Host GL shader/FBO/draw/readback smoke passes. 19,974 bounded gray scanlines across six depths, Power Mac mode/gamma contracts and seven Screamer DMA pacing/interrupt checks pass. Device-level pacing does not establish audible guest sound. |
 | Real guests | Actual Power Mac OS 9.2.1 at 1×/2×. A 16-step built-in Quadra System 7.5.5 recipe proves engine replacement for both restart paths. Another 16-step enhanced-video recipe boots at 800×600, resizes to 779×701, resets into a healthy Finder and shuts down. |
 | ATI game | Quake III drawing, menu click, relative mouse look/firing and return to Finder exercised. Audio assertion fails on both old and updated ATI fixtures because captured sound is silent. No sound/performance certification. |
-| Actual Windows desktop | Not run in this task. Existing Windows VM was running but its Proxmox guest agent was unavailable. No VM state/configuration was changed. Modeled Qt DPI on macOS does not prove Windows compositor/input/packaging behavior. |
+| Actual Windows desktop | November 13 follow-up: Windows 11 Pro portable package, actual 100/125/150/175/200% OS DPI, 59-step flows with native accented input and guest mouse input, 75 exact desktop captures and 19,201,136 raw guest pixels pass. See the [Windows report](windows-proxmox-validation-2026-11-13.md) for model checks, the ATI/Sungem/tablet interrupt fix, limitations and dedicated VM 401 state. |
 
 Selected actual application captures: [Get Info at 2×](evidence/2026-11-ui-audit/settings-2x.png),
 [model menu at 2×](evidence/2026-11-ui-audit/model-menu-2x.png),
@@ -124,7 +127,7 @@ desktop screenshots or original classic-application layout references.
 
 | Priority | Gap | Required evidence / acceptance |
 | --- | --- | --- |
-| P1 | Actual Windows build, compositor and interaction | Build the final sources on Windows; run portable package recipes at actual 100/125/150/175/200% OS DPI, including monitor moves, work-area constraints, native drag, keyboard/IME, focus and full-screen transitions. Use `--windows-matrix` with matching desktop captures; do not substitute modeled Qt scale. |
+| P1 | Remaining Windows interaction and host devices | The actual five-DPI package/compositor/native input/full-screen flows now pass. Still require mixed-DPI monitor moves, other work areas, native drag/snapping, IME/alternate layouts and real accelerated GPU/audio output. One RDP display does not qualify those cases. |
 | P1 | macOS whole-layout text and constrained guest scaling | SwiftUI Text can still place bitmap outlines on fractional baselines. The macOS guest view also retains smooth downscaling when its screen exceeds the window. Add whole-window native screenshot/physical-pixel checks and an explicit sharp/fit policy before claiming parity with the updated C++ display. |
 | P2 | Unmeasured appearance variants | Utility/floating/nonmovable modal frames, inactive/disabled menu variants, combined focus+pressed controls and disabled indeterminate bars need their own native references. Existing controls' passing states do not certify these combinations. |
 | P2 | Entire form layout | No original Mac OS application has ClassicMac's configuration content. Control artwork is measurable; every label baseline, wrapped paragraph, row spacing and focus path still needs screenshot review on each shipping platform and constrained work area. |
@@ -132,7 +135,7 @@ desktop screenshots or original classic-application layout references.
 | P2 | Timing and long-running behavior | Animation cadence, prolonged VBL/game stability, sound and all supported OS editions need separate runtime qualification. The new relative VBL is exercised by boot/UI checks, not a long-duration soak. |
 | P3 | Host file/folder dialogs | These intentionally use platform services. Their contents/chrome do not reproduce classic Standard File; decide separately whether to build and qualify a classic picker. |
 
-The next platform action is an actual Windows package/DPI run when a usable
-Windows execution channel is available. Current evidence is sufficient for
-the measured component changes and desktop audit; it is not sufficient to
-describe the entire app as a pixel-perfect classic Mac OS reproduction.
+The next platform actions are the remaining physical Windows device/input
+cases and the macOS layout/scaling work above. Current Mac and Windows
+evidence supports the measured component and captured-state claims; it does
+not establish that every app state is a pixel-perfect classic Mac OS reproduction.

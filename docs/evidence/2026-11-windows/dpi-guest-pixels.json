@@ -1,0 +1,245 @@
+{
+  "captures": [
+    {
+      "capture": "guest-fullscreen.json",
+      "mode": "Sharp Pixels",
+      "compared": true,
+      "zoom": 1,
+      "pixelsCompared": 786432,
+      "differingPixels": 0
+    },
+    {
+      "capture": "guest-narrow.json",
+      "mode": "Sharp Pixels",
+      "compared": true,
+      "zoom": 1,
+      "pixelsCompared": 172733,
+      "differingPixels": 0
+    },
+    {
+      "capture": "guest-native-menu.json",
+      "mode": "Sharp Pixels",
+      "compared": true,
+      "zoom": 1,
+      "pixelsCompared": 753984,
+      "differingPixels": 0
+    },
+    {
+      "capture": "guest-paused.json",
+      "mode": "Sharp Pixels",
+      "compared": true,
+      "zoom": 1,
+      "pixelsCompared": 172733,
+      "differingPixels": 0
+    },
+    {
+      "capture": "guest-restarted.json",
+      "mode": "Sharp Pixels",
+      "compared": true,
+      "zoom": 1,
+      "pixelsCompared": 753984,
+      "differingPixels": 0
+    },
+    {
+      "capture": "guest-started.json",
+      "mode": "Sharp Pixels",
+      "compared": true,
+      "zoom": 1,
+      "pixelsCompared": 753984,
+      "differingPixels": 0
+    },
+    {
+      "capture": "guest-fullscreen.json",
+      "mode": "Sharp Pixels",
+      "compared": true,
+      "zoom": 1,
+      "pixelsCompared": 786432,
+      "differingPixels": 0
+    },
+    {
+      "capture": "guest-narrow.json",
+      "mode": "Sharp Pixels",
+      "compared": true,
+      "zoom": 1,
+      "pixelsCompared": 172733,
+      "differingPixels": 0
+    },
+    {
+      "capture": "guest-native-menu.json",
+      "mode": "Sharp Pixels",
+      "compared": true,
+      "zoom": 1,
+      "pixelsCompared": 753984,
+      "differingPixels": 0
+    },
+    {
+      "capture": "guest-paused.json",
+      "mode": "Sharp Pixels",
+      "compared": true,
+      "zoom": 1,
+      "pixelsCompared": 172733,
+      "differingPixels": 0
+    },
+    {
+      "capture": "guest-restarted.json",
+      "mode": "Sharp Pixels",
+      "compared": true,
+      "zoom": 1,
+      "pixelsCompared": 753984,
+      "differingPixels": 0
+    },
+    {
+      "capture": "guest-started.json",
+      "mode": "Sharp Pixels",
+      "compared": true,
+      "zoom": 1,
+      "pixelsCompared": 753984,
+      "differingPixels": 0
+    },
+    {
+      "capture": "guest-fullscreen.json",
+      "mode": "Sharp Pixels",
+      "compared": true,
+      "zoom": 1,
+      "pixelsCompared": 786432,
+      "differingPixels": 0
+    },
+    {
+      "capture": "guest-narrow.json",
+      "mode": "Sharp Pixels",
+      "compared": true,
+      "zoom": 1,
+      "pixelsCompared": 690932,
+      "differingPixels": 0
+    },
+    {
+      "capture": "guest-native-menu.json",
+      "mode": "Sharp Pixels",
+      "compared": true,
+      "zoom": 1,
+      "pixelsCompared": 662656,
+      "differingPixels": 0
+    },
+    {
+      "capture": "guest-paused.json",
+      "mode": "Sharp Pixels",
+      "compared": true,
+      "zoom": 1,
+      "pixelsCompared": 672480,
+      "differingPixels": 0
+    },
+    {
+      "capture": "guest-restarted.json",
+      "mode": "Sharp Pixels",
+      "compared": true,
+      "zoom": 1,
+      "pixelsCompared": 662656,
+      "differingPixels": 0
+    },
+    {
+      "capture": "guest-started.json",
+      "mode": "Sharp Pixels",
+      "compared": true,
+      "zoom": 1,
+      "pixelsCompared": 662656,
+      "differingPixels": 0
+    },
+    {
+      "capture": "guest-fullscreen.json",
+      "mode": "Sharp Pixels",
+      "compared": true,
+      "zoom": 1,
+      "pixelsCompared": 786432,
+      "differingPixels": 0
+    },
+    {
+      "capture": "guest-narrow.json",
+      "mode": "Sharp Pixels",
+      "compared": true,
+      "zoom": 1,
+      "pixelsCompared": 690932,
+      "differingPixels": 0
+    },
+    {
+      "capture": "guest-native-menu.json",
+      "mode": "Sharp Pixels",
+      "compared": true,
+      "zoom": 1,
+      "pixelsCompared": 662656,
+      "differingPixels": 0
+    },
+    {
+      "capture": "guest-paused.json",
+      "mode": "Sharp Pixels",
+      "compared": true,
+      "zoom": 1,
+      "pixelsCompared": 672480,
+      "differingPixels": 0
+    },
+    {
+      "capture": "guest-restarted.json",
+      "mode": "Sharp Pixels",
+      "compared": true,
+      "zoom": 1,
+      "pixelsCompared": 662656,
+      "differingPixels": 0
+    },
+    {
+      "capture": "guest-started.json",
+      "mode": "Sharp Pixels",
+      "compared": true,
+      "zoom": 1,
+      "pixelsCompared": 662656,
+      "differingPixels": 0
+    },
+    {
+      "capture": "guest-fullscreen.json",
+      "mode": "Sharp Pixels",
+      "compared": true,
+      "zoom": 1,
+      "pixelsCompared": 786432,
+      "differingPixels": 0
+    },
+    {
+      "capture": "guest-narrow.json",
+      "mode": "Sharp Pixels",
+      "compared": true,
+      "zoom": 1,
+      "pixelsCompared": 690932,
+      "differingPixels": 0
+    },
+    {
+      "capture": "guest-native-menu.json",
+      "mode": "Sharp Pixels",
+      "compared": true,
+      "zoom": 1,
+      "pixelsCompared": 662656,
+      "differingPixels": 0
+    },
+    {
+      "capture": "guest-paused.json",
+      "mode": "Sharp Pixels",
+      "compared": true,
+      "zoom": 1,
+      "pixelsCompared": 672480,
+      "differingPixels": 0
+    },
+    {
+      "capture": "guest-restarted.json",
+      "mode": "Sharp Pixels",
+      "compared": true,
+      "zoom": 1,
+      "pixelsCompared": 662656,
+      "differingPixels": 0
+    },
+    {
+      "capture": "guest-started.json",
+      "mode": "Sharp Pixels",
+      "compared": true,
+      "zoom": 1,
+      "pixelsCompared": 662656,
+      "differingPixels": 0
+    }
+  ],
+  "pixelsCompared": 19201136
+}

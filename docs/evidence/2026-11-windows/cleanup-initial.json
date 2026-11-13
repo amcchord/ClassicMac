@@ -1,0 +1,9 @@
+{
+    "ownedScheduledTasksRemoved":  true,
+    "unattendCopiesRemoved":  [
+                                  "unattend.xml"
+                              ],
+    "ownedGuestsStopped":  true,
+    "defaultPasswordRemoved":  true,
+    "autoLogonDisabled":  true
+}

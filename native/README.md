@@ -90,3 +90,11 @@ captures; `check-guest-pixels.py` compares every visible Sharp Pixels device
 pixel with the captured RFB frame. Modeled DPI tests on macOS are distinct
 from actual Windows desktop tests. See
 [`docs/ui-fidelity-audit-2026-11.md`](../docs/ui-fidelity-audit-2026-11.md).
+The actual local Proxmox Windows follow-up is recorded in
+[`docs/windows-proxmox-validation-2026-11-13.md`](../docs/windows-proxmox-validation-2026-11-13.md);
+reusable Windows desktop/input flows are in [`tests/windows`](tests/windows/README.md).
+
+The Windows ATI profile keeps its tablet on a separate PCI interrupt from
+Sungem when Tools and networking are enabled. Automatic allocation made
+Mac OS 9 stall at startup with that combination; the final package's real
+five-DPI flows cover it with all options enabled.

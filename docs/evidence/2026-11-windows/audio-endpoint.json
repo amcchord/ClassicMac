@@ -1,0 +1,40 @@
+{
+  "soundDevices": [
+    {
+      "name": "High Definition Audio Device",
+      "status": "OK"
+    },
+    {
+      "name": "High Definition Audio Device",
+      "status": "OK"
+    }
+  ],
+  "endpoints": [
+    {
+      "name": "Line In (High Definition Audio Device)",
+      "status": "OK"
+    },
+    {
+      "name": "Speakers (2- High Definition Audio Device)",
+      "status": "OK"
+    },
+    {
+      "name": "Speakers (High Definition Audio Device)",
+      "status": "OK"
+    },
+    {
+      "name": "Microphone (2- High Definition Audio Device)",
+      "status": "OK"
+    }
+  ],
+  "services": [
+    {
+      "Name": "AudioEndpointBuilder",
+      "Status": 4
+    },
+    {
+      "Name": "Audiosrv",
+      "Status": 4
+    }
+  ]
+}

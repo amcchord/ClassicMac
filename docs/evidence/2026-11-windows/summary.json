@@ -1,0 +1,72 @@
+{
+  "nativeSourceCommit": "52b61d8",
+  "windows": "Windows11 Pro24H2 build26100",
+  "proxmoxVM": 401,
+  "nativeReferences": {
+    "comparisons": 122,
+    "differingPixels": 0,
+    "nativeGlyphsAndAdvances": 672,
+    "nativeWidgetGroups": 7
+  },
+  "dpiFlow": {
+    "actualOSScales": [
+      100,
+      125,
+      150,
+      175,
+      200
+    ],
+    "stepsEach": 59,
+    "allPassed": true,
+    "defaultsEnabled": true,
+    "desktopComparisons": 75,
+    "guestCaptures": 30,
+    "guestPixels": 19201136,
+    "differingPixels": 0,
+    "staticRecapture": "150/settings-selection replaces a56-pixel caret blink transition; original retained"
+  },
+  "otherModels": {
+    "builtinQuadraSteps": 33,
+    "enhancedQuadraSteps": 34,
+    "os86Steps": 29,
+    "desktopComparisons": 17,
+    "guestCaptures": 13,
+    "guestPixels": 15979812,
+    "differingPixels": 0,
+    "captureAppBeforePCIFix": true,
+    "argumentFixAppliesToTheseModels": false
+  },
+  "consolidatedMain": {
+    "sourceCommit": "52b61d8",
+    "swiftTests": 138,
+    "optionalSkips": 3,
+    "failures": 0,
+    "nativeReferencesPassed": true,
+    "pythonUnitTests": 11,
+    "deterministicExports": [
+      "UTC",
+      "Pacific/Honolulu"
+    ],
+    "syntaxPassed": true,
+    "screamerUnixChecks": 7
+  },
+  "windowsScreamerTCPChecks": 7,
+  "audio": "DirectSound initialized; audible sound unqualified",
+  "gpu": "No OpenGL4.1; ATI2D passes; accelerated3D unqualified",
+  "artifact": {
+    "sha256": "b2f60d9fbb3536828121385d09dab76789c3a10321fc093a0d6e82e70647763a",
+    "name": "ClassicMac-4.6.2-windows-x64.exe",
+    "size": 42643673
+  },
+  "releaseOrPush": false,
+  "finalState": {
+    "vm401": "stopped",
+    "container300": "running",
+    "autoLogonDisabled": true,
+    "cachedLogonPasswordRemoved": true,
+    "ownedScheduledTasksRemoved": true,
+    "setupHTTPStopped": true,
+    "ownedUnattendedCredentialsRemoved": true,
+    "activationError": "0xC004C020"
+  }
+}

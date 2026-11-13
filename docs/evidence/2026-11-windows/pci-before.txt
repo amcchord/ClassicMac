@@ -1,0 +1,55 @@
+  Bus  0, device  11, function 0:
+    Host bridge: PCI device 106b:001f
+      PCI subsystem 1af4:1100
+      id ""
+  Bus  0, device  12, function 0:
+    Class 65280: PCI device 106b:0022
+      PCI subsystem 1af4:1100
+      BAR0: 32 bit memory at 0x80000000 [0x8007ffff]
+      id ""
+  Bus  0, device  13, function 0:
+    USB controller: PCI device 106b:003f
+      PCI subsystem 1af4:1100
+      IRQ 28, pin A
+      BAR0: 32 bit memory at 0x80080000 [0x800800ff]
+      id ""
+  Bus  0, device  14, function 0:
+    Ethernet controller: PCI device 106b:0021
+      PCI subsystem 0000:0000
+      IRQ 29, pin A
+      BAR0: 32 bit memory at 0x80200000 [0x803fffff]
+      id ""
+  Bus  0, device  15, function 0:
+    Class 0255: PCI device 1234:1112
+      PCI subsystem 1af4:1100
+      BAR0: 32 bit memory at 0x80400000 [0x80400fff]
+      id ""
+  Bus  0, device  16, function 0:
+    VGA controller: PCI device 1002:5144
+      PCI subsystem 1af4:1100
+      IRQ 27, pin A
+      BAR0: 32 bit prefetchable memory at 0x84000000 [0x87ffffff]
+      BAR1: I/O at 0x1000 [0x10ff]
+      BAR2: 32 bit memory at 0x88000000 [0x88003fff]
+      id "ati0"
+  Bus  0, device  17, function 0:
+    SCSI controller: PCI device 1af4:1001
+      PCI subsystem 1af4:0002
+      IRQ 28, pin A
+      BAR0: I/O at 0x1100 [0x117f]
+      BAR4: 64 bit prefetchable memory at 0x88010000 [0x88013fff]
+      id ""
+  Bus  0, device  18, function 0:
+    Class 2432: PCI device 1af4:1052
+      PCI subsystem 1af4:1100
+      IRQ 29, pin A
+      BAR4: 64 bit prefetchable memory at 0x88020000 [0x88023fff]
+      id ""
+  Bus  0, device  14, function 0:
+    Host bridge: PCI device 106b:001e
+      PCI subsystem 1af4:1100
+      id ""
+  Bus  0, device  11, function 0:
+    Host bridge: PCI device 106b:0020
+      PCI subsystem 1af4:1100
+      id ""

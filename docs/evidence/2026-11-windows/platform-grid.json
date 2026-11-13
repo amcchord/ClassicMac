@@ -1,0 +1,142 @@
+{
+  "captures": [
+    {
+      "capture": "enhanced/boot.json",
+      "windowsDpi": 192,
+      "uiPixelZoom": 2,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": null,
+      "desktopMatches": true
+    },
+    {
+      "capture": "enhanced/guest-reset.json",
+      "windowsDpi": 192,
+      "uiPixelZoom": 2,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": null,
+      "desktopMatches": true
+    },
+    {
+      "capture": "enhanced/resized.json",
+      "windowsDpi": 192,
+      "uiPixelZoom": 2,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": null,
+      "desktopMatches": true
+    },
+    {
+      "capture": "enhanced/restarted.json",
+      "windowsDpi": 192,
+      "uiPixelZoom": 2,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": null,
+      "desktopMatches": true
+    },
+    {
+      "capture": "enhanced/settings.json",
+      "windowsDpi": 192,
+      "uiPixelZoom": 2,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true,
+      "desktopMatches": true
+    },
+    {
+      "capture": "enhanced-fullscreen/fullscreen.json",
+      "windowsDpi": 192,
+      "uiPixelZoom": 2,
+      "uniformTitleBarPixels": null,
+      "uniformFullUI": null,
+      "desktopMatches": true
+    },
+    {
+      "capture": "os86/boot.json",
+      "windowsDpi": 192,
+      "uiPixelZoom": 2,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": null,
+      "desktopMatches": true
+    },
+    {
+      "capture": "os86/fullscreen.json",
+      "windowsDpi": 192,
+      "uiPixelZoom": 2,
+      "uniformTitleBarPixels": null,
+      "uniformFullUI": null,
+      "desktopMatches": true
+    },
+    {
+      "capture": "os86/resized.json",
+      "windowsDpi": 192,
+      "uiPixelZoom": 2,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": null,
+      "desktopMatches": true
+    },
+    {
+      "capture": "os86/restarted.json",
+      "windowsDpi": 192,
+      "uiPixelZoom": 2,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": null,
+      "desktopMatches": true
+    },
+    {
+      "capture": "os86/settings.json",
+      "windowsDpi": 192,
+      "uiPixelZoom": 2,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true,
+      "desktopMatches": true
+    },
+    {
+      "capture": "quadra/boot.json",
+      "windowsDpi": 192,
+      "uiPixelZoom": 2,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": null,
+      "desktopMatches": true
+    },
+    {
+      "capture": "quadra/fullscreen.json",
+      "windowsDpi": 192,
+      "uiPixelZoom": 2,
+      "uniformTitleBarPixels": null,
+      "uniformFullUI": null,
+      "desktopMatches": true
+    },
+    {
+      "capture": "quadra/guest-reset.json",
+      "windowsDpi": 192,
+      "uiPixelZoom": 2,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": null,
+      "desktopMatches": true
+    },
+    {
+      "capture": "quadra/resized.json",
+      "windowsDpi": 192,
+      "uiPixelZoom": 2,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": null,
+      "desktopMatches": true
+    },
+    {
+      "capture": "quadra/restarted.json",
+      "windowsDpi": 192,
+      "uiPixelZoom": 2,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": null,
+      "desktopMatches": true
+    },
+    {
+      "capture": "quadra/settings.json",
+      "windowsDpi": 192,
+      "uiPixelZoom": 2,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true,
+      "desktopMatches": true
+    }
+  ],
+  "uniformTitleBars": 14,
+  "matchingDesktopCaptures": 17
+}

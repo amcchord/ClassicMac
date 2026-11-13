@@ -1,0 +1,2129 @@
+{
+  "sourceQAChanges": [
+    "2d467e7",
+    "7aa1fe0",
+    "52b61d8"
+  ],
+  "sourceBaseline": "88ca9e4",
+  "videoDevices": [
+    {
+      "driverVersion": "10.0.26100.1",
+      "name": "Microsoft Basic Display Adapter"
+    },
+    {
+      "driverVersion": "10.0.26100.1150",
+      "name": "Microsoft Remote Display Adapter"
+    }
+  ],
+  "activeSoundDevices": [
+    "High Definition Audio Device",
+    "High Definition Audio Device"
+  ],
+  "package": {
+    "sha256": "b2f60d9fbb3536828121385d09dab76789c3a10321fc093a0d6e82e70647763a",
+    "name": "ClassicMac-4.6.2-windows-x64.exe",
+    "size": 42643673
+  },
+  "nativeSourceCommit": "52b61d8",
+  "os": {
+    "caption": "Microsoft Windows 11 Pro",
+    "architecture": "64-bit",
+    "build": "26100",
+    "version": "10.0.26100"
+  },
+  "date": "2026-11-13",
+  "qemu": "QEMU emulator version 11.0.2 (v11.0.2-dirty)",
+  "compiler": "g++.exe (Rev6, Built by MSYS2 project) 16.2.0",
+  "runtimeFiles": [
+    {
+      "path": "classicmac.exe",
+      "sha256": "c7683f28aeb61c7d30758c4690eec6e2397ec2198002d5b2f0aca9188176c300",
+      "size": 2415248
+    },
+    {
+      "path": "libb2-1.dll",
+      "sha256": "01bbf64090367d511f41d9fc8f34c557f61d4a227b7c9e47ce04052cbfdc3e7d",
+      "size": 35323
+    },
+    {
+      "path": "libbrotlicommon.dll",
+      "sha256": "7b0047dc16dd92a7932124dfd5a6e698d342f533a15d37d61f710def66091436",
+      "size": 140697
+    },
+    {
+      "path": "libbrotlidec.dll",
+      "sha256": "c4c987a01597ddf969d93023f933f999a20f285588b0decb4deeb780c9e9cdf8",
+      "size": 60224
+    },
+    {
+      "path": "libbz2-1.dll",
+      "sha256": "1790bf6473c9d48db14c1f0ee8124142327556d281299ea2a72ee361118ee01a",
+      "size": 107741
+    },
+    {
+      "path": "libcrypto-3-x64.dll",
+      "sha256": "97308feea369b305e562c0098638a1b02a06f52ee9fcc4b8cf3da362ff563cf4",
+      "size": 5501287
+    },
+    {
+      "path": "libdouble-conversion.dll",
+      "sha256": "aecc5a09c4657a969be2969269029664898b3d1ac037b0795614d685a7ca6c1e",
+      "size": 78480
+    },
+    {
+      "path": "libfreetype-6.dll",
+      "sha256": "19604dde573cbb8a13053fc231eee99b91cd972e0e9a3e1465f44ad6985e83ee",
+      "size": 808305
+    },
+    {
+      "path": "libgcc_s_seh-1.dll",
+      "sha256": "791ebf66e99c7c1b4ed3666468cec45a0172b4c8942ac6c84c3e9cab3e1b5270",
+      "size": 150537
+    },
+    {
+      "path": "libglib-2.0-0.dll",
+      "sha256": "3a1abec0184b238db54399cb9243393d9436d96b8fdb9bd9f2875da207c5b458",
+      "size": 1568604
+    },
+    {
+      "path": "libgraphite2.dll",
+      "sha256": "93953e4744bcfce9a7bc439b956544bc213095cb1349c3602a58370f32b25c18",
+      "size": 167857
+    },
+    {
+      "path": "libharfbuzz-0.dll",
+      "sha256": "f3bfe34ffac38f82fb542e65244668d0bd49aa43880b1004772797d43f5e4269",
+      "size": 1892473
+    },
+    {
+      "path": "libiconv-2.dll",
+      "sha256": "9824e9f78e76ad513e5ba0d697c60de2fb24a21c20922bc2f918c86998a08cab",
+      "size": 1139262
+    },
+    {
+      "path": "libicudt78.dll",
+      "sha256": "29b2f925adf4531d7b3ee0edc037f3559996de499dff663819f07000a79d72fa",
+      "size": 33121942
+    },
+    {
+      "path": "libicuin78.dll",
+      "sha256": "cb87dfb05ae183ea96f2295174d993430094cc0f0d6ba99fd4f253d5079b0890",
+      "size": 3179936
+    },
+    {
+      "path": "libicuuc78.dll",
+      "sha256": "9d5fd51a4647f759067568ae82dc391b56af144966a588cd98aab77ef045835a",
+      "size": 1995258
+    },
+    {
+      "path": "libintl-8.dll",
+      "sha256": "0e5a178731e6be6d115442a6ade3df7f03265cd1fc4338f8b6f86a8001cbf582",
+      "size": 298164
+    },
+    {
+      "path": "libjpeg-8.dll",
+      "sha256": "22286acc18b907d03eec1177c99f54a802a6f8437888d1abb79e65a7ecd14605",
+      "size": 963471
+    },
+    {
+      "path": "libmd4c.dll",
+      "sha256": "9331ed00963781cea1059bbb7c6102b85cf714196f2e38ec4557a05daf1129b1",
+      "size": 93595
+    },
+    {
+      "path": "libpcre2-16-0.dll",
+      "sha256": "0daf3ef8645f738efdb5e67d92b4059bbd50434ba3047e46f9196b003c9a1f00",
+      "size": 646599
+    },
+    {
+      "path": "libpcre2-8-0.dll",
+      "sha256": "82bfffeb1f5cab5d1919b3bf4f744602ecbbdab7332d5e80eda469a9138dba80",
+      "size": 706022
+    },
+    {
+      "path": "libpng16-16.dll",
+      "sha256": "28db7a8c6fcc579ce621729d27f1952324cd3a2b4e24da121611bb586346e732",
+      "size": 254777
+    },
+    {
+      "path": "libssl-3-x64.dll",
+      "sha256": "8b71cd694f8edfbddc76674111278db6bcdcde0dcd63b99238420193848e6dbf",
+      "size": 998449
+    },
+    {
+      "path": "libstdc++-6.dll",
+      "sha256": "4e4822dc4aaa99383f581dae7ab9464ae89346c5ca742f7efbcdebe20b0fe7b5",
+      "size": 2659194
+    },
+    {
+      "path": "libwinpthread-1.dll",
+      "sha256": "94a9a4e2fe27b4bc827a4b209e9deb4cc3dc34bc025df06b849144f9d4c588f8",
+      "size": 73308
+    },
+    {
+      "path": "libz-1.dll",
+      "sha256": "934103c50623302548a1cf66fbc22f0029e4eb4556343252a505e2fc005e835f",
+      "size": 148154
+    },
+    {
+      "path": "libzstd.dll",
+      "sha256": "48368ab0ca622d0ec12f41ce85d91f22866bf5da92c77a69a06483564c93816c",
+      "size": 1217412
+    },
+    {
+      "path": "manifest-sha256.json",
+      "sha256": "24a2271187e642c674f8e74798c9fd0f9675d729be5bcaf74375ea0402f8d539",
+      "size": 47069
+    },
+    {
+      "path": "qt.conf",
+      "sha256": "7ea11bffd578782b3578ee2a6deafad26e37b0eae896578b81d177a680c7f128",
+      "size": 26
+    },
+    {
+      "path": "Qt6Core.dll",
+      "sha256": "bcfa6e5a8996340bd2b3a633629f97114e018f73658f15848e6a9e82645c386c",
+      "size": 7462437
+    },
+    {
+      "path": "Qt6Gui.dll",
+      "sha256": "2318ad5e8e3d6eb97283289364506b2f4200aa779c47af843f14f2b568a41822",
+      "size": 10828274
+    },
+    {
+      "path": "Qt6Network.dll",
+      "sha256": "ee96fdb6b33a12f485506ba2da247165858bcc6d9e755e1c66e4af6f862e5496",
+      "size": 2182670
+    },
+    {
+      "path": "Qt6Widgets.dll",
+      "sha256": "0b065a22ba4d3c327335daefe74a5150bc2ce03016c6ea90e155b0dd79ae6425",
+      "size": 7855853
+    },
+    {
+      "path": "ThirdPartyNotices.md",
+      "sha256": "927b6199fa463f2bfe61072d1826b5a424aca3acae56ecbb576feae8a457f1cf",
+      "size": 8720
+    },
+    {
+      "path": "zlib1.dll",
+      "sha256": "aa658771fb152b095eda1614d8bde798efb92324b6f4a0c99c743cd96b67ac90",
+      "size": 190835
+    },
+    {
+      "path": "Licenses/MSYS2/binutils/COPYING",
+      "sha256": "231f7edcc7352d7734a96eef0b8030f77982678c516876fcb81e25b32d68564c",
+      "size": 18002
+    },
+    {
+      "path": "Licenses/MSYS2/binutils/COPYING.LIB",
+      "sha256": "56bdea73b6145ef6ac5259b3da390b981d840c24cb03b8e1cbc678de7ecfa18d",
+      "size": 25291
+    },
+    {
+      "path": "Licenses/MSYS2/binutils/COPYING3",
+      "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903",
+      "size": 35147
+    },
+    {
+      "path": "Licenses/MSYS2/binutils/COPYING3.LIB",
+      "sha256": "a853c2ffec17057872340eee242ae4d96cbf2b520ae27d903e1b2fef1a5f9d1c",
+      "size": 7639
+    },
+    {
+      "path": "Licenses/MSYS2/brotli/LICENSE",
+      "sha256": "3d180008e36922a4e8daec11c34c7af264fed5962d07924aea928c38e8663c94",
+      "size": 1084
+    },
+    {
+      "path": "Licenses/MSYS2/bzip2/LICENSE",
+      "sha256": "c6dbbf828498be844a89eaa3b84adbab3199e342eb5cb2ed2f0d4ba7ec0f38a3",
+      "size": 1896
+    },
+    {
+      "path": "Licenses/MSYS2/c-ares/LICENSE.md",
+      "sha256": "460f5e768fda3752ca2169a95df062578a10fb126bfd65f3b9b1a1bed2f84807",
+      "size": 1211
+    },
+    {
+      "path": "Licenses/MSYS2/cppdap/LICENSE",
+      "sha256": "58d1e17ffe5109a7ae296caafcadfdbe6a7d176f0bc4ab01e12a689b0499d8bd",
+      "size": 11357
+    },
+    {
+      "path": "Licenses/MSYS2/crt/COPYING",
+      "sha256": "99a69660981156c21336fdb5661f89341b013c94e4bf9e1c7467b4745718397f",
+      "size": 2326
+    },
+    {
+      "path": "Licenses/MSYS2/crt/COPYING.MinGW-w64-runtime.txt",
+      "sha256": "1db8da07b436c68833c0673ffee3d9fcb2526047f3820b81661865dfedc79a1f",
+      "size": 12155
+    },
+    {
+      "path": "Licenses/MSYS2/crt/COPYING.MinGW-w64.txt",
+      "sha256": "f38e6194bd3bfa1b654f118e5acefe0aead437bbe669eee43957ccc65a7127f1",
+      "size": 5905
+    },
+    {
+      "path": "Licenses/MSYS2/curl/LICENSE",
+      "sha256": "82f2f4427d6545ee5aaac4f0b80428da6cc8ba41c2cf5da3a03680ec327b9681",
+      "size": 1088
+    },
+    {
+      "path": "Licenses/MSYS2/dbus/AFL-2.1.txt",
+      "sha256": "93bb4f7417aa775bab9026cc3d0af28aeb64451fc5a8ec651876785edd8eaf9b",
+      "size": 8948
+    },
+    {
+      "path": "Licenses/MSYS2/dbus/COPYING",
+      "sha256": "150e5d08e1cb5e62b65967d7931acad2c42d98ec1bbb584bebb01921cbc853c2",
+      "size": 1134
+    },
+    {
+      "path": "Licenses/MSYS2/dbus/GPL-2.0-or-later.txt",
+      "sha256": "aaf135472f81c5b4a0dca9367e5bb5e9750032b5bebe5442b36e4c0a47430df3",
+      "size": 17337
+    },
+    {
+      "path": "Licenses/MSYS2/double-conversion/LICENSE",
+      "sha256": "4af93c12062c58058378de2397dc1c92bbff9ddfb1d583a01c84127557ce97ca",
+      "size": 1527
+    },
+    {
+      "path": "Licenses/MSYS2/dtc/GPL",
+      "sha256": "8177f97513213526df2cf6184d8ff986c675afb514d4e68a404010521b880643",
+      "size": 18092
+    },
+    {
+      "path": "Licenses/MSYS2/expat/COPYING",
+      "sha256": "31b15de82aa19a845156169a17a5488bf597e561b2c318d159ed583139b25e87",
+      "size": 1144
+    },
+    {
+      "path": "Licenses/MSYS2/freetype/FTL.TXT",
+      "sha256": "5a5ee54c5001bbad1cdc1a57cc3dd4c42199b2da09d39c7ee41fab002d02967f",
+      "size": 6743
+    },
+    {
+      "path": "Licenses/MSYS2/freetype/GPLv2.TXT",
+      "sha256": "c4120c6752c910c299e3bd9cb3a46ff262c268303ca2069b61f92f10a5656c18",
+      "size": 17994
+    },
+    {
+      "path": "Licenses/MSYS2/gcc/COPYING.RUNTIME",
+      "sha256": "9d6b43ce4d8de0c878bf16b54d8e7a10d9bd42b75178153e3af6a815bdc90f74",
+      "size": 3324
+    },
+    {
+      "path": "Licenses/MSYS2/gcc/COPYING3",
+      "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903",
+      "size": 35147
+    },
+    {
+      "path": "Licenses/MSYS2/gettext-runtime/COPYING",
+      "sha256": "7ef2cdfe58e0c0460657b6598b49af29d4e03c1e41cbaf0e1da1eb8ad74b95d0",
+      "size": 495
+    },
+    {
+      "path": "Licenses/MSYS2/gettext-runtime/intl/COPYING.LIB",
+      "sha256": "20e50fe7aae3e56378ebf0417d9de904f55a0e61e4df315333e632a4d3555d95",
+      "size": 26419
+    },
+    {
+      "path": "Licenses/MSYS2/gettext-runtime/libasprintf/COPYING",
+      "sha256": "03133addae5b99a6148c538300e6d97074453089be1423b741bd081f18e2b298",
+      "size": 65
+    },
+    {
+      "path": "Licenses/MSYS2/gettext-runtime/libasprintf/COPYING.LIB",
+      "sha256": "20e50fe7aae3e56378ebf0417d9de904f55a0e61e4df315333e632a4d3555d95",
+      "size": 26419
+    },
+    {
+      "path": "Licenses/MSYS2/glib2/COPYING",
+      "sha256": "fa6f36630bb1e0c571d34b2bbdf188d08495c9dbf58f28cac112f303fc1f58fb",
+      "size": 25967
+    },
+    {
+      "path": "Licenses/MSYS2/graphite2/COPYING",
+      "sha256": "2c272829ff23f182c8bf7ea12fedea69b0ae148663123ed5240c117cb129c9c1",
+      "size": 1235
+    },
+    {
+      "path": "Licenses/MSYS2/graphite2/LICENSE",
+      "sha256": "cab46cd45adbfea4b1d0f14b033c70062c73074fa0b56532c2f351576ddf455e",
+      "size": 29228
+    },
+    {
+      "path": "Licenses/MSYS2/harfbuzz/COPYING",
+      "sha256": "ba8f810f2455c2f08e2d56bb49b72f37fcf68f1f4fade38977cfd7372050ad64",
+      "size": 1971
+    },
+    {
+      "path": "Licenses/MSYS2/headers/COPYING",
+      "sha256": "99a69660981156c21336fdb5661f89341b013c94e4bf9e1c7467b4745718397f",
+      "size": 2326
+    },
+    {
+      "path": "Licenses/MSYS2/headers/COPYING.MinGW-w64-runtime.txt",
+      "sha256": "1db8da07b436c68833c0673ffee3d9fcb2526047f3820b81661865dfedc79a1f",
+      "size": 12155
+    },
+    {
+      "path": "Licenses/MSYS2/headers/COPYING.MinGW-w64.txt",
+      "sha256": "f38e6194bd3bfa1b654f118e5acefe0aead437bbe669eee43957ccc65a7127f1",
+      "size": 5905
+    },
+    {
+      "path": "Licenses/MSYS2/headers/ddk-readme.txt",
+      "sha256": "8d8f9924e4ea5466932000bdb9a4104da1d8ca3e4c979bb8207225522ba63826",
+      "size": 650
+    },
+    {
+      "path": "Licenses/MSYS2/jsoncpp/LICENSE",
+      "sha256": "cec0db5f6d7ed6b3a72647bd50aed02e13c3377fd44382b96dc2915534c042ad",
+      "size": 2714
+    },
+    {
+      "path": "Licenses/MSYS2/libarchive/LICENSE",
+      "sha256": "30e556b3959e3985d66efefec5eaac51d4995053caa1d3cffe6eb916f146f229",
+      "size": 3089
+    },
+    {
+      "path": "Licenses/MSYS2/libb2/LICENSE",
+      "sha256": "6a1ee543e5282cd9061881edf462e6fdab181f328da71fc2c9a6950a80e94d01",
+      "size": 6556
+    },
+    {
+      "path": "Licenses/MSYS2/libffi/LICENSE",
+      "sha256": "17b64dc60f3b6897a60f971e288b973f655c2edcdf08b25f3c3dd5549857881c",
+      "size": 1132
+    },
+    {
+      "path": "Licenses/MSYS2/libgcc/COPYING.RUNTIME",
+      "sha256": "9d6b43ce4d8de0c878bf16b54d8e7a10d9bd42b75178153e3af6a815bdc90f74",
+      "size": 3324
+    },
+    {
+      "path": "Licenses/MSYS2/libgcc/COPYING3",
+      "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903",
+      "size": 35147
+    },
+    {
+      "path": "Licenses/MSYS2/libgcrypt/COPYING",
+      "sha256": "edaef632cbb643e4e7a221717a6c441a4c1a7c918e6e4d56debc3d8739b233f6",
+      "size": 17984
+    },
+    {
+      "path": "Licenses/MSYS2/libgcrypt/COPYING.LIB",
+      "sha256": "20e50fe7aae3e56378ebf0417d9de904f55a0e61e4df315333e632a4d3555d95",
+      "size": 26419
+    },
+    {
+      "path": "Licenses/MSYS2/libgpg-error/COPYING",
+      "sha256": "231f7edcc7352d7734a96eef0b8030f77982678c516876fcb81e25b32d68564c",
+      "size": 18002
+    },
+    {
+      "path": "Licenses/MSYS2/libgpg-error/COPYING.LIB",
+      "sha256": "a9bdde5616ecdd1e980b44f360600ee8783b1f99b8cc83a2beb163a0a390e861",
+      "size": 26527
+    },
+    {
+      "path": "Licenses/MSYS2/libiconv/COPYING",
+      "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903",
+      "size": 35147
+    },
+    {
+      "path": "Licenses/MSYS2/libiconv/COPYING.LIB",
+      "sha256": "20e50fe7aae3e56378ebf0417d9de904f55a0e61e4df315333e632a4d3555d95",
+      "size": 26419
+    },
+    {
+      "path": "Licenses/MSYS2/libiconv/README",
+      "sha256": "ff0400ffb0c3dace1a64012f4125f292a3fef58c5b8486c7f9ba0c01a0637f3c",
+      "size": 5743
+    },
+    {
+      "path": "Licenses/MSYS2/libiconv/libcharset/COPYING.LIB",
+      "sha256": "20e50fe7aae3e56378ebf0417d9de904f55a0e61e4df315333e632a4d3555d95",
+      "size": 26419
+    },
+    {
+      "path": "Licenses/MSYS2/libjpeg-turbo/LICENSE.md",
+      "sha256": "ba6bceebcba0fdd35488477c2cca8c4632ce82c74dbfbc87d886ce6fc4433579",
+      "size": 6077
+    },
+    {
+      "path": "Licenses/MSYS2/libjpeg-turbo/README.ijg",
+      "sha256": "75815e3bf6484201a3c3d17a1bbf10f2e8e3237f84df10a2357ea896db2a81d6",
+      "size": 12799
+    },
+    {
+      "path": "Licenses/MSYS2/libjpeg-turbo/README.md",
+      "sha256": "bd71f6ebae1c151e4b5fe7072dc2cedcf33671fa40d91ad5f9058ecdc0b01721",
+      "size": 17831
+    },
+    {
+      "path": "Licenses/MSYS2/libjpeg-turbo/simd/jsimdext.inc",
+      "sha256": "68c5d236785edf75344cebe8b9bec36568bd35c96eb72cc67ffecd66c17dbd74",
+      "size": 15563
+    },
+    {
+      "path": "Licenses/MSYS2/libpng/LICENSE",
+      "sha256": "bdb0a645ea18c60507d0368379b1ac5474b92255fcc2d115e07486a7672ba526",
+      "size": 5345
+    },
+    {
+      "path": "Licenses/MSYS2/libpsl/COPYING",
+      "sha256": "322392e6001b2b3b0fca705dc9f11f26e12441188ecde50eb1d22909980b2925",
+      "size": 1060
+    },
+    {
+      "path": "Licenses/MSYS2/libslirp/COPYRIGHT",
+      "sha256": "5e81ad3841c9073bee91f65c8c74fdc4b67d1f6742cd35fbd22039bb1e920818",
+      "size": 1469
+    },
+    {
+      "path": "Licenses/MSYS2/libssh2/LICENSE",
+      "sha256": "f7f9633cf9ff2f1333f3d7ce46973a8716a4d2a2815ad56f30d437d5fea7bafe",
+      "size": 1959
+    },
+    {
+      "path": "Licenses/MSYS2/libstdc++/COPYING.RUNTIME",
+      "sha256": "9d6b43ce4d8de0c878bf16b54d8e7a10d9bd42b75178153e3af6a815bdc90f74",
+      "size": 3324
+    },
+    {
+      "path": "Licenses/MSYS2/libstdc++/COPYING3",
+      "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903",
+      "size": 35147
+    },
+    {
+      "path": "Licenses/MSYS2/libsystre/LICENSE",
+      "sha256": "3200024286eb0a33c22da3a31c470df07c7b8cfbead2b9528195d67d107264ec",
+      "size": 1445
+    },
+    {
+      "path": "Licenses/MSYS2/libtasn1/COPYING",
+      "sha256": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986",
+      "size": 35149
+    },
+    {
+      "path": "Licenses/MSYS2/libtasn1/COPYING.LESSERv2",
+      "sha256": "20e50fe7aae3e56378ebf0417d9de904f55a0e61e4df315333e632a4d3555d95",
+      "size": 26419
+    },
+    {
+      "path": "Licenses/MSYS2/libtre/LICENSE",
+      "sha256": "6a50ab50d856b30c965cf2dd899e577ec108c938242fd3a2e7a7a25eed996200",
+      "size": 1479
+    },
+    {
+      "path": "Licenses/MSYS2/libunistring/LICENSE",
+      "sha256": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986",
+      "size": 35149
+    },
+    {
+      "path": "Licenses/MSYS2/libunistring/LICENSE.LIB",
+      "sha256": "a853c2ffec17057872340eee242ae4d96cbf2b520ae27d903e1b2fef1a5f9d1c",
+      "size": 7639
+    },
+    {
+      "path": "Licenses/MSYS2/libuv/LICENSE",
+      "sha256": "16de0c32b265cb7d46a6d3bd614f259dd4d693a5e26b3407b04aae8d73041f0c",
+      "size": 1079
+    },
+    {
+      "path": "Licenses/MSYS2/libwinpthread/COPYING",
+      "sha256": "63263614cdd29f2f93cba85e992f041b31f9fc7b4033692f31269489a8a1b177",
+      "size": 2883
+    },
+    {
+      "path": "Licenses/MSYS2/md4c/LICENSE.md",
+      "sha256": "e547c9a66c120b19f9838a1f7c2f51137f5c71ba27b70c3611b673f2cdb4e02e",
+      "size": 1096
+    },
+    {
+      "path": "Licenses/MSYS2/meson/COPYING",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "size": 11358
+    },
+    {
+      "path": "Licenses/MSYS2/mpdecimal/LICENSE",
+      "sha256": "dba079e24a0286052f9f36a5e0b4f6cc95bc83ada657eb26bef8c0b6473f6512",
+      "size": 1285
+    },
+    {
+      "path": "Licenses/MSYS2/ncurses/LICENSE",
+      "sha256": "708999f95527e1ffa670c6fce288c6c600cb477dd04afcc1171422b3dd4ee226",
+      "size": 1447
+    },
+    {
+      "path": "Licenses/MSYS2/nghttp2/COPYING",
+      "sha256": "6b94f3abc1aabd0c72a7c7d92a77f79dda7c8a0cb3df839a97890b4116a2de2a",
+      "size": 1156
+    },
+    {
+      "path": "Licenses/MSYS2/nghttp3/COPYING",
+      "sha256": "58cc3fc8c6d6cb2485ab35eb5918e849b5bf1e56522974e106d7a39a88d61dcd",
+      "size": 1081
+    },
+    {
+      "path": "Licenses/MSYS2/ngtcp2/COPYING",
+      "sha256": "542dd526d2ea23565f0571cc68df6f05ed11248a90ff0f32de19d8ba589db513",
+      "size": 1080
+    },
+    {
+      "path": "Licenses/MSYS2/ninja/COPYING",
+      "sha256": "eb7e9ab9690124c5c9f42bdc81383d886a3dede26345b6ed15bbad7caf81f7ea",
+      "size": 11358
+    },
+    {
+      "path": "Licenses/MSYS2/nsis/COPYING",
+      "sha256": "388357c1215ff403c5ebde3a5ecd273e68f8b79a579996775245d1ee65442aba",
+      "size": 15632
+    },
+    {
+      "path": "Licenses/MSYS2/openssl/LICENSE",
+      "sha256": "7d5450cb2d142651b8afa315b5f238efc805dad827d91ba367d8516bc9d49e7a",
+      "size": 10175
+    },
+    {
+      "path": "Licenses/MSYS2/pcre2/COPYING",
+      "sha256": "99272c55f3dcfa07a8a7e15a5c1a33096e4727de74241d65fa049fccfdd59507",
+      "size": 97
+    },
+    {
+      "path": "Licenses/MSYS2/pcre2/LICENCE.md",
+      "sha256": "197d8a73ffee0d6b09adba2f9c677b5f5aede24edf89258a68e48248d010d811",
+      "size": 4011
+    },
+    {
+      "path": "Licenses/MSYS2/pixman/COPYING",
+      "sha256": "fac9270f0987b96ff4533fca3548c633e02083cbba4a0172a3b149b2e4019793",
+      "size": 2087
+    },
+    {
+      "path": "Licenses/MSYS2/python-distlib/LICENSE",
+      "sha256": "808e10c8a6ab8deb149ff9b3fb19f447a808094606d712a9ca57fead3552599d",
+      "size": 14531
+    },
+    {
+      "path": "Licenses/MSYS2/python-packaging/LICENSE",
+      "sha256": "cad1ef5bd340d73e074ba614d26f7deaca5c7940c3d8c34852e65c4909686c48",
+      "size": 197
+    },
+    {
+      "path": "Licenses/MSYS2/python-packaging/LICENSE.APACHE",
+      "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594",
+      "size": 10174
+    },
+    {
+      "path": "Licenses/MSYS2/python-packaging/LICENSE.BSD",
+      "sha256": "b70e7e9b742f1cc6f948b34c16aa39ffece94196364bc88ff0d2180f0028fac5",
+      "size": 1344
+    },
+    {
+      "path": "Licenses/MSYS2/python-pip/LICENSE.txt",
+      "sha256": "634300a669d49aeae65b12c6c48c924c51a4cdf3d1ff086dc3456dc8bcaa2104",
+      "size": 1093
+    },
+    {
+      "path": "Licenses/MSYS2/python-setuptools/LICENSE",
+      "sha256": "86da0f01aeae46348a3c3d465195dc1ceccde79f79e87769a64b8da04b2a4741",
+      "size": 1023
+    },
+    {
+      "path": "Licenses/MSYS2/python3.14/LICENSE",
+      "sha256": "b0e25a78cffb43f4d92de8b61ccfa1f1f98ecbc22330b54b5251e7b6ba010231",
+      "size": 13804
+    },
+    {
+      "path": "Licenses/MSYS2/qt6-base/AFL-2.1.txt",
+      "sha256": "93bb4f7417aa775bab9026cc3d0af28aeb64451fc5a8ec651876785edd8eaf9b",
+      "size": 8948
+    },
+    {
+      "path": "Licenses/MSYS2/qt6-base/Apache-2.0.txt",
+      "sha256": "e3ba223bb1423f0aad8c3dfce0fe3148db48926d41e6fbc3afbbf5ff9e1c89cb",
+      "size": 10398
+    },
+    {
+      "path": "Licenses/MSYS2/qt6-base/Bitstream-Vera.txt",
+      "sha256": "7a083b136e64d064794c3419751e5c7dd10d2f64c108fe5ba161eae5e5958a93",
+      "size": 8816
+    },
+    {
+      "path": "Licenses/MSYS2/qt6-base/blessing.txt",
+      "sha256": "592db1199aab67aafe4515db9808b420db122083807c5329b2f061951e79acbe",
+      "size": 244
+    },
+    {
+      "path": "Licenses/MSYS2/qt6-base/BSD-2-Clause.txt",
+      "sha256": "8fda146749ca071ac9cdce2e24d25444676ea48d1f9dccc2b7c15c054b717db8",
+      "size": 1276
+    },
+    {
+      "path": "Licenses/MSYS2/qt6-base/BSD-3-Clause.txt",
+      "sha256": "9f0490f18656c6f2435bd14f603ef0c96434d1825615363dce43abb42ed1dcce",
+      "size": 1469
+    },
+    {
+      "path": "Licenses/MSYS2/qt6-base/BSD-4-Clause.txt",
+      "sha256": "83faa0d205c316ce3efeafee465b6a165914fb29595968c08dc6437021b7b6fd",
+      "size": 1672
+    },
+    {
+      "path": "Licenses/MSYS2/qt6-base/BSL-1.0.txt",
+      "sha256": "3abd6471b9a9a08d65ce771143f8e278bb4c1aeb10c1c2d476935a6b049653f5",
+      "size": 1340
+    },
+    {
+      "path": "Licenses/MSYS2/qt6-base/CC0-1.0.txt",
+      "sha256": "a2010f343487d3f7618affe54f789f5487602331c0a8d03f49e9a7c547cf0499",
+      "size": 7048
+    },
+    {
+      "path": "Licenses/MSYS2/qt6-base/FTL.txt",
+      "sha256": "08c135755dd589039470f1fdbb400daaabaaa50d0b366d19cebff4d22986baa1",
+      "size": 6743
+    },
+    {
+      "path": "Licenses/MSYS2/qt6-base/GFDL-1.3-no-invariants-only.txt",
+      "sha256": "110535522396708cea37c72a802c5e7e81391139f5f7985631c93ef242b206a4",
+      "size": 22955
+    },
+    {
+      "path": "Licenses/MSYS2/qt6-base/GPL-2.0-only.txt",
+      "sha256": "8177f97513213526df2cf6184d8ff986c675afb514d4e68a404010521b880643",
+      "size": 18092
+    },
+    {
+      "path": "Licenses/MSYS2/qt6-base/GPL-2.0-or-later.txt",
+      "sha256": "8177f97513213526df2cf6184d8ff986c675afb514d4e68a404010521b880643",
+      "size": 18092
+    },
+    {
+      "path": "Licenses/MSYS2/qt6-base/GPL-3.0-only.txt",
+      "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903",
+      "size": 35147
+    },
+    {
+      "path": "Licenses/MSYS2/qt6-base/HPND.txt",
+      "sha256": "67ac968431270291f5e9cd3ed76705e1169f57082ee102093b2543b28cef63cf",
+      "size": 1188
+    },
+    {
+      "path": "Licenses/MSYS2/qt6-base/IJG.txt",
+      "sha256": "1cb448f5e2e6d3aca60943f4eee1a04675628dc0266a074a42bc1560ebc28d61",
+      "size": 1815
+    },
+    {
+      "path": "Licenses/MSYS2/qt6-base/Imlib2.txt",
+      "sha256": "8846f2baba1a7f4c36f7ca19a923a000d8a21afa37cf0fe006f6ce88a6058a89",
+      "size": 1986
+    },
+    {
+      "path": "Licenses/MSYS2/qt6-base/IPL-1.0.txt",
+      "sha256": "d5328e672fb1bff47ee18e890784541453380081cf3771bb7b3c06fc19c7d503",
+      "size": 11789
+    },
+    {
+      "path": "Licenses/MSYS2/qt6-base/LGPL-2.1-or-later.txt",
+      "sha256": "1ccf09bf2f598308df4bed9cd8e9657dc5cd0973d2800318f2e241486e2edf3f",
+      "size": 25906
+    },
+    {
+      "path": "Licenses/MSYS2/qt6-base/LGPL-3.0-only.txt",
+      "sha256": "da7eabb7bafdf7d3ae5e9f223aa5bdc1eece45ac569dc21b3b037520b4464768",
+      "size": 7651
+    },
+    {
+      "path": "Licenses/MSYS2/qt6-base/libpng-2.0.txt",
+      "sha256": "7317e078e2d3b5d7ba5a6159e650945153262b44b76f6700f8e9edb261c5143e",
+      "size": 5345
+    },
+    {
+      "path": "Licenses/MSYS2/qt6-base/Libpng.txt",
+      "sha256": "58fe669792f9b4e0740bf75ecfe90b5326128bb2ce7e27e1c342abd9db4d8ea6",
+      "size": 4120
+    },
+    {
+      "path": "Licenses/MSYS2/qt6-base/LicenseRef-BSD-3-Clause-with-PCRE2-Binary-Like-Packages-Exception.txt",
+      "sha256": "0526625fcc746a42d3f19a0ab357d3dc8479fdbe3bfd168825498f50215c7a63",
+      "size": 1852
+    },
+    {
+      "path": "Licenses/MSYS2/qt6-base/LicenseRef-ICC-License.txt",
+      "sha256": "9e34ff47b3a44814e183342e7e198d127a6740e29d20e8381fba7688dafc79dd",
+      "size": 463
+    },
+    {
+      "path": "Licenses/MSYS2/qt6-base/LicenseRef-Lcs-Telegraphics.txt",
+      "sha256": "c10225ebbd5191bfdd761b0d7752c785f2453ab665d6c454473fb12d254668aa",
+      "size": 139
+    },
+    {
+      "path": "Licenses/MSYS2/qt6-base/LicenseRef-Qt-Commercial.txt",
+      "sha256": "9b1f50aae6267f9d5e0ceb6775ee86450262c25ec7c0573e151fe5d3f18a4700",
+      "size": 462
+    },
+    {
+      "path": "Licenses/MSYS2/qt6-base/LicenseRef-SHA1-Public-Domain.txt",
+      "sha256": "65d86b8ec6b1cd8b8f6e64fd8710274ba00d6a3c520e00dfdcd1c3d2071f3305",
+      "size": 144
+    },
+    {
+      "path": "Licenses/MSYS2/qt6-base/Linux-syscall-note.txt",
+      "sha256": "3f9e477523febab58de8b716ccfbcf02e6ef1c8e7728953905e8558637abe2a9",
+      "size": 624
+    },
+    {
+      "path": "Licenses/MSYS2/qt6-base/MIT-Khronos-old.txt",
+      "sha256": "3c58021633974f9ed3c3d445a374240a5244fd039628f4d7f6f3e674bc8e6694",
+      "size": 1306
+    },
+    {
+      "path": "Licenses/MSYS2/qt6-base/MIT-open-group.txt",
+      "sha256": "c55d2ab72d8a4f9e9cd8fbd1379268e575e8cfa16874affa5899b75a6d754514",
+      "size": 897
+    },
+    {
+      "path": "Licenses/MSYS2/qt6-base/MIT.txt",
+      "sha256": "d040359701c01996a017d5c515678929cd1b0625e64cb86db44025fbb6cdf1fc",
+      "size": 1111
+    },
+    {
+      "path": "Licenses/MSYS2/qt6-base/MPL-2.0.txt",
+      "sha256": "3f3d9e0024b1921b067d6f7f88deb4a60cbe7a78e76c64e3f1d7fc3b779b9d04",
+      "size": 16726
+    },
+    {
+      "path": "Licenses/MSYS2/qt6-base/Qt-GPL-exception-1.0.txt",
+      "sha256": "40678d338ce53cd93f8b22b281a2ecbcaa3ee65ce60b25ffb0c462b0530846b2",
+      "size": 965
+    },
+    {
+      "path": "Licenses/MSYS2/qt6-base/SPL-1.0.txt",
+      "sha256": "f58f2f30909982445f97f1a61667261920a7caeab21ef5bea1b740f5b144d141",
+      "size": 23547
+    },
+    {
+      "path": "Licenses/MSYS2/qt6-base/Unicode-3.0.txt",
+      "sha256": "80bb6294022d8764adb36a9d65ebb6bd94efb1865918a71e31e6c247607d7634",
+      "size": 1995
+    },
+    {
+      "path": "Licenses/MSYS2/qt6-base/X11.txt",
+      "sha256": "e2936c6509784b4f0ec27bac74182393866fad9422b29a70e085ff14aba87193",
+      "size": 1338
+    },
+    {
+      "path": "Licenses/MSYS2/qt6-base/Xerox.txt",
+      "sha256": "b6bc52205d01e10cf43dbb7b8aec06dcaa3b21d1486e7c9c0bec329ee8244d8d",
+      "size": 965
+    },
+    {
+      "path": "Licenses/MSYS2/qt6-base/Zlib.txt",
+      "sha256": "d7e3139972874dc8abdbbfce27ec1e6f942b28279dd7d27453630a8b4610e080",
+      "size": 1465
+    },
+    {
+      "path": "Licenses/MSYS2/rhash/LICENSE",
+      "sha256": "953e55838353335148c90b5a38a4894292680b1d4c37228ffddddbf18ce54bf5",
+      "size": 736
+    },
+    {
+      "path": "Licenses/MSYS2/sqlite/LICENSE",
+      "sha256": "0b76663a90e034f3d7f2af5bfada4cedec5ebc275361899eccc5c18e6f01ff1f",
+      "size": 1528
+    },
+    {
+      "path": "Licenses/MSYS2/tzdata/LICENSE",
+      "sha256": "0613408568889f5739e5ae252b722a2659c02002839ad970a63dc5e9174b27cf",
+      "size": 252
+    },
+    {
+      "path": "Licenses/MSYS2/vulkan-headers/LICENSE",
+      "sha256": "95ad366d23fadf701d355bc45fb8b82ae2d700239471d35d41286ac3b08ff903",
+      "size": 495
+    },
+    {
+      "path": "Licenses/MSYS2/vulkan-loader/LICENSE",
+      "sha256": "43c0a37e6a0fa7ff3c843b3ec5a4fac84b712558ddac103fbd4c1649662a9ece",
+      "size": 11661
+    },
+    {
+      "path": "Licenses/MSYS2/wineditline/LICENSE",
+      "sha256": "e1a9520a9b3143ad64adb356c5d2fca6bb09a3ad3950cf1f7213946543582440",
+      "size": 1588
+    },
+    {
+      "path": "Licenses/MSYS2/winpthreads/COPYING",
+      "sha256": "63263614cdd29f2f93cba85e992f041b31f9fc7b4033692f31269489a8a1b177",
+      "size": 2883
+    },
+    {
+      "path": "Licenses/MSYS2/xz/COPYING",
+      "sha256": "616a3ad264ce29b8f1cb97e53037b139d406899ca8d1f799651e17bfa09830b8",
+      "size": 3119
+    },
+    {
+      "path": "Licenses/MSYS2/xz/COPYING.0BSD",
+      "sha256": "0b01625d853911cd0e2e088dcfb743261034a091bb379246cb25a14cc4c74bf1",
+      "size": 607
+    },
+    {
+      "path": "Licenses/MSYS2/xz/COPYING.GPLv2",
+      "sha256": "edaef632cbb643e4e7a221717a6c441a4c1a7c918e6e4d56debc3d8739b233f6",
+      "size": 17984
+    },
+    {
+      "path": "Licenses/MSYS2/xz/COPYING.GPLv3",
+      "sha256": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986",
+      "size": 35149
+    },
+    {
+      "path": "Licenses/MSYS2/xz/COPYING.LGPLv2.1",
+      "sha256": "20e50fe7aae3e56378ebf0417d9de904f55a0e61e4df315333e632a4d3555d95",
+      "size": 26419
+    },
+    {
+      "path": "Licenses/MSYS2/zlib/LICENSE",
+      "sha256": "e32ff4e00d9d94930537635291da39e7e612703334bf6fde8c7f1686fe8a45a2",
+      "size": 1002
+    },
+    {
+      "path": "Licenses/MSYS2/zstd/LICENSE",
+      "sha256": "7055266497633c9025b777c78eb7235af13922117480ed5c674677adc381c9d8",
+      "size": 1549
+    },
+    {
+      "path": "plugins/imageformats/qico.dll",
+      "sha256": "b35c893f6118c8c9c41681c6e30ce255bbd52d35c9ad57788c89e35440b65066",
+      "size": 43599
+    },
+    {
+      "path": "plugins/imageformats/qjpeg.dll",
+      "sha256": "f21d8f9bd1b8d22fdd9e0c6d85bdaf0cfef658f033dd50444eb90f27f5c5e516",
+      "size": 66381
+    },
+    {
+      "path": "plugins/platforms/qwindows.dll",
+      "sha256": "0d8373fbf3a2bb409b49303ad8cbf74d78be401e0b97e60003490d7b080e3d69",
+      "size": 1528543
+    },
+    {
+      "path": "plugins/tls/qopensslbackend.dll",
+      "sha256": "ee860823771613562e3fcc55aa194df363cb979f73a11dc215d6a214ce6a5c88",
+      "size": 393911
+    },
+    {
+      "path": "plugins/tls/qschannelbackend.dll",
+      "sha256": "b677ba5df631db8f402026f52d07732c2c2287693d736999fb16531b0af1e915",
+      "size": 312136
+    },
+    {
+      "path": "runtime/ClassicMacTools.iso",
+      "sha256": "23a42184811c7e1ad8718b6746e061c3a1c3e3dd43af25c9c828b3fa326fca22",
+      "size": 33554432
+    },
+    {
+      "path": "runtime/declrom",
+      "sha256": "1eebf6c3f1c5a037f91ceeed1964daf12035a945657b8cf5c7a7a2d1cf7fb40c",
+      "size": 217088
+    },
+    {
+      "path": "runtime/ndrvloader",
+      "sha256": "b41c9f30df9c025223f843c86b37e4409d23467c89794d300d9d1f186e4f3c7c",
+      "size": 230024
+    },
+    {
+      "path": "runtime/pram-seed.img",
+      "sha256": "b8123b161982b46130fc036be5f69829445a5bb775859e118de1165a0f12e82d",
+      "size": 512
+    },
+    {
+      "path": "runtime/Quadra800.rom",
+      "sha256": "05ad753fb594e656cf078023ec189e09e2a7655a780de993b75b8c51ed6b09ca",
+      "size": 1048576
+    },
+    {
+      "path": "runtime/runtime-sha256.json",
+      "sha256": "cb8bd317ef7ce799eb19be72e0febb9a2ea888b49ece60e3c83225a65ad1f13d",
+      "size": 26201
+    },
+    {
+      "path": "runtime/ThirdPartyNotices.md",
+      "sha256": "927b6199fa463f2bfe61072d1826b5a424aca3acae56ecbb576feae8a457f1cf",
+      "size": 8720
+    },
+    {
+      "path": "runtime/bin/libbrotlicommon.dll",
+      "sha256": "7b0047dc16dd92a7932124dfd5a6e698d342f533a15d37d61f710def66091436",
+      "size": 140697
+    },
+    {
+      "path": "runtime/bin/libbrotlidec.dll",
+      "sha256": "c4c987a01597ddf969d93023f933f999a20f285588b0decb4deeb780c9e9cdf8",
+      "size": 60224
+    },
+    {
+      "path": "runtime/bin/libbrotlienc.dll",
+      "sha256": "03f9a82d293caf5b4065a9641dd5309e27aefc5c8111eeec25f906e47ec6c934",
+      "size": 786797
+    },
+    {
+      "path": "runtime/bin/libbz2-1.dll",
+      "sha256": "1790bf6473c9d48db14c1f0ee8124142327556d281299ea2a72ee361118ee01a",
+      "size": 107741
+    },
+    {
+      "path": "runtime/bin/libcrypto-3-x64.dll",
+      "sha256": "97308feea369b305e562c0098638a1b02a06f52ee9fcc4b8cf3da362ff563cf4",
+      "size": 5501287
+    },
+    {
+      "path": "runtime/bin/libcurl-4.dll",
+      "sha256": "529af2acc6ce7507dbc96fd96e196555bb9a38d9cbb47dee441ea2cce325428d",
+      "size": 1417088
+    },
+    {
+      "path": "runtime/bin/libfdt-1.dll",
+      "sha256": "f5cfc89c258fee56229290d331c29e98ae230312ff063bfa0a5377750c6cdda5",
+      "size": 213430
+    },
+    {
+      "path": "runtime/bin/libffi-8.dll",
+      "sha256": "f96cf79b75f33a10023d001673b564538023395c94b3c58e1db53114976a7c25",
+      "size": 39826
+    },
+    {
+      "path": "runtime/bin/libgio-2.0-0.dll",
+      "sha256": "1256cbd7cb48df5ecea1646343d617c8e41a434216fdbb88ccfd78fe498442c8",
+      "size": 1919044
+    },
+    {
+      "path": "runtime/bin/libglib-2.0-0.dll",
+      "sha256": "3a1abec0184b238db54399cb9243393d9436d96b8fdb9bd9f2875da207c5b458",
+      "size": 1568604
+    },
+    {
+      "path": "runtime/bin/libgmodule-2.0-0.dll",
+      "sha256": "5833f90d3c7a627d4d1b541e873bf0b10bca2204be89666213b3c48f6a57422d",
+      "size": 23440
+    },
+    {
+      "path": "runtime/bin/libgmp-10.dll",
+      "sha256": "c2567ccf3f410c3411ba7cd4b7ba14f393a0e70a1d0c0593297df6706b5fba96",
+      "size": 681231
+    },
+    {
+      "path": "runtime/bin/libgnutls-30.dll",
+      "sha256": "f7f05c96572506c81f2ffa89b518234afa4af2603aad8903db257a4f1e97e9e6",
+      "size": 2315149
+    },
+    {
+      "path": "runtime/bin/libgobject-2.0-0.dll",
+      "sha256": "d12b1c34335cf605809af3b9bbed80a05c3334a9dbd02c0d398c1618d47f1d21",
+      "size": 358171
+    },
+    {
+      "path": "runtime/bin/libhogweed-7.dll",
+      "sha256": "b48e33181b78d715ba310581f4c72376c959854638bf635e1703e5fc1b783498",
+      "size": 276571
+    },
+    {
+      "path": "runtime/bin/libiconv-2.dll",
+      "sha256": "9824e9f78e76ad513e5ba0d697c60de2fb24a21c20922bc2f918c86998a08cab",
+      "size": 1139262
+    },
+    {
+      "path": "runtime/bin/libidn2-0.dll",
+      "sha256": "1103631c9f063083407d05d6baeacd564c774f6803ba54421ee53dfb3e25c1b9",
+      "size": 244380
+    },
+    {
+      "path": "runtime/bin/libintl-8.dll",
+      "sha256": "0e5a178731e6be6d115442a6ade3df7f03265cd1fc4338f8b6f86a8001cbf582",
+      "size": 298164
+    },
+    {
+      "path": "runtime/bin/libjpeg-8.dll",
+      "sha256": "22286acc18b907d03eec1177c99f54a802a6f8437888d1abb79e65a7ecd14605",
+      "size": 963471
+    },
+    {
+      "path": "runtime/bin/libnettle-9.dll",
+      "sha256": "9b9f8bffca94d3cca7d1afb77d9deb0fa34427eaa05f1832037f46bc9e3dc134",
+      "size": 359138
+    },
+    {
+      "path": "runtime/bin/libnghttp2-14.dll",
+      "sha256": "5e5460b1f9dd489566a747f7fb72bcc7862608213e1cc401e02a9ee0f1866da1",
+      "size": 213153
+    },
+    {
+      "path": "runtime/bin/libnghttp3-9.dll",
+      "sha256": "30ed479b0ae35b56bd79c816e2b9010f2d0a9f84c96b0a210d44e188e9222f1e",
+      "size": 203451
+    },
+    {
+      "path": "runtime/bin/libngtcp2-16.dll",
+      "sha256": "c58ebb08b5e0f5a56b63ff3d7d98a52eeace32ec6f11d721f010c0db6d231179",
+      "size": 391446
+    },
+    {
+      "path": "runtime/bin/libngtcp2_crypto_ossl-0.dll",
+      "sha256": "89dd5b80f26ea3787e0a59fbd7fc851d6c9c99742131ebcac56b8ccb4df0012a",
+      "size": 51580
+    },
+    {
+      "path": "runtime/bin/libp11-kit-0.dll",
+      "sha256": "3dcd7ae44205254477386a67beea040f9b5c2e791a9dbd50f111070305e04842",
+      "size": 1589489
+    },
+    {
+      "path": "runtime/bin/libpcre2-8-0.dll",
+      "sha256": "82bfffeb1f5cab5d1919b3bf4f744602ecbbdab7332d5e80eda469a9138dba80",
+      "size": 706022
+    },
+    {
+      "path": "runtime/bin/libpixman-1-0.dll",
+      "sha256": "12e693d94829f013e0bd7c042b30998b20e91ece7b6f4d5f075ddbb58b373c92",
+      "size": 737775
+    },
+    {
+      "path": "runtime/bin/libpng16-16.dll",
+      "sha256": "28db7a8c6fcc579ce621729d27f1952324cd3a2b4e24da121611bb586346e732",
+      "size": 254777
+    },
+    {
+      "path": "runtime/bin/libpsl-5.dll",
+      "sha256": "a531e72de3c64d43fb83cbfb6fa63e5ee982a970292ec51314e29d0acabf1dd5",
+      "size": 105846
+    },
+    {
+      "path": "runtime/bin/libslirp-0.dll",
+      "sha256": "dabad7348b07297937e24604dcc15132fd5a7b60e8f13f81aa98eab59dc01fd3",
+      "size": 212508
+    },
+    {
+      "path": "runtime/bin/libssh2-1.dll",
+      "sha256": "7c9b4edb678b738b919950492c4a390482fdd644d1276d4728990fdd3c3ea989",
+      "size": 311537
+    },
+    {
+      "path": "runtime/bin/libssl-3-x64.dll",
+      "sha256": "8b71cd694f8edfbddc76674111278db6bcdcde0dcd63b99238420193848e6dbf",
+      "size": 998449
+    },
+    {
+      "path": "runtime/bin/libtasn1-6.dll",
+      "sha256": "d32d726c2a2068f5f9a9111da399163b288b1e50b5e3cf1a1b26bb02070d97b5",
+      "size": 110365
+    },
+    {
+      "path": "runtime/bin/libunistring-5.dll",
+      "sha256": "ee39258fa1086269674a8179d3cfaf7c4e380ada14441b5dd9ed53d82d15c4e3",
+      "size": 2256134
+    },
+    {
+      "path": "runtime/bin/libwinpthread-1.dll",
+      "sha256": "94a9a4e2fe27b4bc827a4b209e9deb4cc3dc34bc025df06b849144f9d4c588f8",
+      "size": 73308
+    },
+    {
+      "path": "runtime/bin/libz-1.dll",
+      "sha256": "934103c50623302548a1cf66fbc22f0029e4eb4556343252a505e2fc005e835f",
+      "size": 148154
+    },
+    {
+      "path": "runtime/bin/libzstd.dll",
+      "sha256": "48368ab0ca622d0ec12f41ce85d91f22866bf5da92c77a69a06483564c93816c",
+      "size": 1217412
+    },
+    {
+      "path": "runtime/bin/qemu-img.exe",
+      "sha256": "e9ef07f7ac88192e26db7437a99448b328b9f668ed8cce9bd01fe947f5a45b33",
+      "size": 2586835
+    },
+    {
+      "path": "runtime/bin/qemu-system-m68k.exe",
+      "sha256": "cec97dbd13d7cbd138ad8d0bae87f4655ae5e34e8c203a25a47d3c70aa02852a",
+      "size": 10169341
+    },
+    {
+      "path": "runtime/bin/qemu-system-ppc.exe",
+      "sha256": "57a0b30c7617b5801ba91da3a18fba087eebef67e5c497c2582fbbbc9e71469a",
+      "size": 16215582
+    },
+    {
+      "path": "runtime/bin/zlib1.dll",
+      "sha256": "aa658771fb152b095eda1614d8bde798efb92324b6f4a0c99c743cd96b67ac90",
+      "size": 190835
+    },
+    {
+      "path": "runtime/Iconfactory/manifest.json",
+      "sha256": "7cc3540643bc9db98e3a06cf406bd2a39abe267c090275ebc9381ff4359d5628",
+      "size": 520
+    },
+    {
+      "path": "runtime/Iconfactory/powermac_7500.icns",
+      "sha256": "10d096df51ffe4916c1fc8675db27fb38db72d1d87aa277fe502ae0648ec3906",
+      "size": 2296
+    },
+    {
+      "path": "runtime/Iconfactory/powermac_g4.icns",
+      "sha256": "72bb50ae25711283a097165df1b38a3f8ddae49136b996835e69aeef2c0141cd",
+      "size": 6238
+    },
+    {
+      "path": "runtime/Iconfactory/quadra_800.icns",
+      "sha256": "bf02e2b97a9f0d917867591afcfd08c46f870ee1dbc5ea73e3a75c7aa246058d",
+      "size": 2296
+    },
+    {
+      "path": "runtime/Iconfactory/README.txt",
+      "sha256": "d1289676fbd364c83ca6b37575ecdc166ee9df4d7d7d04883c2690db082cbbe2",
+      "size": 376
+    },
+    {
+      "path": "runtime/Iconfactory/Apple Desktops/License.txt",
+      "sha256": "ee395001fdffbb8b15064074cf636d2f44220644c6836c0c8a4c16128a81043a",
+      "size": 765
+    },
+    {
+      "path": "runtime/Iconfactory/Apple Desktops/readme.html",
+      "sha256": "9e92c14f3a8e097db12cc060ce2447229c7a702e12ec7cf6156372ef0b638a9a",
+      "size": 5030
+    },
+    {
+      "path": "runtime/Iconfactory/G4 v2/License.txt",
+      "sha256": "ee395001fdffbb8b15064074cf636d2f44220644c6836c0c8a4c16128a81043a",
+      "size": 765
+    },
+    {
+      "path": "runtime/Iconfactory/G4 v2/readme.html",
+      "sha256": "48d0735339c173f66f8e4b9755fc3c004c40616048ee00693ae7ce0682dc0d82",
+      "size": 3612
+    },
+    {
+      "path": "runtime/Licenses/noVNC-MPL-2.0.txt",
+      "sha256": "3ccd2242d7f5b6c5ae831a486f63cce1f18d8cd11c511f6a7a7251673763b2d1",
+      "size": 2163
+    },
+    {
+      "path": "runtime/Licenses/pako-MIT.txt",
+      "sha256": "3bc404ffa7888053253eedcc5a667619aa08dc1be0bea400e5ff28c51602180f",
+      "size": 1084
+    },
+    {
+      "path": "runtime/Licenses/Platinum-fonts.txt",
+      "sha256": "20975fc0fb7026fd7b2394fe940921342b12c6a8e7f91d70e38eff30d80de23f",
+      "size": 2308
+    },
+    {
+      "path": "runtime/Licenses/QEMU-GPL-2.0.txt",
+      "sha256": "dd3ce02338c3a48abb6ba59b48809f7108a8bd242cb0cc8be90daafa30707c28",
+      "size": 17880
+    },
+    {
+      "path": "runtime/Licenses/QEMU-LGPL-2.1.txt",
+      "sha256": "31c90ce76b6f5aab90a205851e71d5c27e31c0aa3d7017a4383b98a6fe3f1faa",
+      "size": 26415
+    },
+    {
+      "path": "runtime/Licenses/QEMU-LICENSE.txt",
+      "sha256": "139c64b7a9ae62858ff969aae622ecfcf4f1519655bd92d2e70a1a2fb615690e",
+      "size": 1177
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/binutils/COPYING",
+      "sha256": "231f7edcc7352d7734a96eef0b8030f77982678c516876fcb81e25b32d68564c",
+      "size": 18002
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/binutils/COPYING.LIB",
+      "sha256": "56bdea73b6145ef6ac5259b3da390b981d840c24cb03b8e1cbc678de7ecfa18d",
+      "size": 25291
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/binutils/COPYING3",
+      "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903",
+      "size": 35147
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/binutils/COPYING3.LIB",
+      "sha256": "a853c2ffec17057872340eee242ae4d96cbf2b520ae27d903e1b2fef1a5f9d1c",
+      "size": 7639
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/brotli/LICENSE",
+      "sha256": "3d180008e36922a4e8daec11c34c7af264fed5962d07924aea928c38e8663c94",
+      "size": 1084
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/bzip2/LICENSE",
+      "sha256": "c6dbbf828498be844a89eaa3b84adbab3199e342eb5cb2ed2f0d4ba7ec0f38a3",
+      "size": 1896
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/c-ares/LICENSE.md",
+      "sha256": "460f5e768fda3752ca2169a95df062578a10fb126bfd65f3b9b1a1bed2f84807",
+      "size": 1211
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/cppdap/LICENSE",
+      "sha256": "58d1e17ffe5109a7ae296caafcadfdbe6a7d176f0bc4ab01e12a689b0499d8bd",
+      "size": 11357
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/crt/COPYING",
+      "sha256": "99a69660981156c21336fdb5661f89341b013c94e4bf9e1c7467b4745718397f",
+      "size": 2326
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/crt/COPYING.MinGW-w64-runtime.txt",
+      "sha256": "1db8da07b436c68833c0673ffee3d9fcb2526047f3820b81661865dfedc79a1f",
+      "size": 12155
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/crt/COPYING.MinGW-w64.txt",
+      "sha256": "f38e6194bd3bfa1b654f118e5acefe0aead437bbe669eee43957ccc65a7127f1",
+      "size": 5905
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/curl/LICENSE",
+      "sha256": "82f2f4427d6545ee5aaac4f0b80428da6cc8ba41c2cf5da3a03680ec327b9681",
+      "size": 1088
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/dbus/AFL-2.1.txt",
+      "sha256": "93bb4f7417aa775bab9026cc3d0af28aeb64451fc5a8ec651876785edd8eaf9b",
+      "size": 8948
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/dbus/COPYING",
+      "sha256": "150e5d08e1cb5e62b65967d7931acad2c42d98ec1bbb584bebb01921cbc853c2",
+      "size": 1134
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/dbus/GPL-2.0-or-later.txt",
+      "sha256": "aaf135472f81c5b4a0dca9367e5bb5e9750032b5bebe5442b36e4c0a47430df3",
+      "size": 17337
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/double-conversion/LICENSE",
+      "sha256": "4af93c12062c58058378de2397dc1c92bbff9ddfb1d583a01c84127557ce97ca",
+      "size": 1527
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/dtc/GPL",
+      "sha256": "8177f97513213526df2cf6184d8ff986c675afb514d4e68a404010521b880643",
+      "size": 18092
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/expat/COPYING",
+      "sha256": "31b15de82aa19a845156169a17a5488bf597e561b2c318d159ed583139b25e87",
+      "size": 1144
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/freetype/FTL.TXT",
+      "sha256": "5a5ee54c5001bbad1cdc1a57cc3dd4c42199b2da09d39c7ee41fab002d02967f",
+      "size": 6743
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/freetype/GPLv2.TXT",
+      "sha256": "c4120c6752c910c299e3bd9cb3a46ff262c268303ca2069b61f92f10a5656c18",
+      "size": 17994
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/gcc/COPYING.RUNTIME",
+      "sha256": "9d6b43ce4d8de0c878bf16b54d8e7a10d9bd42b75178153e3af6a815bdc90f74",
+      "size": 3324
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/gcc/COPYING3",
+      "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903",
+      "size": 35147
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/gettext-runtime/COPYING",
+      "sha256": "7ef2cdfe58e0c0460657b6598b49af29d4e03c1e41cbaf0e1da1eb8ad74b95d0",
+      "size": 495
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/gettext-runtime/intl/COPYING.LIB",
+      "sha256": "20e50fe7aae3e56378ebf0417d9de904f55a0e61e4df315333e632a4d3555d95",
+      "size": 26419
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/gettext-runtime/libasprintf/COPYING",
+      "sha256": "03133addae5b99a6148c538300e6d97074453089be1423b741bd081f18e2b298",
+      "size": 65
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/gettext-runtime/libasprintf/COPYING.LIB",
+      "sha256": "20e50fe7aae3e56378ebf0417d9de904f55a0e61e4df315333e632a4d3555d95",
+      "size": 26419
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/glib2/COPYING",
+      "sha256": "fa6f36630bb1e0c571d34b2bbdf188d08495c9dbf58f28cac112f303fc1f58fb",
+      "size": 25967
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/graphite2/COPYING",
+      "sha256": "2c272829ff23f182c8bf7ea12fedea69b0ae148663123ed5240c117cb129c9c1",
+      "size": 1235
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/graphite2/LICENSE",
+      "sha256": "cab46cd45adbfea4b1d0f14b033c70062c73074fa0b56532c2f351576ddf455e",
+      "size": 29228
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/harfbuzz/COPYING",
+      "sha256": "ba8f810f2455c2f08e2d56bb49b72f37fcf68f1f4fade38977cfd7372050ad64",
+      "size": 1971
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/headers/COPYING",
+      "sha256": "99a69660981156c21336fdb5661f89341b013c94e4bf9e1c7467b4745718397f",
+      "size": 2326
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/headers/COPYING.MinGW-w64-runtime.txt",
+      "sha256": "1db8da07b436c68833c0673ffee3d9fcb2526047f3820b81661865dfedc79a1f",
+      "size": 12155
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/headers/COPYING.MinGW-w64.txt",
+      "sha256": "f38e6194bd3bfa1b654f118e5acefe0aead437bbe669eee43957ccc65a7127f1",
+      "size": 5905
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/headers/ddk-readme.txt",
+      "sha256": "8d8f9924e4ea5466932000bdb9a4104da1d8ca3e4c979bb8207225522ba63826",
+      "size": 650
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/jsoncpp/LICENSE",
+      "sha256": "cec0db5f6d7ed6b3a72647bd50aed02e13c3377fd44382b96dc2915534c042ad",
+      "size": 2714
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/libarchive/LICENSE",
+      "sha256": "30e556b3959e3985d66efefec5eaac51d4995053caa1d3cffe6eb916f146f229",
+      "size": 3089
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/libb2/LICENSE",
+      "sha256": "6a1ee543e5282cd9061881edf462e6fdab181f328da71fc2c9a6950a80e94d01",
+      "size": 6556
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/libffi/LICENSE",
+      "sha256": "17b64dc60f3b6897a60f971e288b973f655c2edcdf08b25f3c3dd5549857881c",
+      "size": 1132
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/libgcc/COPYING.RUNTIME",
+      "sha256": "9d6b43ce4d8de0c878bf16b54d8e7a10d9bd42b75178153e3af6a815bdc90f74",
+      "size": 3324
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/libgcc/COPYING3",
+      "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903",
+      "size": 35147
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/libgcrypt/COPYING",
+      "sha256": "edaef632cbb643e4e7a221717a6c441a4c1a7c918e6e4d56debc3d8739b233f6",
+      "size": 17984
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/libgcrypt/COPYING.LIB",
+      "sha256": "20e50fe7aae3e56378ebf0417d9de904f55a0e61e4df315333e632a4d3555d95",
+      "size": 26419
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/libgpg-error/COPYING",
+      "sha256": "231f7edcc7352d7734a96eef0b8030f77982678c516876fcb81e25b32d68564c",
+      "size": 18002
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/libgpg-error/COPYING.LIB",
+      "sha256": "a9bdde5616ecdd1e980b44f360600ee8783b1f99b8cc83a2beb163a0a390e861",
+      "size": 26527
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/libiconv/COPYING",
+      "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903",
+      "size": 35147
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/libiconv/COPYING.LIB",
+      "sha256": "20e50fe7aae3e56378ebf0417d9de904f55a0e61e4df315333e632a4d3555d95",
+      "size": 26419
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/libiconv/README",
+      "sha256": "ff0400ffb0c3dace1a64012f4125f292a3fef58c5b8486c7f9ba0c01a0637f3c",
+      "size": 5743
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/libiconv/libcharset/COPYING.LIB",
+      "sha256": "20e50fe7aae3e56378ebf0417d9de904f55a0e61e4df315333e632a4d3555d95",
+      "size": 26419
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/libjpeg-turbo/LICENSE.md",
+      "sha256": "ba6bceebcba0fdd35488477c2cca8c4632ce82c74dbfbc87d886ce6fc4433579",
+      "size": 6077
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/libjpeg-turbo/README.ijg",
+      "sha256": "75815e3bf6484201a3c3d17a1bbf10f2e8e3237f84df10a2357ea896db2a81d6",
+      "size": 12799
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/libjpeg-turbo/README.md",
+      "sha256": "bd71f6ebae1c151e4b5fe7072dc2cedcf33671fa40d91ad5f9058ecdc0b01721",
+      "size": 17831
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/libjpeg-turbo/simd/jsimdext.inc",
+      "sha256": "68c5d236785edf75344cebe8b9bec36568bd35c96eb72cc67ffecd66c17dbd74",
+      "size": 15563
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/libpng/LICENSE",
+      "sha256": "bdb0a645ea18c60507d0368379b1ac5474b92255fcc2d115e07486a7672ba526",
+      "size": 5345
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/libpsl/COPYING",
+      "sha256": "322392e6001b2b3b0fca705dc9f11f26e12441188ecde50eb1d22909980b2925",
+      "size": 1060
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/libslirp/COPYRIGHT",
+      "sha256": "5e81ad3841c9073bee91f65c8c74fdc4b67d1f6742cd35fbd22039bb1e920818",
+      "size": 1469
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/libssh2/LICENSE",
+      "sha256": "f7f9633cf9ff2f1333f3d7ce46973a8716a4d2a2815ad56f30d437d5fea7bafe",
+      "size": 1959
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/libstdc++/COPYING.RUNTIME",
+      "sha256": "9d6b43ce4d8de0c878bf16b54d8e7a10d9bd42b75178153e3af6a815bdc90f74",
+      "size": 3324
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/libstdc++/COPYING3",
+      "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903",
+      "size": 35147
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/libsystre/LICENSE",
+      "sha256": "3200024286eb0a33c22da3a31c470df07c7b8cfbead2b9528195d67d107264ec",
+      "size": 1445
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/libtasn1/COPYING",
+      "sha256": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986",
+      "size": 35149
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/libtasn1/COPYING.LESSERv2",
+      "sha256": "20e50fe7aae3e56378ebf0417d9de904f55a0e61e4df315333e632a4d3555d95",
+      "size": 26419
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/libtre/LICENSE",
+      "sha256": "6a50ab50d856b30c965cf2dd899e577ec108c938242fd3a2e7a7a25eed996200",
+      "size": 1479
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/libunistring/LICENSE",
+      "sha256": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986",
+      "size": 35149
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/libunistring/LICENSE.LIB",
+      "sha256": "a853c2ffec17057872340eee242ae4d96cbf2b520ae27d903e1b2fef1a5f9d1c",
+      "size": 7639
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/libuv/LICENSE",
+      "sha256": "16de0c32b265cb7d46a6d3bd614f259dd4d693a5e26b3407b04aae8d73041f0c",
+      "size": 1079
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/libwinpthread/COPYING",
+      "sha256": "63263614cdd29f2f93cba85e992f041b31f9fc7b4033692f31269489a8a1b177",
+      "size": 2883
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/md4c/LICENSE.md",
+      "sha256": "e547c9a66c120b19f9838a1f7c2f51137f5c71ba27b70c3611b673f2cdb4e02e",
+      "size": 1096
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/meson/COPYING",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "size": 11358
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/mpdecimal/LICENSE",
+      "sha256": "dba079e24a0286052f9f36a5e0b4f6cc95bc83ada657eb26bef8c0b6473f6512",
+      "size": 1285
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/ncurses/LICENSE",
+      "sha256": "708999f95527e1ffa670c6fce288c6c600cb477dd04afcc1171422b3dd4ee226",
+      "size": 1447
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/nghttp2/COPYING",
+      "sha256": "6b94f3abc1aabd0c72a7c7d92a77f79dda7c8a0cb3df839a97890b4116a2de2a",
+      "size": 1156
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/nghttp3/COPYING",
+      "sha256": "58cc3fc8c6d6cb2485ab35eb5918e849b5bf1e56522974e106d7a39a88d61dcd",
+      "size": 1081
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/ngtcp2/COPYING",
+      "sha256": "542dd526d2ea23565f0571cc68df6f05ed11248a90ff0f32de19d8ba589db513",
+      "size": 1080
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/ninja/COPYING",
+      "sha256": "eb7e9ab9690124c5c9f42bdc81383d886a3dede26345b6ed15bbad7caf81f7ea",
+      "size": 11358
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/nsis/COPYING",
+      "sha256": "388357c1215ff403c5ebde3a5ecd273e68f8b79a579996775245d1ee65442aba",
+      "size": 15632
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/openssl/LICENSE",
+      "sha256": "7d5450cb2d142651b8afa315b5f238efc805dad827d91ba367d8516bc9d49e7a",
+      "size": 10175
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/pcre2/COPYING",
+      "sha256": "99272c55f3dcfa07a8a7e15a5c1a33096e4727de74241d65fa049fccfdd59507",
+      "size": 97
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/pcre2/LICENCE.md",
+      "sha256": "197d8a73ffee0d6b09adba2f9c677b5f5aede24edf89258a68e48248d010d811",
+      "size": 4011
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/pixman/COPYING",
+      "sha256": "fac9270f0987b96ff4533fca3548c633e02083cbba4a0172a3b149b2e4019793",
+      "size": 2087
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/python-distlib/LICENSE",
+      "sha256": "808e10c8a6ab8deb149ff9b3fb19f447a808094606d712a9ca57fead3552599d",
+      "size": 14531
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/python-packaging/LICENSE",
+      "sha256": "cad1ef5bd340d73e074ba614d26f7deaca5c7940c3d8c34852e65c4909686c48",
+      "size": 197
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/python-packaging/LICENSE.APACHE",
+      "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594",
+      "size": 10174
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/python-packaging/LICENSE.BSD",
+      "sha256": "b70e7e9b742f1cc6f948b34c16aa39ffece94196364bc88ff0d2180f0028fac5",
+      "size": 1344
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/python-pip/LICENSE.txt",
+      "sha256": "634300a669d49aeae65b12c6c48c924c51a4cdf3d1ff086dc3456dc8bcaa2104",
+      "size": 1093
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/python-setuptools/LICENSE",
+      "sha256": "86da0f01aeae46348a3c3d465195dc1ceccde79f79e87769a64b8da04b2a4741",
+      "size": 1023
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/python3.14/LICENSE",
+      "sha256": "b0e25a78cffb43f4d92de8b61ccfa1f1f98ecbc22330b54b5251e7b6ba010231",
+      "size": 13804
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/qt6-base/AFL-2.1.txt",
+      "sha256": "93bb4f7417aa775bab9026cc3d0af28aeb64451fc5a8ec651876785edd8eaf9b",
+      "size": 8948
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/qt6-base/Apache-2.0.txt",
+      "sha256": "e3ba223bb1423f0aad8c3dfce0fe3148db48926d41e6fbc3afbbf5ff9e1c89cb",
+      "size": 10398
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/qt6-base/Bitstream-Vera.txt",
+      "sha256": "7a083b136e64d064794c3419751e5c7dd10d2f64c108fe5ba161eae5e5958a93",
+      "size": 8816
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/qt6-base/blessing.txt",
+      "sha256": "592db1199aab67aafe4515db9808b420db122083807c5329b2f061951e79acbe",
+      "size": 244
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/qt6-base/BSD-2-Clause.txt",
+      "sha256": "8fda146749ca071ac9cdce2e24d25444676ea48d1f9dccc2b7c15c054b717db8",
+      "size": 1276
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/qt6-base/BSD-3-Clause.txt",
+      "sha256": "9f0490f18656c6f2435bd14f603ef0c96434d1825615363dce43abb42ed1dcce",
+      "size": 1469
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/qt6-base/BSD-4-Clause.txt",
+      "sha256": "83faa0d205c316ce3efeafee465b6a165914fb29595968c08dc6437021b7b6fd",
+      "size": 1672
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/qt6-base/BSL-1.0.txt",
+      "sha256": "3abd6471b9a9a08d65ce771143f8e278bb4c1aeb10c1c2d476935a6b049653f5",
+      "size": 1340
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/qt6-base/CC0-1.0.txt",
+      "sha256": "a2010f343487d3f7618affe54f789f5487602331c0a8d03f49e9a7c547cf0499",
+      "size": 7048
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/qt6-base/FTL.txt",
+      "sha256": "08c135755dd589039470f1fdbb400daaabaaa50d0b366d19cebff4d22986baa1",
+      "size": 6743
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/qt6-base/GFDL-1.3-no-invariants-only.txt",
+      "sha256": "110535522396708cea37c72a802c5e7e81391139f5f7985631c93ef242b206a4",
+      "size": 22955
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/qt6-base/GPL-2.0-only.txt",
+      "sha256": "8177f97513213526df2cf6184d8ff986c675afb514d4e68a404010521b880643",
+      "size": 18092
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/qt6-base/GPL-2.0-or-later.txt",
+      "sha256": "8177f97513213526df2cf6184d8ff986c675afb514d4e68a404010521b880643",
+      "size": 18092
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/qt6-base/GPL-3.0-only.txt",
+      "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903",
+      "size": 35147
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/qt6-base/HPND.txt",
+      "sha256": "67ac968431270291f5e9cd3ed76705e1169f57082ee102093b2543b28cef63cf",
+      "size": 1188
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/qt6-base/IJG.txt",
+      "sha256": "1cb448f5e2e6d3aca60943f4eee1a04675628dc0266a074a42bc1560ebc28d61",
+      "size": 1815
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/qt6-base/Imlib2.txt",
+      "sha256": "8846f2baba1a7f4c36f7ca19a923a000d8a21afa37cf0fe006f6ce88a6058a89",
+      "size": 1986
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/qt6-base/IPL-1.0.txt",
+      "sha256": "d5328e672fb1bff47ee18e890784541453380081cf3771bb7b3c06fc19c7d503",
+      "size": 11789
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/qt6-base/LGPL-2.1-or-later.txt",
+      "sha256": "1ccf09bf2f598308df4bed9cd8e9657dc5cd0973d2800318f2e241486e2edf3f",
+      "size": 25906
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/qt6-base/LGPL-3.0-only.txt",
+      "sha256": "da7eabb7bafdf7d3ae5e9f223aa5bdc1eece45ac569dc21b3b037520b4464768",
+      "size": 7651
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/qt6-base/libpng-2.0.txt",
+      "sha256": "7317e078e2d3b5d7ba5a6159e650945153262b44b76f6700f8e9edb261c5143e",
+      "size": 5345
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/qt6-base/Libpng.txt",
+      "sha256": "58fe669792f9b4e0740bf75ecfe90b5326128bb2ce7e27e1c342abd9db4d8ea6",
+      "size": 4120
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/qt6-base/LicenseRef-BSD-3-Clause-with-PCRE2-Binary-Like-Packages-Exception.txt",
+      "sha256": "0526625fcc746a42d3f19a0ab357d3dc8479fdbe3bfd168825498f50215c7a63",
+      "size": 1852
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/qt6-base/LicenseRef-ICC-License.txt",
+      "sha256": "9e34ff47b3a44814e183342e7e198d127a6740e29d20e8381fba7688dafc79dd",
+      "size": 463
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/qt6-base/LicenseRef-Lcs-Telegraphics.txt",
+      "sha256": "c10225ebbd5191bfdd761b0d7752c785f2453ab665d6c454473fb12d254668aa",
+      "size": 139
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/qt6-base/LicenseRef-Qt-Commercial.txt",
+      "sha256": "9b1f50aae6267f9d5e0ceb6775ee86450262c25ec7c0573e151fe5d3f18a4700",
+      "size": 462
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/qt6-base/LicenseRef-SHA1-Public-Domain.txt",
+      "sha256": "65d86b8ec6b1cd8b8f6e64fd8710274ba00d6a3c520e00dfdcd1c3d2071f3305",
+      "size": 144
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/qt6-base/Linux-syscall-note.txt",
+      "sha256": "3f9e477523febab58de8b716ccfbcf02e6ef1c8e7728953905e8558637abe2a9",
+      "size": 624
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/qt6-base/MIT-Khronos-old.txt",
+      "sha256": "3c58021633974f9ed3c3d445a374240a5244fd039628f4d7f6f3e674bc8e6694",
+      "size": 1306
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/qt6-base/MIT-open-group.txt",
+      "sha256": "c55d2ab72d8a4f9e9cd8fbd1379268e575e8cfa16874affa5899b75a6d754514",
+      "size": 897
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/qt6-base/MIT.txt",
+      "sha256": "d040359701c01996a017d5c515678929cd1b0625e64cb86db44025fbb6cdf1fc",
+      "size": 1111
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/qt6-base/MPL-2.0.txt",
+      "sha256": "3f3d9e0024b1921b067d6f7f88deb4a60cbe7a78e76c64e3f1d7fc3b779b9d04",
+      "size": 16726
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/qt6-base/Qt-GPL-exception-1.0.txt",
+      "sha256": "40678d338ce53cd93f8b22b281a2ecbcaa3ee65ce60b25ffb0c462b0530846b2",
+      "size": 965
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/qt6-base/SPL-1.0.txt",
+      "sha256": "f58f2f30909982445f97f1a61667261920a7caeab21ef5bea1b740f5b144d141",
+      "size": 23547
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/qt6-base/Unicode-3.0.txt",
+      "sha256": "80bb6294022d8764adb36a9d65ebb6bd94efb1865918a71e31e6c247607d7634",
+      "size": 1995
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/qt6-base/X11.txt",
+      "sha256": "e2936c6509784b4f0ec27bac74182393866fad9422b29a70e085ff14aba87193",
+      "size": 1338
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/qt6-base/Xerox.txt",
+      "sha256": "b6bc52205d01e10cf43dbb7b8aec06dcaa3b21d1486e7c9c0bec329ee8244d8d",
+      "size": 965
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/qt6-base/Zlib.txt",
+      "sha256": "d7e3139972874dc8abdbbfce27ec1e6f942b28279dd7d27453630a8b4610e080",
+      "size": 1465
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/rhash/LICENSE",
+      "sha256": "953e55838353335148c90b5a38a4894292680b1d4c37228ffddddbf18ce54bf5",
+      "size": 736
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/sqlite/LICENSE",
+      "sha256": "0b76663a90e034f3d7f2af5bfada4cedec5ebc275361899eccc5c18e6f01ff1f",
+      "size": 1528
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/tzdata/LICENSE",
+      "sha256": "0613408568889f5739e5ae252b722a2659c02002839ad970a63dc5e9174b27cf",
+      "size": 252
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/vulkan-headers/LICENSE",
+      "sha256": "95ad366d23fadf701d355bc45fb8b82ae2d700239471d35d41286ac3b08ff903",
+      "size": 495
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/vulkan-loader/LICENSE",
+      "sha256": "43c0a37e6a0fa7ff3c843b3ec5a4fac84b712558ddac103fbd4c1649662a9ece",
+      "size": 11661
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/wineditline/LICENSE",
+      "sha256": "e1a9520a9b3143ad64adb356c5d2fca6bb09a3ad3950cf1f7213946543582440",
+      "size": 1588
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/winpthreads/COPYING",
+      "sha256": "63263614cdd29f2f93cba85e992f041b31f9fc7b4033692f31269489a8a1b177",
+      "size": 2883
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/xz/COPYING",
+      "sha256": "616a3ad264ce29b8f1cb97e53037b139d406899ca8d1f799651e17bfa09830b8",
+      "size": 3119
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/xz/COPYING.0BSD",
+      "sha256": "0b01625d853911cd0e2e088dcfb743261034a091bb379246cb25a14cc4c74bf1",
+      "size": 607
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/xz/COPYING.GPLv2",
+      "sha256": "edaef632cbb643e4e7a221717a6c441a4c1a7c918e6e4d56debc3d8739b233f6",
+      "size": 17984
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/xz/COPYING.GPLv3",
+      "sha256": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986",
+      "size": 35149
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/xz/COPYING.LGPLv2.1",
+      "sha256": "20e50fe7aae3e56378ebf0417d9de904f55a0e61e4df315333e632a4d3555d95",
+      "size": 26419
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/zlib/LICENSE",
+      "sha256": "e32ff4e00d9d94930537635291da39e7e612703334bf6fde8c7f1686fe8a45a2",
+      "size": 1002
+    },
+    {
+      "path": "runtime/Licenses/MSYS2-runtime/zstd/LICENSE",
+      "sha256": "7055266497633c9025b777c78eb7235af13922117480ed5c674677adc381c9d8",
+      "size": 1549
+    },
+    {
+      "path": "runtime/qemu/pc-bios/mac_qfb.rom",
+      "sha256": "5f40220ec35e12fcdf1ad9715a8aa1cf0893fb2b15aa19c1f3973c6ef1bf35b4",
+      "size": 20480
+    },
+    {
+      "path": "runtime/qemu/pc-bios/openbios-ppc",
+      "sha256": "46060017fd9071dc2384da45da57fd12ede0172ac7ae75463e10df2564b175db",
+      "size": 705428
+    },
+    {
+      "path": "runtime/qemu/pc-bios/qemu_vga.ndrv",
+      "sha256": "7983d4d736d22528a81f5120a7b04bf61b619438d27af6f85acedb3de0ad4c13",
+      "size": 19703
+    },
+    {
+      "path": "runtime/qemu/pc-bios/vgabios-stdvga.bin",
+      "sha256": "e8fc9e55790dbe3cb31f019a3deb57206ba6c54f5e581adb2ab2677a9d391472",
+      "size": 39424
+    },
+    {
+      "path": "runtime/qemu/pc-bios/keymaps/ar",
+      "sha256": "059ab719df4296edb800d399501e3823e1e6f470cc06a3a4564f4bb2dbd5c1fc",
+      "size": 28605
+    },
+    {
+      "path": "runtime/qemu/pc-bios/keymaps/bepo",
+      "sha256": "01ccdb7e2d0b20f517e03d39cc70802ad83dfc1ed2e5d50ff9b4a4f77e37a9f8",
+      "size": 27809
+    },
+    {
+      "path": "runtime/qemu/pc-bios/keymaps/cz",
+      "sha256": "3664b3f13e6cfff0e6d05f12000aa6610eff04f570707261ec35ca830ded6c36",
+      "size": 29209
+    },
+    {
+      "path": "runtime/qemu/pc-bios/keymaps/da",
+      "sha256": "95ef0c168f0b25e936a7ff944da820a43af8028b515cc6709724f457e105c187",
+      "size": 29230
+    },
+    {
+      "path": "runtime/qemu/pc-bios/keymaps/de",
+      "sha256": "cda7dc9656f007ca3e88e5bac50f20c7f61f934bcec2e87c6d61859e632ddb98",
+      "size": 29183
+    },
+    {
+      "path": "runtime/qemu/pc-bios/keymaps/de-ch",
+      "sha256": "3260cb64fdcdf48e2b53c5d0573dc2a9410d7d3aae227ed42dda945f9ab74e06",
+      "size": 29214
+    },
+    {
+      "path": "runtime/qemu/pc-bios/keymaps/en-gb",
+      "sha256": "e14229b7f9165bf226bf4de968fd5f6a504014a2179de08c2b2184cefe68174e",
+      "size": 29219
+    },
+    {
+      "path": "runtime/qemu/pc-bios/keymaps/en-us",
+      "sha256": "52cf4c523e686078699ed58761c7e1443080305237a5f67a3716832570c5c8e5",
+      "size": 27086
+    },
+    {
+      "path": "runtime/qemu/pc-bios/keymaps/es",
+      "sha256": "d9b1da8193232882705bd4a312c0923b6d91268f1e1a8eed2afbd7fc37681c06",
+      "size": 29203
+    },
+    {
+      "path": "runtime/qemu/pc-bios/keymaps/et",
+      "sha256": "95af1e25132185e3cb271d491086ccf09cb667033afb718f1a11e974e80a838f",
+      "size": 27291
+    },
+    {
+      "path": "runtime/qemu/pc-bios/keymaps/fi",
+      "sha256": "4c5cd5359c18635187d7af9570088a7bbd21f96d961aedbc4c9fb1e5df099281",
+      "size": 28604
+    },
+    {
+      "path": "runtime/qemu/pc-bios/keymaps/fo",
+      "sha256": "3750b8090caea3cf6c827b97f5ecc2d1172c33d960141c50f96e61c53f682ccf",
+      "size": 29217
+    },
+    {
+      "path": "runtime/qemu/pc-bios/keymaps/fr",
+      "sha256": "60d9baa3565b7727b4178704100bffb02cbd5b527a9dcc9f9ca76d76767b166e",
+      "size": 29204
+    },
+    {
+      "path": "runtime/qemu/pc-bios/keymaps/fr-be",
+      "sha256": "522b5e758375e3d796fba096a46077766bd44548c8c61a4abe946e3116c1ad97",
+      "size": 29211
+    },
+    {
+      "path": "runtime/qemu/pc-bios/keymaps/fr-ca",
+      "sha256": "9ee3fc13beec6e74f40fb6d150d7fe3b0afe4557fdf0769601e662a122a88cc0",
+      "size": 27564
+    },
+    {
+      "path": "runtime/qemu/pc-bios/keymaps/fr-ch",
+      "sha256": "7b2ad2929f3b7b4f5d60176bd7e1852f91efbcfe2700e8df9bc9b891609a7170",
+      "size": 29215
+    },
+    {
+      "path": "runtime/qemu/pc-bios/keymaps/hr",
+      "sha256": "e8391ed09015ce8459a98e3470daddd3a6d95c4c7e93b750098f5a321fd57482",
+      "size": 29255
+    },
+    {
+      "path": "runtime/qemu/pc-bios/keymaps/hu",
+      "sha256": "763a938ed2fdd224b9cb8ad606d02aabc93a0e3fb7a5e5e9caafa0ec8c05d422",
+      "size": 29207
+    },
+    {
+      "path": "runtime/qemu/pc-bios/keymaps/is",
+      "sha256": "6eb4e5bd93ca2f7a2059a31fd014444108eb684ecd97902da2492b0a0f6e3cdc",
+      "size": 29254
+    },
+    {
+      "path": "runtime/qemu/pc-bios/keymaps/it",
+      "sha256": "12d090cdcb6af0e95a0c0330b8b7f0ac0446ab8cf7140b4f8c6c797c08e9c219",
+      "size": 29312
+    },
+    {
+      "path": "runtime/qemu/pc-bios/keymaps/ja",
+      "sha256": "a4561aefcc2fd2f4ba01604001c9c0dc67469514ea0a665063b72e79d5d9c687",
+      "size": 27163
+    },
+    {
+      "path": "runtime/qemu/pc-bios/keymaps/lt",
+      "sha256": "0bfc98e913451c0b9082d0317deffa03c6f0c53a1422cb4f4c1ef64dc3939d2f",
+      "size": 29166
+    },
+    {
+      "path": "runtime/qemu/pc-bios/keymaps/lv",
+      "sha256": "be4f1e28325ae2ea927bd51e31863a327e64c0a938725fd02c2a7260660bdf77",
+      "size": 28618
+    },
+    {
+      "path": "runtime/qemu/pc-bios/keymaps/meson.build",
+      "sha256": "ed373272262fb1fe66f43ca5eba606871b5ca635633dfb19ea4fed2fd14e47a3",
+      "size": 1544
+    },
+    {
+      "path": "runtime/qemu/pc-bios/keymaps/mk",
+      "sha256": "71068ffe163ce6684b35f423e897e00c97debe0c3df555c43d26b46a79ca68e7",
+      "size": 27685
+    },
+    {
+      "path": "runtime/qemu/pc-bios/keymaps/nl",
+      "sha256": "70cb1b41f184d61520867e639e6b69cddea4b0e2458c5502c7c40512301876c7",
+      "size": 29268
+    },
+    {
+      "path": "runtime/qemu/pc-bios/keymaps/no",
+      "sha256": "95b3fe5258264b827ba01acc7a774bd9edbaec52c54e582a0737c33087a92514",
+      "size": 29563
+    },
+    {
+      "path": "runtime/qemu/pc-bios/keymaps/pl",
+      "sha256": "5f3da802f81f385c58179272e48c4f8680dfdfe55383c504a6d84b3b7a8aadfb",
+      "size": 29327
+    },
+    {
+      "path": "runtime/qemu/pc-bios/keymaps/pt",
+      "sha256": "29161e1b8b61b761c3f3bff237ca73ce4ee3316a99090890b32469824b5eed8a",
+      "size": 29195
+    },
+    {
+      "path": "runtime/qemu/pc-bios/keymaps/pt-br",
+      "sha256": "fbb9491c0bfc4253cced9d8a20965aca98d0249c4626fe6e7d31358b24e34e8d",
+      "size": 29175
+    },
+    {
+      "path": "runtime/qemu/pc-bios/keymaps/ru",
+      "sha256": "afa015a736cd935fc38a0df62fd6ab2f3c64b44c48b3e6d95969cbbfcdc43e91",
+      "size": 27704
+    },
+    {
+      "path": "runtime/qemu/pc-bios/keymaps/sl",
+      "sha256": "bea8fe8ac0ca281038ac0e1788c39f090507ff0646bd4f57cc18f6873b030147",
+      "size": 4632
+    },
+    {
+      "path": "runtime/qemu/pc-bios/keymaps/sv",
+      "sha256": "97731fbe91f254d81c005ffc232180a8dd7baeb6d699f0f0fc15e341672f96b3",
+      "size": 3346
+    },
+    {
+      "path": "runtime/qemu/pc-bios/keymaps/th",
+      "sha256": "6dd9562a2b10c81f658ad96075fd87832777e87357620e89c7d070e4097fbbb9",
+      "size": 27829
+    },
+    {
+      "path": "runtime/qemu/pc-bios/keymaps/tr",
+      "sha256": "f59f8cc154f0dc8b45166b524b9c1e649ba027e39381aac286663ad2227ddce8",
+      "size": 29142
+    }
+  ]
+}

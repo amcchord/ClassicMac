@@ -1,0 +1,14 @@
+[
+  {
+    "sha256": "66a416c8b1dc9430998f65e123913d35f0e0e68d54c92afce0110df99205ee2d",
+    "path": "native/src/machine.cpp"
+  },
+  {
+    "sha256": "96731bc08f91e3bb43582203f64cf93eccec0efd8493bb538a06c1950b1725fe",
+    "path": "native/src/qualification.cpp"
+  },
+  {
+    "sha256": "d37051e976b9d2b5a0fcf3adc294de10202a789b5c699408ecdcc5300515190f",
+    "path": "native/tests/argument-golden.json"
+  }
+]

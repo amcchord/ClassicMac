@@ -1,0 +1,117 @@
+[
+  {
+    "nativeSourceCommit": "52b61d8",
+    "desktopScale": 100,
+    "windowsDpi": 96,
+    "perMonitorV2": true,
+    "uiPixelZoom": 1,
+    "steps": 59,
+    "flowPassed": true,
+    "inputPassed": true,
+    "persistedName": "Windows QA \u00e9 \u00f1",
+    "packageExit": 0,
+    "nativeInputCompleted": true,
+    "nativeInputErrors": 0,
+    "engineBeforeRestart": 8600,
+    "engineAfterRestart": 10352,
+    "stoppedAtEnd": true,
+    "configuration": {
+      "networking": true,
+      "sound": true,
+      "toolsCDInserted": true,
+      "tabletInput": true
+    }
+  },
+  {
+    "nativeSourceCommit": "52b61d8",
+    "desktopScale": 125,
+    "windowsDpi": 120,
+    "perMonitorV2": true,
+    "uiPixelZoom": 1,
+    "steps": 59,
+    "flowPassed": true,
+    "inputPassed": true,
+    "persistedName": "Windows QA \u00e9 \u00f1",
+    "packageExit": 0,
+    "nativeInputCompleted": true,
+    "nativeInputErrors": 0,
+    "engineBeforeRestart": 5240,
+    "engineAfterRestart": 1984,
+    "stoppedAtEnd": true,
+    "configuration": {
+      "networking": true,
+      "sound": true,
+      "toolsCDInserted": true,
+      "tabletInput": true
+    }
+  },
+  {
+    "nativeSourceCommit": "52b61d8",
+    "desktopScale": 150,
+    "windowsDpi": 144,
+    "perMonitorV2": true,
+    "uiPixelZoom": 2,
+    "steps": 59,
+    "flowPassed": true,
+    "inputPassed": true,
+    "persistedName": "Windows QA \u00e9 \u00f1",
+    "packageExit": 0,
+    "nativeInputCompleted": true,
+    "nativeInputErrors": 0,
+    "engineBeforeRestart": 2428,
+    "engineAfterRestart": 3640,
+    "stoppedAtEnd": true,
+    "configuration": {
+      "networking": true,
+      "sound": true,
+      "toolsCDInserted": true,
+      "tabletInput": true
+    }
+  },
+  {
+    "nativeSourceCommit": "52b61d8",
+    "desktopScale": 175,
+    "windowsDpi": 168,
+    "perMonitorV2": true,
+    "uiPixelZoom": 2,
+    "steps": 59,
+    "flowPassed": true,
+    "inputPassed": true,
+    "persistedName": "Windows QA \u00e9 \u00f1",
+    "packageExit": 0,
+    "nativeInputCompleted": true,
+    "nativeInputErrors": 0,
+    "engineBeforeRestart": 10972,
+    "engineAfterRestart": 5900,
+    "stoppedAtEnd": true,
+    "configuration": {
+      "networking": true,
+      "sound": true,
+      "toolsCDInserted": true,
+      "tabletInput": true
+    }
+  },
+  {
+    "nativeSourceCommit": "52b61d8",
+    "desktopScale": 200,
+    "windowsDpi": 192,
+    "perMonitorV2": true,
+    "uiPixelZoom": 2,
+    "steps": 59,
+    "flowPassed": true,
+    "inputPassed": true,
+    "persistedName": "Windows QA \u00e9 \u00f1",
+    "packageExit": 0,
+    "nativeInputCompleted": true,
+    "nativeInputErrors": 0,
+    "engineBeforeRestart": 8488,
+    "engineAfterRestart": 9080,
+    "stoppedAtEnd": true,
+    "configuration": {
+      "networking": true,
+      "sound": true,
+      "toolsCDInserted": true,
+      "tabletInput": true
+    }
+  }
+]
