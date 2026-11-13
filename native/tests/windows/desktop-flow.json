@@ -1,0 +1,259 @@
+{
+  "output": "REPLACED_BY_RUNNER",
+  "steps": [
+    {
+      "action": "assertDpi",
+      "scale": 1.0,
+      "pixelScale": 1,
+      "native": true
+    },
+    {
+      "action": "open",
+      "folder": "REPLACED_BY_RUNNER"
+    },
+    {
+      "action": "wait",
+      "milliseconds": 1800
+    },
+    {
+      "action": "capture",
+      "window": "home",
+      "name": "home",
+      "nativeScreen": true
+    },
+    {
+      "action": "click",
+      "text": "New Mac\u2026"
+    },
+    {
+      "action": "window",
+      "title": "New Mac"
+    },
+    {
+      "action": "capture",
+      "name": "new-mac",
+      "nativeScreen": true
+    },
+    {
+      "action": "popup",
+      "index": 0
+    },
+    {
+      "action": "capture",
+      "name": "new-model-menu",
+      "nativeScreen": true
+    },
+    {
+      "action": "uiKey",
+      "key": "Escape"
+    },
+    {
+      "action": "click",
+      "text": "Cancel"
+    },
+    {
+      "action": "click",
+      "text": "Get Info\u2026"
+    },
+    {
+      "action": "window",
+      "title": "Get Info"
+    },
+    {
+      "action": "wait",
+      "milliseconds": 6000
+    },
+    {
+      "action": "capture",
+      "name": "settings",
+      "nativeScreen": true
+    },
+    {
+      "action": "popup",
+      "index": 2
+    },
+    {
+      "action": "capture",
+      "name": "graphics-menu",
+      "nativeScreen": true
+    },
+    {
+      "action": "uiKey",
+      "key": "Escape"
+    },
+    {
+      "action": "click",
+      "text": "Save"
+    },
+    {
+      "action": "click",
+      "text": "Media\u2026"
+    },
+    {
+      "action": "window",
+      "title": "Media"
+    },
+    {
+      "action": "capture",
+      "name": "media",
+      "nativeScreen": true
+    },
+    {
+      "action": "click",
+      "text": "Done"
+    },
+    {
+      "action": "click",
+      "text": "Library\u2026"
+    },
+    {
+      "action": "window",
+      "title": "Mac OS Library",
+      "timeout": 90000
+    },
+    {
+      "action": "capture",
+      "name": "library",
+      "nativeScreen": true
+    },
+    {
+      "action": "click",
+      "text": "Close"
+    },
+    {
+      "action": "setup"
+    },
+    {
+      "action": "window",
+      "title": "Welcome to ClassicMac"
+    },
+    {
+      "action": "capture",
+      "name": "setup-license",
+      "nativeScreen": true
+    },
+    {
+      "action": "uiKey",
+      "key": "Escape"
+    },
+    {
+      "action": "start"
+    },
+    {
+      "action": "guestReady"
+    },
+    {
+      "action": "wait",
+      "milliseconds": 55000
+    },
+    {
+      "action": "capture",
+      "window": "guest",
+      "name": "guest-started",
+      "nativeScreen": true
+    },
+    {
+      "action": "wait",
+      "milliseconds": 2500
+    },
+    {
+      "action": "capture",
+      "window": "guest",
+      "name": "guest-native-menu",
+      "nativeScreen": true
+    },
+    {
+      "action": "wait",
+      "milliseconds": 500
+    },
+    {
+      "action": "resize",
+      "window": "guest",
+      "width": 480,
+      "height": 520
+    },
+    {
+      "action": "capture",
+      "window": "guest",
+      "name": "guest-narrow",
+      "nativeScreen": true
+    },
+    {
+      "action": "click",
+      "text": "Full Screen"
+    },
+    {
+      "action": "wait",
+      "milliseconds": 700
+    },
+    {
+      "action": "capture",
+      "window": "guest",
+      "name": "guest-fullscreen",
+      "nativeScreen": true
+    },
+    {
+      "action": "guestEscape"
+    },
+    {
+      "action": "wait",
+      "milliseconds": 500
+    },
+    {
+      "action": "pause"
+    },
+    {
+      "action": "capture",
+      "window": "guest",
+      "name": "guest-paused",
+      "nativeScreen": true
+    },
+    {
+      "action": "resume"
+    },
+    {
+      "action": "markEngine"
+    },
+    {
+      "action": "restart"
+    },
+    {
+      "action": "engineReplaced",
+      "timeout": 45000
+    },
+    {
+      "action": "wait",
+      "milliseconds": 55000
+    },
+    {
+      "action": "capture",
+      "window": "guest",
+      "name": "guest-restarted",
+      "nativeScreen": true
+    },
+    {
+      "action": "click",
+      "text": "Paste\u2026"
+    },
+    {
+      "action": "window",
+      "title": "Paste Text into Mac"
+    },
+    {
+      "action": "capture",
+      "name": "paste-dialog",
+      "nativeScreen": true
+    },
+    {
+      "action": "click",
+      "text": "Cancel"
+    },
+    {
+      "action": "shutdown"
+    },
+    {
+      "action": "stopped",
+      "timeout": 30000
+    }
+  ]
+}
