@@ -68,3 +68,13 @@ This extends document-window and icon coverage. The remaining font/layout,
 menu, utility/modal and animation gaps described above still need their own
 native references. Desktop CSS shares the original icon PNGs and corrected
 title stripe pattern, but is not certified by the native Swift frame gate.
+
+## November 12 follow-up
+
+The [November desktop audit](ui-fidelity-audit-2026-11.md) supersedes the
+remaining-gap statements above for Mac Roman fonts, menu panels, paired-arrow
+scrollbars, movable dialogs, focus artwork and indeterminate phase patterns.
+It also corrects the old M5Tab-derived system ASCII bearing oracle using an
+independent native QuickDraw capture. The historical findings above remain
+as the record of the October work. Whole-app and actual Windows certification
+remain explicitly limited in the new audit.

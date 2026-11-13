@@ -1,0 +1,605 @@
+{
+  "date": "2026-11-12",
+  "baseline": "5835124c97b6094c479607ecf11d235f794dccb6",
+  "retrobootRevision": "432a43d4ba8502a7afeaa5dd25ecf959c23aed1c",
+  "host": "macOS / Apple Silicon",
+  "frontend": "native-qt-cpp",
+  "publication": false,
+  "sourcePreparationPasses": 2,
+  "qemuBuild": "passed, m68k and ppc, v11.0.2",
+  "recipes": {
+    "audit-ui-final": {
+      "passed": true,
+      "steps": 48,
+      "actions": [
+        "open",
+        "capture",
+        "click",
+        "window",
+        "capture",
+        "popup",
+        "capture",
+        "uiKey",
+        "click",
+        "click",
+        "window",
+        "capture",
+        "popup",
+        "capture",
+        "uiKey",
+        "click",
+        "click",
+        "window",
+        "capture",
+        "click",
+        "click",
+        "window",
+        "capture",
+        "click",
+        "setup",
+        "window",
+        "capture",
+        "uiKey",
+        "start",
+        "guestReady",
+        "wait",
+        "capture",
+        "resize",
+        "capture",
+        "click",
+        "wait",
+        "capture",
+        "guestEscape",
+        "wait",
+        "pause",
+        "capture",
+        "resume",
+        "click",
+        "window",
+        "capture",
+        "click",
+        "shutdown",
+        "stopped"
+      ]
+    },
+    "audit-ui-2x-final": {
+      "passed": true,
+      "steps": 48,
+      "actions": [
+        "open",
+        "capture",
+        "click",
+        "window",
+        "capture",
+        "popup",
+        "capture",
+        "uiKey",
+        "click",
+        "click",
+        "window",
+        "capture",
+        "popup",
+        "capture",
+        "uiKey",
+        "click",
+        "click",
+        "window",
+        "capture",
+        "click",
+        "click",
+        "window",
+        "capture",
+        "click",
+        "setup",
+        "window",
+        "capture",
+        "uiKey",
+        "start",
+        "guestReady",
+        "wait",
+        "capture",
+        "resize",
+        "capture",
+        "click",
+        "wait",
+        "capture",
+        "guestEscape",
+        "wait",
+        "pause",
+        "capture",
+        "resume",
+        "click",
+        "window",
+        "capture",
+        "click",
+        "shutdown",
+        "stopped"
+      ]
+    },
+    "quadra-restart-proof": {
+      "passed": true,
+      "steps": 16,
+      "actions": [
+        "open",
+        "start",
+        "guestReady",
+        "wait",
+        "markEngine",
+        "restart",
+        "engineReplaced",
+        "wait",
+        "capture",
+        "markEngine",
+        "key",
+        "engineReplaced",
+        "wait",
+        "capture",
+        "shutdown",
+        "stopped"
+      ]
+    },
+    "quadra-enhanced-final": {
+      "passed": true,
+      "steps": 16,
+      "actions": [
+        "open",
+        "start",
+        "guestReady",
+        "wait",
+        "capture",
+        "resize",
+        "guestSize",
+        "wait",
+        "capture",
+        "markEngine",
+        "key",
+        "engineReplaced",
+        "wait",
+        "capture",
+        "shutdown",
+        "stopped"
+      ]
+    }
+  },
+  "pixelReports": {
+    "audit-ui-final/guest-pixels": {
+      "captures": [
+        {
+          "capture": "guest-fullscreen.json",
+          "mode": "Sharp Pixels",
+          "compared": true,
+          "zoom": 1,
+          "pixelsCompared": 640000,
+          "differingPixels": 0
+        },
+        {
+          "capture": "guest-narrow.json",
+          "mode": "Sharp Pixels",
+          "compared": true,
+          "zoom": 1,
+          "pixelsCompared": 172733,
+          "differingPixels": 0
+        },
+        {
+          "capture": "guest-paused.json",
+          "mode": "Sharp Pixels",
+          "compared": true,
+          "zoom": 1,
+          "pixelsCompared": 172733,
+          "differingPixels": 0
+        },
+        {
+          "capture": "guest-started.json",
+          "mode": "Sharp Pixels",
+          "compared": true,
+          "zoom": 1,
+          "pixelsCompared": 307200,
+          "differingPixels": 0
+        }
+      ],
+      "pixelsCompared": 1292666
+    },
+    "audit-ui-final/ui-grid": {
+      "captures": [
+        {
+          "capture": "graphics-menu.json",
+          "windowsDpi": null,
+          "uiPixelZoom": 1,
+          "uniformTitleBarPixels": true,
+          "uniformFullUI": true,
+          "desktopMatches": null
+        },
+        {
+          "capture": "guest-fullscreen.json",
+          "windowsDpi": null,
+          "uiPixelZoom": 1,
+          "uniformTitleBarPixels": true,
+          "uniformFullUI": null,
+          "desktopMatches": null
+        },
+        {
+          "capture": "guest-narrow.json",
+          "windowsDpi": null,
+          "uiPixelZoom": 1,
+          "uniformTitleBarPixels": true,
+          "uniformFullUI": null,
+          "desktopMatches": null
+        },
+        {
+          "capture": "guest-paused.json",
+          "windowsDpi": null,
+          "uiPixelZoom": 1,
+          "uniformTitleBarPixels": true,
+          "uniformFullUI": null,
+          "desktopMatches": null
+        },
+        {
+          "capture": "guest-started.json",
+          "windowsDpi": null,
+          "uiPixelZoom": 1,
+          "uniformTitleBarPixels": true,
+          "uniformFullUI": null,
+          "desktopMatches": null
+        },
+        {
+          "capture": "home.json",
+          "windowsDpi": null,
+          "uiPixelZoom": 1,
+          "uniformTitleBarPixels": true,
+          "uniformFullUI": true,
+          "desktopMatches": null
+        },
+        {
+          "capture": "library.json",
+          "windowsDpi": null,
+          "uiPixelZoom": 1,
+          "uniformTitleBarPixels": true,
+          "uniformFullUI": true,
+          "desktopMatches": null
+        },
+        {
+          "capture": "media.json",
+          "windowsDpi": null,
+          "uiPixelZoom": 1,
+          "uniformTitleBarPixels": true,
+          "uniformFullUI": true,
+          "desktopMatches": null
+        },
+        {
+          "capture": "new-mac.json",
+          "windowsDpi": null,
+          "uiPixelZoom": 1,
+          "uniformTitleBarPixels": true,
+          "uniformFullUI": true,
+          "desktopMatches": null
+        },
+        {
+          "capture": "new-model-menu.json",
+          "windowsDpi": null,
+          "uiPixelZoom": 1,
+          "uniformTitleBarPixels": true,
+          "uniformFullUI": true,
+          "desktopMatches": null
+        },
+        {
+          "capture": "paste-dialog.json",
+          "windowsDpi": null,
+          "uiPixelZoom": 1,
+          "uniformTitleBarPixels": true,
+          "uniformFullUI": true,
+          "desktopMatches": null
+        },
+        {
+          "capture": "settings.json",
+          "windowsDpi": null,
+          "uiPixelZoom": 1,
+          "uniformTitleBarPixels": true,
+          "uniformFullUI": true,
+          "desktopMatches": null
+        },
+        {
+          "capture": "setup-license.json",
+          "windowsDpi": null,
+          "uiPixelZoom": 1,
+          "uniformTitleBarPixels": true,
+          "uniformFullUI": true,
+          "desktopMatches": null
+        }
+      ],
+      "uniformTitleBars": 13,
+      "matchingDesktopCaptures": 0
+    },
+    "audit-ui-2x-final/guest-pixels": {
+      "captures": [
+        {
+          "capture": "guest-fullscreen.json",
+          "mode": "Sharp Pixels",
+          "compared": true,
+          "zoom": 2,
+          "pixelsCompared": 2764800,
+          "differingPixels": 0
+        },
+        {
+          "capture": "guest-narrow.json",
+          "mode": "Sharp Pixels",
+          "compared": true,
+          "zoom": 1,
+          "pixelsCompared": 307200,
+          "differingPixels": 0
+        },
+        {
+          "capture": "guest-paused.json",
+          "mode": "Sharp Pixels",
+          "compared": true,
+          "zoom": 1,
+          "pixelsCompared": 740544,
+          "differingPixels": 0
+        },
+        {
+          "capture": "guest-started.json",
+          "mode": "Sharp Pixels",
+          "compared": true,
+          "zoom": 1,
+          "pixelsCompared": 307200,
+          "differingPixels": 0
+        }
+      ],
+      "pixelsCompared": 4119744
+    },
+    "audit-ui-2x-final/ui-grid": {
+      "captures": [
+        {
+          "capture": "graphics-menu.json",
+          "windowsDpi": null,
+          "uiPixelZoom": 2,
+          "uniformTitleBarPixels": true,
+          "uniformFullUI": true,
+          "desktopMatches": null
+        },
+        {
+          "capture": "guest-fullscreen.json",
+          "windowsDpi": null,
+          "uiPixelZoom": 2,
+          "uniformTitleBarPixels": true,
+          "uniformFullUI": null,
+          "desktopMatches": null
+        },
+        {
+          "capture": "guest-narrow.json",
+          "windowsDpi": null,
+          "uiPixelZoom": 2,
+          "uniformTitleBarPixels": true,
+          "uniformFullUI": null,
+          "desktopMatches": null
+        },
+        {
+          "capture": "guest-paused.json",
+          "windowsDpi": null,
+          "uiPixelZoom": 2,
+          "uniformTitleBarPixels": true,
+          "uniformFullUI": null,
+          "desktopMatches": null
+        },
+        {
+          "capture": "guest-started.json",
+          "windowsDpi": null,
+          "uiPixelZoom": 2,
+          "uniformTitleBarPixels": true,
+          "uniformFullUI": null,
+          "desktopMatches": null
+        },
+        {
+          "capture": "home.json",
+          "windowsDpi": null,
+          "uiPixelZoom": 2,
+          "uniformTitleBarPixels": true,
+          "uniformFullUI": true,
+          "desktopMatches": null
+        },
+        {
+          "capture": "library.json",
+          "windowsDpi": null,
+          "uiPixelZoom": 2,
+          "uniformTitleBarPixels": true,
+          "uniformFullUI": true,
+          "desktopMatches": null
+        },
+        {
+          "capture": "media.json",
+          "windowsDpi": null,
+          "uiPixelZoom": 2,
+          "uniformTitleBarPixels": true,
+          "uniformFullUI": true,
+          "desktopMatches": null
+        },
+        {
+          "capture": "new-mac.json",
+          "windowsDpi": null,
+          "uiPixelZoom": 2,
+          "uniformTitleBarPixels": true,
+          "uniformFullUI": true,
+          "desktopMatches": null
+        },
+        {
+          "capture": "new-model-menu.json",
+          "windowsDpi": null,
+          "uiPixelZoom": 2,
+          "uniformTitleBarPixels": true,
+          "uniformFullUI": true,
+          "desktopMatches": null
+        },
+        {
+          "capture": "paste-dialog.json",
+          "windowsDpi": null,
+          "uiPixelZoom": 2,
+          "uniformTitleBarPixels": true,
+          "uniformFullUI": true,
+          "desktopMatches": null
+        },
+        {
+          "capture": "settings.json",
+          "windowsDpi": null,
+          "uiPixelZoom": 2,
+          "uniformTitleBarPixels": true,
+          "uniformFullUI": true,
+          "desktopMatches": null
+        },
+        {
+          "capture": "setup-license.json",
+          "windowsDpi": null,
+          "uiPixelZoom": 2,
+          "uniformTitleBarPixels": true,
+          "uniformFullUI": true,
+          "desktopMatches": null
+        }
+      ],
+      "uniformTitleBars": 13,
+      "matchingDesktopCaptures": 0
+    },
+    "quadra-enhanced-final/guest-pixels": {
+      "captures": [
+        {
+          "capture": "enhanced-boot.json",
+          "mode": "Sharp Pixels",
+          "compared": true,
+          "zoom": 1,
+          "pixelsCompared": 442540,
+          "differingPixels": 0
+        },
+        {
+          "capture": "enhanced-resized.json",
+          "mode": "Sharp Pixels",
+          "compared": true,
+          "zoom": 1,
+          "pixelsCompared": 546079,
+          "differingPixels": 0
+        },
+        {
+          "capture": "enhanced-restarted.json",
+          "mode": "Sharp Pixels",
+          "compared": true,
+          "zoom": 1,
+          "pixelsCompared": 442540,
+          "differingPixels": 0
+        }
+      ],
+      "pixelsCompared": 1431159
+    }
+  },
+  "windows": {
+    "actualHostTested": false,
+    "reason": "Existing VM guest agent unavailable; VM state/configuration unchanged",
+    "modeledQtScale": [
+      1,
+      2
+    ],
+    "sourceOverlay": "WGL overlay applies to current ATI sources; not compiled on Windows"
+  },
+  "atiGame": {
+    "updated": {
+      "boot_s": 20.199,
+      "game_relative": true,
+      "menu_click": true,
+      "returned_finder_relative": false,
+      "first_intro_uploads_8s": 193,
+      "replay_uploads_6s": 183,
+      "status": "fail",
+      "error": "Intro soundtrack contains too little audio"
+    },
+    "oldRenderer": {
+      "boot_s": 20.472,
+      "game_relative": true,
+      "menu_click": true,
+      "returned_finder_relative": false,
+      "first_intro_uploads_8s": 193,
+      "replay_uploads_6s": 183,
+      "status": "fail",
+      "error": "Intro soundtrack contains too little audio"
+    },
+    "qualification": "Drawing/input exercised; both fixtures fail the silent audio assertion. No audio/performance certification."
+  },
+  "screenshots": {
+    "settings-2x.png": "9ecd565ced8387e09273442072e00e151aa598a8f69cad50f57edee3602d60a2",
+    "model-menu-2x.png": "b38b31491b4490752600b930fb8b4cd25b07180bf7532b571b7e243e4dc2a591",
+    "guest-narrow.png": "11390d6b2ac87836ed6fb46d6cea9c42842db8aacc8176879648ebcd588cbe53",
+    "quadra-enhanced-resized.png": "40f836b97669edfd76236c2a30517f70d48bd0226c9c460bbcb68965f831db23"
+  },
+  "sourceCommit": "a5dce20",
+  "integratedBranch": "main",
+  "swift": {
+    "tests": 138,
+    "skipped": 3,
+    "failures": 0,
+    "platinumRenderTests": 13,
+    "skipReasons": [
+      "optional Copland lifecycle fixture",
+      "optional Copland archive fixture",
+      "optional classic base archive fixture"
+    ]
+  },
+  "pythonUnitTests": {
+    "tests": 11,
+    "failures": 0
+  },
+  "hostGLSmoke": "passed: real CGL context, shaders, FBO, red triangle, blue clear, no GL errors",
+  "driverTests": {
+    "boundedGrayScanlines": 19974,
+    "depths": 6,
+    "ppcModeContract": "passed",
+    "ppcGammaContract": "passed"
+  },
+  "screamerDeviceTest": {
+    "origin": "synthetic-qtest",
+    "apple_software_run": false,
+    "expect": "paced",
+    "screamer": "0x80014000",
+    "dbdma": "0x80008000",
+    "flag_while_stopped": "0xffffffff",
+    "half_done_ms": {
+      "0": 7.8,
+      "1": 19.4
+    },
+    "frame_stamps": [
+      0,
+      512
+    ],
+    "half_gap_ms": 11.6,
+    "pace_frames_per_s": 44142,
+    "hold_frames_per_s": {
+      "unserviced": 5120,
+      "serviced": 46080
+    },
+    "checks": [
+      {
+        "check": "no half completes while the virtual clock is stopped",
+        "ok": true
+      },
+      {
+        "check": "frame-counter stamps one half (512 frames) apart",
+        "ok": true
+      },
+      {
+        "check": "both halves complete once the VM runs",
+        "ok": true
+      },
+      {
+        "check": "half B completes about one half (11.6 ms) after half A",
+        "ok": true
+      },
+      {
+        "check": "the looping program takes 44100 frames per second within 0.5 % (no slip)",
+        "ok": true
+      },
+      {
+        "check": "output waits while the last interrupt is unserviced",
+        "ok": true
+      },
+      {
+        "check": "serviced interrupts: output at full speed",
+        "ok": true
+      }
+    ],
+    "pass": true
+  },
+  "combinedGuestPixelsCompared": 6843569
+}

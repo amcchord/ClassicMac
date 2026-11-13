@@ -1646,3 +1646,50 @@ consolidated root checks, publish and verify stable 4.1.1. Retain 4.1.0 for roll
   This is the same stale-request class already fixed for ATI/Quadra.
 - Focused native tests pass. Mac and Linux owned engines are rebuilding; final
   Windows/Linux packages and early-startup verification are next. No publication.
+
+
+## 2026-11-12 — RetroBoot 2.0.1 import and native UI fidelity audit
+
+- Work: `codex/retroboot-ui-audit` in `worktrees/retroboot-ui-audit`, from
+  `5835124`. `0d7cd63` imports 16 emulator patches from RetroBoot `432a43d4`
+  (15 verbatim, one adaptation reusing existing shared VIA/translation hooks),
+  rebases CGL, preserves WGL and local resize/input/startup behavior, fixes
+  repeatable source preparation and rebuilds both video firmware files.
+- `a5dce20` replaces approximate font/control artwork using independent native
+  Mac OS 9.2.1 RGB32 Appearance Manager/QuickDraw measurements. System ASCII's
+  old M5Tab bearing oracle is corrected and archived. All three fonts cover
+  224 Mac Roman glyphs/advances; fonts, menus, movable dialogs, focused
+  controls, scrollbars and progress use shared measured drawing resources.
+- Native running/configuration fixes: preserve custom resolution, hide
+  inapplicable model options, keep preview aspect, clip field selection,
+  animate caret/progress, preserve grow artwork, wrap guest actions, add
+  Media, request shutdown on close and use content-only full screen.
+  Oversized Sharp Pixels displays scroll without fractional reduction.
+- Engine/UI source commits fast-forwarded into local main. Consolidated
+  validation ran there: 138 Swift tests with three optional fixture skips
+  and zero failures (13 Platinum tests); native build and 122 exact reference
+  comparisons, 672 glyphs/advances and display/input/model tests; 11 Python
+  tests; deterministic exports in two time zones; shell/Python syntax;
+  actual CGL shader/FBO/draw/readback; 19,974 bounded gray rows over six depths;
+  Power Mac mode/gamma contracts; seven Screamer DMA/interrupt checks.
+- Two 48-step real native Power Mac OS 9.2.1 flows pass at 1x and modeled 2x,
+  with 26 surface-grid checks. Built-in Quadra System 7.5.5 proves host restart
+  and guest RESET through distinct replacement processes in 16 steps.
+  Enhanced Quadra passes 16 boot/non-square resize/reset/shutdown steps.
+  Eleven raw guest comparisons cover 6,843,569 visible pixels with no changes.
+- ATI Quake III intro/menu/relative mouse look/firing/return-to-Finder paths
+  run on the imported engine. Audio assertion fails with silent samples on
+  both updated and isolated old ATI renderers; no audio/performance claim.
+  The final local runtime initially hit macOS's cached code-signature state
+  after overwriting a binary in place; atomic replacement fixed the test
+  staging, and final recipes passed with the fresh engine.
+- Audit/provenance: `docs/ui-fidelity-audit-2026-11.md`,
+  `docs/retroboot-2.0.1-import.{md,json}` and sanitized committed evidence.
+  Remaining P1 work is real Windows five-DPI/compositor/interaction testing
+  and macOS whole-layout text/constrained guest scaling. The Windows VM's
+  guest agent was unavailable; no VM state/configuration or production system
+  was changed. No push/tag/release. All test guests use disposable clones;
+  task guests stopped, original machines/root gxmetal preserved.
+- Next: actual Windows package validation when a usable execution channel
+  exists. Existing 4.6.2 publication remains unfinished and is not authorized
+  by this task. Worktree/output retained; cleanup is a separate operation.
