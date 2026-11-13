@@ -773,6 +773,7 @@ public:
         state["captureWidth"] = w->width();
         state["captureHeight"] = w->height();
         state["captureTitle"] = w->windowTitle();
+        state["captureFullScreen"] = w->isFullScreen();
         Model::writeJSON(output + "/" + step["name"].toString() + ".json", state);
         if (auto e = app->currentEngine(); e && !e->vnc.frame.isNull())
           e->vnc.frame.save(output + "/" + step["name"].toString() +

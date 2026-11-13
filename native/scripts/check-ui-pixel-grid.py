@@ -29,10 +29,12 @@ for meta in sorted(a.root.rglob('*.json')):
     with Image.open(capture) as source:
         image = source.convert('RGB')
     assert image.width % zoom == 0 and image.height % zoom == 0, (meta, 'partial UI pixel at window edge')
-    title = image.crop((0, 0, image.width, 22 * zoom))
-    base = title.resize((title.width // zoom, title.height // zoom), Image.Resampling.NEAREST)
-    repeated = base.resize(title.size, Image.Resampling.NEAREST)
-    assert ImageChops.difference(title, repeated).getbbox() is None, (meta, 'uneven title-bar pixel blocks')
+    has_title = not (state.get('captureKind') == 'guest' and state.get('captureFullScreen'))
+    if has_title:
+        title = image.crop((0, 0, image.width, 22 * zoom))
+        base = title.resize((title.width // zoom, title.height // zoom), Image.Resampling.NEAREST)
+        repeated = base.resize(title.size, Image.Resampling.NEAREST)
+        assert ImageChops.difference(title, repeated).getbbox() is None, (meta, 'uneven title-bar pixel blocks')
     # Pure UI captures also cover text, buttons, fields, icons and scrollbars.
     # Running guest displays have their own explicitly selected pixel zoom.
     full_ui = state['captureKind'] != 'guest' if 'captureKind' in state else not state.get('displays')
@@ -47,15 +49,15 @@ for meta in sorted(a.root.rglob('*.json')):
         assert screen.size == image.size, (meta, 'desktop/window size differs', screen.size, image.size)
         assert ImageChops.difference(screen, image).getbbox() is None, (meta, 'desktop compositor changed UI pixels')
     rows.append({'capture': str(meta.relative_to(a.root)), 'windowsDpi': state.get('windowsDpi'),
-                 'uiPixelZoom': zoom, 'uniformTitleBarPixels': True,
+                 'uiPixelZoom': zoom, 'uniformTitleBarPixels': True if has_title else None,
                  'uniformFullUI': True if full_ui else None,
                  'desktopMatches': True if actual_desktop else None})
 assert rows, 'No captures were checked'
 if a.windows_matrix:
     assert {r['windowsDpi'] for r in rows if r['desktopMatches']} >= {96, 120, 144, 168, 192}, 'Missing real Windows DPI desktop captures'
     assert {r['uiPixelZoom'] for r in rows} >= {1, 2}, 'Missing 1x or 2x UI'
-report = {'captures': rows, 'uniformTitleBars': len(rows),
+report = {'captures': rows, 'uniformTitleBars': sum(r['uniformTitleBarPixels'] is True for r in rows),
           'matchingDesktopCaptures': sum(r['desktopMatches'] is True for r in rows)}
 if a.output:
     a.output.write_text(json.dumps(report, indent=2) + '\n')
-print(f"{len(rows)} uniform title bars; {report['matchingDesktopCaptures']} exact desktop captures")
+print(f"{report['uniformTitleBars']} uniform title bars; {report['matchingDesktopCaptures']} exact desktop captures")
