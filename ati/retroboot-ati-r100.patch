@@ -1,5 +1,5 @@
 diff --git a/hw/display/ati.c b/hw/display/ati.c
-index 0489995..96c26c0 100644
+index 0489995..df5f3f9 100644
 --- a/hw/display/ati.c
 +++ b/hw/display/ati.c
 @@ -44,6 +44,7 @@ static const struct {
@@ -18,37 +18,88 @@ index 0489995..96c26c0 100644
      DPRINTF("%d -> %d\n",
              s->mode, !!(s->regs.crtc_gen_cntl & CRTC2_EXT_DISP_EN));
      if (s->regs.crtc_gen_cntl & CRTC2_EXT_DISP_EN) {
-@@ -255,16 +257,41 @@ static void ati_vga_update_irq(ATIVGAState *s)
+@@ -255,16 +257,91 @@ static void ati_vga_update_irq(ATIVGAState *s)
      pci_set_irq(&s->dev, !!(s->regs.gen_int_status & s->regs.gen_int_cntl));
  }
  
-+/* RetroBoot: the MC address range the CRTC scans out */
-+static void ati_scanout_range(ATIVGAState *s, uint64_t *mc, uint64_t *len)
++/* RetroBoot: the CRTC runs an extended (non-VGA) mode */
++bool ati_ext_mode(ATIVGAState *s)
++{
++    return s->mode == EXT_MODE;
++}
++
++/*
++ * RetroBoot: the MC address range the CRTC scans out, or will once a pending
++ * flip settles (CRTC_OFFSET as written)
++ */
++void ati_scanout_range(ATIVGAState *s, uint64_t *mc, uint64_t *len)
 +{
 +    *mc = (uint64_t)(s->regfile[MC_FB_LOCATION / 4] & 0xffff) << 16 |
 +          (s->regs.crtc_offset & 0x07ffffff);
 +    *len = (uint64_t)s->vga.vbe_line_offset * s->vga.vbe_regs[VBE_DISPI_INDEX_YRES];
 +}
 +
++/*
++ * RetroBoot: a page flip waiting for its frame takes effect once the frame is
++ * in VRAM.  The vblank checks, and so does every synchronous readback (a 2D
++ * operation or a status read): the guest goes on as soon as it has written
++ * CRTC_OFFSET, and Mac OS's ATI OpenGL clears the next back buffer -- the
++ * front buffer being left -- with a 2D fill before it draws.  That fill first
++ * lands the new frame (ati_3d_sync), so showing it at once keeps the display
++ * off the buffer being cleared; waiting for the vblank showed it black for a
++ * frame at most flips (Cro-Mag Rally: about ten black frames a second).
++ */
++void ati_flip_settle(ATIVGAState *s)
++{
++    uint64_t mc, len;
++
++    if (!s->flip_pending || s->mode != EXT_MODE) {
++        return;
++    }
++    ati_scanout_range(s, &mc, &len);
++    if (ati_3d_range_ready(s, mc, len)) {
++        s->flip_pending = false;
++        ati_vga_set_offset(&s->vga, s->regs.crtc_offset & 0x07ffffff);
++    }
++}
++
  static void ati_vga_vblank_irq(void *opaque)
  {
      ATIVGAState *s = opaque;
- 
-+    if (ati_is_radeon(s) && s->mode == EXT_MODE) {
-+        /* scanout of a 3D render target */
++    int64_t now = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
++    int64_t period = NANOSECONDS_PER_SECOND / MAX(s->vblank_hz, 1);
++
++    /*
++     * Scanout of a 3D render target.  Skipped while the vCPU waits for the
++     * render thread with the BQL released (ati_3d_busy): its readback is
++     * mid-operation, and it lands frames and settles flips itself on return.
++     */
++    if (ati_is_radeon(s) && s->mode == EXT_MODE && !ati_3d_busy(s)) {
 +        uint64_t mc, len;
-+        ati_scanout_range(s, &mc, &len);
 +        ati_3d_land(s);                 /* finished readbacks into VRAM */
-+        if (s->flip_pending && ati_3d_range_ready(s, mc, len)) {
-+            s->flip_pending = false;
-+            ati_vga_set_offset(&s->vga, s->regs.crtc_offset & 0x07ffffff);
-+        }
++        ati_flip_settle(s);
++        ati_scanout_range(s, &mc, &len);
 +        ati_3d_sync_range(s, mc, len);  /* and start the next ones */
 +    }
-+
-     timer_mod(&s->vblank_timer, qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) +
+ 
+-    timer_mod(&s->vblank_timer, qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) +
 -              NANOSECONDS_PER_SECOND / 60);
-+              NANOSECONDS_PER_SECOND / MAX(s->vblank_hz, 1));
++    /*
++     * RetroBoot: a steady rate.  The next vblank is due a period after this
++     * one's deadline, not after the moment the timer ran: a main loop held up
++     * for a few milliseconds per frame made every period that much longer
++     * (Cro-Mag Rally's menu, which flips once per vblank, ran at 52 Hz
++     * instead of 60).  More than a period late starts a new phase.  Enabling
++     * the interrupt (GEN_INT_CNTL) while the timer runs keeps its phase.
++     */
++    if (!timer_pending(&s->vblank_timer)) {
++        int64_t next = s->vblank_next + period;
++        if (!s->vblank_next || next <= now) {
++            next = now + period;
++        }
++        s->vblank_next = next;
++        timer_mod(&s->vblank_timer, next);
++    }
      s->regs.gen_int_status |= CRTC_VBLANK_INT;
 +    s->accel.vblanks++;
      ati_vga_update_irq(s);
@@ -61,7 +112,7 @@ index 0489995..96c26c0 100644
  static inline uint32_t ati_reg_read_offs(uint32_t reg, int offs,
                                           unsigned int size)
  {
-@@ -275,7 +302,7 @@ static inline uint32_t ati_reg_read_offs(uint32_t reg, int offs,
+@@ -275,7 +352,7 @@ static inline uint32_t ati_reg_read_offs(uint32_t reg, int offs,
      }
  }
  
@@ -70,7 +121,7 @@ index 0489995..96c26c0 100644
  {
      ATIVGAState *s = opaque;
      uint32_t val = 0;
-@@ -358,6 +385,10 @@ static uint64_t ati_mm_read(void *opaque, hwaddr addr, unsigned int size)
+@@ -358,6 +435,10 @@ static uint64_t ati_mm_read(void *opaque, hwaddr addr, unsigned int size)
      case CONFIG_APER_1_BASE:
          val = pci_default_read_config(&s->dev,
                                        PCI_BASE_ADDRESS_0, size) & 0xfffffff0;
@@ -81,7 +132,7 @@ index 0489995..96c26c0 100644
          break;
      case CONFIG_APER_SIZE:
          val = memory_region_size(&s->linear_aper) / 2;
-@@ -373,7 +404,8 @@ static uint64_t ati_mm_read(void *opaque, hwaddr addr, unsigned int size)
+@@ -373,7 +454,8 @@ static uint64_t ati_mm_read(void *opaque, hwaddr addr, unsigned int size)
          val = BIT(23); /* Radeon HDP_APER_CNTL */
          break;
      case MC_STATUS:
@@ -91,7 +142,7 @@ index 0489995..96c26c0 100644
          break;
      case MEM_SDRAM_MODE_REG:
          if (s->dev_id != PCI_DEVICE_ID_ATI_RAGE128_PF) {
-@@ -382,6 +414,10 @@ static uint64_t ati_mm_read(void *opaque, hwaddr addr, unsigned int size)
+@@ -382,6 +464,10 @@ static uint64_t ati_mm_read(void *opaque, hwaddr addr, unsigned int size)
          break;
      case RBBM_STATUS:
      case GUI_STAT:
@@ -102,7 +153,7 @@ index 0489995..96c26c0 100644
          val = 64; /* free CMDFIFO entries */
          break;
      case CRTC_H_TOTAL_DISP:
-@@ -540,7 +576,29 @@ static uint64_t ati_mm_read(void *opaque, hwaddr addr, unsigned int size)
+@@ -540,7 +626,29 @@ static uint64_t ati_mm_read(void *opaque, hwaddr addr, unsigned int size)
          qemu_log_mask(LOG_GUEST_ERROR,
                        "Read from write-only register 0x%x\n", (unsigned)addr);
          break;
@@ -132,7 +183,7 @@ index 0489995..96c26c0 100644
          break;
      }
      if (addr < CUR_OFFSET || addr > CUR_CLR1 || ATI_DEBUG_HW_CURSOR) {
-@@ -560,15 +618,58 @@ static inline void ati_reg_write_offs(uint32_t *reg, int offs,
+@@ -560,15 +668,58 @@ static inline void ati_reg_write_offs(uint32_t *reg, int offs,
      }
  }
  
@@ -193,7 +244,7 @@ index 0489995..96c26c0 100644
      case MM_INDEX:
          s->regs.mm_index = data & ~3;
          break;
-@@ -606,6 +707,13 @@ static void ati_mm_write(void *opaque, hwaddr addr,
+@@ -606,6 +757,13 @@ static void ati_mm_write(void *opaque, hwaddr addr,
          }
          break;
      case GEN_INT_STATUS:
@@ -207,7 +258,7 @@ index 0489995..96c26c0 100644
          data &= (s->dev_id == PCI_DEVICE_ID_ATI_RAGE128_PF ?
                   0x000f040fUL : 0xfc080effUL);
          s->regs.gen_int_status &= ~data;
-@@ -629,8 +737,9 @@ static void ati_mm_write(void *opaque, hwaddr addr,
+@@ -629,8 +787,9 @@ static void ati_mm_write(void *opaque, hwaddr addr,
                                (s->regs.crtc_gen_cntl & CRTC2_CUR_EN) != 0);
              }
          }
@@ -219,7 +270,7 @@ index 0489995..96c26c0 100644
              ati_vga_switch_mode(s);
          }
          break;
-@@ -724,19 +833,45 @@ static void ati_mm_write(void *opaque, hwaddr addr,
+@@ -724,19 +883,45 @@ static void ati_mm_write(void *opaque, hwaddr addr,
          s->regs.config_cntl = data;
          break;
      case CRTC_H_TOTAL_DISP:
@@ -265,7 +316,7 @@ index 0489995..96c26c0 100644
          ati_vga_set_offset(&s->vga, s->regs.crtc_offset & 0x07ffffff);
          break;
      case CRTC_OFFSET_CNTL:
-@@ -829,7 +964,7 @@ static void ati_mm_write(void *opaque, hwaddr addr,
+@@ -829,7 +1014,7 @@ static void ati_mm_write(void *opaque, hwaddr addr,
          }
          break;
      case DST_TILE:
@@ -274,7 +325,7 @@ index 0489995..96c26c0 100644
              s->regs.dst_tile = data & 3;
          }
          break;
-@@ -1026,21 +1161,110 @@ static void ati_mm_write(void *opaque, hwaddr addr,
+@@ -1026,21 +1211,110 @@ static void ati_mm_write(void *opaque, hwaddr addr,
      case HOST_DATA6:
      case HOST_DATA7:
      case HOST_DATA_LAST:
@@ -394,7 +445,7 @@ index 0489995..96c26c0 100644
  static const MemoryRegionOps ati_mm_ops = {
      .read = ati_mm_read,
      .write = ati_mm_write,
-@@ -1073,14 +1297,15 @@ static void ati_vga_realize(PCIDevice *dev, Error **errp)
+@@ -1073,14 +1347,15 @@ static void ati_vga_realize(PCIDevice *dev, Error **errp)
          }
      }
      if (s->dev_id != PCI_DEVICE_ID_ATI_RAGE128_PF &&
@@ -413,7 +464,7 @@ index 0489995..96c26c0 100644
          s->vga.vram_size_mb < 16) {
          warn_report("Too small video memory for device id");
          s->vga.vram_size_mb = 16;
-@@ -1102,6 +1327,15 @@ static void ati_vga_realize(PCIDevice *dev, Error **errp)
+@@ -1102,6 +1377,15 @@ static void ati_vga_realize(PCIDevice *dev, Error **errp)
      i2cbus = i2c_init_bus(DEVICE(s), "ati-vga.ddc");
      bitbang_i2c_init(&s->bbi2c, i2cbus);
      i2c_slave_set_address(I2C_SLAVE(&s->i2cddc), 0x50);
@@ -429,7 +480,7 @@ index 0489995..96c26c0 100644
      qdev_realize(DEVICE(&s->i2cddc), BUS(i2cbus), &error_abort);
  
      /* mmio register space */
-@@ -1118,6 +1352,13 @@ static void ati_vga_realize(PCIDevice *dev, Error **errp)
+@@ -1118,6 +1402,13 @@ static void ati_vga_realize(PCIDevice *dev, Error **errp)
      if (!s->linear_aper_sz) {
          if (s->dev_id == PCI_DEVICE_ID_ATI_RAGE128_PF) {
              s->linear_aper_sz = ATI_RAGE128_LINEAR_APER_SIZE;
@@ -443,7 +494,7 @@ index 0489995..96c26c0 100644
          } else {
              s->linear_aper_sz = ATI_R100_LINEAR_APER_SIZE;
          }
-@@ -1133,6 +1374,16 @@ static void ati_vga_realize(PCIDevice *dev, Error **errp)
+@@ -1133,6 +1424,16 @@ static void ati_vga_realize(PCIDevice *dev, Error **errp)
      memory_region_init(&s->linear_aper, OBJECT(dev), "ati-linear-aperture0",
                         s->linear_aper_sz);
      memory_region_add_subregion(&s->linear_aper, 0, &vga->vram);
@@ -460,7 +511,7 @@ index 0489995..96c26c0 100644
  
      pci_register_bar(dev, 0, PCI_BASE_ADDRESS_MEM_PREFETCH, &s->linear_aper);
      pci_register_bar(dev, 1, PCI_BASE_ADDRESS_SPACE_IO, &s->io);
-@@ -1141,6 +1392,9 @@ static void ati_vga_realize(PCIDevice *dev, Error **errp)
+@@ -1141,6 +1442,9 @@ static void ati_vga_realize(PCIDevice *dev, Error **errp)
      /* most interrupts are not yet emulated but MacOS needs at least VBlank */
      dev->config[PCI_INTERRUPT_PIN] = 1;
      timer_init_ns(&s->vblank_timer, QEMU_CLOCK_VIRTUAL, ati_vga_vblank_irq, s);
@@ -470,7 +521,7 @@ index 0489995..96c26c0 100644
  }
  
  static void ati_vga_reset(DeviceState *dev)
-@@ -1158,6 +1412,7 @@ static void ati_vga_reset(DeviceState *dev)
+@@ -1158,6 +1462,7 @@ static void ati_vga_reset(DeviceState *dev)
      s->host_data.next = 0;
      s->host_data.row = 0;
      s->host_data.col = 0;
@@ -478,7 +529,7 @@ index 0489995..96c26c0 100644
  }
  
  static void ati_vga_exit(PCIDevice *dev)
-@@ -1177,6 +1432,8 @@ static const Property ati_vga_properties[] = {
+@@ -1177,6 +1482,8 @@ static const Property ati_vga_properties[] = {
      /* this is a debug option, prefer PROP_UINT over PROP_BIT for simplicity */
      DEFINE_PROP_UINT8("x-pixman", ATIVGAState, use_pixman, DEFAULT_X_PIXMAN),
      DEFINE_PROP_UINT64("x-linear-aper-size", ATIVGAState, linear_aper_sz, 0),
@@ -487,7 +538,7 @@ index 0489995..96c26c0 100644
      DEFINE_EDID_PROPERTIES(ATIVGAState, i2cddc.edid_info),
  };
  
-@@ -1198,10 +1455,29 @@ static void ati_vga_class_init(ObjectClass *klass, const void *data)
+@@ -1198,10 +1505,29 @@ static void ati_vga_class_init(ObjectClass *klass, const void *data)
      k->exit = ati_vga_exit;
  }
  
@@ -518,7 +569,7 @@ index 0489995..96c26c0 100644
      object_property_set_description(o, "x-pixman", "Use pixman for: "
                                      "1: fill, 2: blit");
 diff --git a/hw/display/ati_2d.c b/hw/display/ati_2d.c
-index 4849867..7950770 100644
+index 4849867..87723f6 100644
 --- a/hw/display/ati_2d.c
 +++ b/hw/display/ati_2d.c
 @@ -3,6 +3,8 @@
@@ -672,9 +723,32 @@ index 4849867..7950770 100644
 +    default: stl_he_p(p, v); break;
 +    }
 +}
-+
+ 
+-static void ati_set_dirty(VGACommonState *vga, const ATI2DCtx *ctx)
 +static inline uint32_t rop3(uint8_t rop, uint32_t p, uint32_t s, uint32_t d)
-+{
+ {
+-    DisplaySurface *ds = qemu_console_surface(vga->con);
+-    unsigned int bypp = ctx->bpp / 8;
+-    hwaddr dirty_start = ctx->dst_offset + ctx->dst.x * bypp +
+-                         ctx->dst.y * ctx->dst_stride;
+-    hwaddr dirty_end = dirty_start + ctx->dst.width * bypp +
+-                       (ctx->dst.height - 1) * ctx->dst_stride;
+-    /*
+-     * The blit may be outside of the visible screen (e.g. virtual desktops.)
+-     * Dirty only the intersection of the visible screen and the blit.
+-     */
+-    hwaddr vis_start = vga->vbe_start_addr * 4;
+-    hwaddr vis_end = vis_start + vga->vbe_regs[VBE_DISPI_INDEX_YRES] *
+-                       vga->vbe_line_offset;
+-    hwaddr start = MAX(vis_start, dirty_start);
+-    hwaddr end = MIN(vis_end, dirty_end);
+-
+-    (void)ds;
+-    DPRINTF("%p %u ds: %p %d %d rop: %x\n", vga->vram_ptr, vga->vbe_start_addr,
+-            surface_data(ds), surface_stride(ds), surface_bits_per_pixel(ds),
+-            ctx->rop3 >> 16);
+-
+-    if (start < end) {
 +    uint32_t r = 0;
 +
 +    switch (rop) {
@@ -708,32 +782,9 @@ index 4849867..7950770 100644
 +    }
 +    return r;
 +}
- 
--static void ati_set_dirty(VGACommonState *vga, const ATI2DCtx *ctx)
++
 +static inline bool rop_uses_src(uint8_t rop)
- {
--    DisplaySurface *ds = qemu_console_surface(vga->con);
--    unsigned int bypp = ctx->bpp / 8;
--    hwaddr dirty_start = ctx->dst_offset + ctx->dst.x * bypp +
--                         ctx->dst.y * ctx->dst_stride;
--    hwaddr dirty_end = dirty_start + ctx->dst.width * bypp +
--                       (ctx->dst.height - 1) * ctx->dst_stride;
--    /*
--     * The blit may be outside of the visible screen (e.g. virtual desktops.)
--     * Dirty only the intersection of the visible screen and the blit.
--     */
--    hwaddr vis_start = vga->vbe_start_addr * 4;
--    hwaddr vis_end = vis_start + vga->vbe_regs[VBE_DISPI_INDEX_YRES] *
--                       vga->vbe_line_offset;
--    hwaddr start = MAX(vis_start, dirty_start);
--    hwaddr end = MIN(vis_end, dirty_end);
--
--    (void)ds;
--    DPRINTF("%p %u ds: %p %d %d rop: %x\n", vga->vram_ptr, vga->vbe_start_addr,
--            surface_data(ds), surface_stride(ds), surface_bits_per_pixel(ds),
--            ctx->rop3 >> 16);
--
--    if (start < end) {
++{
 +    return ((rop >> 2) ^ rop) & 0x33;
 +}
 +
@@ -805,7 +856,7 @@ index 4849867..7950770 100644
      ctx->scissor.x = s->regs.sc_left;
      ctx->scissor.y = s->regs.sc_top;
  
-@@ -119,346 +242,481 @@ static void setup_2d_blt_ctx(const ATIVGAState *s, ATI2DCtx *ctx)
+@@ -119,213 +242,389 @@ static void setup_2d_blt_ctx(const ATIVGAState *s, ATI2DCtx *ctx)
      ctx->dst.y = (ctx->top_to_bottom ?
                   s->regs.dst_y : s->regs.dst_y + 1 - ctx->dst.height);
      ctx->dst_stride = s->regs.dst_pitch;
@@ -1059,22 +1110,6 @@ index 4849867..7950770 100644
 -        if (!ctx->src_stride) {
 -            qemu_log_mask(LOG_GUEST_ERROR, "Zero source pitch\n");
 -            return false;
--        }
--        if (!ctx->host_data_active &&
--            (vis_src.x > 0x3fff || vis_src.y > 0x3fff ||
--            ctx->src_bits >= ctx->vram_end - bypp ||
--            ctx->src_bits + vis_src.x * bypp + (vis_src.y + vis_dst.height) *
--            ctx->src_stride >= ctx->vram_end - bypp)) {
--            qemu_log_mask(LOG_UNIMP, "blt outside vram not implemented\n");
--            return false;
--        }
--
--        DPRINTF("pixman_blt(%p, %p, %ld, %ld, %d, %d, %d, %d, %d, %d, %d, %d)\n",
--                ctx->src_bits, ctx->dst_bits,
--                ctx->src_stride / sizeof(uint32_t),
--                ctx->dst_stride / sizeof(uint32_t),
--                ctx->bpp, ctx->bpp, vis_src.x, vis_src.y, vis_dst.x, vis_dst.y,
--                vis_dst.width, vis_dst.height);
 +    if (rop == 0xcc && c->src_kind == SRC_MEM_COLOR) {
 +        uint8_t *src_bits = c->vram + c->src_offset;
 +        uint8_t *dst_bits = c->vram + c->dst_offset;
@@ -1082,7 +1117,38 @@ index 4849867..7950770 100644
 +                    c->src_stride == c->dst_stride;
 +        QemuRect srect = { sx, sy, vis->width, vis->height }, isect;
 +        bool overlap = same && qemu_rect_intersect(&srect, vis, &isect);
- #ifdef CONFIG_PIXMAN
++#ifdef CONFIG_PIXMAN
++        if ((use_pixman & BIT(1)) && !overlap && !(c->src_stride & 3) &&
++            !(c->dst_stride & 3) && !(c->src_offset & 3) &&
++            !(c->dst_offset & 3) &&
++            pixman_blt((uint32_t *)src_bits, (uint32_t *)dst_bits,
++                       c->src_stride / 4, c->dst_stride / 4, c->bpp, c->bpp,
++                       sx, sy, vis->x, vis->y, vis->width, vis->height)) {
++            return true;
+         }
+-        if (!ctx->host_data_active &&
+-            (vis_src.x > 0x3fff || vis_src.y > 0x3fff ||
+-            ctx->src_bits >= ctx->vram_end - bypp ||
+-            ctx->src_bits + vis_src.x * bypp + (vis_src.y + vis_dst.height) *
+-            ctx->src_stride >= ctx->vram_end - bypp)) {
+-            qemu_log_mask(LOG_UNIMP, "blt outside vram not implemented\n");
+-            return false;
++#endif
++        /* rows in the order that is safe for overlapping copies */
++        for (int i = 0; i < vis->height; i++) {
++            int y = (overlap && sy < vis->y) ? vis->height - 1 - i : i;
++            memmove(dst_bits + (vis->y + y) * c->dst_stride + vis->x * c->bypp,
++                    src_bits + (sy + y) * c->src_stride + sx * c->bypp,
++                    vis->width * c->bypp);
+         }
+-
+-        DPRINTF("pixman_blt(%p, %p, %ld, %ld, %d, %d, %d, %d, %d, %d, %d, %d)\n",
+-                ctx->src_bits, ctx->dst_bits,
+-                ctx->src_stride / sizeof(uint32_t),
+-                ctx->dst_stride / sizeof(uint32_t),
+-                ctx->bpp, ctx->bpp, vis_src.x, vis_src.y, vis_dst.x, vis_dst.y,
+-                vis_dst.width, vis_dst.height);
+-#ifdef CONFIG_PIXMAN
 -        int src_stride_words = ctx->src_stride / sizeof(uint32_t);
 -        int dst_stride_words = ctx->dst_stride / sizeof(uint32_t);
 -        if ((use_pixman & BIT(1)) &&
@@ -1108,42 +1174,6 @@ index 4849867..7950770 100644
 -                                       ctx->bpp, ctx->bpp, 0, 0,
 -                                       vis_dst.x, vis_dst.y,
 -                                       vis_dst.width, vis_dst.height);
--            }
--            g_free(tmp);
--        } else
-+        if ((use_pixman & BIT(1)) && !overlap && !(c->src_stride & 3) &&
-+            !(c->dst_stride & 3) && !(c->src_offset & 3) &&
-+            !(c->dst_offset & 3) &&
-+            pixman_blt((uint32_t *)src_bits, (uint32_t *)dst_bits,
-+                       c->src_stride / 4, c->dst_stride / 4, c->bpp, c->bpp,
-+                       sx, sy, vis->x, vis->y, vis->width, vis->height)) {
-+            return true;
-+        }
- #endif
--        {
--            fallback = true;
-+        /* rows in the order that is safe for overlapping copies */
-+        for (int i = 0; i < vis->height; i++) {
-+            int y = (overlap && sy < vis->y) ? vis->height - 1 - i : i;
-+            memmove(dst_bits + (vis->y + y) * c->dst_stride + vis->x * c->bypp,
-+                    src_bits + (sy + y) * c->src_stride + sx * c->bypp,
-+                    vis->width * c->bypp);
-         }
--        if (fallback) {
--            for (y = 0; y < vis_dst.height; y++) {
--                i = vis_dst.x * bypp;
--                j = vis_src.x * bypp;
--                if (ctx->top_to_bottom) {
--                    i += (vis_dst.y + y) * ctx->dst_stride;
--                    j += (vis_src.y + y) * ctx->src_stride;
--                } else {
--                    i += (vis_dst.y + vis_dst.height - 1 - y)
--                         * ctx->dst_stride;
--                    j += (vis_src.y + vis_dst.height - 1 - y)
--                         * ctx->src_stride;
--                }
--                memmove(&ctx->dst_bits[i], &ctx->src_bits[j],
--                        vis_dst.width * bypp);
 +        return true;
 +    }
 +    if (rop == 0xf0 && (c->brush == 0 || (c->brush >= 10 && c->brush <= 12)) &&
@@ -1160,7 +1190,28 @@ index 4849867..7950770 100644
 +                bool la;
 +                st_px(r + k * c->bypp, c->bypp,
 +                      brush_px(c, (vis->x + k) & 7, py, &la));
-+            }
+             }
+-            g_free(tmp);
+-        } else
+-#endif
+-        {
+-            fallback = true;
+-        }
+-        if (fallback) {
+-            for (y = 0; y < vis_dst.height; y++) {
+-                i = vis_dst.x * bypp;
+-                j = vis_src.x * bypp;
+-                if (ctx->top_to_bottom) {
+-                    i += (vis_dst.y + y) * ctx->dst_stride;
+-                    j += (vis_src.y + y) * ctx->src_stride;
+-                } else {
+-                    i += (vis_dst.y + vis_dst.height - 1 - y)
+-                         * ctx->dst_stride;
+-                    j += (vis_src.y + vis_dst.height - 1 - y)
+-                         * ctx->src_stride;
+-                }
+-                memmove(&ctx->dst_bits[i], &ctx->src_bits[j],
+-                        vis_dst.width * bypp);
 +            for (size_t n = 8 * c->bypp; n < rowlen; n *= 2) {
 +                memcpy(r + n, r, MIN(n, rowlen - n));
              }
@@ -1274,7 +1325,6 @@ index 4849867..7950770 100644
 +        qemu_log_mask(LOG_GUEST_ERROR, "ati: 2D blit with invalid bpp\n");
          return false;
      }
--
 +    if (!c->dst_stride) {
 +        qemu_log_mask(LOG_GUEST_ERROR, "ati: 2D blit with zero dest pitch\n");
 +        return false;
@@ -1305,20 +1355,85 @@ index 4849867..7950770 100644
 +        ati_2d_generic(c, &vis, sx, sy, buf, buf_stride);
 +    }
 +    ati_set_dirty(&s->vga, c, &vis);
++    if (ati_is_radeon(s)) {
++        /* GL's copy of a 3D target here is stale now */
++        ati_3d_vram_written(s, c->dst_offset + vis.x * c->bypp +
++                               (uint64_t)vis.y * c->dst_stride,
++                            (uint64_t)(vis.height - 1) * c->dst_stride +
++                            vis.width * c->bypp);
++    }
++    s->accel.ops2d++;
++    s->accel.pixels2d += (uint64_t)vis.width * vis.height;
++    return true;
++}
++
++static unsigned host_row_bytes(ATIVGAState *s, const ATI2DCtx *c, bool mono);
+ 
++/*
++ * RetroBoot: a solid fill of an off-screen 3D render target is done by the
++ * renderer as a GL clear (ati_3d_fill): Mac OS's ATI OpenGL clears the next
++ * back buffer this way every frame.  Same operations and clipping as the
++ * fill in ati_2d_fast, on the same 2D state; false = do it in VRAM.
++ */
++static bool ati_2d_gl_fill(ATIVGAState *s, const ATI2DCtx *c)
++{
++    uint8_t rop = c->rop3 >> 16;
++    QemuRect vis;
++    uint32_t filler;
++
++    if (!((rop == 0xf0 && (c->brush == 13 || c->brush == 14)) ||
++          rop == 0x00 || rop == 0xff) ||
++        c->cmp_en || c->wmask_en || (c->bpp != 16 && c->bpp != 32) ||
++        !c->dst_stride || (c->dst_stride & 3) || (c->dst_offset & 3) ||
++        !qemu_rect_intersect(&c->dst, &c->scissor, &vis) ||
++        vis.x + vis.width > c->dst_stride / c->bypp ||
++        (uint64_t)c->dst_offset + (uint64_t)(vis.y + vis.height) *
++        c->dst_stride > c->vram_size) {
++        return false;
++    }
++    if (c->src_kind == SRC_MEM_COLOR || c->src_kind == SRC_MEM_MONO) {
++        /* unused by these ROPs, but ati_2d_run refuses an operation whose
++         * source lies outside VRAM: leave that case to it */
++        int sx = c->sx + (vis.x - c->dst.x), sy = c->sy + (vis.y - c->dst.y);
++        if (!c->src_stride || sx < 0 || sy < 0 ||
++            (uint64_t)c->src_offset + (uint64_t)(sy + vis.height) *
++            c->src_stride > c->vram_size) {
++            return false;
++        }
++    }
++    filler = rop == 0x00 ? 0 : rop == 0xff ? ~0u : c->bfg;
++    if (c->bpp == 16) {
++        filler = (filler & 0xffff) | (filler << 16);
++    }
++    if (!ati_3d_fill(s, c->dst_offset, c->dst_stride, c->bypp,
++                     vis.x, vis.y, vis.width, vis.height, filler)) {
++        return false;
++    }
++    trace_ati_2d_op(c->bpp, rop, c->src_kind, vis.x, vis.y, vis.width,
++                    vis.height, c->dst_offset, c->dst_stride);
 +    s->accel.ops2d++;
 +    s->accel.pixels2d += (uint64_t)vis.width * vis.height;
      return true;
  }
  
-+static unsigned host_row_bytes(ATIVGAState *s, const ATI2DCtx *c, bool mono);
-+
- void ati_2d_blt(ATIVGAState *s)
+@@ -333,132 +632,155 @@ void ati_2d_blt(ATIVGAState *s)
  {
      ATI2DCtx ctx;
      uint32_t src_source = s->regs.dp_mix & DP_SRC_SOURCE;
+-
 +    uint32_t src_dt = (s->regs.dp_datatype >> 16) & 3;
- 
++
 +    if (ati_is_radeon(s)) {
++        if (!s->host_data.active && src_source != DP_SRC_HOST &&
++            src_source != DP_SRC_HOST_BYTEALIGN) {
++            setup_2d_blt_ctx(s, &ctx);
++            if (src_source == DP_SRC_RECT) {
++                ctx.src_kind = src_dt == 3 ? SRC_MEM_COLOR : SRC_MEM_MONO;
++            }
++            if (ati_2d_gl_fill(s, &ctx)) {
++                return;
++            }
++        }
 +        ati_3d_sync(s, ATI_SYNC_2D);     /* 2D reads/writes see 3D results */
 +    }
      /* Finish any active HOST_DATA blits before starting a new blit */
@@ -1484,7 +1599,30 @@ index 4849867..7950770 100644
              }
 +            src = band;
          }
--    }
++        if ((s->debug & 2) && !mono) {
++            fprintf(stderr, "ati hostdata band row %u rows %u:", s->host_data.row, rows);
++            for (unsigned k = 0; k < MIN(rowb, 400u); k += 4) {
++                fprintf(stderr, " %08x", ldl_be_p(src + k));
++            }
++            fprintf(stderr, "\n");
++        }
++        b.dst.y = ctx.dst.y + s->host_data.row;
++        b.dst.height = rows;
++        if (qemu_rect_intersect(&b.dst, &b.scissor, &vis)) {
++            src += (size_t)(vis.y - b.dst.y) * rowb;
++            b.sx = vis.x - b.dst.x;
++            b.sy = 0;
++            b.dst = vis;
++            ati_2d_run(s, &b, src, rowb);
++        }
++        g_free(band);
++        s->host_data.row += rows;
++        used_bits += s->host_data.bit0;
++        memmove(s->host_data.buf, s->host_data.buf + (used_bits >> 3),
++                s->host_data.nbytes - (used_bits >> 3));
++        s->host_data.nbytes -= used_bits >> 3;
++        s->host_data.bit0 = used_bits & 7;
+     }
 -
 -    /* Copy and then modify blit ctx for use in a chunked blit */
 -    chunk = ctx;
@@ -1510,35 +1648,14 @@ index 4849867..7950770 100644
 -                pix_in_scanline, row, col, chunk.dst.x, chunk.dst.y);
 -        if (ati_2d_do_blt(&chunk, s->use_pixman)) {
 -            ati_set_dirty(&s->vga, &chunk);
-+        if ((s->debug & 2) && !mono) {
-+            fprintf(stderr, "ati hostdata band row %u rows %u:", s->host_data.row, rows);
-+            for (unsigned k = 0; k < MIN(rowb, 400u); k += 4) {
-+                fprintf(stderr, " %08x", ldl_be_p(src + k));
-+            }
-+            fprintf(stderr, "\n");
-         }
+-        }
 -        idx += pix_in_scanline;
 -        col += pix_in_scanline;
 -        if (col >= ctx.dst.width) {
 -            col = 0;
 -            row += 1;
-+        b.dst.y = ctx.dst.y + s->host_data.row;
-+        b.dst.height = rows;
-+        if (qemu_rect_intersect(&b.dst, &b.scissor, &vis)) {
-+            src += (size_t)(vis.y - b.dst.y) * rowb;
-+            b.sx = vis.x - b.dst.x;
-+            b.sy = 0;
-+            b.dst = vis;
-+            ati_2d_run(s, &b, src, rowb);
-         }
-+        g_free(band);
-+        s->host_data.row += rows;
-+        used_bits += s->host_data.bit0;
-+        memmove(s->host_data.buf, s->host_data.buf + (used_bits >> 3),
-+                s->host_data.nbytes - (used_bits >> 3));
-+        s->host_data.nbytes -= used_bits >> 3;
-+        s->host_data.bit0 = used_bits & 7;
-     }
+-        }
+-    }
 -
 -    /* Track state of the overall blit for use by the next flush */
 -    s->host_data.next = 0;
@@ -1551,7 +1668,7 @@ index 4849867..7950770 100644
      return s->host_data.active;
  }
  
-@@ -470,3 +728,164 @@ void ati_host_data_finish(ATIVGAState *s)
+@@ -470,3 +792,164 @@ void ati_host_data_finish(ATIVGAState *s)
      }
      s->host_data.active = false;
  }
@@ -1718,10 +1835,10 @@ index 4849867..7950770 100644
 +}
 diff --git a/hw/display/ati_3d.c b/hw/display/ati_3d.c
 new file mode 100644
-index 0000000..210ae5d
+index 0000000..018ba7d
 --- /dev/null
 +++ b/hw/display/ati_3d.c
-@@ -0,0 +1,1423 @@
+@@ -0,0 +1,1554 @@
 +/*
 + * QEMU ATI Radeon (R100) emulation: 3D engine.
 + *
@@ -1868,9 +1985,10 @@ index 0000000..210ae5d
 +    uint32_t arr_addr[16], arr_stride[16], arr_size[16];
 +    uint64_t draws, verts, syncs, readbacks, uploads, texuploads, texhits;
 +    uint64_t zclears, upload_skips, flips, vblank_waits, readbacks_joined;
++    uint64_t gl_fills;          /* RetroBoot: 2D fills done as GL clears */
 +    uint64_t rb_why[ATI_SYNC_N];      /* readbacks by cause: 2D, status read, vblank */
 +    uint64_t vb_fetch, vb_idx;        /* vertices fetched and decoded / drawn, 3D_RNDR_GEN_INDX_PRIM */
-+    char stats[512];
++    char stats[768];
 +};
 +
 +static inline uint32_t R(ATIVGAState *s, hwaddr a)
@@ -1940,41 +2058,29 @@ index 0000000..210ae5d
 +    return NULL;
 +}
 +
-+/* fast 64-bit content hash (4 lanes, 8 bytes per step) */
-+static uint64_t vram_hash(const uint8_t *p, size_t len)
-+{
-+    uint64_t h[4] = { 0x9E3779B97F4A7C15ULL, 0xC2B2AE3D27D4EB4FULL,
-+                      0x165667B19E3779F9ULL, 0x27D4EB2F165667C5ULL };
-+    size_t i = 0;
-+
-+    for (; i + 32 <= len; i += 32) {
-+        for (int l = 0; l < 4; l++) {
-+            h[l] = (h[l] ^ ldq_he_p(p + i + 8 * l)) * 0x100000001B3ULL;
-+            h[l] ^= h[l] >> 29;
-+        }
-+    }
-+    for (; i < len; i++) {
-+        h[0] = (h[0] ^ p[i]) * 0x100000001B3ULL;
-+    }
-+    return h[0] ^ (h[1] * 3) ^ (h[2] * 5) ^ (h[3] * 7) ^ len;
-+}
-+
 +/* copy a finished scanout readback into VRAM */
 +static void track_land(ATIVGAState *s, ATITrack *k)
 +{
 +    uint64_t off, contig;
 +    ATIReadJob *j = k->pending;
++    bool in_vram;
++    uint64_t j_mc, j_hash;
++    size_t j_len;
 +
 +    if (!j || !ati_glr_read_done(j)) {
 +        return;
 +    }
-+    if (ati_mc_translate(s, j->img.mc, &off, &contig) == ATI_MC_VRAM &&
-+        off + j->len <= s->vga.vram_size) {
++    in_vram = ati_mc_translate(s, j->img.mc, &off, &contig) == ATI_MC_VRAM &&
++              off + j->len <= s->vga.vram_size;
++    if (in_vram) {
 +        memcpy(s->vga.vram_ptr + off, j->buf, j->len);
 +        memory_region_set_dirty(&s->vga.vram, off, j->len);
 +    } else {
 +        ati_mc_rw(s, j->img.mc, j->buf, j->len, true);
 +    }
++    j_mc = j->img.mc;
++    j_len = j->len;
++    j_hash = j->hash;           /* of j->buf, now VRAM's bytes */
 +    ati_glr_read_free(j);
 +    k->pending = NULL;
 +    if (k->gen == k->read_gen) {
@@ -1986,7 +2092,8 @@ index 0000000..210ae5d
 +        k->gl_valid = ati_mc_translate(s, k->img.mc, &off2, &c2) == ATI_MC_VRAM &&
 +                      off2 + len <= s->vga.vram_size;
 +        if (k->gl_valid) {
-+            k->vram_hash = vram_hash(s->vga.vram_ptr + off2, len);
++            k->vram_hash = in_vram && j_mc == k->img.mc && j_len == len ?
++                           j_hash : ati_vram_hash(s->vga.vram_ptr + off2, len);
 +        }
 +    }
 +}
@@ -2020,9 +2127,17 @@ index 0000000..210ae5d
 +    track_drop_pending(s, k);
 +    if (ati_mc_translate(s, k->img.mc, &off, &contig) == ATI_MC_VRAM &&
 +        off + len <= s->vga.vram_size) {
-+        ati_glr_target_read(t->r, &k->img, s->vga.vram_ptr + off);
++        /*
++         * Into a copy, then into VRAM with the BQL held again: the vCPU waits
++         * without the BQL, and the display must not see a target it shows
++         * half rewritten.  The copy starts as VRAM because the renderer
++         * writes only the target's pixels, not the rest of each pitch.
++         */
++        uint8_t *buf = g_memdup2(s->vga.vram_ptr + off, len);
++        k->vram_hash = ati_glr_target_read(t->r, &k->img, buf);
++        memcpy(s->vga.vram_ptr + off, buf, len);
++        g_free(buf);
 +        memory_region_set_dirty(&s->vga.vram, off, len);
-+        k->vram_hash = vram_hash(s->vga.vram_ptr + off, len);
 +        k->gl_valid = true;
 +    } else {
 +        uint8_t *buf = g_malloc(len);
@@ -2042,11 +2157,27 @@ index 0000000..210ae5d
 +    if (!t || !t->r) {
 +        return;
 +    }
-+    for (int i = 0; i < MAX_TRACK; i++) {
-+        if (t->track[i].gl_owned) {
++    /*
++     * Frames in flight first, then the flip waiting for one settles, and only
++     * then are other targets read back into VRAM.  With off-screen 2D fills
++     * done in GL (ati_3d_fill) the buffer still on screen can be GL-owned
++     * while its flip-away is pending; reading it back before the display has
++     * left it (the BQL is released while the vCPU waits, so the display can
++     * refresh meanwhile) would show the next frame half drawn.
++     */
++    for (int pass = 0; pass < 2; pass++) {
++        for (int i = 0; i < MAX_TRACK; i++) {
++            ATITrack *k = &t->track[i];
++            if (!k->gl_owned || (pass == 0 && !k->pending)) {
++                continue;
++            }
 +            t->rb_why[why]++;
++            track_readback(s, k);
 +        }
-+        track_readback(s, &t->track[i]);
++        /* every frame is in VRAM now: a flip waiting for one shows it before
++         * the guest writes to the buffer it is leaving */
++        ati_3d_land(s);
++        ati_flip_settle(s);
 +    }
 +}
 +
@@ -2110,6 +2241,122 @@ index 0000000..210ae5d
 +    }
 +}
 +
++bool ati_3d_busy(ATIVGAState *s)
++{
++    return s->r3d && ati_glr_waiting(s->r3d->r);
++}
++
++/*
++ * The 2D engine wrote VRAM [off, off + len).  A target there whose GL copy
++ * matched VRAM (gl_valid) no longer does, so its next draw uploads it without
++ * hashing the whole target to find that out (Mac OS's ATI OpenGL 2D-clears
++ * the back buffer every frame: a 4 MB hash per frame at 1920x1080 on the
++ * vCPU).  CPU writes are still caught by the hash.
++ */
++void ati_3d_vram_written(ATIVGAState *s, uint64_t off, uint64_t len)
++{
++    ATI3DState *t = s->r3d;
++
++    for (int i = 0; t && i < MAX_TRACK; i++) {
++        ATITrack *k = &t->track[i];
++        uint64_t koff, contig;
++        uint64_t klen = (uint64_t)k->img.pitch * k->img.h;
++
++        if (k->gl_valid &&
++            ati_mc_translate(s, k->img.mc, &koff, &contig) == ATI_MC_VRAM &&
++            off < koff + klen && koff < off + len) {
++            k->gl_valid = false;
++        }
++    }
++}
++
++/*
++ * A solid 2D fill of an off-screen 3D render target, done as a GL clear.
++ *
++ * Mac OS's ATI OpenGL 2D-clears the next back buffer -- the buffer the
++ * display is just leaving -- every frame.  In VRAM that meant: waiting for the
++ * frame in flight to land (so the display could leave the buffer, else it
++ * showed black), a 4 MB fill at 1920x1080, and uploading the cleared buffer
++ * to GL for the first draw.  In GL it is a scissored clear: the vCPU doesn't
++ * wait, the old frame stays intact in VRAM until the new one lands, and the
++ * next draw finds the target GL-owned.
++ *
++ * Only for a rectangle inside one tracked target, with that target's pitch
++ * and depth, never the buffer the CRTC shows or is about to show (that keeps
++ * the Finder's and single-buffered drawing in VRAM).  A partial fill needs GL
++ * to hold the rest of the target already: GL-owned, or a readback that VRAM
++ * still matches.  Afterwards the target is GL-owned like one drawn into; VRAM
++ * catches up at the next sync point, as for 3D drawing.
++ */
++bool ati_3d_fill(ATIVGAState *s, uint32_t dst_offset, int stride, int bypp,
++                 int x, int y, int w, int h, uint32_t filler)
++{
++    ATI3DState *t = s->r3d;
++    ATITrack *hit = NULL;
++    uint64_t smc, slen, soff, koff = 0, contig, start, end, rel;
++    int tx, ty;
++    bool whole;
++    uint8_t px[4];
++
++    if (!t || !t->r || !ati_ext_mode(s) || w <= 0 || h <= 0 || !stride) {
++        return false;
++    }
++    start = dst_offset + (uint64_t)y * stride + (uint64_t)x * bypp;
++    end = dst_offset + (uint64_t)(y + h - 1) * stride + (uint64_t)(x + w) * bypp;
++    ati_scanout_range(s, &smc, &slen);
++    if (ati_mc_translate(s, smc, &soff, &contig) != ATI_MC_VRAM ||
++        (start < soff + slen && soff < end)) {
++        return false;
++    }
++    for (int i = 0; i < MAX_TRACK; i++) {
++        ATITrack *k = &t->track[i];
++        uint64_t o;
++        uint64_t klen = (uint64_t)k->img.pitch * k->img.h;
++
++        if (!k->img.w ||
++            ati_mc_translate(s, k->img.mc, &o, &contig) != ATI_MC_VRAM ||
++            !(start < o + klen && o < end)) {
++            continue;
++        }
++        if (hit) {
++            return false;                       /* spans two targets */
++        }
++        hit = k;
++        koff = o;
++    }
++    if (!hit || hit->img.pitch != (uint32_t)stride ||
++        ati_fmt_bpp(hit->img.fmt) != (unsigned)bypp || start < koff ||
++        end > koff + (uint64_t)hit->img.pitch * hit->img.h) {
++        return false;
++    }
++    rel = start - koff;
++    if ((rel % stride) % bypp) {
++        return false;
++    }
++    tx = (rel % stride) / bypp;
++    ty = rel / stride;
++    if (tx + w > hit->img.w || ty + h > hit->img.h) {
++        return false;
++    }
++    whole = !tx && !ty && w == hit->img.w && h == hit->img.h;
++    if (!whole && !hit->gl_owned) {
++        /* GL must hold the rest of the target: VRAM unchanged since the
++         * readback (the same test as a draw's, track_acquire) */
++        if (!hit->gl_valid ||
++            ati_vram_hash(s->vga.vram_ptr + koff,
++                          (size_t)hit->img.pitch * hit->img.h) != hit->vram_hash) {
++            return false;
++        }
++    }
++    stl_he_p(px, filler);
++    ati_glr_fill(t->r, &hit->img, tx, ty, w, h, px);
++    hit->gl_owned = true;
++    hit->gl_valid = false;
++    hit->gen++;
++    t->gl_fills++;
++    return true;
++}
++
 +/* no readback in flight for [mc, mc+len) */
 +bool ati_3d_range_ready(ATIVGAState *s, uint64_t mc, uint64_t len)
 +{
@@ -2160,7 +2407,7 @@ index 0000000..210ae5d
 +        size_t klen = (size_t)k->img.pitch * k->img.h;
 +        if (ati_mc_translate(s, k->img.mc, &off, &contig) == ATI_MC_VRAM &&
 +            off + klen <= s->vga.vram_size &&
-+            vram_hash(s->vga.vram_ptr + off, klen) == k->vram_hash) {
++            ati_vram_hash(s->vga.vram_ptr + off, klen) == k->vram_hash) {
 +            /* nobody wrote it since the readback: GL's copy is current */
 +            k->gl_owned = true;
 +            t->upload_skips++;
@@ -2184,8 +2431,7 @@ index 0000000..210ae5d
 +    /* the colour buffer's current contents become the GL target's */
 +    buf = g_malloc(len);
 +    ati_mc_rw(s, img->mc, buf, len, false);
-+    ati_glr_target_upload(t->r, img, buf);
-+    g_free(buf);
++    ati_glr_target_upload_take(t->r, img, buf);  /* buf is the queue's now */
 +    k->gl_owned = true;
 +    k->gl_valid = false;
 +    t->uploads++;
@@ -3113,11 +3359,13 @@ index 0000000..210ae5d
 +             " zclears=%" PRIu64 " upload_skips=%" PRIu64
 +             " rb_2d=%" PRIu64 " rb_status=%" PRIu64 " rb_scanout=%" PRIu64
 +             " flips=%" PRIu64 " joined=%" PRIu64 " flip_waits=%" PRIu64
-+             " vb_fetch=%" PRIu64 " vb_idx=%" PRIu64 " gl=%s",
++             " vb_fetch=%" PRIu64 " vb_idx=%" PRIu64 " gl_fills=%" PRIu64
++             " gl=%s",
 +             t->draws, t->verts, t->readbacks, t->uploads, t->texuploads,
 +             t->texhits, t->zclears, t->upload_skips, t->rb_why[ATI_SYNC_2D],
 +             t->rb_why[ATI_SYNC_STATUS], t->rb_why[ATI_SYNC_VBLANK], t->flips,
 +             t->readbacks_joined, t->vblank_waits, t->vb_fetch, t->vb_idx,
++             t->gl_fills,
 +             t->r ? "on" : "off");
 +    return t->stats;
 +}
@@ -3147,10 +3395,10 @@ index 0000000..210ae5d
 +}
 diff --git a/hw/display/ati_3d.h b/hw/display/ati_3d.h
 new file mode 100644
-index 0000000..7cf79a3
+index 0000000..76e9127
 --- /dev/null
 +++ b/hw/display/ati_3d.h
-@@ -0,0 +1,135 @@
+@@ -0,0 +1,153 @@
 +/*
 + * QEMU ATI Radeon (R100) emulation: interface between the 3D state decoder
 + * (vCPU thread) and the GL renderer (its own thread).
@@ -3264,17 +3512,35 @@ index 0000000..7cf79a3
 +/* render-target content from guest memory (bytes in guest layout) */
 +void ati_glr_target_upload(ATIRenderer *r, const ATIImage *img,
 +                           const uint8_t *data);
++/* the same, taking ownership of data (g_malloc()ed, pitch * h bytes) */
++void ati_glr_target_upload_take(ATIRenderer *r, const ATIImage *img,
++                                uint8_t *data);
++/* fill [x, x+w) x [y, y+h) of a target with one pixel (px: guest bytes) */
++void ati_glr_fill(ATIRenderer *r, const ATIImage *img, int x, int y, int w,
++                  int h, const uint8_t px[4]);
 +void ati_glr_depth_clear(ATIRenderer *r, const ATIImage *color,
 +                         uint32_t depth_mc, float z, int stencil,
 +                         int x, int y, int w, int h);
-+/* read the render target back into guest layout; waits */
-+void ati_glr_target_read(ATIRenderer *r, const ATIImage *img, uint8_t *out);
++/*
++ * Read the render target back into guest layout; waits.  Returns
++ * ati_vram_hash() of the pitch * h bytes at out once written.
++ */
++uint64_t ati_glr_target_read(ATIRenderer *r, const ATIImage *img, uint8_t *out);
 +typedef struct ATIReadJob {
 +    ATIImage img;
 +    uint8_t *buf;
 +    size_t len;
++    uint64_t hash;              /* ati_vram_hash(buf, len), set before done */
 +    int done;                   /* set by the render thread (atomic) */
 +} ATIReadJob;
++/*
++ * True while the vCPU waits for the render thread with the BQL released
++ * (glr_push_wait): the device's 3D state is mid-operation, so other threads
++ * holding the BQL (the vblank timer) leave it alone.
++ */
++bool ati_glr_waiting(ATIRenderer *r);
++/* content hash of guest bytes (render-target change detection) */
++uint64_t ati_vram_hash(const uint8_t *p, size_t len);
 +ATIReadJob *ati_glr_target_read_async(ATIRenderer *r, const ATIImage *img);
 +bool ati_glr_read_done(ATIReadJob *j);
 +void ati_glr_read_wait(ATIRenderer *r, ATIReadJob *j);
@@ -4132,10 +4398,10 @@ index 0000000..997cc45
 +#endif
 diff --git a/hw/display/ati_glr.c b/hw/display/ati_glr.c
 new file mode 100644
-index 0000000..da3c484
+index 0000000..5f006d4
 --- /dev/null
 +++ b/hw/display/ati_glr.c
-@@ -0,0 +1,1039 @@
+@@ -0,0 +1,1312 @@
 +/*
 + * QEMU ATI Radeon (R100) emulation: OpenGL ES 3.0 renderer thread.
 + *
@@ -4154,6 +4420,8 @@ index 0000000..da3c484
 +#include "qemu/atomic.h"
 +#include "qemu/log.h"
 +#include "qemu/bswap.h"
++#include "qemu/main-loop.h"
++#include "hw/core/cpu.h"
 +#include "ati_gl.h"
 +#include "ati_3d.h"
 +
@@ -4183,7 +4451,8 @@ index 0000000..da3c484
 +    uint16_t min, mag, ws, wt;
 +} GLRTexture;
 +
-+enum { CMD_DRAW, CMD_TEX, CMD_UPLOAD, CMD_READ, CMD_CLEARZ, CMD_FINISH, CMD_READ_ASYNC };
++enum { CMD_DRAW, CMD_TEX, CMD_UPLOAD, CMD_READ, CMD_CLEARZ, CMD_FINISH, CMD_READ_ASYNC,
++       CMD_FILL };
 +
 +typedef struct GLRCmd {
 +    int kind;
@@ -4203,6 +4472,8 @@ index 0000000..da3c484
 +    uint32_t depth_mc;
 +    QemuEvent *done;
 +    ATIReadJob *job;
++    uint64_t hash;              /* CMD_READ: ati_vram_hash of the result */
++    uint8_t px[4];              /* CMD_FILL: the pixel, guest bytes */
 +} GLRCmd;
 +
 +struct ATIRenderer {
@@ -4213,8 +4484,11 @@ index 0000000..da3c484
 +    bool ok;
 +    char info[256];
 +    QemuEvent ready;
++    bool waiting;               /* vCPU waits with the BQL released (BQL) */
 +
 +    /* render thread only */
++    uint8_t *scratch;           /* RGBA8 rows for uploads and readbacks */
++    size_t scratch_len;
 +    ATIGL gl;
 +    GLuint prog, vao, vbo;
 +    GLint u_fbsize, u_stage_c, u_stage_a, u_tfactor, u_stage_en, u_tex_en,
@@ -4278,12 +4552,168 @@ index 0000000..da3c484
 +    o[3] = 255;
 +}
 +
++/*
++ * RetroBoot: fast paths for the per-frame conversions.  A game at 1920x1080
++ * converts every frame twice (the cleared back buffer up, the finished frame
++ * back), 2 M pixels each way; byte by byte that was most of a frame's time.
++ *
++ * With the row on a 32-bit boundary, byte b of pixel x's little-endian value
++ * is at (bpp * x + b) ^ swap (perm_byte_index), so a 16-bit pixel is a 16-bit
++ * load at (2x ^ (swap & 2)), big-endian when swap & 1, and a 32-bit pixel is a
++ * little- (swap 0) or big-endian (swap 3) load.  Results equal the generic
++ * loops below, which keep every other case.
++ */
++static uint32_t *dec16_lut[3];      /* render thread only */
++
++static int dec16_index(uint8_t fmt)
++{
++    switch (fmt) {
++    case ATI_FMT_ARGB1555: return 0;
++    case ATI_FMT_RGB565: return 1;
++    case ATI_FMT_ARGB4444: return 2;
++    default: return -1;
++    }
++}
++
++/* RGBA8 bytes of every 16-bit value, in memory order */
++static const uint32_t *dec16_table(int i)
++{
++    if (!dec16_lut[i]) {
++        uint32_t *t = g_new(uint32_t, 65536);
++        for (uint32_t v = 0; v < 65536; v++) {
++            uint8_t o[4];
++            switch (i) {
++            case 0:
++                o[0] = ex5((v >> 10) & 31); o[1] = ex5((v >> 5) & 31);
++                o[2] = ex5(v & 31); o[3] = (v & 0x8000) ? 255 : 0;
++                break;
++            case 1:
++                o[0] = ex5((v >> 11) & 31); o[1] = ex6((v >> 5) & 63);
++                o[2] = ex5(v & 31); o[3] = 255;
++                break;
++            default:
++                o[0] = ex4((v >> 8) & 15); o[1] = ex4((v >> 4) & 15);
++                o[2] = ex4(v & 15); o[3] = ex4(v >> 12);
++                break;
++            }
++            memcpy(&t[v], o, 4);
++        }
++        dec16_lut[i] = t;
++    }
++    return dec16_lut[i];
++}
++
++static bool decode_row_fast(const uint8_t *src, uint8_t *dst, unsigned w,
++                            uint8_t fmt, uint8_t swap, uint32_t row_base)
++{
++    int li = dec16_index(fmt);
++
++    if (row_base & 3) {
++        return false;
++    }
++    if (li >= 0) {
++        const uint32_t *lut = dec16_table(li);
++        unsigned xo = swap & 2;
++        if (swap & 1) {
++            for (unsigned x = 0; x < w; x++) {
++                memcpy(dst + 4 * x, &lut[lduw_be_p(src + ((2 * x) ^ xo))], 4);
++            }
++        } else {
++            for (unsigned x = 0; x < w; x++) {
++                memcpy(dst + 4 * x, &lut[lduw_le_p(src + ((2 * x) ^ xo))], 4);
++            }
++        }
++        return true;
++    }
++    if ((fmt == ATI_FMT_ARGB8888 || fmt == ATI_FMT_RGBA8888) &&
++        (swap == 0 || swap == 3)) {
++        for (unsigned x = 0; x < w; x++) {
++            uint32_t v = swap ? ldl_be_p(src + 4 * x) : ldl_le_p(src + 4 * x);
++            uint8_t *o = dst + 4 * x;
++            if (fmt == ATI_FMT_ARGB8888) {
++                o[0] = v >> 16; o[1] = v >> 8; o[2] = v; o[3] = v >> 24;
++            } else {
++                o[0] = v >> 24; o[1] = v >> 16; o[2] = v >> 8; o[3] = v;
++            }
++        }
++        return true;
++    }
++    return false;
++}
++
++static inline void enc16_store(uint8_t *dst, unsigned x, unsigned xo, bool be,
++                               uint32_t v)
++{
++    uint8_t *p = dst + ((2 * x) ^ xo);
++    if (be) {
++        stw_be_p(p, v);
++    } else {
++        stw_le_p(p, v);
++    }
++}
++
++static bool encode_row_fast(const uint8_t *src, uint8_t *dst, unsigned w,
++                            uint8_t fmt, uint8_t swap, uint32_t row_base)
++{
++    unsigned xo = swap & 2;
++    bool be = swap & 1;
++
++    if (row_base & 3) {
++        return false;
++    }
++    switch (fmt) {
++    case ATI_FMT_ARGB1555:
++        for (unsigned x = 0; x < w; x++) {
++            const uint8_t *p = src + 4 * x;
++            enc16_store(dst, x, xo, be, ((p[3] >= 128) << 15) |
++                        ((p[0] >> 3) << 10) | ((p[1] >> 3) << 5) | (p[2] >> 3));
++        }
++        return true;
++    case ATI_FMT_RGB565:
++        for (unsigned x = 0; x < w; x++) {
++            const uint8_t *p = src + 4 * x;
++            enc16_store(dst, x, xo, be, ((p[0] >> 3) << 11) |
++                        ((p[1] >> 2) << 5) | (p[2] >> 3));
++        }
++        return true;
++    case ATI_FMT_ARGB4444:
++        for (unsigned x = 0; x < w; x++) {
++            const uint8_t *p = src + 4 * x;
++            enc16_store(dst, x, xo, be, ((p[3] >> 4) << 12) |
++                        ((p[0] >> 4) << 8) | ((p[1] >> 4) << 4) | (p[2] >> 4));
++        }
++        return true;
++    case ATI_FMT_ARGB8888:
++    case ATI_FMT_RGBA8888:
++        if (swap == 1 || swap == 2) {
++            return false;
++        }
++        for (unsigned x = 0; x < w; x++) {
++            const uint8_t *p = src + 4 * x;
++            uint32_t v = fmt == ATI_FMT_ARGB8888 ?
++                ((uint32_t)p[3] << 24) | (p[0] << 16) | (p[1] << 8) | p[2] :
++                ((uint32_t)p[0] << 24) | (p[1] << 16) | (p[2] << 8) | p[3];
++            if (swap) {
++                stl_be_p(dst + 4 * x, v);
++            } else {
++                stl_le_p(dst + 4 * x, v);
++            }
++        }
++        return true;
++    default:
++        return false;
++    }
++}
++
 +/* decode one row of w guest pixels into RGBA8 */
 +static void decode_row(const uint8_t *src, uint8_t *dst, unsigned w,
 +                       uint8_t fmt, uint8_t swap, uint32_t row_base)
 +{
 +    unsigned bpp = ati_fmt_bpp(fmt);
 +
++    if (decode_row_fast(src, dst, w, fmt, swap, row_base)) {
++        return;
++    }
 +    for (unsigned x = 0; x < w; x++) {
 +        uint32_t off = x * bpp, v = 0;
 +        for (unsigned b = 0; b < bpp; b++) {
@@ -4360,6 +4790,9 @@ index 0000000..da3c484
 +{
 +    unsigned bpp = ati_fmt_bpp(fmt);
 +
++    if (encode_row_fast(src, dst, w, fmt, swap, row_base)) {
++        return;
++    }
 +    for (unsigned x = 0; x < w; x++) {
 +        const uint8_t *p = src + 4 * x;
 +        uint32_t v;
@@ -4693,22 +5126,35 @@ index 0000000..da3c484
 +    }
 +}
 +
++/*
++ * RGBA8 staging for a whole target, kept between frames: a fresh 8 MB buffer
++ * per conversion (1920x1080) cost page faults and kernel zeroing every frame.
++ */
++static uint8_t *glr_scratch(ATIRenderer *r, size_t len)
++{
++    if (r->scratch_len < len) {
++        g_free(r->scratch);
++        r->scratch = g_malloc(len);
++        r->scratch_len = len;
++    }
++    return r->scratch;
++}
++
 +static void glr_upload(ATIRenderer *r, GLRCmd *c)
 +{
 +    ATIGL *gl = &r->gl;
 +    GLRTarget *t = glr_target(r, &c->img, true);
 +    unsigned w = MIN(c->img.w, t->w), h = MIN(c->img.h, t->h);
-+    uint8_t *rgba = g_malloc(w * 4 * h);
++    uint8_t *rgba = glr_scratch(r, (size_t)w * 4 * h);
 +
 +    for (unsigned y = 0; y < h; y++) {
-+        decode_row(c->data + y * c->img.pitch, rgba + y * w * 4, w,
++        decode_row(c->data + y * c->img.pitch, rgba + (size_t)y * w * 4, w,
 +                   c->img.fmt, c->img.swap, c->img.mc + y * c->img.pitch);
 +    }
 +    gl->BindTexture(GL_TEXTURE_2D, t->tex);
 +    gl->PixelStorei(GL_UNPACK_ALIGNMENT, 1);
 +    gl->TexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE,
 +                      rgba);
-+    g_free(rgba);
 +}
 +
 +static void glr_read(ATIRenderer *r, GLRCmd *c)
@@ -4718,20 +5164,42 @@ index 0000000..da3c484
 +    unsigned w, h;
 +    uint8_t *rgba;
 +
-+    if (!t) {
-+        return;
++    if (t) {
++        w = MIN(c->img.w, t->w);
++        h = MIN(c->img.h, t->h);
++        rgba = glr_scratch(r, (size_t)w * 4 * h);
++        glr_bind(r, t, t->depth_mc);
++        gl->PixelStorei(GL_PACK_ALIGNMENT, 1);
++        gl->ReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, rgba);
++        for (unsigned y = 0; y < h; y++) {
++            encode_row(rgba + (size_t)y * w * 4, c->data + y * c->img.pitch, w,
++                       c->img.fmt, c->img.swap, c->img.mc + y * c->img.pitch);
++        }
 +    }
-+    w = MIN(c->img.w, t->w);
-+    h = MIN(c->img.h, t->h);
-+    rgba = g_malloc(w * 4 * h);
++    /* the caller's change detection, here rather than on the vCPU */
++    c->hash = ati_vram_hash(c->data, (size_t)c->img.pitch * c->img.h);
++}
++
++/*
++ * A solid 2D fill on a target (ati_3d_fill).  The pixel is decoded the way an
++ * upload decodes VRAM (the 2D engine stores the same value in both halves of
++ * a 16-bit word pair, so its position in the word doesn't matter).  Draws set
++ * their own scissor and colour mask, as the depth clear relies on too.
++ */
++static void glr_fill(ATIRenderer *r, GLRCmd *c)
++{
++    ATIGL *gl = &r->gl;
++    GLRTarget *t = glr_target(r, &c->img, true);
++    uint8_t rgba[4];
++
++    decode_row(c->px, rgba, 1, c->img.fmt, c->img.swap, 0);
 +    glr_bind(r, t, t->depth_mc);
-+    gl->PixelStorei(GL_PACK_ALIGNMENT, 1);
-+    gl->ReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, rgba);
-+    for (unsigned y = 0; y < h; y++) {
-+        encode_row(rgba + y * w * 4, c->data + y * c->img.pitch, w,
-+                   c->img.fmt, c->img.swap, c->img.mc + y * c->img.pitch);
-+    }
-+    g_free(rgba);
++    gl->Enable(GL_SCISSOR_TEST);
++    gl->Scissor(c->x, c->y, c->w, c->h);
++    gl->ColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
++    gl->ClearColor(rgba[0] / 255.0f, rgba[1] / 255.0f, rgba[2] / 255.0f,
++                   rgba[3] / 255.0f);
++    gl->Clear(GL_COLOR_BUFFER_BIT);
 +}
 +
 +static void glr_clearz(ATIRenderer *r, GLRCmd *c)
@@ -4995,10 +5463,14 @@ index 0000000..da3c484
 +            break;
 +        case CMD_READ_ASYNC:
 +            glr_read(r, c);
++            c->job->hash = c->hash;
 +            qatomic_store_release(&c->job->done, 1);
 +            break;
 +        case CMD_CLEARZ:
 +            glr_clearz(r, c);
++            break;
++        case CMD_FILL:
++            glr_fill(r, c);
 +            break;
 +        case CMD_FINISH:
 +            r->gl.Finish();
@@ -5031,15 +5503,59 @@ index 0000000..da3c484
 +    qemu_mutex_unlock(&r->lock);
 +}
 +
++/*
++ * Wait for the render thread.  The vCPU calls this from MMIO with the BQL
++ * held; waiting for a frame at 1920x1080 took ~10 ms, during which the main
++ * loop could not run its timers: the Screamer's 1 ms output DMA commands fell
++ * behind (Cro-Mag Rally: 43 % of its sound reached the host), and the vblank
++ * slipped to 52 Hz.  So a vCPU releases the BQL for the wait.  r->waiting
++ * tells the device's other BQL holders (the vblank timer) that the 3D state
++ * is mid-operation; the vCPU itself cannot touch the device until it
++ * returns.  Any other thread (none waits today) keeps the BQL, so no vCPU can
++ * enter the device under it.
++ */
 +static void glr_push_wait(ATIRenderer *r, GLRCmd *c)
 +{
 +    QemuEvent ev;
++    bool unlock = current_cpu && bql_locked();
 +
 +    qemu_event_init(&ev, false);
 +    c->done = &ev;
 +    glr_push(r, c);
++    if (unlock) {
++        r->waiting = true;
++        bql_unlock();
++    }
 +    qemu_event_wait(&ev);
++    if (unlock) {
++        bql_lock();
++        r->waiting = false;
++    }
 +    qemu_event_destroy(&ev);
++}
++
++bool ati_glr_waiting(ATIRenderer *r)
++{
++    return r && r->waiting;
++}
++
++uint64_t ati_vram_hash(const uint8_t *p, size_t len)
++{
++    /* fast 64-bit content hash (4 lanes, 8 bytes per step) */
++    uint64_t h[4] = { 0x9E3779B97F4A7C15ULL, 0xC2B2AE3D27D4EB4FULL,
++                      0x165667B19E3779F9ULL, 0x27D4EB2F165667C5ULL };
++    size_t i = 0;
++
++    for (; i + 32 <= len; i += 32) {
++        for (int l = 0; l < 4; l++) {
++            h[l] = (h[l] ^ ldq_he_p(p + i + 8 * l)) * 0x100000001B3ULL;
++            h[l] ^= h[l] >> 29;
++        }
++    }
++    for (; i < len; i++) {
++        h[0] = (h[0] ^ p[i]) * 0x100000001B3ULL;
++    }
++    return h[0] ^ (h[1] * 3) ^ (h[2] * 5) ^ (h[3] * 7) ^ len;
 +}
 +
 +ATIRenderer *ati_glr_new(char *info, size_t infolen)
@@ -5091,14 +5607,36 @@ index 0000000..da3c484
 +    glr_push(r, c);
 +}
 +
-+void ati_glr_target_upload(ATIRenderer *r, const ATIImage *img,
-+                           const uint8_t *data)
++void ati_glr_target_upload_take(ATIRenderer *r, const ATIImage *img,
++                                uint8_t *data)
 +{
 +    GLRCmd *c = g_new0(GLRCmd, 1);
 +
 +    c->kind = CMD_UPLOAD;
 +    c->img = *img;
-+    c->data = g_memdup2(data, (size_t)img->pitch * img->h);
++    c->data = data;             /* freed by the render thread */
++    glr_push(r, c);
++}
++
++void ati_glr_target_upload(ATIRenderer *r, const ATIImage *img,
++                           const uint8_t *data)
++{
++    ati_glr_target_upload_take(r, img,
++                               g_memdup2(data, (size_t)img->pitch * img->h));
++}
++
++void ati_glr_fill(ATIRenderer *r, const ATIImage *img, int x, int y, int w,
++                  int h, const uint8_t px[4])
++{
++    GLRCmd *c = g_new0(GLRCmd, 1);
++
++    c->kind = CMD_FILL;
++    c->img = *img;
++    c->x = x;
++    c->y = y;
++    c->w = w;
++    c->h = h;
++    memcpy(c->px, px, 4);
 +    glr_push(r, c);
 +}
 +
@@ -5120,11 +5658,12 @@ index 0000000..da3c484
 +    glr_push(r, c);
 +}
 +
-+void ati_glr_target_read(ATIRenderer *r, const ATIImage *img, uint8_t *out)
++uint64_t ati_glr_target_read(ATIRenderer *r, const ATIImage *img, uint8_t *out)
 +{
 +    GLRCmd c = { .kind = CMD_READ, .img = *img, .data = out };
 +
 +    glr_push_wait(r, &c);
++    return c.hash;
 +}
 +
 +/*
@@ -5176,7 +5715,7 @@ index 0000000..da3c484
 +    glr_push_wait(r, &c);
 +}
 diff --git a/hw/display/ati_int.h b/hw/display/ati_int.h
-index 0c48934..6bd73e1 100644
+index 0c48934..d19d9e8 100644
 --- a/hw/display/ati_int.h
 +++ b/hw/display/ati_int.h
 @@ -30,6 +30,8 @@
@@ -5253,7 +5792,7 @@ index 0c48934..6bd73e1 100644
      uint16_t cursor_size;
      uint32_t cursor_offset;
      QEMUCursor *cursor;
-@@ -121,15 +165,51 @@ struct ATIVGAState {
+@@ -121,15 +165,68 @@ struct ATIVGAState {
      I2CDDCState i2cddc;
      uint64_t linear_aper_sz;
      MemoryRegion linear_aper;
@@ -5265,6 +5804,7 @@ index 0c48934..6bd73e1 100644
 +    ATICPState cp;
 +    uint32_t debug;             /* x-debug: 1 = dump 2D packets */
 +    uint32_t vblank_hz;         /* x-vblank-hz: emulated vertical refresh (lab) */
++    int64_t vblank_next;        /* RetroBoot: deadline of the next vblank */
 +    ATIAccelStats accel;
 +    ATI3DState *r3d;
  };
@@ -5301,6 +5841,22 @@ index 0c48934..6bd73e1 100644
 +bool ati_3d_flip(ATIVGAState *s, uint64_t mc, uint64_t len);
 +bool ati_3d_range_ready(ATIVGAState *s, uint64_t mc, uint64_t len);
 +void ati_3d_land(ATIVGAState *s);
++/* the vCPU waits for the render thread with the BQL released */
++bool ati_3d_busy(ATIVGAState *s);
++/* the 2D engine wrote VRAM [off, off + len) (VRAM offsets) */
++void ati_3d_vram_written(ATIVGAState *s, uint64_t off, uint64_t len);
++/*
++ * A solid 2D fill of the rectangle r (dst offset, pitch and bytes per pixel
++ * as the 2D engine has them; filler = the 32-bit VRAM word it would store,
++ * 16-bit values repeated) done on a 3D render target in GL instead of VRAM.
++ * False when it doesn't apply; then nothing has changed.
++ */
++bool ati_3d_fill(ATIVGAState *s, uint32_t dst_offset, int stride, int bypp,
++                 int x, int y, int w, int h, uint32_t filler);
++void ati_scanout_range(ATIVGAState *s, uint64_t *mc, uint64_t *len);
++/* the CRTC runs an extended (non-VGA) mode */
++bool ati_ext_mode(ATIVGAState *s);
++void ati_flip_settle(ATIVGAState *s);
 +const char *ati_3d_stats(ATIVGAState *s);
  bool ati_host_data_flush(ATIVGAState *s);
  void ati_host_data_finish(ATIVGAState *s);

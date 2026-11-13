@@ -1,0 +1,94 @@
+RetroBoot: a cheaper TCG store path into pages that still hold translated code (target-generic, m68k series).
+
+Classic Mac OS keeps data beside code: stacks, driver globals and heap
+blocks share 4 KiB pages with 68k code, so most guest stores during startup
+hit a page whose TLB entry carries TLB_NOTDIRTY and take notdirty_write():
+58 million times in a Mac OS 8.1 start (41 million into one page holding the
+boot code and its stack), 20 million for 7.5.5.  Each call made two atomic
+bitmap sets and five bitmap searches although nothing changed.  The page's
+dirty bits for every client are now read in one pass
+(physical_memory_page_dirty_clients) and, while code remains in the page,
+only bits that are still clear are set.  Same dirty bits and TLB state as
+before; the code-coverage check (tcg-graphics-fast-path) is unchanged.
+Lab, x86 rb-lab: Mac OS 8.1 Finder after 10.7 s -> 9.5 s (median of 4).
+
+diff --git a/accel/tcg/cputlb.c b/accel/tcg/cputlb.c
+index 20010353ec..84cf2019ff 100644
+--- a/accel/tcg/cputlb.c
++++ b/accel/tcg/cputlb.c
+@@ -1345,8 +1345,28 @@ static void notdirty_write(CPUState *cpu, vaddr mem_vaddr, unsigned size,
+ 
+     trace_memory_notdirty_write_access(mem_vaddr, ram_addr, size);
+ 
+-    if (!physical_memory_get_dirty_flag(ram_addr, DIRTY_MEMORY_CODE)) {
++    /*
++     * RetroBoot: guests that keep data beside code (classic Mac OS: stacks,
++     * driver globals and heap blocks share pages with code) store into pages
++     * that still hold translated code all the time, and each store comes
++     * here.  Read the page's dirty bits for every client at once, and when
++     * code remains in the page (the entry keeps its notdirty callback) set
++     * only the VGA and migration bits that are still clear, instead of two
++     * atomic read-modify-writes and five more bitmap searches per store.
++     */
++    uint8_t bits = physical_memory_page_dirty_clients(ram_addr);
++
++    if (!(bits & (1 << DIRTY_MEMORY_CODE))) {
+         tb_invalidate_phys_range_fast(cpu, ram_addr, size, retaddr);
++        bits = physical_memory_page_dirty_clients(ram_addr);
++        if (!(bits & (1 << DIRTY_MEMORY_CODE))) {
++            uint8_t clean = DIRTY_CLIENTS_NOCODE & ~bits;
++
++            if (clean) {
++                physical_memory_set_dirty_range(ram_addr, size, clean);
++            }
++            return;
++        }
+     }
+ 
+     /*
+diff --git a/include/system/physmem.h b/include/system/physmem.h
+index da91b77bd9..75c2a1148e 100644
+--- a/include/system/physmem.h
++++ b/include/system/physmem.h
+@@ -17,6 +17,7 @@
+ bool physical_memory_get_dirty_flag(ram_addr_t addr, unsigned client);
+ 
+ bool physical_memory_is_clean(ram_addr_t addr);
++uint8_t physical_memory_page_dirty_clients(ram_addr_t addr);
+ 
+ uint8_t physical_memory_range_includes_clean(ram_addr_t start,
+                                              ram_addr_t length,
+diff --git a/system/physmem.c b/system/physmem.c
+index 4e26f1a1d4..2c7e14b528 100644
+--- a/system/physmem.c
++++ b/system/physmem.c
+@@ -927,6 +927,29 @@ bool physical_memory_get_dirty_flag(ram_addr_t addr, unsigned client)
+     return physical_memory_get_dirty(addr, 1, client);
+ }
+ 
++/*
++ * RetroBoot: the dirty bits of one page for every client (bit n = client n),
++ * in one RCU section and without range searches: the TCG notdirty store path.
++ */
++uint8_t physical_memory_page_dirty_clients(ram_addr_t addr)
++{
++    unsigned long page = addr >> TARGET_PAGE_BITS;
++    unsigned long idx = page / DIRTY_MEMORY_BLOCK_SIZE;
++    unsigned long offset = page % DIRTY_MEMORY_BLOCK_SIZE;
++    uint8_t bits = 0;
++    int i;
++
++    RCU_READ_LOCK_GUARD();
++    for (i = 0; i < DIRTY_MEMORY_NUM; i++) {
++        DirtyMemoryBlocks *blocks = qatomic_rcu_read(&ram_list.dirty_memory[i]);
++
++        if (test_bit(offset, blocks->blocks[idx])) {
++            bits |= 1 << i;
++        }
++    }
++    return bits;
++}
++
+ bool physical_memory_is_clean(ram_addr_t addr)
+ {
+     bool vga = physical_memory_get_dirty_flag(addr, DIRTY_MEMORY_VGA);

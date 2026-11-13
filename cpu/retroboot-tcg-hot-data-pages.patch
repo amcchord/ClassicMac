@@ -1,0 +1,267 @@
+diff --git a/accel/tcg/internal-common.h b/accel/tcg/internal-common.h
+--- a/accel/tcg/internal-common.h
++++ b/accel/tcg/internal-common.h
+@@ -18,6 +18,8 @@
+ extern int64_t max_advance;
+ 
+ extern bool one_insn_per_tb;
++/* RetroBoot: drop a code page's TBs after this many stores that miss them */
++extern unsigned tcg_hot_data_writes;
+ 
+ extern bool icount_align_option;
+ 
+diff --git a/accel/tcg/tb-context.h b/accel/tcg/tb-context.h
+--- a/accel/tcg/tb-context.h
++++ b/accel/tcg/tb-context.h
+@@ -35,6 +35,7 @@
+     /* statistics */
+     unsigned tb_flush_count;
+     unsigned tb_phys_invalidate_count;
++    unsigned tb_hot_data_drops;     /* RetroBoot: x-hot-data-writes */
+ };
+ 
+ extern TBContext tb_ctx;
+diff --git a/accel/tcg/tb-maint.c b/accel/tcg/tb-maint.c
+--- a/accel/tcg/tb-maint.c
++++ b/accel/tcg/tb-maint.c
+@@ -194,13 +194,22 @@
+     uint32_t code_coverage;
+     /* list of TBs intersecting this ram page */
+     uintptr_t first_tb;
++    /*
++     * RetroBoot hot data pages: CPU stores that trapped on this page (it
++     * holds code) without touching any of it, since the page was last
++     * protected; the drop threshold's backoff; when the page's TBs were
++     * last dropped (ms, 0 = never or already accounted).
++     */
++    uint32_t hot_writes : 24;
++    uint32_t hot_shift : 8;
++    uint32_t hot_drop_ms;
+ };
+ 
+ void page_table_config_init(void)
+ {
+     uint32_t v_l1_bits;
+ 
+-    QEMU_BUILD_BUG_ON(sizeof(PageDesc) != 16);
++    QEMU_BUILD_BUG_ON(sizeof(PageDesc) != 24);
+     assert(TARGET_PAGE_BITS);
+     assert(TARGET_PAGE_BITS >= 5);
+     /* The bits remaining after N lower levels of page tables.  */
+@@ -699,6 +708,65 @@
+ }
+ 
+ /*
++ * RetroBoot hot data pages (-accel tcg,x-hot-data-writes=N, 0 = off).
++ *
++ * A page that holds translated code is write-protected in the softmmu TLB,
++ * so every CPU store to it takes the slow path (notdirty_write), even a
++ * store that the code coverage mask shows touches no code.  Mac OS mixes
++ * code and data on pages (code built on a stack page, fragments next to
++ * their globals); on the PMU machine Quake III's hottest stack frames shared
++ * a page with 45 translated instructions and trapped 600,000 times a second.
++ *
++ * After N trapped stores that missed every TB since the page was last
++ * protected, all TBs on the page are dropped (TBs are only a cache), so the
++ * TLB entry turns writable and the stores run inline.  Code still in use
++ * is translated again and protects the page again.  A page protected again
++ * within HOT_DATA_SOON_MS of a drop doubles its threshold (at most
++ * N << HOT_DATA_MAX_SHIFT); one that stays unprotected longer halves it.
++ * A page holding the TB that is storing is never dropped from that store.
++ */
++#define HOT_DATA_SOON_MS    10
++#define HOT_DATA_CALM_MS    1000
++#define HOT_DATA_MAX_SHIFT  8
++
++static uint32_t hot_data_now_ms(void)
++{
++    uint32_t ms = (uint32_t)(g_get_monotonic_time() / 1000);
++    return ms ? ms : 1;     /* 0 means "no drop pending" */
++}
++
++/* The first TB of a page was just added (page lock held). */
++static void hot_data_reprotected(PageDesc *p)
++{
++    if (p->hot_drop_ms) {
++        uint32_t since = hot_data_now_ms() - p->hot_drop_ms;
++
++        if (since < HOT_DATA_SOON_MS) {
++            if (p->hot_shift < HOT_DATA_MAX_SHIFT) {
++                p->hot_shift++;
++            }
++        } else if (since > HOT_DATA_CALM_MS && p->hot_shift) {
++            p->hot_shift--;
++        }
++        p->hot_drop_ms = 0;
++    }
++    p->hot_writes = 0;
++}
++
++/* Is @tb (the storing TB, or NULL) on the physical page @index? */
++static bool hot_data_tb_on_page(TranslationBlock *tb, tb_page_addr_t index)
++{
++    if (!tb) {
++        return false;
++    }
++    if ((tb_page_addr0(tb) >> TARGET_PAGE_BITS) == index) {
++        return true;
++    }
++    return tb_page_addr1(tb) != -1 &&
++           (tb_page_addr1(tb) >> TARGET_PAGE_BITS) == index;
++}
++
++/*
+  * Add the tb in the target page and protect it if necessary.
+  * Called with @p->lock held.
+  */
+@@ -748,6 +816,7 @@
+      */
+     if (!page_already_protected) {
+         tlb_protect_code(tb->page_addr[n] & TARGET_PAGE_MASK);
++        hot_data_reprotected(p);
+     }
+ }
+ 
+@@ -1277,6 +1346,51 @@
+ }
+ 
+ /*
++ * A trapped store to the code page @p (page @index, lock held) that touched
++ * no code.  Returns true when it dropped the page's TBs (hot data pages,
++ * above) and released the lock itself.
++ */
++static bool hot_data_store(CPUState *cpu, PageDesc *p, tb_page_addr_t index,
++                           uintptr_t ra)
++{
++    unsigned n = qatomic_read(&tcg_hot_data_writes);
++    tb_page_addr_t page_start = index << TARGET_PAGE_BITS;
++    tb_page_addr_t page_last = page_start | ~TARGET_PAGE_MASK;
++    struct page_collection *pages;
++
++    if (!n || ++p->hot_writes < MIN((uint64_t)n << p->hot_shift, 0xffffff)) {
++        return false;
++    }
++    p->hot_writes = 0;
++    if (ra && hot_data_tb_on_page(tcg_tb_lookup(ra), index)) {
++        /* the storing code itself is here: dropping it would only bounce */
++        if (p->hot_shift < HOT_DATA_MAX_SHIFT) {
++            p->hot_shift++;
++        }
++        return false;
++    }
++    qatomic_set(&tb_ctx.tb_hot_data_drops, tb_ctx.tb_hot_data_drops + 1);
++    if (tb_invalidate_phys_page_range__locked(cpu, NULL, p, page_start,
++                                              page_last, ra)) {
++        if (!p->first_tb) {
++            p->hot_drop_ms = hot_data_now_ms();
++        }
++        page_unlock(p);
++        return true;
++    }
++    /* a TB spanning two pages: lock both, as below */
++    page_unlock(p);
++    pages = page_collection_lock(page_start, page_last);
++    tb_invalidate_phys_page_range__locked(cpu, pages, p, page_start,
++                                          page_last, ra);
++    if (!p->first_tb) {
++        p->hot_drop_ms = hot_data_now_ms();
++    }
++    page_collection_unlock(pages);
++    return true;
++}
++
++/*
+  * len must be <= 8 and start must be a multiple of len.
+  * Called via softmmu_template.h when code areas are written to with
+  * iothread mutex not held.
+@@ -1293,6 +1407,9 @@
+         if ((last >> TARGET_PAGE_BITS) == index) {
+             page_lock(p);
+             if (!(p->code_coverage & page_coverage_mask(start, last))) {
++                if (hot_data_store(cpu, p, index, ra)) {
++                    return;
++                }
+                 page_unlock(p);
+                 return;
+             }
+diff --git a/accel/tcg/tcg-all.c b/accel/tcg/tcg-all.c
+--- a/accel/tcg/tcg-all.c
++++ b/accel/tcg/tcg-all.c
+@@ -83,6 +83,7 @@
+ }
+ 
+ bool one_insn_per_tb;
++unsigned tcg_hot_data_writes = 64;
+ 
+ #ifndef CONFIG_USER_ONLY
+ static void tcg_vm_change_state(void *opaque, bool running, RunState state)
+@@ -242,6 +243,31 @@
+     qatomic_set(&one_insn_per_tb, value);
+ }
+ 
++static void tcg_get_hot_data_writes(Object *obj, Visitor *v,
++                                    const char *name, void *opaque,
++                                    Error **errp)
++{
++    uint32_t value = qatomic_read(&tcg_hot_data_writes);
++
++    visit_type_uint32(v, name, &value, errp);
++}
++
++static void tcg_set_hot_data_writes(Object *obj, Visitor *v,
++                                    const char *name, void *opaque,
++                                    Error **errp)
++{
++    uint32_t value;
++
++    if (!visit_type_uint32(v, name, &value, errp)) {
++        return;
++    }
++    if (value > 0xffff) {
++        error_setg(errp, "x-hot-data-writes must be at most 65535");
++        return;
++    }
++    qatomic_set(&tcg_hot_data_writes, value);
++}
++
+ static int tcg_gdbstub_supported_sstep_flags(AccelState *as)
+ {
+     /*
+@@ -288,6 +314,13 @@
+                                    tcg_set_one_insn_per_tb);
+     object_class_property_set_description(oc, "one-insn-per-tb",
+         "Only put one guest insn in each translation block");
++
++    object_class_property_add(oc, "x-hot-data-writes", "int",
++        tcg_get_hot_data_writes, tcg_set_hot_data_writes,
++        NULL, NULL);
++    object_class_property_set_description(oc, "x-hot-data-writes",
++        "Drop the translations of a code page after this many stores "
++        "to it that touch no code (0 = never)");
+ }
+ 
+ static const TypeInfo tcg_accel_type = {
+diff --git a/accel/tcg/tcg-stats.c b/accel/tcg/tcg-stats.c
+--- a/accel/tcg/tcg-stats.c
++++ b/accel/tcg/tcg-stats.c
+@@ -44,8 +44,10 @@
+                                                     &error_fatal);
+ 
+     g_string_append_printf(buf, "Accelerator settings:\n");
+-    g_string_append_printf(buf, "one-insn-per-tb: %s\n\n",
++    g_string_append_printf(buf, "one-insn-per-tb: %s\n",
+                            one_insn_per_tb ? "on" : "off");
++    g_string_append_printf(buf, "hot-data-writes: %u\n\n",
++                           qatomic_read(&tcg_hot_data_writes));
+ }
+ 
+ static void print_qht_statistics(struct qht_stats hst, GString *buf)
+@@ -155,6 +157,8 @@
+                            qatomic_read(&tb_ctx.tb_flush_count));
+     g_string_append_printf(buf, "TB invalidate count %u\n",
+                            qatomic_read(&tb_ctx.tb_phys_invalidate_count));
++    g_string_append_printf(buf, "Hot data page drops %u\n",
++                           qatomic_read(&tb_ctx.tb_hot_data_drops));
+ 
+     tlb_flush_counts(&flush_full, &flush_part, &flush_elide);
+     g_string_append_printf(buf, "TLB full flushes    %zu\n", flush_full);

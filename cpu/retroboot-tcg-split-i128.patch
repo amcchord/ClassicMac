@@ -1,0 +1,104 @@
+--- a/accel/tcg/tcg-all.c
++++ b/accel/tcg/tcg-all.c
+@@ -268,6 +268,16 @@
+     qatomic_set(&tcg_hot_data_writes, value);
+ }
+ 
++static bool tcg_get_split_i128(Object *obj, Error **errp)
++{
++    return qatomic_read(&tcg_split_i128);
++}
++
++static void tcg_set_split_i128(Object *obj, bool value, Error **errp)
++{
++    qatomic_set(&tcg_split_i128, value);
++}
++
+ static int tcg_gdbstub_supported_sstep_flags(AccelState *as)
+ {
+     /*
+@@ -321,6 +331,12 @@
+     object_class_property_set_description(oc, "x-hot-data-writes",
+         "Drop the translations of a code page after this many stores "
+         "to it that touch no code (0 = never)");
++
++    object_class_property_add_bool(oc, "x-split-i128",
++                                   tcg_get_split_i128, tcg_set_split_i128);
++    object_class_property_set_description(oc, "x-split-i128",
++        "Without host 16-byte loads/stores, emit 16-byte guest accesses that "
++        "need no 16-byte atomicity as two inline 8-byte ones (softmmu)");
+ }
+ 
+ static const TypeInfo tcg_accel_type = {
+--- a/accel/tcg/tcg-stats.c
++++ b/accel/tcg/tcg-stats.c
+@@ -15,6 +15,7 @@
+ #include "hw/core/cpu.h"
+ #include "tcg/tcg.h"
+ #include "internal-common.h"
++#include "tcg/startup.h"
+ #include "tb-context.h"
+ #include <math.h>
+ 
+@@ -46,8 +47,10 @@
+     g_string_append_printf(buf, "Accelerator settings:\n");
+     g_string_append_printf(buf, "one-insn-per-tb: %s\n",
+                            one_insn_per_tb ? "on" : "off");
+-    g_string_append_printf(buf, "hot-data-writes: %u\n\n",
++    g_string_append_printf(buf, "hot-data-writes: %u\n",
+                            qatomic_read(&tcg_hot_data_writes));
++    g_string_append_printf(buf, "split-i128: %s\n\n",
++                           qatomic_read(&tcg_split_i128) ? "on" : "off");
+ }
+ 
+ static void print_qht_statistics(struct qht_stats hst, GString *buf)
+--- a/include/tcg/startup.h
++++ b/include/tcg/startup.h
+@@ -55,4 +55,14 @@
+  */
+ void tcg_prologue_init(void);
+ 
++/*
++ * RetroBoot (accelerator property x-split-i128, default on): in softmmu, a
++ * 16-byte guest access that needs no 16-byte atomicity (MO_ATOM_NONE or
++ * MO_ATOM_IFALIGN_PAIR, e.g. PowerPC lvx/stvx; always MO_ATOM_NONE with one
++ * vCPU) is emitted as two inline 8-byte accesses with their own TLB fast
++ * paths when the host has no 16-byte load/store (x86-64 without AVX),
++ * instead of a call to helper_ld_i128/helper_st_i128 and its full lookup.
++ */
++extern bool tcg_split_i128;
++
+ #endif
+--- a/tcg/tcg-op-ldst.c
++++ b/tcg/tcg-op-ldst.c
+@@ -24,6 +24,7 @@
+ 
+ #include "qemu/osdep.h"
+ #include "tcg/tcg.h"
++#include "tcg/startup.h"
+ #include "tcg/tcg-temp-internal.h"
+ #include "tcg/tcg-op-common.h"
+ #include "tcg/tcg-mo.h"
+@@ -443,6 +444,8 @@
+     tcg_gen_qemu_st_i64_int(val, addr, idx, memop);
+ }
+ 
++bool tcg_split_i128 = true;     /* RetroBoot: x-split-i128 */
++
+ /*
+  * Return true if @mop, without knowledge of the pointer alignment,
+  * does not require 16-byte atomicity, and it would be adventagous
+@@ -450,8 +453,11 @@
+  */
+ static bool use_two_i64_for_i128(MemOp mop)
+ {
+-    /* Two softmmu tlb lookups is larger than one function call. */
+-    if (tcg_use_softmmu) {
++    /*
++     * Two softmmu tlb lookups is larger than one function call, but much
++     * faster than the helper's full lookup (RetroBoot: x-split-i128).
++     */
++    if (tcg_use_softmmu && !qatomic_read(&tcg_split_i128)) {
+         return false;
+     }
+ 

@@ -1,0 +1,185 @@
+diff --git a/hw/display/vga.c b/hw/display/vga.c
+--- a/hw/display/vga.c
++++ b/hw/display/vga.c
+@@ -1544,6 +1544,47 @@
+ /*
+  * graphic modes
+  */
++/*
++ * RetroBoot: whether a displayed row of untracked VRAM differs from the copy
++ * taken when it was last reported.  For a changed row, [*b0, *b1) is the span
++ * from its first to its last differing byte, and only that span is copied: a
++ * write elsewhere in the row while it is being compared still differs at the
++ * next refresh, so nothing the guest draws is lost, only reported a refresh
++ * later.  memcmp decides the common case, an unchanged row.
++ */
++static bool vga_untracked_row_changed(const uint8_t *row, uint8_t *copy,
++                                      size_t len, size_t *b0, size_t *b1)
++{
++    size_t lo = 0, hi = len;
++
++    if (likely(memcmp(row, copy, len) == 0)) {
++        return false;
++    }
++    while (lo + 8 <= len && ldq_he_p(row + lo) == ldq_he_p(copy + lo)) {
++        lo += 8;
++    }
++    while (lo < len && row[lo] == copy[lo]) {
++        lo++;
++    }
++    if (lo == len) {
++        return false;               /* written back to what was shown */
++    }
++    while (hi >= lo + 8 &&
++           ldq_he_p(row + hi - 8) == ldq_he_p(copy + hi - 8)) {
++        hi -= 8;
++    }
++    while (hi > lo && row[hi - 1] == copy[hi - 1]) {
++        hi--;
++    }
++    if (hi <= lo) {
++        hi = lo + 1;
++    }
++    memcpy(copy + lo, row + lo, hi - lo);
++    *b0 = lo;
++    *b1 = hi;
++    return true;
++}
++
+ static void vga_draw_graphic(VGACommonState *s, int full_update)
+ {
+     DisplaySurface *surface = qemu_console_surface(s->con);
+@@ -1557,6 +1598,8 @@
+     uint32_t v, addr1, addr;
+     vga_draw_line_func *vga_draw_line = NULL;
+     bool allocate_surface, force_shadow = false;
++    bool copy_all = false;
++    int x0, x1, run_x0, run_x1;
+     pixman_format_code_t format;
+ #if HOST_BIG_ENDIAN
+     bool byteswap = !s->big_endian_fb;
+@@ -1718,6 +1761,9 @@
+                 vga_dirty_log_stop(s);
+             } else {
+                 vga_dirty_log_start(s);
++                g_free(s->untracked_copy);
++                s->untracked_copy = NULL;
++                s->untracked_copy_size = 0;
+             }
+             full_update = 1;
+         }
+@@ -1774,6 +1820,23 @@
+ #endif
+     addr1 = (s->params.start_addr * 4);
+     y_start = -1;
++    run_x0 = disp_width;
++    run_x1 = 0;
++    if (s->untracked_vram_active) {
++        size_t need = (size_t)height * bwidth;
++
++        if (full_update || !s->untracked_copy ||
++            s->untracked_row_bytes != bwidth || s->untracked_rows != height) {
++            if (s->untracked_copy_size < need) {
++                g_free(s->untracked_copy);
++                s->untracked_copy = g_malloc(need);
++                s->untracked_copy_size = need;
++            }
++            s->untracked_row_bytes = bwidth;
++            s->untracked_rows = height;
++            copy_all = true;        /* report and copy every row this time */
++        }
++    }
+     d = surface_data(surface);
+     linesize = surface_stride(surface);
+     y1 = 0;
+@@ -1813,7 +1876,26 @@
+         }
+         page0 = addr & s->vbe_size_mask;
+         page1 = (addr + bwidth - 1) & s->vbe_size_mask;
+-        if (full_update) {
++        x0 = 0;
++        x1 = disp_width;
++        if (s->untracked_vram_active && y < s->untracked_rows) {
++            /* a shared surface: rows never wrap (that forces a shadow) */
++            uint8_t *copy = s->untracked_copy + (size_t)y * bwidth;
++            size_t b0, b1;
++
++            if (full_update || copy_all) {
++                memcpy(copy, s->vram_ptr + page0, bwidth);
++                update = 1;
++            } else {
++                update = vga_untracked_row_changed(s->vram_ptr + page0, copy,
++                                                   bwidth, &b0, &b1);
++                if (update) {
++                    x0 = MIN(b0 * 8 / bits, disp_width - 1);
++                    x1 = MAX(MIN(DIV_ROUND_UP(b1 * 8, bits), disp_width),
++                             x0 + 1);
++                }
++            }
++        } else if (full_update) {
+             update = 1;
+         } else if (page1 < page0) {
+             /* scanline wraps from end of video memory to the start */
+@@ -1829,10 +1911,16 @@
+                                                       page0, page1 - page0);
+         }
+         /* explicit invalidation for the hardware cursor (cirrus only) */
+-        update |= vga_scanline_invalidated(s, y);
++        if (vga_scanline_invalidated(s, y)) {
++            update = 1;
++            x0 = 0;
++            x1 = disp_width;
++        }
+         if (update) {
+             if (y_start < 0)
+                 y_start = y;
++            run_x0 = MIN(run_x0, x0);
++            run_x1 = MAX(run_x1, x1);
+             if (surface_is_allocated(surface)) {
+                 uint8_t *p;
+                 p = vga_draw_line(s, d, addr, width, hpel);
+@@ -1845,9 +1933,11 @@
+         } else {
+             if (y_start >= 0) {
+                 /* flush to display */
+-                dpy_gfx_update(s->con, 0, y_start,
+-                               disp_width, y - y_start);
++                dpy_gfx_update(s->con, run_x0, y_start,
++                               run_x1 - run_x0, y - y_start);
+                 y_start = -1;
++                run_x0 = disp_width;
++                run_x1 = 0;
+             }
+         }
+         if (!multi_run) {
+@@ -1870,8 +1960,8 @@
+     }
+     if (y_start >= 0) {
+         /* flush to display */
+-        dpy_gfx_update(s->con, 0, y_start,
+-                       disp_width, y - y_start);
++        dpy_gfx_update(s->con, run_x0, y_start,
++                       run_x1 - run_x0, y - y_start);
+     }
+     g_free(snap);
+     memset(s->invalidated_y_table, 0, sizeof(s->invalidated_y_table));
+diff --git a/hw/display/vga_int.h b/hw/display/vga_int.h
+--- a/hw/display/vga_int.h
++++ b/hw/display/vga_int.h
+@@ -151,6 +151,16 @@
+      */
+     bool untracked_vram;
+     bool untracked_vram_active;
++    /*
++     * RetroBoot: with untracked VRAM nothing records which rows the guest
++     * wrote, so each refresh compares the displayed rows with this copy of
++     * what it last reported (untracked_rows rows of untracked_row_bytes) and
++     * reports only what differs.
++     */
++    uint8_t *untracked_copy;
++    size_t untracked_copy_size;
++    uint32_t untracked_row_bytes;
++    int untracked_rows;
+     bool classicmac_boot_handoff;
+     int64_t classicmac_boot_handoff_started_ns;
+     QEMUTimer *classicmac_boot_handoff_timer;

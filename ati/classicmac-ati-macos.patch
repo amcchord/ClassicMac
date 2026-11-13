@@ -1,8 +1,7 @@
 diff --git a/hw/display/ati.c b/hw/display/ati.c
-index 96c26c0..b2e76b3 100644
 --- a/hw/display/ati.c
 +++ b/hw/display/ati.c
-@@ -1472,11 +1472,20 @@ static char *ati_get_accel_stats(Object *o, Error **errp)
+@@ -1522,11 +1522,20 @@
                             s->r3d ? ati_3d_stats(s) : "");
  }
  
@@ -24,18 +23,17 @@ index 96c26c0..b2e76b3 100644
      object_initialize_child(o, "edid", &s->i2cddc, TYPE_I2CDDC);
      object_property_set_description(o, "x-pixman", "Use pixman for: "
 diff --git a/hw/display/ati_3d.c b/hw/display/ati_3d.c
-index 210ae5d..31c46fc 100644
 --- a/hw/display/ati_3d.c
 +++ b/hw/display/ati_3d.c
-@@ -147,6 +147,7 @@ struct ATI3DState {
+@@ -148,6 +148,7 @@
      uint64_t rb_why[ATI_SYNC_N];      /* readbacks by cause: 2D, status read, vblank */
      uint64_t vb_fetch, vb_idx;        /* vertices fetched and decoded / drawn, 3D_RNDR_GEN_INDX_PRIM */
-     char stats[512];
+     char stats[768];
 +    char gl_info[256];                /* ClassicMac: host GL renderer, "" when off */
  };
  
  static inline uint32_t R(ATIVGAState *s, hwaddr a)
-@@ -1403,19 +1404,30 @@ void ati_3d_reg_write(ATIVGAState *s, hwaddr addr, uint32_t data)
+@@ -1534,19 +1535,30 @@
      /* state lives in the register file; draws decode it there */
  }
  
@@ -71,7 +69,6 @@ index 210ae5d..31c46fc 100644
      } else {
          warn_report("ati: no host GL (%s); 3D drawing is discarded", info);
 diff --git a/hw/display/ati_gl.c b/hw/display/ati_gl.c
-index de12797..b8dd95a 100644
 --- a/hw/display/ati_gl.c
 +++ b/hw/display/ati_gl.c
 @@ -1,12 +1,16 @@
@@ -93,10 +90,11 @@ index de12797..b8dd95a 100644
   */
  
  #include <dlfcn.h>
-@@ -15,6 +19,168 @@
+@@ -14,6 +18,168 @@
+ #include <stdlib.h>
  #include <string.h>
  #include "ati_gl.h"
- 
++
 +#ifdef __APPLE__
 +/*
 + * ClassicMac: Apple's OpenGL.framework through CGL with an OpenGL 4.1 Core
@@ -258,18 +256,16 @@ index de12797..b8dd95a 100644
 +}
 +
 +#else /* !__APPLE__: EGL surfaceless + OpenGL ES 3.0 (RetroBoot) */
-+
+ 
  typedef void *EGLDisplay;
  typedef void *EGLContext;
- typedef void *EGLSurface;
-@@ -165,3 +331,5 @@ void ati_gl_close(void)
+@@ -165,3 +331,5 @@
      egl.dpy = NULL;
      /* the libraries stay loaded: Mesa does not like being unloaded */
  }
 +
 +#endif /* __APPLE__ */
 diff --git a/hw/display/ati_gl.h b/hw/display/ati_gl.h
-index 997cc45..aeb69d1 100644
 --- a/hw/display/ati_gl.h
 +++ b/hw/display/ati_gl.h
 @@ -10,6 +10,11 @@
@@ -284,7 +280,7 @@ index 997cc45..aeb69d1 100644
   */
  #ifndef ATI_GL_H
  #define ATI_GL_H
-@@ -148,6 +153,13 @@ typedef uint64_t GLuint64;
+@@ -148,6 +153,13 @@
  #define GL_SYNC_FLUSH_COMMANDS_BIT     0x00000001
  #define GL_NEAREST_                    GL_NEAREST
  
@@ -299,7 +295,6 @@ index 997cc45..aeb69d1 100644
      X(const GLubyte *, GetString, (GLenum)) \
      X(GLenum, GetError, (void)) \
 diff --git a/hw/display/ati_glr.c b/hw/display/ati_glr.c
-index da3c484..a017617 100644
 --- a/hw/display/ati_glr.c
 +++ b/hw/display/ati_glr.c
 @@ -1,5 +1,5 @@
@@ -309,7 +304,7 @@ index da3c484..a017617 100644
   *
   * Copyright (c) 2026 RetroBoot contributors
   *
-@@ -268,8 +268,8 @@ static void encode_row(const uint8_t *src, uint8_t *dst, unsigned w,
+@@ -435,8 +435,8 @@
   * alpha test, fog) is selected by uniforms.
   */
  
@@ -319,7 +314,7 @@ index da3c484..a017617 100644
      "uniform vec2 fbsize;\n"
      "in vec4 a_pos;\n"            /* x, y (pixels), z (0..1), rhw */
      "in vec4 a_c0;\n"
-@@ -296,7 +296,6 @@ static const char *vs_src =
+@@ -463,7 +463,6 @@
      "}\n";
  
  static const char *fs_src =
@@ -327,7 +322,7 @@ index da3c484..a017617 100644
      "precision highp float;\n"
      "uniform sampler2D tex0;\n"
      "uniform sampler2D tex1;\n"
-@@ -320,7 +319,7 @@ static const char *fs_src =
+@@ -487,7 +486,7 @@
      "in vec4 v_t1;\n"
      "in vec4 v_t2;\n"
      "in float v_z;\n"
@@ -336,24 +331,24 @@ index da3c484..a017617 100644
      "vec4 T[4];\n"
      "vec4 cur; vec4 dif; vec4 spec;\n"
      "vec3 carg(int a, int s) {\n"
-@@ -416,8 +415,9 @@ static GLuint glr_shader(ATIRenderer *r, GLenum type, const char *src)
+@@ -583,8 +582,9 @@
      ATIGL *gl = &r->gl;
      GLuint s = gl->CreateShader(type);
      GLint ok = 0;
-+    const GLchar *srcs[2] = { ATI_GLSL_VERSION, src };
- 
+-
 -    gl->ShaderSource(s, 1, &src, NULL);
++    const GLchar *srcs[2] = { ATI_GLSL_VERSION, src };
++
 +    gl->ShaderSource(s, 2, srcs, NULL);
      gl->CompileShader(s);
      gl->GetShaderiv(s, GL_COMPILE_STATUS, &ok);
      if (!ok) {
 diff --git a/hw/display/ati_int.h b/hw/display/ati_int.h
-index 6bd73e1..6a87a3e 100644
 --- a/hw/display/ati_int.h
 +++ b/hw/display/ati_int.h
-@@ -210,6 +210,7 @@ bool ati_3d_flip(ATIVGAState *s, uint64_t mc, uint64_t len);
- bool ati_3d_range_ready(ATIVGAState *s, uint64_t mc, uint64_t len);
- void ati_3d_land(ATIVGAState *s);
+@@ -227,6 +227,7 @@
+ bool ati_ext_mode(ATIVGAState *s);
+ void ati_flip_settle(ATIVGAState *s);
  const char *ati_3d_stats(ATIVGAState *s);
 +const char *ati_3d_gl_info(ATIVGAState *s);
  bool ati_host_data_flush(ATIVGAState *s);

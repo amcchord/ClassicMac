@@ -7,7 +7,8 @@ int qfb_get_mode(CntrlParam* params, DCtlPtr dce) {
     = *reinterpret_cast<VDSwitchInfoRec**>(params->csParam);
   si->csMode = locals->cur_mode;
   si->csData = locals->cur_resolution; /* current DisplayModeID */
-  si->csPage = (locals->qfb->base - QFB_VRAM_SLOT_BASE) / (locals->qfb->width * locals->qfb->rowbytes);
+  /* A framebuffer page contains height rows, including non-square modes. */
+  si->csPage = (locals->qfb->base - QFB_VRAM_SLOT_BASE) / (locals->qfb->height * locals->qfb->rowbytes);
   si->csBaseAddr = reinterpret_cast<Ptr>(locals->vram + locals->qfb->base);
   return noErr;
 }

@@ -1,0 +1,50 @@
+diff --git a/target/ppc/cpu_init.c b/target/ppc/cpu_init.c
+--- a/target/ppc/cpu_init.c
++++ b/target/ppc/cpu_init.c
+@@ -610,7 +610,7 @@ static void register_74xx_sprs(CPUPPCState *env)
+ 
+     spr_register(env, SPR_MSSCR0, "MSSCR0",
+                  SPR_NOACCESS, SPR_NOACCESS,
+-                 &spr_read_generic, &spr_write_generic,
++                 &spr_read_generic, &spr_write_msscr0,
+                  0x00000000);
+     /* Hardware implementation registers */
+     spr_register(env, SPR_HID0, "HID0",
+diff --git a/target/ppc/spr_common.h b/target/ppc/spr_common.h
+--- a/target/ppc/spr_common.h
++++ b/target/ppc/spr_common.h
+@@ -81,6 +81,7 @@ void _spr_register(CPUPPCState *env, int num, const char *name,
+ void spr_noaccess(DisasContext *ctx, int gprn, int sprn);
+ void spr_read_generic(DisasContext *ctx, int gprn, int sprn);
+ void spr_write_generic(DisasContext *ctx, int sprn, int gprn);
++void spr_write_msscr0(DisasContext *ctx, int sprn, int gprn);
+ void spr_write_generic32(DisasContext *ctx, int sprn, int gprn);
+ void spr_core_write_generic(DisasContext *ctx, int sprn, int gprn);
+ void spr_core_write_generic32(DisasContext *ctx, int sprn, int gprn);
+diff --git a/target/ppc/translate.c b/target/ppc/translate.c
+--- a/target/ppc/translate.c
++++ b/target/ppc/translate.c
+@@ -453,6 +453,23 @@ void spr_write_generic(DisasContext *ctx, int sprn, int gprn)
+     spr_store_dump_spr(sprn);
+ }
+ 
++/*
++ * RetroBoot: MSSCR0 of the 7400/7410.  MSSCR0[DL1HWF] (L1 data cache
++ * hardware flush) clears itself when the flush is done; QEMU has no cache to
++ * flush, so it is done at once.  Mac OS 9 (its CPU plugin, before power
++ * management transitions on a PowerBook) and Linux set the bit and poll it
++ * until it clears, which never happened here.  Other bits are stored as
++ * written.
++ */
++void spr_write_msscr0(DisasContext *ctx, int sprn, int gprn)
++{
++    TCGv t0 = tcg_temp_new();
++
++    tcg_gen_andi_tl(t0, cpu_gpr[gprn], ~(target_ulong)0x00800000);
++    gen_store_spr(sprn, t0);
++    spr_store_dump_spr(sprn);
++}
++
+ void spr_write_generic32(DisasContext *ctx, int sprn, int gprn)
+ {
+ #ifdef TARGET_PPC64

@@ -1,0 +1,52 @@
+diff --git a/hw/misc/mac_via.c b/hw/misc/mac_via.c
+--- a/hw/misc/mac_via.c
++++ b/hw/misc/mac_via.c
+@@ -1334,6 +1334,12 @@
+ };
+ 
+ static const Property mos6522_q800_via1_properties[] = {
++    /* RetroBoot: reuse the shared translation-aware T2 hold on Quadra VIA1. */
++    DEFINE_PROP_BOOL("t2-hold", MOS6522Q800VIA1State, parent_obj.t2_hold, true),
++    DEFINE_PROP_UINT32("x-t2-hold-quiet-us", MOS6522Q800VIA1State,
++                       parent_obj.t2_hold_quiet_us, 100),
++    DEFINE_PROP_UINT32("x-t2-hold-max-us", MOS6522Q800VIA1State,
++                       parent_obj.t2_hold_max_us, 4000),
+     DEFINE_PROP_DRIVE("drive", MOS6522Q800VIA1State, blk),
+     /*
+      * RetroBoot: ADB autopolling every 100 ms instead of 11 ms once the
+diff --git a/hw/misc/mos6522.c b/hw/misc/mos6522.c
+--- a/hw/misc/mos6522.c
++++ b/hw/misc/mos6522.c
+@@ -176,7 +176,7 @@
+     trace_mos6522_set_counter(1 + ti->index, val);
+     if (ti->index == 1) {
+         s->t2_held_since = 0;
+-        if (s->t2_hold && !s->t2_watch && s->coherent_timers) {
++        if (s->t2_hold && !s->t2_watch) {
+             s->t2_watch = cpu_translation_watch();
+             s->t2_hold = s->t2_watch;   /* SMP, icount or no TCG: off */
+         }
+@@ -367,11 +367,11 @@
+     MOS6522State *s = opaque;
+     MOS6522Timer *ti = &s->timers[1];
+ 
+-    if (s->coherent_timers &&
+-        mos6522_t2_hold(s, qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL))) {
++    if (mos6522_t2_hold(s, qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL))) {
+         return;
+     }
+ 
++    s->t2_held_since = 0;
+     mos6522_timer2_fired(s);
+     mos6522_timer2_update(s, ti, ti->next_irq_time);
+     s->ifr |= T2_INT;
+@@ -413,7 +413,8 @@
+         s->ifr |= T1_INT;
+     }
+     if (now >= s->timers[1].next_irq_time &&
+-        !(s->coherent_timers && mos6522_t2_hold(s, now))) {
++        !mos6522_t2_hold(s, now)) {
++        s->t2_held_since = 0;
+         mos6522_timer2_fired(s);
+         mos6522_timer2_update(s, &s->timers[1], now);
+         s->ifr |= T2_INT;

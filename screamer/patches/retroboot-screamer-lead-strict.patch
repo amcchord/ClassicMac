@@ -1,0 +1,90 @@
+diff --git a/hw/audio/screamer.c b/hw/audio/screamer.c
+--- a/hw/audio/screamer.c
++++ b/hw/audio/screamer.c
+@@ -156,6 +156,22 @@
+  * status after an interrupt.  The DMA then waits for the guest instead of
+  * overrunning it; the codec timeline above lets it catch up afterwards.
+  */
++/*
++ * RetroBoot: a pre-roll that holds on a slow guest (host-lead-strict).
++ *
++ * The host stream starts once the lead is queued, or at once when no output
++ * command is pending, so that a sound shorter than the lead still plays.  On
++ * a slow guest the second rule also fired in the gap between two of Mac OS's
++ * DBDMA programs (the driver restarts its program from the half-done
++ * interrupt, a millisecond or more later on the Gemini PDA's vCPU): when the
++ * 10 ms audio timer met that gap, the stream started with what was queued
++ * (35 ms instead of a 120 ms lead in one QuickTime run), and the next long
++ * wait for the guest (irq-hold, up to 100 ms when QuickTime starts a sound)
++ * ran the host dry.  With host-lead-strict an idle DMA starts the stream only
++ * once the lead's time has passed since the pre-roll began: a short sound
++ * starts one lead after its first data, like a long one.  Off by default (the
++ * PCs' behaviour); hostd turns it on for the Gemini PDA.
++ */
+ #define SCREAMER_HOLD_POLL_NS   (250 * SCALE_US)
+ #define SCREAMER_LEAD_STEP_MS   20
+ #define SCREAMER_IDLE_NS        (2 * SCALE_MS)  /* longer: the DMA was idle */
+@@ -435,6 +451,9 @@
+             pmac_screamer_tx_transfer(&s->io);  /* a command that found no room */
+         }
+         queued = s->bpos - s->ppos;
++        if (queued && !s->host_started && !s->preroll_ns) {
++            s->preroll_ns = now;                /* a pre-roll begins */
++        }
+ 
+         if (s->host_started && s->dma_pending &&
+             muldiv64(now - s->host_t0_ns, s->rate, NANOSECONDS_PER_SECOND) >
+@@ -445,6 +464,7 @@
+             s->lead_ms = MIN(s->lead_ms + SCREAMER_LEAD_STEP_MS,
+                              MAX(s->host_lead_max_ms, s->host_lead_ms));
+             s->host_started = false;            /* pre-roll the larger lead */
++            s->preroll_ns = now;
+             trace_screamer_underrun(s->underruns, s->lead_ms, queued);
+         }
+         if (!queued) {
+@@ -454,13 +474,16 @@
+             }
+         } else if (s->host_started ||
+                    queued >= s->lead_ms * screamer_bytes_per_ms(s) ||
+-                   !s->dma_pending) {
++                   (!s->dma_pending &&
++                    (!s->host_lead_strict ||
++                     now - s->preroll_ns >= (int64_t)s->lead_ms * SCALE_MS))) {
+             uint32_t before = s->ppos;
+ 
+             if (!s->host_started) {
+                 s->host_started = true;
+                 s->host_t0_ns = now;
+                 s->host_frames = 0;
++                s->preroll_ns = 0;
+             }
+             screamer_host_write(s, avail);
+             s->host_frames += (s->ppos - before) / 4;
+@@ -549,6 +572,7 @@
+     s->frames = 0;
+     s->codec_ns = 0;
+     s->host_started = false;
++    s->preroll_ns = 0;
+     s->vol_pending = false;
+     s->lead_ms = s->host_lead_ms;
+     s->underrun_ns = 0;
+@@ -754,6 +778,7 @@
+     DEFINE_PROP_UINT32("host-lead-ms", ScreamerState, host_lead_ms, 40),
+     DEFINE_PROP_UINT32("host-lead-max-ms", ScreamerState, host_lead_max_ms, 120),
+     DEFINE_PROP_UINT32("irq-hold-ms", ScreamerState, irq_hold_ms, 100),
++    DEFINE_PROP_BOOL("host-lead-strict", ScreamerState, host_lead_strict, false),
+ };
+ 
+ static void screamer_class_init(ObjectClass *oc, const void *data)
+diff --git a/include/hw/audio/screamer.h b/include/hw/audio/screamer.h
+--- a/include/hw/audio/screamer.h
++++ b/include/hw/audio/screamer.h
+@@ -85,6 +85,8 @@
+     uint32_t holds;
+     uint32_t underruns;         /* statistics (trace) */
+     uint32_t dropped;
++    bool host_lead_strict;      /* property host-lead-strict: an idle DMA waits too */
++    int64_t preroll_ns;         /* the current pre-roll began (0: none) */
+ 
+     uint32_t idle_stop_ms;      /* stop the host stream after this long */
+     bool voice_active;

@@ -1,0 +1,28 @@
+RetroBoot: nubus-qfb takes 32 in its depth register as millions, as at realize (m68k series).
+
+The qfb driver's open (ClassicMac qfb/driver main.cc) writes 32 to the depth
+register when the card starts in millions (slot PRAM mode $85, nubus-qfb
+depth=24 or 32); its cscSetMode/cscSwitchMode write 24.  QEMU accepted only
+1, 2, 4, 8, 16 and 24 and took 32 as 1 bit, so a Mac that starts in millions
+drew 32-bit pixels into a 1-bit screen (lab: Mac OS 8.1, seed mode $85).
+Realize already maps a depth property of 32 to 24; the register now does too.
+
+diff --git a/hw/display/mac_qfb.c b/hw/display/mac_qfb.c
+index e58fda54bb..1f1ff35ca6 100644
+--- a/hw/display/mac_qfb.c
++++ b/hw/display/mac_qfb.c
+@@ -529,6 +529,14 @@ static void qfb_ctrl_write(void *opaque,
+         case 1: case 2: case 4: case 8: case 16: case 24:
+             s->depth = val;
+             break;
++        case 32:
++            /*
++             * RetroBoot: millions, as at realize.  The driver's open writes
++             * 32 when the card starts in millions (cscSetMode writes 24);
++             * taken as 1 bit, Mac OS drew 32-bit pixels into a 1-bit screen.
++             */
++            s->depth = 24;
++            break;
+         default:
+             s->depth = 1;
+             break;

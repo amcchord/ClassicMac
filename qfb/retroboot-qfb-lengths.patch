@@ -1,0 +1,101 @@
+RetroBoot: nubus-qfb declares device lengths and a page count that fit the card (Quadra 800, m68k series).
+
+The Quadra ROM sets ScreenBytes to the video sResource's minorLength and clears
+that many bytes from the screen base (device base + vpBaseOffset 0x10000);
+mac_qfb.rom declares 256 MiB, so the clear ran into the next slot and bus-erred
+(Sad Mac at the gray screen).  Mac OS likewise uses majorLength (32 MiB, 64 KiB
+past VRAM from the screen base), and the patched page count ignored the base
+offset, so the last page ran past VRAM.  At realize (and on the driver's
+re-patch) minorLength is limited to the standard slot space after the screen
+base, majorLength to VRAM after it, and mPageCnt counts pages after it (at most
+32000, as the driver).
+
+diff --git a/hw/display/mac_qfb.c b/hw/display/mac_qfb.c
+index c71c91d4fe..28b58e3e6d 100644
+--- a/hw/display/mac_qfb.c
++++ b/hw/display/mac_qfb.c
+@@ -65,6 +65,10 @@
+ 
+ #define QFB_IRQ_VBL         0x1
+ 
++/* RetroBoot: vpBaseOffset of every mac_qfb.rom mode (the driver's
++   QFB_VRAM_SLOT_BASE): the screen starts this far into VRAM. */
++#define QFB_SCREEN_BASE_OFFSET 0x10000
++
+ /* QuickDraw gets very cranky if your rowbytes is >= 16382 */
+ #define QFB_MAX_WIDTH       3840
+ #define QFB_MAX_HEIGHT      2160
+@@ -698,7 +702,63 @@ static void qfb_patch_sresource(QfbState *ms, uint8_t *ptr, uint32_t offset, uin
+     qfb_patch_vpblock(ms, ptr, (offset + qfb_ptr_read_u32(ptr + offset)) & 0xFFFFFF, size, &depth);
+ 
+     if(depth != 0)
+-        qfb_ptr_write_u32(ptr + offset + 4, ((QFB_VRAM_SIZE / ms->height / qfb_calculate_stride(ms->width, depth)) & 0xFFFFFF) | 0x03000000);
++        /* RetroBoot: pages that fit after the screen base, as the driver
++           counts them (qfb_calculate_num_pages); Mac OS grays every page at
++           startup, and the last one ran 64 KiB past VRAM (bus error). */
++        qfb_ptr_write_u32(ptr + offset + 4, (MIN((QFB_VRAM_SIZE - QFB_SCREEN_BASE_OFFSET) / ((uint64_t)ms->height * qfb_calculate_stride(ms->width, depth)), 32000) & 0xFFFFFF) | 0x03000000);
++}
++
++/*
++ * RetroBoot: keep the Quadra ROM's and Mac OS's screen clears inside the card.
++ *
++ * The 68040 Macintosh ROM (Quadra 610/650/800) sets ScreenBytes to the video
++ * sResource's minorLength and clears that many bytes from ScrnBase, the device
++ * base plus the mode's vpBaseOffset; Mac OS clears majorLength bytes from the
++ * 32-bit (super slot) base the same way.  mac_qfb.rom declares minorLength
++ * 256 MiB ("a slight fib", see decl_rom.s) and majorLength 32 MiB with
++ * vpBaseOffset 0x10000, so both clears ran past the card: into the next
++ * slot's standard space (bus error; the ROM's Sad Mac 0000000F/00000001 at the
++ * gray screen, whose own clear faults again) and 64 KiB past the 32 MiB of
++ * VRAM (bus error while Mac OS starts).  Declare instead the lengths that fit
++ * from the screen base: to the end of the standard slot space (the
++ * declaration ROM at its top ignores writes) and to the end of VRAM.
++ */
++#define QFB_SRSRC_MINOR_LENGTH 11
++#define QFB_SRSRC_MAJOR_LENGTH 13
++
++/* A declaration ROM list entry's 24-bit signed offset, relative to the entry. */
++static int64_t qfb_rom_entry_target(uint8_t *ptr, int64_t entry)
++{
++    int32_t v = (ptr[entry + 1] << 16) | (ptr[entry + 2] << 8) | ptr[entry + 3];
++
++    return entry + ((v & 0x800000) ? v - 0x1000000 : v);
++}
++
++static void qfb_fit_space_lengths(uint8_t *ptr, uint32_t size)
++{
++    int64_t dir = qfb_rom_entry_target(ptr, (int64_t)size - 20);
++    int64_t d, e, rec, list;
++    uint32_t max;
++
++    for (d = dir; d >= 0 && d + 4 <= size && ptr[d] != 0xff; d += 4) {
++        if (ptr[d] < 128) {
++            continue; /* board sResource: no device spaces */
++        }
++        list = qfb_rom_entry_target(ptr, d);
++        for (e = list; e >= 0 && e + 4 <= size && ptr[e] != 0xff; e += 4) {
++            if (ptr[e] == QFB_SRSRC_MINOR_LENGTH) {
++                max = NUBUS_SLOT_SIZE - QFB_SCREEN_BASE_OFFSET;
++            } else if (ptr[e] == QFB_SRSRC_MAJOR_LENGTH) {
++                max = QFB_VRAM_SIZE - QFB_SCREEN_BASE_OFFSET;
++            } else {
++                continue;
++            }
++            rec = qfb_rom_entry_target(ptr, e);
++            if (rec >= 0 && rec + 4 <= size && qfb_ptr_read_u32(ptr + rec) > max) {
++                qfb_ptr_write_u32(ptr + rec, max);
++            }
++        }
++    }
+ }
+ 
+ /* QuickDraw-compatible video cards must specify every resolution supported by
+@@ -769,6 +829,8 @@ static void qfb_try_patch_decl_rom(MemoryRegion *rom, QfbState *ms)
+         }
+     }
+ 
++    qfb_fit_space_lengths(ptr, size);
++
+     checksum = qfb_calc_nubus_checksum(ptr, size);
+     qfb_ptr_write_u32(ptr + size - 12, checksum);
+ }

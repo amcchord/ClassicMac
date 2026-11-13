@@ -1,0 +1,160 @@
+RetroBoot: Mac OS's Restart on the Quadra 800 is a system reset, and a q800 system reset starts the ROM again (m68k series).
+
+The Macintosh ROM executes RESET once at power-on (PC 0x4080009C on the
+Quadra 610/650/800 ROM) and runs the same path when Mac OS restarts; QEMU's
+RESET does nothing, so a Restart (Special menu, the power dialog's Restart
+button or R) rebooted the Mac inside the running QEMU without any QMP event,
+and hostd could not tell a Restart from a hang.  m68k CPU property
+restart-resets (default off; on for the q800 through its compat globals): a
+RESET after the first since the last system reset requests a system reset
+(SHUTDOWN_CAUSE_GUEST_RESET: QMP SHUTDOWN guest-reset with -action
+reboot=shutdown, RESET guest-reset otherwise).  -global
+m68040-m68k-cpu.restart-resets=off restores QEMU's in-place restart.
+
+A q800 system reset (this one, or QMP system_reset) loaded the initial SP
+and PC from RAM at 0 and 4, which hold Mac OS's vectors by then: the CPU
+started at a stale RAM address and the screen stayed white.  The machine now
+keeps the ROM's reset vectors and writes them back before the CPU reset.
+
+diff --git a/hw/m68k/q800.c b/hw/m68k/q800.c
+index c52b3b5012..c0317ceb2d 100644
+--- a/hw/m68k/q800.c
++++ b/hw/m68k/q800.c
+@@ -108,7 +108,17 @@ static void main_cpu_reset(void *opaque)
+ {
+     M68kCPU *cpu = opaque;
+     CPUState *cs = CPU(cpu);
+-
++    Q800MachineState *m = container_of(cpu, Q800MachineState, cpu);
++
++    if (m->rom_reset_vectors) {
++        /*
++         * RetroBoot: put the Mac ROM's reset vectors back at 0 and 4.  By the
++         * time of a system reset Mac OS's vectors are in that RAM, and the CPU
++         * started at a stale RAM address (a white screen) instead of the ROM.
++         */
++        stl_phys(cs->as, 0, m->rom_reset_sp);
++        stl_phys(cs->as, 4, m->rom_reset_pc);
++    }
+     cpu_reset(cs);
+     cpu->env.aregs[7] = ldl_phys(cs->as, 0);
+     cpu->env.pc = ldl_phys(cs->as, 4);
+@@ -697,6 +707,9 @@ static void q800_machine_init(MachineState *machine)
+             stl_phys(cs->as, 0, ldl_be_p(ptr));    /* reset initial SP */
+             stl_phys(cs->as, 4,
+                      MACROM_ADDR + ldl_be_p(ptr + 4)); /* reset initial PC */
++            m->rom_reset_sp = ldl_be_p(ptr);
++            m->rom_reset_pc = MACROM_ADDR + ldl_be_p(ptr + 4);
++            m->rom_reset_vectors = true;
+         }
+     }
+ }
+@@ -781,6 +794,8 @@ static void q800_init(Object *obj)
+ }
+ 
+ static GlobalProperty hw_compat_q800[] = {
++    /* RetroBoot: Mac OS's Restart is a system reset (guest-reset) */
++    { M68K_CPU_TYPE_NAME("m68040"), "restart-resets", "on" },
+     { "scsi-hd", "quirk_mode_page_vendor_specific_apple", "on" },
+     { "scsi-hd", "vendor", " SEAGATE" },
+     { "scsi-hd", "product", "          ST225N" },
+diff --git a/include/hw/m68k/q800.h b/include/hw/m68k/q800.h
+index eca8a2ffe2..fa19ebe78d 100644
+--- a/include/hw/m68k/q800.h
++++ b/include/hw/m68k/q800.h
+@@ -71,6 +71,10 @@ struct Q800MachineState {
+     MemoryRegion machine_id;
+     MemoryRegion escc_alias;
+ 
++    /* RetroBoot: the Mac ROM's reset vectors, restored at a system reset */
++    bool rom_reset_vectors;
++    uint32_t rom_reset_sp, rom_reset_pc;
++
+     bool add_qfb; /* Whether to add a paravirtualized video card */
+     bool unplug_dafb; /* Whether to unplug the built-in DAFB video card */
+ };
+diff --git a/target/m68k/cpu.c b/target/m68k/cpu.c
+index d849a4a90f..9d504caff0 100644
+--- a/target/m68k/cpu.c
++++ b/target/m68k/cpu.c
+@@ -28,6 +28,7 @@
+ #endif
+ 
+ #include "cpu.h"
++#include "hw/core/qdev-properties.h"
+ 
+ static void m68k_cpu_set_pc(CPUState *cs, vaddr value)
+ {
+@@ -109,6 +110,7 @@ static void m68k_cpu_reset_hold(Object *obj, ResetType type)
+     }
+ 
+     memset(env, 0, offsetof(CPUM68KState, end_reset_fields));
++    M68K_CPU(obj)->reset_insns = 0;
+ #ifdef CONFIG_USER_ONLY
+     cpu_m68k_set_sr(env, 0);
+ #else
+@@ -632,6 +634,12 @@ static const TCGCPUOps m68k_tcg_ops = {
+ #endif /* !CONFIG_USER_ONLY */
+ };
+ 
++#if !defined(CONFIG_USER_ONLY)
++static const Property m68k_cpu_properties[] = {
++    DEFINE_PROP_BOOL("restart-resets", M68kCPU, restart_resets, false),
++};
++#endif
++
+ static void m68k_cpu_class_init(ObjectClass *c, const void *data)
+ {
+     M68kCPUClass *mcc = M68K_CPU_CLASS(c);
+@@ -653,6 +661,7 @@ static void m68k_cpu_class_init(ObjectClass *c, const void *data)
+ #if !defined(CONFIG_USER_ONLY)
+     dc->vmsd = &vmstate_m68k_cpu;
+     cc->sysemu_ops = &m68k_sysemu_ops;
++    device_class_set_props(dc, m68k_cpu_properties);
+ #endif
+     cc->disas_set_info = m68k_cpu_disas_set_info;
+ 
+diff --git a/target/m68k/cpu.h b/target/m68k/cpu.h
+index 7911ab9de3..44480a455b 100644
+--- a/target/m68k/cpu.h
++++ b/target/m68k/cpu.h
+@@ -167,6 +167,15 @@ struct ArchCPU {
+     CPUState parent_obj;
+ 
+     CPUM68KState env;
++
++    /*
++     * RetroBoot: a Macintosh ROM executes RESET once at power-on and again
++     * when Mac OS restarts.  With restart-resets on, every RESET after the
++     * first since the last system reset asks for a system reset (guest-reset),
++     * as the machine's restart.  Off: RESET does nothing (QEMU's behaviour).
++     */
++    bool restart_resets;
++    uint32_t reset_insns;
+ };
+ 
+ /*
+diff --git a/target/m68k/helper.c b/target/m68k/helper.c
+index 9bab184389..0c55ef479f 100644
+--- a/target/m68k/helper.c
++++ b/target/m68k/helper.c
+@@ -28,6 +28,7 @@
+ #include "system/memory.h"
+ #include "gdbstub/helpers.h"
+ #include "fpu/softfloat.h"
++#include "system/runstate.h"
+ #include "qemu/qemu-print.h"
+ 
+ #define SIGNBIT (1u << 31)
+@@ -1505,6 +1506,11 @@ void HELPER(pflush)(CPUM68KState *env, uint32_t addr, uint32_t opmode)
+ 
+ void HELPER(reset)(CPUM68KState *env)
+ {
++    M68kCPU *cpu = env_archcpu(env);
++
+     /* FIXME: reset all except CPU */
++    if (cpu->restart_resets && cpu->reset_insns++) {
++        qemu_system_reset_request(SHUTDOWN_CAUSE_GUEST_RESET);
++    }
+ }
+ #endif /* !CONFIG_USER_ONLY */

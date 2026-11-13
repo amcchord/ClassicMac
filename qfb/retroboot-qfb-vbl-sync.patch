@@ -1,0 +1,71 @@
+RetroBoot: nubus-qfb's VBL on the Quadra's 60.15 Hz tick (m68k series).
+
+The card's VBL interrupt ran at 60.00 Hz and VIA1's 60 Hz interrupt at
+60.15 Hz, both on the virtual clock, so an idle Mac (STOP between
+interrupts with RetroBoot Idle) woke twice per frame.  vbl-ns (default
+16625800, VIA1's period; mac_via aligns its tick the same way) puts both on
+the same virtual instants; vbl-ns=16666667 is the original 60.00 Hz.
+
+diff --git a/hw/display/mac_qfb.c b/hw/display/mac_qfb.c
+index 28b58e3e6d..286787ab1b 100644
+--- a/hw/display/mac_qfb.c
++++ b/hw/display/mac_qfb.c
+@@ -371,10 +371,17 @@ static void qfb_update_irq(QfbState *s)
+     }
+ }
+ 
+-static int64_t qfb_next_vbl(void)
++/*
++ * RetroBoot: vbl-ns (default 16625800, the Quadra's VIA1 60.15 Hz tick) puts
++ * the card's VBL on the same virtual instants as VIA1's 60 Hz interrupt, which
++ * the Quadra's mac_via aligns the same way, so an idle Mac wakes once per
++ * frame for both instead of twice.  vbl-ns=16666667 is the original 60.00 Hz.
++ */
++static int64_t qfb_next_vbl(QfbState *s)
+ {
+-    return (qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) + QFB_IRQ_VBL_PERIOD_NS) /
+-            QFB_IRQ_VBL_PERIOD_NS * QFB_IRQ_VBL_PERIOD_NS;
++    int64_t period = s->vbl_ns ? s->vbl_ns : QFB_IRQ_VBL_PERIOD_NS;
++
++    return (qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) + period) / period * period;
+ }
+ 
+ static void qfb_vbl_timer(void *opaque)
+@@ -386,7 +393,7 @@ static void qfb_vbl_timer(void *opaque)
+     qfb_update_irq(s);
+ 
+     /* 60 Hz irq */
+-    next_vbl = qfb_next_vbl();
++    next_vbl = qfb_next_vbl(s);
+     timer_mod(s->vbl_timer, next_vbl);
+ }
+ 
+@@ -513,7 +520,7 @@ static void qfb_ctrl_write(void *opaque,
+     case QFB_IRQ_MASK:
+         s->regs[addr >> 2] = val & QFB_IRQ_VBL;
+         if (val & QFB_IRQ_VBL) {
+-            next_vbl = qfb_next_vbl();
++            next_vbl = qfb_next_vbl(s);
+             timer_mod(s->vbl_timer, next_vbl);
+         } else {
+             timer_del(s->vbl_timer);
+@@ -1032,6 +1039,7 @@ static const Property qfb_nubus_properties[] = {
+     DEFINE_PROP_UINT32("width", QfbNubusState, qfb.width, 640),
+     DEFINE_PROP_UINT32("height", QfbNubusState, qfb.height, 480),
+     DEFINE_PROP_UINT8("depth", QfbNubusState, qfb.depth, 8),
++    DEFINE_PROP_UINT32("vbl-ns", QfbNubusState, qfb.vbl_ns, 16625800),
+ };
+ 
+ static const VMStateDescription vmstate_qfb_nubus = {
+diff --git a/include/hw/display/mac_qfb.h b/include/hw/display/mac_qfb.h
+index 96da0b32e6..8d05bf445c 100644
+--- a/include/hw/display/mac_qfb.h
++++ b/include/hw/display/mac_qfb.h
+@@ -46,6 +46,7 @@ typedef struct QfbState {
+     uint32_t width, height; /* in pixels */
+     uint32_t stride; /* in bytes */
+     uint8_t depth;
++    uint32_t vbl_ns; /* RetroBoot: VBL period on the virtual clock */
+ 
+     uint32_t regs[QFB_NUM_REGS];
+ 

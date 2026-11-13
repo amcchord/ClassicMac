@@ -128,6 +128,29 @@ PATCHED_FILES=(
   hw/misc/macio/pmu.c
   hw/ide/core.c
   include/hw/ide/ide-bus.h
+  accel/tcg/internal-common.h
+  accel/tcg/tb-context.h
+  accel/tcg/tcg-all.c
+  accel/tcg/tcg-stats.c
+  hw/audio/screamer.c
+  hw/display/mac_qfb.c
+  hw/display/vga-helpers.h
+  hw/input/adb-kbd.c
+  hw/input/adb-mouse.c
+  hw/input/adb.c
+  hw/misc/mac_via.c
+  include/hw/audio/screamer.h
+  include/hw/display/mac_qfb.h
+  include/hw/input/adb.h
+  include/hw/misc/mac_via.h
+  include/system/physmem.h
+  include/tcg/startup.h
+  system/physmem.c
+  target/m68k/cpu.c
+  target/m68k/cpu.h
+  target/m68k/helper.c
+  target/ppc/spr_common.h
+  tcg/tcg-op-ldst.c
 )
 # Untracked files created by patches (git apply refuses to create them again)
 # or copied by earlier releases; removed before the patches are applied.
@@ -218,7 +241,12 @@ fi
 mkdir -p "$VENDOR_DIR"
 if git -C "$QEMU_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   log "QEMU already present; resetting tracked files to pristine $QEMU_TAG"
-  git -C "$QEMU_DIR" checkout -- "${PATCHED_FILES[@]}" 2>/dev/null || true
+  # Copied device sources are untracked in upstream QEMU. Filter those out:
+  # one unknown path makes checkout reject the entire list, leaving an old
+  # patch stack in place and making the next preparation fail halfway through.
+  git -C "$QEMU_DIR" ls-files -z -- "${PATCHED_FILES[@]}" |
+    git -C "$QEMU_DIR" restore --source="$QEMU_TAG" --worktree \
+      --pathspec-from-file=- --pathspec-file-nul || die "Failed to restore QEMU sources"
   for untracked in "${UNTRACKED_PATCH_FILES[@]}"; do
     rm -f "$QEMU_DIR/$untracked"
   done
@@ -496,6 +524,28 @@ done
 # the legacy Virtio startup profile opts in. Ported from RetroBoot.
 git -C "$QEMU_DIR" apply "$POWERMAC_DIR/mac-os-8-idle-interrupt.patch" || die "Failed to apply legacy Mac OS idle wakeup"
 git -C "$QEMU_DIR" apply "$POWERMAC_DIR/mac-os-8-ethernet-timing.patch" || die "Failed to apply legacy Mac OS Ethernet timing"
+
+# RetroBoot 2.0.1: dirty-store and SIMD fast paths, accurate Quadra reset,
+# lower idle input/display work, and complete VGA damage reporting. The
+# source/provenance manifest records the import and the shared-T2 adaptation.
+log "Installing RetroBoot CPU, Quadra and VGA improvements"
+for patch in "$CPU_DIR/retroboot-tcg-notdirty-fast" \
+             "$CPU_DIR/retroboot-tcg-hot-data-pages" \
+             "$CPU_DIR/retroboot-tcg-split-i128" \
+             "$CPU_DIR/retroboot-ppc-msscr0-flush" \
+             "$PPCVID_DIR/retroboot-vga-fast-rows" \
+             "$PPCVID_DIR/retroboot-vga-flip-during-snapshot" \
+             "$PPCVID_DIR/retroboot-vga-untracked-damage" \
+             "$SCREAMER_DIR/patches/retroboot-screamer-lead-strict" \
+             "$QFB_DIR/retroboot-q800-restart-reset" \
+             "$QFB_DIR/retroboot-q800-adb-idle" \
+             "$QFB_DIR/retroboot-q800-t2-hold" \
+             "$QFB_DIR/retroboot-qfb-lengths" \
+             "$QFB_DIR/retroboot-qfb-vbl-sync" \
+             "$QFB_DIR/retroboot-qfb-refresh" \
+             "$QFB_DIR/retroboot-qfb-millions"; do
+  git -C "$QEMU_DIR" apply "$patch.patch" || die "Failed to apply ${patch#"$ROOT_DIR"/}.patch"
+done
 
 # ---------------------------------------------------------------------------
 # 3f. Emulated ATI Radeon R100 (ati-vga,model=r100), applied last

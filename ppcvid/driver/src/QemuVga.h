@@ -7,7 +7,9 @@
 #define USE_DSL_TIMER
 
 /* Pseudo VBL timer duration in ms */
-#define TIMER_DURATION	30
+/* RetroBoot 2.0.1: relative 16 ms VBL ticks keep the software cursor and
+ * VBL-paced animation near 60 Hz without an overdue fixed-phase deadline. */
+#define TIMER_DURATION	16
 
 /* Enable use of the PCI IRQ as VBL using non-upstream QEMU VGA
  * extensions
@@ -95,11 +97,11 @@
 
 /* Ticks of the pseudo-VBL timer a request must hold steady before we act
  * (debounce, mirroring the 68k qfb driver's accRun debounce). */
-#define HOST_RESIZE_DEBOUNCE_TICKS       2
+#define HOST_RESIZE_DEBOUNCE_TICKS       4
 
-/* Ticks (~30 ms each) before an un-adopted pending host-resize mode is
+/* Ticks (~16 ms each) before an un-adopted pending host-resize mode is
  * abandoned, restoring normal mode reporting (about 10 seconds). */
-#define HOST_RESIZE_PENDING_TIMEOUT_TICKS 333
+#define HOST_RESIZE_PENDING_TIMEOUT_TICKS 600
 
 /* --- VModes */
 

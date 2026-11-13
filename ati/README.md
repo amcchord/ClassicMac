@@ -24,10 +24,11 @@ card are unaffected.
 ## Provenance and license
 
 - `retroboot-ati-r100.patch`: RetroBoot `emulator/patches/retroboot-ati-r100.patch`
-  at RetroBoot commit `1860881266449ca2575061e0bd4055c1265cf217` (last changed
-  by `eed8be751edf115375603a04f180158a0e6fc03d`, 2026-10-15), SHA-256
-  `163bf0451d3b13e5098ed4fa9fa60e25eb030135b85a16adf5a230aef32a9cf4`. Its
-  patched files are identical to RetroBoot `research/gfx/qemu/hw/display/`.
+  at RetroBoot commit `432a43d4ba8502a7afeaa5dd25ecf959c23aed1c` (2.0.1), SHA-256
+  `6276b79e4d9e4ec771c1767b53272096272abc782a94a7abaf94cf8b39b3e393`.
+  The CGL overlay is rebased on the updated renderer; WGL remains local.
+  See [the import record](../docs/retroboot-2.0.1-import.md) for coverage and
+  the complete patch manifest.
   RetroBoot's base is ClassicMac `3e24594` + QEMU v11.0.2 `e545d8bb9d63`.
 - `openbios-ati-radeon.patch`: RetroBoot `emulator/openbios/retroboot-ati-radeon.patch`
   (last changed by `d43e582f11732c3bc38d5358093d6255f75636cf`), SHA-256

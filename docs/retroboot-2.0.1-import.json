@@ -1,0 +1,162 @@
+{
+  "source": "https://github.com/amcchord/RetroBoot",
+  "revision": "432a43d4ba8502a7afeaa5dd25ecf959c23aed1c",
+  "release": "2.0.1",
+  "previousRevision": "1860881266449ca2575061e0bd4055c1265cf217",
+  "qemu": "v11.0.2",
+  "patches": [
+    {
+      "path": "ati/retroboot-ati-r100.patch",
+      "upstreamPath": "emulator/patches/retroboot-ati-r100.patch",
+      "upstreamSHA256": "6276b79e4d9e4ec771c1767b53272096272abc782a94a7abaf94cf8b39b3e393",
+      "sha256": "6276b79e4d9e4ec771c1767b53272096272abc782a94a7abaf94cf8b39b3e393",
+      "verbatim": true,
+      "adaptation": null
+    },
+    {
+      "path": "cpu/retroboot-ppc-msscr0-flush.patch",
+      "upstreamPath": "emulator/patches/retroboot-ppc-msscr0-flush.patch",
+      "upstreamSHA256": "eb014d453e23c5d8e56abbc35a08b8c04dbf8b891c9626ded87298bed4dc99c9",
+      "sha256": "eb014d453e23c5d8e56abbc35a08b8c04dbf8b891c9626ded87298bed4dc99c9",
+      "verbatim": true,
+      "adaptation": null
+    },
+    {
+      "path": "cpu/retroboot-tcg-hot-data-pages.patch",
+      "upstreamPath": "emulator/patches/retroboot-tcg-hot-data-pages.patch",
+      "upstreamSHA256": "4be2c60cbb8e12c4910e329992a7817c89c0a31c1ac73ed2da274ba8c7527b32",
+      "sha256": "4be2c60cbb8e12c4910e329992a7817c89c0a31c1ac73ed2da274ba8c7527b32",
+      "verbatim": true,
+      "adaptation": null
+    },
+    {
+      "path": "cpu/retroboot-tcg-notdirty-fast.patch",
+      "upstreamPath": "emulator/patches/retroboot-tcg-notdirty-fast.patch",
+      "upstreamSHA256": "5e05b4a32c527a35e29cabfed149d80df52e55a749be574e066d1eb33fcd4afb",
+      "sha256": "5e05b4a32c527a35e29cabfed149d80df52e55a749be574e066d1eb33fcd4afb",
+      "verbatim": true,
+      "adaptation": null
+    },
+    {
+      "path": "cpu/retroboot-tcg-split-i128.patch",
+      "upstreamPath": "emulator/patches/retroboot-tcg-split-i128.patch",
+      "upstreamSHA256": "6838fe48a991da099a625b0e861402e184395ca938accf0ac5762faff7b240a8",
+      "sha256": "6838fe48a991da099a625b0e861402e184395ca938accf0ac5762faff7b240a8",
+      "verbatim": true,
+      "adaptation": null
+    },
+    {
+      "path": "ppcvid/retroboot-vga-fast-rows.patch",
+      "upstreamPath": "emulator/patches/retroboot-vga-fast-rows.patch",
+      "upstreamSHA256": "b022b6438cef8f5a1fef6b66f7eacde39b61da9dc6df584d6c874568301f8550",
+      "sha256": "b022b6438cef8f5a1fef6b66f7eacde39b61da9dc6df584d6c874568301f8550",
+      "verbatim": true,
+      "adaptation": null
+    },
+    {
+      "path": "ppcvid/retroboot-vga-flip-during-snapshot.patch",
+      "upstreamPath": "emulator/patches/retroboot-vga-flip-during-snapshot.patch",
+      "upstreamSHA256": "1034ed2a4224e529146c3816843e2c6d36f858697e6cd2d825973ba88ab48589",
+      "sha256": "1034ed2a4224e529146c3816843e2c6d36f858697e6cd2d825973ba88ab48589",
+      "verbatim": true,
+      "adaptation": null
+    },
+    {
+      "path": "ppcvid/retroboot-vga-untracked-damage.patch",
+      "upstreamPath": "emulator/patches/retroboot-vga-untracked-damage.patch",
+      "upstreamSHA256": "6ad130ccab0a02e6da436bed36208eb4e983912f7effb2940c5d4429c6d9688a",
+      "sha256": "6ad130ccab0a02e6da436bed36208eb4e983912f7effb2940c5d4429c6d9688a",
+      "verbatim": true,
+      "adaptation": null
+    },
+    {
+      "path": "qfb/retroboot-q800-adb-idle.patch",
+      "upstreamPath": "emulator/patches/retroboot-q800-adb-idle.patch",
+      "upstreamSHA256": "8c7fa3d4d6cfc2f7b421442514a84c773dc1b6450d7896ea33efa5837c1982de",
+      "sha256": "8c7fa3d4d6cfc2f7b421442514a84c773dc1b6450d7896ea33efa5837c1982de",
+      "verbatim": true,
+      "adaptation": null
+    },
+    {
+      "path": "qfb/retroboot-q800-restart-reset.patch",
+      "upstreamPath": "emulator/patches/retroboot-q800-restart-reset.patch",
+      "upstreamSHA256": "7308f70aebb271b838d838e872d25669e3e93e16611b676990188e8a8181de0a",
+      "sha256": "7308f70aebb271b838d838e872d25669e3e93e16611b676990188e8a8181de0a",
+      "verbatim": true,
+      "adaptation": null
+    },
+    {
+      "path": "qfb/retroboot-q800-t2-hold.patch",
+      "upstreamPath": "emulator/patches/retroboot-q800-t2-hold.patch",
+      "upstreamSHA256": "09445cdb4c02ff940c55b861d3d41d38f6d3d85e0f6e66d438eb0aebcf85046f",
+      "sha256": "ec1cb227eb3f85df336eb5c695896de052dabd0b4d748da732f70a3b6eca374e",
+      "verbatim": false,
+      "adaptation": "Reuse existing PPC translation bookkeeping and generic 6522 T2 hold; enable it on the Quadra without enabling coherent-timers."
+    },
+    {
+      "path": "qfb/retroboot-qfb-lengths.patch",
+      "upstreamPath": "emulator/patches/retroboot-qfb-lengths.patch",
+      "upstreamSHA256": "b3880556729c9beddc3efba94209f675e124b1fc8cb80c53b31cf2029bcf189e",
+      "sha256": "b3880556729c9beddc3efba94209f675e124b1fc8cb80c53b31cf2029bcf189e",
+      "verbatim": true,
+      "adaptation": null
+    },
+    {
+      "path": "qfb/retroboot-qfb-millions.patch",
+      "upstreamPath": "emulator/patches/retroboot-qfb-millions.patch",
+      "upstreamSHA256": "0421584d2866ecf7e817d096d7df4ff9d25f5d361824799f7e9c3c74daac9a7e",
+      "sha256": "0421584d2866ecf7e817d096d7df4ff9d25f5d361824799f7e9c3c74daac9a7e",
+      "verbatim": true,
+      "adaptation": null
+    },
+    {
+      "path": "qfb/retroboot-qfb-refresh.patch",
+      "upstreamPath": "emulator/patches/retroboot-qfb-refresh.patch",
+      "upstreamSHA256": "19ef3357190c98243dc0d79e69ba05aee30e5a7287c7c57dc5fedaa835f14a9d",
+      "sha256": "19ef3357190c98243dc0d79e69ba05aee30e5a7287c7c57dc5fedaa835f14a9d",
+      "verbatim": true,
+      "adaptation": null
+    },
+    {
+      "path": "qfb/retroboot-qfb-vbl-sync.patch",
+      "upstreamPath": "emulator/patches/retroboot-qfb-vbl-sync.patch",
+      "upstreamSHA256": "58d5d943f8f4566d09dd0a5922723da1ae058f29920808b286d2c2ac2964ffb7",
+      "sha256": "58d5d943f8f4566d09dd0a5922723da1ae058f29920808b286d2c2ac2964ffb7",
+      "verbatim": true,
+      "adaptation": null
+    },
+    {
+      "path": "screamer/patches/retroboot-screamer-lead-strict.patch",
+      "upstreamPath": "emulator/patches/retroboot-screamer-lead-strict.patch",
+      "upstreamSHA256": "fb609f4eb35e612c79a92e47e0edf0b9a789a93115052303f1093c3a93d5a893",
+      "sha256": "fb609f4eb35e612c79a92e47e0edf0b9a789a93115052303f1093c3a93d5a893",
+      "verbatim": true,
+      "adaptation": null
+    }
+  ],
+  "localOverlays": [
+    "ati/classicmac-ati-macos.patch",
+    "ati/classicmac-host-resize.patch",
+    "ati/classicmac-radeon-idle.patch",
+    "desktop/ati_gl_windows.inc"
+  ],
+  "unchangedImports": "Existing PowerPC FPU/MMU/branch, VIA and Screamer patches are unchanged; the two startup patches retain their documented context rebases.",
+  "firmware": [
+    {
+      "path": "ppcvid/qemu_vga.ndrv",
+      "sha256": "7983d4d736d22528a81f5120a7b04bf61b619438d27af6f85acedb3de0ad4c13",
+      "source": "ppcvid/driver/src/QemuVga.h",
+      "upstreamPath": "emulator/ndrv/retroboot-vbl-60hz.patch",
+      "upstreamSHA256": "f92e4a118a4922b79cf16e573552595dab788a920c77a6331caa52e41f251c52",
+      "adaptation": "Use relative 16 ms ticks by default; preserve about 64 ms resize debounce and about 10 s timeout. Do not import appliance boot-mode or built-in-panel policy."
+    },
+    {
+      "path": "qfb/mac_qfb.rom",
+      "sha256": "5f40220ec35e12fcdf1ad9715a8aa1cf0893fb2b15aa19c1f3973c6ef1bf35b4",
+      "source": "qfb/driver/src/status.cc",
+      "upstreamPath": "emulator/qfb/retroboot-gray-rows.patch",
+      "upstreamSHA256": "6eae83baf6c5ae24311dfcfd97339a8d1d607cf9417cdbb73f12c888efbd848e",
+      "adaptation": "Correct GetPage to divide by height times rowbytes. Existing bounded GrayPattern row fill is retained."
+    }
+  ]
+}

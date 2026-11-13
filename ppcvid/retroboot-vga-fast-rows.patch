@@ -1,0 +1,147 @@
+diff --git a/hw/display/vga-helpers.h b/hw/display/vga-helpers.h
+--- a/hw/display/vga-helpers.h
++++ b/hw/display/vga-helpers.h
+@@ -327,6 +327,83 @@ static void *vga_draw_line8(VGACommonState *vga, uint8_t *d,
+     return hpel ? vga->panning_buf + 4 * hpel : NULL;
+ }
+ 
++/*
++ * RetroBoot: rows that lie in VRAM without wrapping convert from a plain
++ * pointer, 15- and 16-bit pixels through a table of the same formula: a page
++ * flip makes the whole screen dirty, and at 1920x1080 the per-pixel masked
++ * reads below took several milliseconds per frame, under the BQL.  Rows
++ * that wrap, or start on an odd address, keep the loops below.
++ */
++static const uint8_t *vga_row_ptr(VGACommonState *vga, uint32_t addr,
++                                  uint32_t bytes, uint32_t align)
++{
++    uint32_t a = addr & vga->vbe_size_mask;
++
++    if ((addr & (align - 1)) || bytes > vga->vbe_size_mask + 1u - a) {
++        return NULL;
++    }
++    return vga->vram_ptr + a;
++}
++
++static uint32_t *vga_lut15, *vga_lut16;     /* main loop only */
++
++static const uint32_t *vga_lut(bool b15)
++{
++    uint32_t **lut = b15 ? &vga_lut15 : &vga_lut16;
++
++    if (!*lut) {
++        uint32_t n = b15 ? 0x8000 : 0x10000;
++        uint32_t *t = g_new(uint32_t, n);
++        for (uint32_t v = 0; v < n; v++) {
++            t[v] = b15 ? rgb_to_pixel32((v >> 7) & 0xf8, (v >> 2) & 0xf8,
++                                        (v << 3) & 0xf8)
++                       : rgb_to_pixel32((v >> 8) & 0xf8, (v >> 3) & 0xfc,
++                                        (v << 3) & 0xf8);
++        }
++        *lut = t;
++    }
++    return *lut;
++}
++
++static bool vga_draw_row16_fast(VGACommonState *vga, uint8_t *d, uint32_t addr,
++                                int width, bool b15, bool be)
++{
++    const uint8_t *p = vga_row_ptr(vga, addr, width * 2, 2);
++    const uint32_t *lut;
++    uint32_t mask = b15 ? 0x7fff : 0xffff;
++
++    if (!p || width <= 0) {
++        return false;
++    }
++    lut = vga_lut(b15);
++    if (be) {
++        for (int x = 0; x < width; x++) {
++            ((uint32_t *)d)[x] = lut[lduw_be_p(p + 2 * x) & mask];
++        }
++    } else {
++        for (int x = 0; x < width; x++) {
++            ((uint32_t *)d)[x] = lut[lduw_le_p(p + 2 * x) & mask];
++        }
++    }
++    return true;
++}
++
++static bool vga_draw_row32_fast(VGACommonState *vga, uint8_t *d, uint32_t addr,
++                                int width, bool be)
++{
++    const uint8_t *p = vga_row_ptr(vga, addr, width * 4, 1);
++
++    if (!p || width <= 0) {
++        return false;
++    }
++    for (int x = 0; x < width; x++) {
++        uint32_t v = be ? ldl_be_p(p + 4 * x) : ldl_le_p(p + 4 * x);
++        ((uint32_t *)d)[x] = rgb_to_pixel32((v >> 16) & 0xff, (v >> 8) & 0xff,
++                                            v & 0xff);
++    }
++    return true;
++}
++
+ /*
+  * 15 bit color
+  */
+@@ -336,6 +413,9 @@ static void *vga_draw_line15_le(VGACommonState *vga, uint8_t *d,
+     int w;
+     uint32_t v, r, g, b;
+ 
++    if (vga_draw_row16_fast(vga, d, addr, width, true, false)) {
++        return NULL;
++    }
+     w = width;
+     do {
+         v = vga_read_word_le(vga, addr);
+@@ -355,6 +435,9 @@ static void *vga_draw_line15_be(VGACommonState *vga, uint8_t *d,
+     int w;
+     uint32_t v, r, g, b;
+ 
++    if (vga_draw_row16_fast(vga, d, addr, width, true, true)) {
++        return NULL;
++    }
+     w = width;
+     do {
+         v = vga_read_word_be(vga, addr);
+@@ -377,6 +460,9 @@ static void *vga_draw_line16_le(VGACommonState *vga, uint8_t *d,
+     int w;
+     uint32_t v, r, g, b;
+ 
++    if (vga_draw_row16_fast(vga, d, addr, width, false, false)) {
++        return NULL;
++    }
+     w = width;
+     do {
+         v = vga_read_word_le(vga, addr);
+@@ -396,6 +482,9 @@ static void *vga_draw_line16_be(VGACommonState *vga, uint8_t *d,
+     int w;
+     uint32_t v, r, g, b;
+ 
++    if (vga_draw_row16_fast(vga, d, addr, width, false, true)) {
++        return NULL;
++    }
+     w = width;
+     do {
+         v = vga_read_word_be(vga, addr);
+@@ -457,6 +546,9 @@ static void *vga_draw_line32_le(VGACommonState *vga, uint8_t *d,
+     int w;
+     uint32_t r, g, b;
+ 
++    if (vga_draw_row32_fast(vga, d, addr, width, false)) {
++        return NULL;
++    }
+     w = width;
+     do {
+         b = vga_read_byte(vga, addr + 0);
+@@ -475,6 +567,9 @@ static void *vga_draw_line32_be(VGACommonState *vga, uint8_t *d,
+     int w;
+     uint32_t r, g, b;
+ 
++    if (vga_draw_row32_fast(vga, d, addr, width, true)) {
++        return NULL;
++    }
+     w = width;
+     do {
+         r = vga_read_byte(vga, addr + 1);

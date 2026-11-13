@@ -1,0 +1,231 @@
+RetroBoot: Quadra ADB autopolling at the Macintosh II rate with input, slower while idle (m68k series).
+
+mac_via autopolls the ADB devices every 20 ms and each empty poll is several
+VIA1 shift-register interrupts: about 250 of the 316 interrupts a second at
+an idle Mac OS 8.1 Finder, while an ADB mouse moved the pointer at most 50
+times a second.  mos6522-q800-via1 properties: adb-poll-ms (default 11, the
+Macintosh II family's ADB Manager rate; 0 keeps 20) is the period while
+there is input; adb-idle-poll-ms (default 100; 0 = off) is the period once no
+device has had input for adb-idle-after-ms (default 1000).  Input to the ADB
+keyboard or mouse polls at once and restores adb-poll-ms.  The settings
+live in the VIA's state and reach the bus at realize (qbus_init() in the
+VIA's instance_init zeroes the bus after the property defaults are set),
+the bus's own reset restores the VIA's period instead of 20 ms, and a new
+autopoll mask (Mac OS talks to each device in turn) waits the idle period
+too.  Lab, idle Mac OS 8.1 Finder: 105 autopolls a second -> 10.
+
+diff --git a/hw/input/adb-kbd.c b/hw/input/adb-kbd.c
+index 507557deec..f710058252 100644
+--- a/hw/input/adb-kbd.c
++++ b/hw/input/adb-kbd.c
+@@ -326,6 +326,7 @@ static void adb_keyboard_event(DeviceState *dev, QemuConsole *src,
+     }
+ 
+     adb_kbd_put_keycode(s, keycode);
++    adb_input_activity(ADB_BUS(qdev_get_parent_bus(dev)));
+ }
+ 
+ static const VMStateDescription vmstate_adb_kbd = {
+diff --git a/hw/input/adb-mouse.c b/hw/input/adb-mouse.c
+index 373ef3f953..458460d404 100644
+--- a/hw/input/adb-mouse.c
++++ b/hw/input/adb-mouse.c
+@@ -66,6 +66,8 @@ static void adb_mouse_handle_event(DeviceState *dev, QemuConsole *src,
+         [INPUT_BUTTON_RIGHT]  = ADB_MOUSE_BUTTON_RIGHT,
+     };
+ 
++    adb_input_activity(ADB_BUS(qdev_get_parent_bus(dev)));
++
+     switch (evt->type) {
+     case INPUT_EVENT_KIND_REL:
+         move = evt->u.rel.data;
+diff --git a/hw/input/adb.c b/hw/input/adb.c
+index 29c09c7559..5f3a9770c7 100644
+--- a/hw/input/adb.c
++++ b/hw/input/adb.c
+@@ -123,6 +123,7 @@ int adb_poll(ADBBusState *s, uint8_t *obuf, uint16_t poll_mask)
+             olen = do_adb_request(s, obuf + 1, buf, 1);
+             /* if there is data, we poll again the same device */
+             if (olen > 0) {
++                s->last_input_ms = qemu_clock_get_ms(QEMU_CLOCK_VIRTUAL);
+                 s->status |= ADB_STATUS_POLLREPLY;
+                 obuf[0] = buf[0];
+                 olen++;
+@@ -134,6 +135,8 @@ int adb_poll(ADBBusState *s, uint8_t *obuf, uint16_t poll_mask)
+     return olen;
+ }
+ 
++static int64_t adb_autopoll_delay(ADBBusState *s);
++
+ void adb_set_autopoll_enabled(ADBBusState *s, bool enabled)
+ {
+     if (s->autopoll_enabled != enabled) {
+@@ -141,7 +144,7 @@ void adb_set_autopoll_enabled(ADBBusState *s, bool enabled)
+         if (s->autopoll_enabled) {
+             timer_mod(s->autopoll_timer,
+                       qemu_clock_get_ms(QEMU_CLOCK_VIRTUAL) +
+-                      s->autopoll_rate_ms);
++                      adb_autopoll_delay(s));
+         } else {
+             timer_del(s->autopoll_timer);
+         }
+@@ -164,15 +167,43 @@ void adb_set_autopoll_mask(ADBBusState *s, uint16_t mask)
+     if (s->autopoll_mask != mask) {
+         s->autopoll_mask = mask;
+         if (s->autopoll_enabled && s->autopoll_mask) {
++            /*
++             * RetroBoot: Mac OS's ADB Manager talks to each device in turn
++             * (a new mask) also while nothing happens; the idle period too.
++             */
+             timer_mod(s->autopoll_timer,
+                       qemu_clock_get_ms(QEMU_CLOCK_VIRTUAL) +
+-                      s->autopoll_rate_ms);
++                      adb_autopoll_delay(s));
+         } else {
+             timer_del(s->autopoll_timer);
+         }
+     }
+ }
+ 
++/* RetroBoot: the autopoll period (slower while the devices are idle). */
++static int64_t adb_autopoll_delay(ADBBusState *s)
++{
++    if (s->idle_rate_ms > s->autopoll_rate_ms &&
++        qemu_clock_get_ms(QEMU_CLOCK_VIRTUAL) - s->last_input_ms >=
++        s->idle_after_ms) {
++        return s->idle_rate_ms;
++    }
++    return s->autopoll_rate_ms;
++}
++
++/* A device got input from the host: poll it now, then at the full rate. */
++void adb_input_activity(ADBBusState *s)
++{
++    int64_t now = qemu_clock_get_ms(QEMU_CLOCK_VIRTUAL);
++    bool was_idle = adb_autopoll_delay(s) != s->autopoll_rate_ms;
++
++    s->last_input_ms = now;
++    if (was_idle && s->autopoll_enabled && s->autopoll_mask &&
++        !s->autopoll_blocked) {
++        timer_mod(s->autopoll_timer, now);
++    }
++}
++
+ void adb_autopoll_block(ADBBusState *s)
+ {
+     s->autopoll_blocked = true;
+@@ -191,7 +222,7 @@ void adb_autopoll_unblock(ADBBusState *s)
+     if (s->autopoll_enabled) {
+         timer_mod(s->autopoll_timer,
+                   qemu_clock_get_ms(QEMU_CLOCK_VIRTUAL) +
+-                  s->autopoll_rate_ms);
++                  adb_autopoll_delay(s));
+     }
+ }
+ 
+@@ -207,7 +238,7 @@ static void adb_autopoll(void *opaque)
+ 
+     timer_mod(s->autopoll_timer,
+               qemu_clock_get_ms(QEMU_CLOCK_VIRTUAL) +
+-              s->autopoll_rate_ms);
++              adb_autopoll_delay(s));
+ }
+ 
+ void adb_register_autopoll_callback(ADBBusState *s, void (*cb)(void *opaque),
+@@ -237,7 +268,7 @@ static void adb_bus_reset_hold(Object *obj, ResetType type)
+ 
+     adb_bus->autopoll_enabled = false;
+     adb_bus->autopoll_mask = 0xffff;
+-    adb_bus->autopoll_rate_ms = 20;
++    adb_bus->autopoll_rate_ms = adb_bus->reset_rate_ms ?: 20;
+ }
+ 
+ static void adb_bus_realize(BusState *qbus, Error **errp)
+diff --git a/hw/misc/mac_via.c b/hw/misc/mac_via.c
+index 26ee230dcc..650ed459f1 100644
+--- a/hw/misc/mac_via.c
++++ b/hw/misc/mac_via.c
+@@ -1245,6 +1245,17 @@ static void mos6522_q800_via1_realize(DeviceState *dev, Error **errp)
+ 
+     adb_register_autopoll_callback(adb_bus, adb_via_poll, v1s);
+     v1s->adb_data_ready = qdev_get_gpio_in(dev, VIA1_IRQ_ADB_READY_BIT);
++    /* the period the bus's own reset restores (it set 20 ms) */
++    adb_bus->reset_rate_ms = v1s->adb_poll_ms;
++    if (v1s->adb_poll_ms) {
++        adb_bus->autopoll_rate_ms = v1s->adb_poll_ms;
++    }
++    /*
++     * Kept in the VIA's state: qbus_init() in instance_init zeroes the bus
++     * after the property defaults are set, so the defaults never reached it.
++     */
++    adb_bus->idle_rate_ms = v1s->adb_idle_poll_ms;
++    adb_bus->idle_after_ms = v1s->adb_idle_after_ms;
+ 
+     if (v1s->blk) {
+         int64_t len = blk_getlength(v1s->blk);
+@@ -1324,6 +1335,22 @@ static const VMStateDescription vmstate_q800_via1 = {
+ 
+ static const Property mos6522_q800_via1_properties[] = {
+     DEFINE_PROP_DRIVE("drive", MOS6522Q800VIA1State, blk),
++    /*
++     * RetroBoot: ADB autopolling every 100 ms instead of 11 ms once the
++     * keyboard and mouse have been idle for 1 s.  Each empty autopoll is
++     * several shift-register interrupts (about 250 a second at an idle
++     * Finder); input polls at once.  adb-idle-poll-ms=0: always adb-poll-ms.
++     */
++    DEFINE_PROP_UINT32("adb-idle-poll-ms", MOS6522Q800VIA1State,
++                       adb_idle_poll_ms, 100),
++    /*
++     * RetroBoot: the autopoll period while there is input, 11 ms as the
++     * Macintosh II family's ADB Manager polls (QEMU: 20 ms, so an ADB mouse
++     * moved the pointer at most 50 times a second).  0 keeps 20 ms.
++     */
++    DEFINE_PROP_UINT8("adb-poll-ms", MOS6522Q800VIA1State, adb_poll_ms, 11),
++    DEFINE_PROP_UINT32("adb-idle-after-ms", MOS6522Q800VIA1State,
++                       adb_idle_after_ms, 1000),
+ };
+ 
+ static void mos6522_q800_via1_class_init(ObjectClass *oc, const void *data)
+diff --git a/include/hw/input/adb.h b/include/hw/input/adb.h
+index 1079195830..d68c99c677 100644
+--- a/include/hw/input/adb.h
++++ b/include/hw/input/adb.h
+@@ -87,12 +87,24 @@ struct ADBBusState {
+     uint16_t autopoll_mask;
+     void (*autopoll_cb)(void *opaque);
+     void *autopoll_cb_opaque;
++
++    /*
++     * RetroBoot: with idle_rate_ms set, autopolling slows to that period
++     * once no device has had input for idle_after_ms; input to a device
++     * (adb_input_activity) polls at once and restores autopoll_rate_ms.
++     * reset_rate_ms (0: 20 ms) is the period a bus reset restores.
++     */
++    uint32_t idle_rate_ms;
++    uint32_t idle_after_ms;
++    int64_t last_input_ms;
++    uint32_t reset_rate_ms;
+ };
+ 
+ int adb_request(ADBBusState *s, uint8_t *buf_out,
+                 const uint8_t *buf, int len);
+ int adb_poll(ADBBusState *s, uint8_t *buf_out, uint16_t poll_mask);
+ 
++void adb_input_activity(ADBBusState *s);
+ void adb_autopoll_block(ADBBusState *s);
+ void adb_autopoll_unblock(ADBBusState *s);
+ 
+diff --git a/include/hw/misc/mac_via.h b/include/hw/misc/mac_via.h
+index 114f41db4c..fe475796cc 100644
+--- a/include/hw/misc/mac_via.h
++++ b/include/hw/misc/mac_via.h
+@@ -72,6 +72,9 @@ struct MOS6522Q800VIA1State {
+     /* external timers */
+     QEMUTimer *one_second_timer;
+     int64_t next_second;
++    uint8_t adb_poll_ms;    /* RetroBoot: autopoll period with input */
++    uint32_t adb_idle_poll_ms;  /* RetroBoot: ... once idle (0: off) */
++    uint32_t adb_idle_after_ms; /* RetroBoot: idle after this long */
+     QEMUTimer *sixty_hz_timer;
+     int64_t next_sixty_hz;
+ 

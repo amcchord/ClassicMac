@@ -1,0 +1,86 @@
+RetroBoot: nubus-qfb takes a dirty snapshot of the visible screen only, and only when it changed (m68k series).
+
+Every display refresh snapshotted and cleared the dirty bitmap of all 32 MiB
+of VRAM, which also walks every TLB entry of the vCPU (tlb_reset_dirty):
+about a third of the main thread's time at an idle Finder.  The refresh now
+looks at the visible screen's pages first and returns when none is dirty.
+A screen that runs past the end of VRAM (a guest running wild) wraps in the
+dirty check as in the pixel reads; it failed the snapshot's range assertion
+and aborted QEMU (also before this patch, which snapshotted all of VRAM).
+
+diff --git a/hw/display/mac_qfb.c b/hw/display/mac_qfb.c
+index 286787ab1b..e58fda54bb 100644
+--- a/hw/display/mac_qfb.c
++++ b/hw/display/mac_qfb.c
+@@ -24,6 +24,8 @@
+ #include "qapi/error.h"
+ #include "hw/core/qdev-properties.h"
+ #include "migration/vmstate.h"
++#include "system/physmem.h"
++#include "exec/target_page.h"
+ 
+ #define VIDEO_SUPER_BASE    0x0000000
+ #define VIDEO_ALIAS_BASE    0x001000
+@@ -247,6 +249,22 @@ static qfb_draw_line_func * const qfb_draw_line_table[QFB_DRAW_LINE_NB] = {
+ static int qfb_check_dirty(QfbState *s, DirtyBitmapSnapshot *snap,
+                            ram_addr_t addr, int len)
+ {
++    /*
++     * RetroBoot: a screen that runs past the end of VRAM wraps, as the
++     * pixel reads do (qfb_read_byte); qfb_draw_graphic() then snapshots the
++     * whole VRAM.  Unwrapped, a line past the end failed the snapshot's
++     * range assertion and aborted QEMU (a guest running wild at startup).
++     */
++    if (len >= QFB_VRAM_SIZE) {
++        return true;
++    }
++    addr %= QFB_VRAM_SIZE;
++    if (addr + len > QFB_VRAM_SIZE) {
++        return memory_region_snapshot_get_dirty(&s->mem_vram, snap, addr,
++                                                QFB_VRAM_SIZE - addr) ||
++               memory_region_snapshot_get_dirty(&s->mem_vram, snap, 0,
++                                                addr + len - QFB_VRAM_SIZE);
++    }
+     return memory_region_snapshot_get_dirty(&s->mem_vram, snap, addr, len);
+ }
+ 
+@@ -284,9 +302,36 @@ static void qfb_draw_graphic(QfbState *s)
+     qfb_draw_line = qfb_draw_line_table[v];
+     assert(qfb_draw_line != NULL);
+ 
+-    snap = memory_region_snapshot_and_clear_dirty(&s->mem_vram, 0x0,
+-                                             memory_region_size(&s->mem_vram),
+-                                             DIRTY_MEMORY_VGA);
++    /*
++     * RetroBoot: take the dirty snapshot of the visible screen only, and
++     * none at all when nothing there was written since the last refresh.
++     * Each snapshot of the 32 MiB VRAM also walked every TLB entry of the
++     * vCPU (tlb_reset_dirty), on every refresh of an idle Finder.
++     */
++    {
++        ram_addr_t first = s->regs[QFB_MODE_BASE >> 2];
++        ram_addr_t len = (ram_addr_t)qfb_stride * s->height;
++        ram_addr_t ram = memory_region_get_ram_addr(&s->mem_vram);
++        ram_addr_t off;
++        bool dirty = false;
++
++        if (first + len > QFB_VRAM_SIZE) {
++            first = 0;              /* the screen wraps: the whole VRAM */
++            len = QFB_VRAM_SIZE;    /* (qfb_check_dirty wraps each line) */
++        }
++        for (off = first & TARGET_PAGE_MASK; off < first + len;
++             off += TARGET_PAGE_SIZE) {
++            if (physical_memory_get_dirty_flag(ram + off, DIRTY_MEMORY_VGA)) {
++                dirty = true;
++                break;
++            }
++        }
++        if (!dirty) {
++            return;
++        }
++        snap = memory_region_snapshot_and_clear_dirty(&s->mem_vram, first, len,
++                                                      DIRTY_MEMORY_VGA);
++    }
+ 
+     ymin = -1;
+     page = s->regs[QFB_MODE_BASE >> 2];

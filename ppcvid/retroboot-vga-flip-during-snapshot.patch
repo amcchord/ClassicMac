@@ -1,0 +1,29 @@
+diff --git a/hw/display/vga.c b/hw/display/vga.c
+--- a/hw/display/vga.c
++++ b/hw/display/vga.c
+@@ -1779,9 +1779,25 @@
+     y1 = 0;
+ 
+     if (!full_update && !s->untracked_vram_active) {
++        VGADisplayParams now;
++
+         snap = memory_region_snapshot_and_clear_dirty(&s->vram, region_start,
+                                                       region_end - region_start,
+                                                       DIRTY_MEMORY_VGA);
++        /*
++         * RetroBoot: the vCPU can complete device writes while the snapshot
++         * runs.  With the ATI card a page flip and the 2D clear of the buffer
++         * it left landed there, after start_addr was read above, and this
++         * refresh then drew the cleared buffer: single black frames in
++         * Cro-Mag Rally's menu and races.  When the display moved meanwhile,
++         * draw nothing now; the next refresh sees the new parameters and
++         * redraws everything (the frame shown until then is the previous one).
++         */
++        s->get_params(s, &now);
++        if (memcmp(&now, &s->params, sizeof(now))) {
++            g_free(snap);
++            return;
++        }
+     }
+ 
+     for(y = 0; y < height; y++) {
