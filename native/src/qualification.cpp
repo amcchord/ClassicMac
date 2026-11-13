@@ -187,6 +187,13 @@ int selfTest(const QString &fixtures, const QString &output) {
     QStringList expected;
     for (auto v : profile["arguments"].toArray())
       expected << v.toString();
+#ifdef Q_OS_WIN
+    const auto overrides = profile["windowsDeviceOverrides"].toObject();
+    for (auto i = overrides.begin(); i != overrides.end(); ++i)
+      expected.replaceInStrings(QRegularExpression("^" +
+                                    QRegularExpression::escape(i.key()) + "$"),
+                                i.value().toString());
+#endif
     require(actual == expected, "QEMU argument parity differs for " +
                                     QJsonDocument(profile["config"].toObject())
                                         .toJson(QJsonDocument::Compact));

@@ -615,7 +615,10 @@
       "virtio-tablet-pci",
       "-nic",
       "user,model=sungem"
-    ]
+    ],
+    "windowsDeviceOverrides": {
+      "virtio-tablet-pci": "virtio-tablet-pci,addr=0x13"
+    }
   },
   {
     "config": {
