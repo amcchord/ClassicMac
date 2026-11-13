@@ -8,6 +8,9 @@ closed. The active desktop must have the requested OS display scale; the test
 checks `GetDpiForWindow` and Per-Monitor V2 awareness. Qt scale overrides are
 removed from the child environment.
 
+Before launching, the runner sets a distinct temporary name in the disposable
+config. The native input must replace it and persist the expected accented name.
+
 Run in the logged-in user's interactive desktop, rather than service session 0:
 
 ```powershell

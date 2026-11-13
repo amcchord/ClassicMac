@@ -16,13 +16,19 @@ if (-not (Test-Path (Join-Path $Machine 'config.json'))) { throw 'Missing dispos
 if (Test-Path $Output) { throw 'Choose a new output folder' }
 New-Item -ItemType Directory $Output | Out-Null
 $Output=(Resolve-Path $Output).Path
+$initial=Get-Content (Join-Path $Machine 'config.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+$initial.name='Windows QA before input'
+[IO.File]::WriteAllText((Join-Path $Machine 'config.json'),($initial|ConvertTo-Json -Depth 12),(New-Object Text.UTF8Encoding($false)))
 $recipe=Get-Content (Join-Path $PSScriptRoot 'desktop-flow.json') -Raw | ConvertFrom-Json
 $recipe.output=$Output.Replace('\','/')
 $recipe.steps[0].scale=$DesktopScale/100.0
 $recipe.steps[0].pixelScale=[Math]::Max(1,[Math]::Round($DesktopScale/100.0,[MidpointRounding]::AwayFromZero))
 $recipe.steps[1].folder=$Machine.Replace('\','/')
 foreach ($step in $recipe.steps) {
- if ($step.action -eq 'wait' -and $step.milliseconds -eq 55000) { $step.milliseconds=$BootWaitMilliseconds }
+ if ($step.action -eq 'wait' -and $step.milliseconds -eq 55000) {
+  $step.milliseconds=$BootWaitMilliseconds
+  $step | Add-Member -NotePropertyName timeout -NotePropertyValue ($BootWaitMilliseconds+5000) -Force
+ }
 }
 $recipePath=Join-Path $Output 'recipe.json'
 [IO.File]::WriteAllText($recipePath,($recipe|ConvertTo-Json -Depth 12),(New-Object Text.UTF8Encoding($false)))
