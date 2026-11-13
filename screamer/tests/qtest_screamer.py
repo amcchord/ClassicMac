@@ -30,6 +30,7 @@ into guest RAM, starts DBDMA channel 0x10 and checks:
 
     qtest_screamer.py --qemu BIN --share DIR --run NEWDIR [--expect instant]
 
+--tcp uses loopback TCP on hosts without Unix sockets (automatic on Windows).
 --expect instant inverts checks 1-2 and skips 4 (screamer.paced-dma=off,
 for showing the old behaviour).  Writes RUN/result.json; exit status 1 on
 failure.
@@ -59,9 +60,10 @@ RATE = 44100
 def connect(path, timeout=20):
     deadline = time.monotonic() + timeout
     while True:
-        s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        s = socket.socket(socket.AF_INET if isinstance(path, tuple) else socket.AF_UNIX,
+                          socket.SOCK_STREAM)
         try:
-            s.connect(str(path))
+            s.connect(path if isinstance(path, tuple) else str(path))
             return s
         except OSError:
             s.close()
@@ -72,7 +74,7 @@ def connect(path, timeout=20):
 
 class QMP:
     def __init__(self, path):
-        self.f = connect(path).makefile('rw')
+        self.f = connect(path).makefile('rw', newline='\n')
         self.read()
         self.call('qmp_capabilities')
 
@@ -93,7 +95,7 @@ class QMP:
 
 class QTest:
     def __init__(self, path):
-        self.f = connect(path).makefile('rw')
+        self.f = connect(path).makefile('rw', newline='\n')
 
     def raw(self, line):
         self.f.write(line + '\n')
@@ -155,22 +157,38 @@ def main():
     ap.add_argument('--share', required=True, help="the package's share/qemu (OpenBIOS)")
     ap.add_argument('--run', required=True, type=Path)
     ap.add_argument('--expect', choices=['paced', 'instant'], default='paced')
+    ap.add_argument('--tcp', action='store_true',
+                    default=sys.platform == 'win32' or not hasattr(socket, 'AF_UNIX'),
+                    help='Use loopback TCP instead of Unix sockets')
     a = ap.parse_args()
     a.run.mkdir(parents=True, exist_ok=False)
+    endpoints, addresses, reservations = {}, {}, []
+    for name in ('qmp', 'qtest'):
+        if a.tcp:
+            reservation = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            reservation.bind(('127.0.0.1', 0))
+            reservations.append(reservation)
+            endpoints[name] = reservation.getsockname()
+            addresses[name] = f'tcp:127.0.0.1:{endpoints[name][1]},server=on,wait=off'
+        else:
+            endpoints[name] = a.run / (name + '.sock')
+            addresses[name] = f'unix:{endpoints[name]},server=on,wait=off'
+    for reservation in reservations:
+        reservation.close()
     argv = [a.qemu, '-M', 'mac99,via=cuda,audiodev=snd0', '-cpu', '7400', '-m', '128',
             '-display', 'none', '-nic', 'none', '-audiodev', 'none,id=snd0', '-L', a.share,
-            '-qmp', f'unix:{a.run}/qmp.sock,server=on,wait=off',
-            '-qtest', f'unix:{a.run}/qtest.sock,server=on,wait=off']
+            '-qmp', addresses['qmp'], '-qtest', addresses['qtest']]
     if a.expect == 'instant':
         argv += ['-global', 'screamer.paced-dma=off']
-    checks, result = [], {'origin': 'synthetic-qtest', 'apple_software_run': False, 'expect': a.expect}
+    checks, result = [], {'origin': 'synthetic-qtest', 'apple_software_run': False,
+                         'expect': a.expect, 'transport': 'tcp' if a.tcp else 'unix'}
 
     def check(ok, what):
         checks.append({'check': what, 'ok': bool(ok)})
 
     proc = subprocess.Popen(argv, stdout=subprocess.DEVNULL, stderr=open(a.run / 'stderr.log', 'w'))
     try:
-        q = QMP(a.run / 'qmp.sock')
+        q = QMP(endpoints['qmp'])
         base = {}
         for _ in range(90):                 # OpenBIOS enumerates PCI and maps MacIO
             tree = q.call('human-monitor-command', **{'command-line': 'info mtree -f'})
@@ -187,7 +205,7 @@ def main():
         result['screamer'] = hex(base['screamer'])
         result['dbdma'] = hex(base['dbdma'])
         q.call('stop')
-        t = QTest(a.run / 'qtest.sock')
+        t = QTest(endpoints['qtest'])
         t.write(BUF, bytes(range(256)) * (2 * HALF // 256))
         t.write(FLAG, b'\xff\xff\xff\xff')
         t.write(PROG, program(base['screamer']))
