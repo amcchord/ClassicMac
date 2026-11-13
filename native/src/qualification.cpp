@@ -687,14 +687,13 @@ public:
         if (auto e = app->currentEngine(); e && e->vnc.ready) {
           auto view = app->guest(e)->findChild<GuestView *>();
           require(view, "Native guest pointer view missing");
-          auto size = e->vnc.frame.size();
-          size.scale(view->size(), Qt::KeepAspectRatio);
-          QPointF p((view->width() - size.width()) / 2.0 +
-                        step["x"].toInt() * size.width() /
-                            double(e->vnc.frame.width()),
-                    (view->height() - size.height()) / 2.0 +
-                        step["y"].toInt() * size.height() /
-                            double(e->vnc.frame.height()));
+          const auto image = view->screenRect();
+          const QPointF p(image.x() + (step["x"].toInt() + 0.5) * image.width() /
+                                          e->vnc.frame.width(),
+                          image.y() + (step["y"].toInt() + 0.5) * image.height() /
+                                          e->vnc.frame.height());
+          require(view->displayViewport().contains(p.toPoint()),
+                  "The requested guest input point is outside the visible screen");
           QMouseEvent move(QEvent::MouseMove, p, view->mapToGlobal(p.toPoint()),
                            Qt::NoButton, Qt::NoButton, Qt::NoModifier);
           QApplication::sendEvent(view, &move);
