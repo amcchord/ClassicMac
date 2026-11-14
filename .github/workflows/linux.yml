@@ -46,6 +46,8 @@ jobs:
           key: ${{ steps.engine.outputs.cache-primary-key }}
       - name: Check Linux display devices
         run: python3 ati/tests/test_qemu_ati.py --gl-api gles --gl-optional output/desktop/runtime/bin/qemu-system-ppc output/desktop/runtime/qemu/pc-bios
+      - name: Check Quadra shared display pixels
+        run: python3 display/tests/test_quadra_frame.py output/desktop/runtime/bin/qemu-system-m68k
       - name: Check Power Mac sound DMA timing
         run: python3 screamer/tests/qtest_screamer.py --qemu output/desktop/runtime/bin/qemu-system-ppc --share output/desktop/runtime/qemu/pc-bios --run output/desktop/screamer-timing
       - name: Build native C++ frontend

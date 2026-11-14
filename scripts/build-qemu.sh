@@ -298,6 +298,8 @@ cp "$QFB_DIR/mac_qfb.c" "$QEMU_DIR/hw/display/mac_qfb.c"
 cp "$QFB_DIR/mac_qfb.h" "$QEMU_DIR/include/hw/display/mac_qfb.h"
 cp "$QFB_DIR/mac_qfb.rom" "$QEMU_DIR/pc-bios/mac_qfb.rom"
 git -C "$QEMU_DIR" apply "$QFB_DIR/integration.patch" || die "Failed to apply qfb integration patch"
+# Built-in Quadra at 640x480 must retire QEMU's same-size startup placeholder.
+git -C "$QEMU_DIR" apply "$QFB_DIR/macfb-live-surface.patch" || die "Failed to apply live Quadra display patch"
 # Retina/HiDPI: size the Cocoa window at visual resolution rather than native pixels.
 git -C "$QEMU_DIR" apply "$QFB_DIR/cocoa-retina.patch" || die "Failed to apply cocoa retina patch"
 # Host-window-driven live resizing: make the Cocoa window resizable and feed
@@ -751,6 +753,8 @@ fi
 # clock/pointer-mode events, and greet the listener again after it drops.
 "$PYTHON_BIN" "$DISPLAY_DIR/tests/test_display_gate.py" \
   "$QEMU_PPC_BIN" "$QEMU_DIR/pc-bios" || die "ClassicMac display backend test failed"
+"$PYTHON_BIN" "$DISPLAY_DIR/tests/test_quadra_frame.py" \
+  "$QEMU_BIN" || die "Quadra shared display pixel test failed"
 for via in mos6522-cuda mos6522-pmu; do
   VIA_HELP="$("$QEMU_PPC_BIN" -device "$via,help" 2>&1 || true)"
   for property in coherent-timers t2-hold x-t2-hold-quiet-us x-t2-hold-max-us; do

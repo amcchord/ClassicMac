@@ -236,22 +236,7 @@ final class GuestDisplaySession: @unchecked Sendable {
             frameLock.unlock()
             return
         }
-        var macLike = 0, samples = 0
-        for gy in 1...9 {
-            for gx in 1...12 {
-                let x = width * gx / 13, y = height * gy / 10
-                let px = base.advanced(by: y * stride + x * 4)
-                let b = Int(px.load(fromByteOffset: 0, as: UInt8.self))
-                let g = Int(px.load(fromByteOffset: 1, as: UInt8.self))
-                let r = Int(px.load(fromByteOffset: 2, as: UInt8.self))
-                samples += 1
-                let black = r < 24 && g < 24 && b < 24
-                let white = r > 240 && g > 240 && b > 240
-                let firmwareYellow = r > 230 && g > 230 && b > 150 && b < 235
-                if family == .quadra800 ? !black : !(black || white || firmwareYellow) { macLike += 1 }
-            }
-        }
-        let reveal = macLike * 10 >= samples * 3
+        let reveal = GuestBootFrame.isReady(base, width: width, height: height, stride: stride, family: family)
         if reveal { revealed = true }
         frameLock.unlock()
         if reveal { publishReveal() }
@@ -273,7 +258,13 @@ final class GuestDisplaySession: @unchecked Sendable {
     }
 
     private func publishReveal() {
-        Task { @MainActor [state] in state.revealed = true }
+        Task { @MainActor [self, state] in
+            // Install the ready frame before the fade, including when the
+            // display link paused while the guest was covered or occluded.
+            NotificationCenter.default.post(name: GuestScreenNSView.refreshNotification, object: nil)
+            DebugSnapshots.recordStartup(self)
+            state.revealed = true
+        }
     }
 
     // MARK: Frames

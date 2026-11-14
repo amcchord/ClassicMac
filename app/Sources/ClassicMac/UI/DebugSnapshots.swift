@@ -8,6 +8,16 @@ import PlatinumKit
 /// CFFIXED_USER_HOME pointing at a scratch home so no real Macs are touched.
 @MainActor
 enum DebugSnapshots {
+    /// Retain the first frame exposed by the startup fade during a UI tour.
+    static func recordStartup(_ session: GuestDisplaySession) {
+        guard let folder = ProcessInfo.processInfo.environment["CLASSICMAC_UI_SNAPSHOTS"],
+              let image = session.takeFrame(force: true) else { return }
+        let url = URL(fileURLWithPath: folder, isDirectory: true)
+            .appendingPathComponent("startup-\(session.vmID.uuidString).png")
+        let rep = NSBitmapImageRep(cgImage: image)
+        try? rep.representation(using: .png, properties: [:])?.write(to: url)
+    }
+
     static func runIfRequested() {
         let env = ProcessInfo.processInfo.environment
         guard let folder = env["CLASSICMAC_UI_SNAPSHOTS"] else { return }
@@ -56,6 +66,25 @@ enum DebugSnapshots {
             let title = window.title.isEmpty ? "window" : window.title.replacingOccurrences(of: "/", with: "-")
             let name = String(format: "%@%02d-%@.png", prefix.isEmpty ? "" : prefix + "-", index, title)
             write(window, to: out.appendingPathComponent(name))
+        }
+        var displays: [[String: Any]] = []
+        for vm in VMStore.shared.vms {
+            guard let session = GuestWindows.shared.session(for: vm.id) else { continue }
+            let state = session.state
+            var row: [String: Any] = ["name": vm.name, "running": QEMUManager.shared.isRunning(vm.id),
+                "connected": state.connected, "revealed": state.revealed,
+                "width": state.surfaceSize.width, "height": state.surfaceSize.height,
+                "classicDisplay": QEMUManager.usesClassicMacDisplay(vm)]
+            if let image = session.takeFrame(force: true) {
+                let name = "\(prefix)-\(vm.id.uuidString)-raw.png"
+                let rep = NSBitmapImageRep(cgImage: image)
+                try? rep.representation(using: .png, properties: [:])?.write(to: out.appendingPathComponent(name))
+                row["rawFrame"] = name
+            }
+            displays.append(row)
+        }
+        if let data = try? JSONSerialization.data(withJSONObject: displays, options: [.prettyPrinted, .sortedKeys]) {
+            try? data.write(to: out.appendingPathComponent("\(prefix)-displays.json"))
         }
     }
 

@@ -1,0 +1,16 @@
+diff --git a/hw/display/macfb.c b/hw/display/macfb.c
+--- a/hw/display/macfb.c
++++ b/hw/display/macfb.c
+@@ -476,7 +476,11 @@ static void macfb_update_display(void *opaque)
+         return;
+     }
+ 
+-    if (s->width != surface_width(surface) ||
++    /* The initial 640x480 console surface is a placeholder even when its
++     * size matches the guest mode. Replace it before drawing so listeners
++     * can distinguish real guest pixels from the startup message. */
++    if (surface_is_placeholder(surface) ||
++        s->width != surface_width(surface) ||
+         s->height != surface_height(surface)) {
+         qemu_console_resize(s->con, s->width, s->height);
+     }
