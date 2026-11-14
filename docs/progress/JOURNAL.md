@@ -1799,3 +1799,28 @@ consolidated root checks, publish and verify stable 4.1.1. Retain 4.1.0 for roll
 - Next: tag final source, stage complete draft, verify upload hashes, publish
   stable/latest and verify anonymous downloads. Rollback to v4.6.1 latest if
   verification fails; preserve tags/assets. Earlier fidelity/device limits remain.
+
+
+## 2026-11-14 — 4.6.2 published and anonymous downloads verified
+
+- User-authorized GitHub publication completed from codex/github-4.6.2-release.
+  All prior source and final evidence fast-forwarded/pushed to main. Annotated
+  v4.6.2 tag points to a98eb9949b564d7e97834c144d885cfb0b7bd14d; product code is
+  451ce59, with only documentation/evidence changes before the tag.
+- GitHub release 445028007 published stable/latest at 2026-11-14T05:02:22Z:
+  https://github.com/amcchord/ClassicMac/releases/tag/v4.6.2 . Nine assets include
+  Mac DMG/ZIP, Windows EXE, Linux AppImage, three patched QEMU source archives,
+  unchanged Copland source and SHA256SUMS. README/release table has direct links.
+- All uploaded asset sizes and GitHub SHA-256 digests match local files before
+  publication. After publication, independent unauthenticated HTTPS downloads
+  of every asset match byte counts and SHA-256. Public release page/latest
+  redirect and anonymous latest-release API resolve to v4.6.2. Sanitized proof:
+  docs/evidence/4.6.2/public-downloads.json. Existing v4.6.1 remains available.
+- No post-publication failure or rollback. Only GitHub repository/tag/release
+  changed. Owned Windows release scheduled task and RDP removed; all task
+  guests stopped. Proxmox 401 stopped and container 300 running, independently
+  confirmed. No source cleanup or unrelated user changes performed.
+- Result: intended import/audit/fixes, local Windows qualification, Mac display
+  and startup corrections, committed source and easy downloads are delivered.
+  Remaining measured-state/physical-device limits stay explicit in the audit;
+  no certification of every UI state. Next action is the next requested change.

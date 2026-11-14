@@ -1,24 +1,25 @@
-# GitHub 4.6.2 release — 2026-11-13
+# ClassicMac 4.6.2 published — 2026-11-14
 
-All product fixes are on GitHub main through 451ce59. User authorizes publication.
-Owner: codex/github-4.6.2-release; contained worktree; unrelated gxmetal untouched.
+User-authorized GitHub release is complete. Stable/latest v4.6.2:
+https://github.com/amcchord/ClassicMac/releases/tag/v4.6.2
+Tag commit: a98eb9949b564d7e97834c144d885cfb0b7bd14d; product code: 451ce59.
+All RetroBoot/UI/Windows/Mac fixes, audit and evidence are committed on main.
 
-Mac blank Quadra and white startup flash fixed. Final signed app reaches visible
-Finder on built-in/enhanced Quadra and Power Mac; first revealed frames contain
-Happy Mac. Apple agreement resolved; final app/DMG notarized and full release
-verification passes. Consolidated main: 143 Swift tests, 3 optional skips,
-0 failures; 11 Python tests; Mac/Linux shared-display test 3,148,800 exact pixels.
-Linux CI 43558821440 succeeds. Final Windows portable rebuild passes 33 Quadra
-steps, 6 exact desktop captures and 3,646,080 guest pixels; frontend/Power Mac
-payloads identical to prior five-DPI/default-device qualification. Both native
-reference gates pass 122 comparisons and 672 glyphs.
+Nine release assets (Mac DMG/ZIP, Windows EXE, Linux AppImage, four corresponding
+source archives/checksums) were uploaded and independently downloaded without
+credentials. Every SHA-256 matches; public latest redirect resolves to v4.6.2.
+Verification: docs/evidence/4.6.2/public-downloads.json. v4.6.1 remains available.
 
-Eight qualified downloads/source archives plus SHA256SUMS staged in task output.
-Matching DAFB source verified in all three platform source archives. Evidence
-and release notes prepared. Proxmox VM 401 stopped; container 300 running;
-owned RDP/task/guest processes stopped. Original machines preserved.
+Mac Quadra blank-window bug and white startup flash fixed. Final signed/notarized
+app reveals Happy Mac and reaches visible Finder on built-in/enhanced Quadra
+and Power Mac. 143 Swift tests, three optional skips, zero failures; 11 Python
+checks. Mac/Linux compare 3,148,800 shared RGB pixels exactly. Linux CI passes.
+Final Windows Quadra 33-step flow, six desktop comparisons and 3,646,080 guest
+pixels pass. Unchanged frontend/Power Mac payloads retain five-DPI qualification.
+Both native reference gates pass 122 comparisons and 672 glyphs.
 
-Next: commit evidence, tag final source, create GitHub draft, verify all uploaded
-assets, publish stable/latest, anonymously redownload and compare every hash.
-Previous latest v4.6.1 retained. If publication verification fails, restore it
-as latest while preserving tags/assets. No catalog/site deployment.
+All task guests/RDP/jobs stopped; dedicated Proxmox VM 401 stopped, container
+300 running. Original user machines and unrelated root gxmetal preserved.
+Only GitHub source/tag/release published; no catalog/site deployment.
+Remaining fidelity/hardware limits are documented in the audit and release
+notes. No release work remains; continue with the next requested change.
