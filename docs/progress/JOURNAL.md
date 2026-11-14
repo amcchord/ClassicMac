@@ -1755,3 +1755,47 @@ consolidated root checks, publish and verify stable 4.1.1. Retain 4.1.0 for roll
   earlier Mac whole-layout/scaling/appearance gaps. Windows activation also
   needs a usable license. Next is physical device/input qualification; the
   repository is integrated and the disposable test system is stopped.
+
+
+## 2026-11-13 — GitHub release preparation and Mac display/startup fixes
+
+- User authorizes committing/pushing all RetroBoot/UI/Windows improvements and
+  publishing easy GitHub downloads. Worktree/branch: github-4.6.2-release /
+  codex/github-4.6.2-release. Previous stable v4.6.1 retained; git backup bundle
+  in contained output. Root's unrelated gxmetal is unchanged.
+- Prior source plus efc2363/733be36 pushed to main. Download table/4.6.2 notes
+  added; Tools CD pinned to the verified qualified release. Linux CI exposed a
+  moving AppImage-tool checksum; pin immutable official 1.9.1 instead.
+- Actual signed Mac smoke reproduced the user's booted-but-blank window:
+  Quadra 640×480 DAFB never replaced QEMU's same-size placeholder, while the
+  shared display deliberately suppresses placeholder pixels. 451ce59 replaces
+  it before drawing and adds a ROM-free qtest. Old engine fails; fixed Mac
+  and Linux compare 3,148,800 RGB pixels exactly over palette/reconnect/reset.
+- User then observed the brief white startup flash. Same commit waits for
+  structured boot content, ignores uniform clears and empty checkerboards,
+  recognizes Happy Mac and updates the display before fading. Five tests pass.
+  Final signed app captures show Happy Mac as the first revealed frame and
+  visible Finder on built-in/enhanced Quadra and Power Mac. Disposable clones
+  only; all task guests stopped afterward.
+- Consolidated main validation: 143 Swift tests, three optional fixture skips,
+  zero failures; 11 Python tests. Both native Windows/Linux reference gates
+  pass 122 comparisons and 672 glyphs. Linux CI 43558821440 succeeds from
+  451ce59 with the exact shared-display/device/Screamer/native/package gates.
+- Final Windows portable EXE rebuilt with the DAFB fix: 33-step real Quadra flow,
+  six exact desktop captures and 3,646,080 guest pixels pass. Extraction checks
+  all 417 payload hashes; only m68k engine and runtime hash inventory differ
+  from qualified b2f60d9f package. Frontend/Power Mac/firmware byte parity retains
+  the prior five-DPI 59-step/default-device results. New EXE SHA256
+  73c81e011aaefa7749d07aa6d3ceeca33ffc922ec28edd77fa3ea4a84fb079a6.
+- Apple blocked initial notarization on an account agreement. User resolved it;
+  final app/DMG accepted, stapled and full verification passed (signatures,
+  Gatekeeper, engine/firmware, macOS 15 runtime libraries). Keys used only in
+  memory/0600 temporary files, removed afterward. Final DMG SHA256
+  e42d6d294312f50b92ea4694393b9b62b8ccad36ffbbdbf2097d3e65705686da.
+- All three corresponding QEMU archives include identical fixed DAFB source;
+  unchanged Copland source retained. Evidence/checksums under docs/evidence/4.6.2.
+  Proxmox VM 401 gracefully stopped, owned release task/RDP removed, container
+  300 still running. No original guest disks, catalog/site or other VMs changed.
+- Next: tag final source, stage complete draft, verify upload hashes, publish
+  stable/latest and verify anonymous downloads. Rollback to v4.6.1 latest if
+  verification fails; preserve tags/assets. Earlier fidelity/device limits remain.

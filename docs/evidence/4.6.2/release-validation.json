@@ -1,0 +1,80 @@
+{
+  "date": "2026-11-13",
+  "productSourceCommit": "451ce59751a8e7a40f5496702a09b70c4e789d29",
+  "mac": {
+    "swiftTests": 143,
+    "optionalFixtureSkips": 3,
+    "failures": 0,
+    "bootFrameTests": 5,
+    "regression": "The old engine fails the 640x480 actual RGB comparison; the fixed DAFB retires the same-size placeholder",
+    "quadraQtest": {
+      "appleROMOrDiskRequired": false,
+      "sizes": [
+        [
+          640,
+          480
+        ],
+        [
+          800,
+          600
+        ]
+      ],
+      "cases": [
+        "palette changes",
+        "shared-memory reconnect",
+        "guest reset"
+      ],
+      "exactRGBPixels": 3148800,
+      "differingPixels": 0
+    },
+    "visibleFinderModels": [
+      "Built-in Quadra/System 7.5.5/640x480",
+      "Enhanced Quadra/System 7.5.5/800x600",
+      "Power Mac/Mac OS 9.2.1/1024x768"
+    ],
+    "startupReveal": "First revealed frames include the Happy Mac; uniform white/gray and empty checkerboards stay behind the curtain",
+    "fullReleaseVerification": "passed; Developer ID, notarization, stapling, Gatekeeper, engines, firmware, libraries targeting macOS 15",
+    "notarySubmissions": {
+      "app": "d16ef177-71c6-4356-818e-6ed4634739cb",
+      "dmg": "2b9d63ef-1c20-4ed9-8043-9e7a85c0f0b1"
+    },
+    "taskGuestsStopped": true
+  },
+  "windows": {
+    "packageSHA256": "73c81e011aaefa7749d07aa6d3ceeca33ffc922ec28edd77fa3ea4a84fb079a6",
+    "nativeSourceCommit": "52b61d8",
+    "finalQuadraFlow": {
+      "steps": 33,
+      "allPassed": true,
+      "actualWindowsDPI": 96,
+      "hostAndGuestResetReplaceEngine": true,
+      "cleanShutdown": true,
+      "desktopCaptures": 6,
+      "visibleGuestPixels": 3646080,
+      "differingPixels": 0
+    },
+    "retainedFiveDPIQualification": "All payloads except qemu-system-m68k.exe and its runtime checksum inventory are byte-identical to the prior b2f60d9f package. Native frontend, Power Mac engine and firmware are unchanged; five-DPI 59-step results remain applicable.",
+    "portablePayloadHashesVerified": 417,
+    "references": 122,
+    "nativeFontGlyphs": 672,
+    "taskVM401Stopped": true,
+    "container300StillRunning": true
+  },
+  "linux": {
+    "actionsRun": "https://github.com/amcchord/ClassicMac/actions/runs/43558821440",
+    "sourceCommit": "451ce59751a8e7a40f5496702a09b70c4e789d29",
+    "result": "success",
+    "quadraQtest": "passed",
+    "atiDeviceGate": "passed; desktop GL optional on CI",
+    "screamerTimingChecks": 7,
+    "nativeReferences": 122,
+    "nativeFontGlyphs": 672,
+    "physicalDesktopRun": false
+  },
+  "common": {
+    "pythonTests": 11,
+    "failures": 0,
+    "macfbSourceSHA256AllThreeArchives": "48c3b0b0aa0060d17a45db0eb8313d03cdba125a3a60d9ac69cfc78cb4460122"
+  },
+  "limits": "Earlier audit qualification limits remain; these checks do not certify every UI state, physical Windows GPU/audio, mixed-monitor movement or every guest application."
+}

@@ -1,0 +1,16 @@
+{
+  "checks": 122,
+  "displayProtocolAndInput": "passed",
+  "dpiScales": [
+    1,
+    1.25,
+    1.5,
+    1.75,
+    2,
+    2.5,
+    3
+  ],
+  "nativeFontGlyphs": 672,
+  "nativeWidgetGroups": 7,
+  "result": "passed"
+}

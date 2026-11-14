@@ -1,0 +1,42 @@
+{
+  "captures": [
+    {
+      "capture": "boot.json",
+      "mode": "Fit Window",
+      "compared": false
+    },
+    {
+      "capture": "fullscreen.json",
+      "mode": "Sharp Pixels",
+      "compared": true,
+      "zoom": 3,
+      "pixelsCompared": 2764800,
+      "differingPixels": 0
+    },
+    {
+      "capture": "guest-reset.json",
+      "mode": "Sharp Pixels",
+      "compared": true,
+      "zoom": 1,
+      "pixelsCompared": 287040,
+      "differingPixels": 0
+    },
+    {
+      "capture": "resized.json",
+      "mode": "Sharp Pixels",
+      "compared": true,
+      "zoom": 1,
+      "pixelsCompared": 307200,
+      "differingPixels": 0
+    },
+    {
+      "capture": "restarted.json",
+      "mode": "Sharp Pixels",
+      "compared": true,
+      "zoom": 1,
+      "pixelsCompared": 287040,
+      "differingPixels": 0
+    }
+  ],
+  "pixelsCompared": 3646080
+}

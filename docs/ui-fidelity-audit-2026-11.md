@@ -65,6 +65,8 @@ have no percentage or perceptual tolerance.
 | Close behavior | Closing a running guest could hide it while its disk remained mounted. | Request orderly shutdown; keep the guest visible while it stops. |
 | Configuration | Saving an unrelated setting could reset a custom resolution absent from the preset list. Model-specific options could appear for the wrong family. | Preserve custom size in the list, hide inapplicable CPU/enhanced-video controls and disable the Power Mac graphics selector for Quadra. |
 | Preview/copy | Saved preview could stretch; empty/about text included unnecessary prose. | Preserve aspect ratio with nearest-neighbor rendering. Use functional labels/states. |
+| Mac Quadra display | At 640×480, the built-in DAFB drew Finder into a surface still flagged as QEMU's startup placeholder. The Home preview worked, while the shared display remained black behind the startup curtain. | Retire the same-size placeholder before drawing. A ROM-free hardware test fails on the old engine and passes 3,148,800 exact RGB pixels over color changes, reconnect and reset at two sizes. The final signed app shows Finder. |
+| Mac startup transition | Quadra's reveal heuristic accepted uniform white; the fade could expose an empty frame before boot content. | Require actual image structure, average out the ROM's empty checkerboard, detect the small Happy Mac, and draw the latest frame before fading. Five regression tests pass. Captures retain the first revealed frame for built-in/enhanced Quadra and Power Mac. |
 
 ## Configuration and lifecycle review
 
@@ -139,3 +141,23 @@ The next platform actions are the remaining physical Windows device/input
 cases and the macOS layout/scaling work above. Current Mac and Windows
 evidence supports the measured component and captured-state claims; it does
 not establish that every app state is a pixel-perfect classic Mac OS reproduction.
+
+## 4.6.2 final package checks
+
+The [release validation record](evidence/4.6.2/release-validation.json) adds
+the Mac display/startup fixes above, 143 Swift tests (three optional skips),
+11 Python tests and the new exact shared-display test on macOS and Linux.
+Actual final signed Swift app windows show System 7.5.5 Finder on both
+Quadra display models and Mac OS 9.2.1 Finder on Power Mac. The first revealed
+frames contain Happy Mac: [built-in Quadra](evidence/4.6.2/mac/quadra-startup.png),
+[enhanced Quadra](evidence/4.6.2/mac/enhanced-startup.png) and
+[Power Mac](evidence/4.6.2/mac/powermac-startup.png).
+
+The Windows portable EXE was rebuilt with the same DAFB fix and passed a fresh
+33-step built-in Quadra flow, six exact real-desktop captures and 3,646,080
+visible guest pixels with zero differences. All 417 extracted payload hashes
+were checked. Its frontend and Power Mac payloads are byte-identical to the
+package with the earlier five-DPI/default-device qualification; only the
+Quadra engine and its runtime hash inventory differ. Final Windows and Linux
+reference gates both pass 122 comparisons and 672 glyphs. This addendum does
+not change the remaining appearance/layout and physical-device limits above.

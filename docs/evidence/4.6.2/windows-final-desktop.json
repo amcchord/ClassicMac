@@ -1,0 +1,54 @@
+{
+  "captures": [
+    {
+      "capture": "boot.json",
+      "windowsDpi": 96,
+      "uiPixelZoom": 1,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": null,
+      "desktopMatches": true
+    },
+    {
+      "capture": "fullscreen.json",
+      "windowsDpi": 96,
+      "uiPixelZoom": 1,
+      "uniformTitleBarPixels": null,
+      "uniformFullUI": null,
+      "desktopMatches": true
+    },
+    {
+      "capture": "guest-reset.json",
+      "windowsDpi": 96,
+      "uiPixelZoom": 1,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": null,
+      "desktopMatches": true
+    },
+    {
+      "capture": "resized.json",
+      "windowsDpi": 96,
+      "uiPixelZoom": 1,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": null,
+      "desktopMatches": true
+    },
+    {
+      "capture": "restarted.json",
+      "windowsDpi": 96,
+      "uiPixelZoom": 1,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": null,
+      "desktopMatches": true
+    },
+    {
+      "capture": "settings.json",
+      "windowsDpi": 96,
+      "uiPixelZoom": 1,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true,
+      "desktopMatches": true
+    }
+  ],
+  "uniformTitleBars": 5,
+  "matchingDesktopCaptures": 6
+}

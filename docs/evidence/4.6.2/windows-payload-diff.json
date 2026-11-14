@@ -1,0 +1,16 @@
+{
+  "previousPackageSHA256": "b2f60d9fbb3536828121385d09dab76789c3a10321fc093a0d6e82e70647763a",
+  "newPackageSHA256": "73c81e011aaefa7749d07aa6d3ceeca33ffc922ec28edd77fa3ea4a84fb079a6",
+  "payloadChanges": [
+    {
+      "path": "runtime/bin/qemu-system-m68k.exe",
+      "oldSHA256": "cec97dbd13d7cbd138ad8d0bae87f4655ae5e34e8c203a25a47d3c70aa02852a",
+      "newSHA256": "568b21644a859dc89f9c9f894453212d3c5ed11c011417379b8a9d27068d2e5e"
+    },
+    {
+      "path": "runtime/runtime-sha256.json",
+      "oldSHA256": "cb8bd317ef7ce799eb19be72e0febb9a2ea888b49ece60e3c83225a65ad1f13d",
+      "newSHA256": "bf8040fda0e0ecb0b567b8daed8cda781c594dfd250e5c2db529d8b9c6cbc33c"
+    }
+  ]
+}

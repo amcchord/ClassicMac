@@ -1,0 +1,33 @@
+{
+  "origin": "Final signed 4.6.2 app with disposable public guest fixtures; startup capture is the first frame exposed by the fade",
+  "captures": [
+    {
+      "file": "mac/quadra-startup.png",
+      "sha256": "e9487bc302a0ad7ebae7f04861bea6fe164ab060e72ec35ac3f874b83e6d1437"
+    },
+    {
+      "file": "mac/quadra-window.png",
+      "sha256": "6c8453366f4dd0c74bdf83c974f8ef0daaa04f56e2f1f9c32826032333ae9cab"
+    },
+    {
+      "file": "mac/quadra-finder.png",
+      "sha256": "50448386c7b7b7a8a82222f6d2a3c7120f29072a76945af6ec6e75a39a46cdaf"
+    },
+    {
+      "file": "mac/enhanced-startup.png",
+      "sha256": "ac7647afcd6b874fefaf07b81bae24c7bcd4d26137bae162a3ca3416d76b30e8"
+    },
+    {
+      "file": "mac/enhanced-finder.png",
+      "sha256": "3e5239aa93fba0b8d2fb6ef2d6a1a3f149ae052d4c1b25a09723b0081afe43fd"
+    },
+    {
+      "file": "mac/powermac-startup.png",
+      "sha256": "6a1a301cb85fbb438533df24edda65ab63ded4b243874947ebe84ec64536188b"
+    },
+    {
+      "file": "mac/powermac-finder.png",
+      "sha256": "ed4c9f0f9c2c2c76944f8d1653e38eff2fe23040a448417b820c22f758d1494d"
+    }
+  ]
+}
