@@ -40,8 +40,8 @@ for f in lib.iterdir():
 (app/'classicmac.desktop').write_text('[Desktop Entry]\nType=Application\nName=ClassicMac\nExec=classicmac\nIcon=classicmac\nCategories=Utility;\n')
 shutil.copyfile(root/'desktop/ui/app.png',app/'classicmac.png')
 (app/'manifest-sha256.json').write_text(json.dumps({str(p.relative_to(app)):hashlib.sha256(p.read_bytes()).hexdigest() for p in app.rglob('*') if p.is_file() and p.name!='manifest-sha256.json'},indent=2)+'\n')
-tool=out/'appimagetool.AppImage';digest='95cbe7cce9717fce90c484e34052ee7c7f1d7635b33c12525b4776826a7d29b6'
-if not tool.exists():urllib.request.urlretrieve('https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage',tool)
+tool=out/'appimagetool.AppImage';digest='ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0'
+if not tool.exists():urllib.request.urlretrieve('https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage',tool)
 if hashlib.sha256(tool.read_bytes()).hexdigest()!=digest:raise SystemExit('AppImage tool checksum mismatch')
 tool.chmod(0o755);packages=root/'output/desktop/packages';packages.mkdir(parents=True,exist_ok=True)
 env=os.environ|{'ARCH':'x86_64','APPIMAGE_EXTRACT_AND_RUN':'1'}

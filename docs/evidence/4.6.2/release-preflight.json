@@ -11,5 +11,11 @@
   "backup": "existing v4.6.1 release retained; local git bundle under output/release-4.6.2",
   "rollback": "Leave draft until all assets verify. Restore v4.6.1 as latest if a post-publication check fails; preserve tags/assets.",
   "scope": "GitHub repository/release only; no catalog or site deployment",
-  "windowsPackageSHA256": "b2f60d9fbb3536828121385d09dab76789c3a10321fc093a0d6e82e70647763a"
+  "windowsPackageSHA256": "b2f60d9fbb3536828121385d09dab76789c3a10321fc093a0d6e82e70647763a",
+  "appImageTool": {
+    "version": "1.9.1",
+    "url": "https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage",
+    "sha256": "ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0",
+    "verifiedAgainstOfficialGitHubAsset": 324406736
+  }
 }
