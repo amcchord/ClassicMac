@@ -40,7 +40,7 @@ jobs:
         if: steps.engine-cache.outputs.cache-hit != 'true'
         shell: msys2 {0}
         run: |
-          desktop/scripts/build-engine.sh
+          QEMU_REPO=https://github.com/qemu/qemu.git desktop/scripts/build-engine.sh
           python3 ati/tests/test_qemu_ati.py --gl-optional output/desktop/runtime/bin/qemu-system-ppc.exe output/desktop/runtime/qemu/pc-bios
           tar --exclude=.git --exclude=build --exclude=build-windows -czf output/desktop/ClassicMac-Windows-QEMU-source.tar.gz -C vendor qemu
       - name: Include the qualified Tools CD
@@ -49,11 +49,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         shell: pwsh
         run: |
-          gh release download v4.0.0-preview.3 --repo amcchord/ClassicMac --pattern 'ClassicMac-4.0.0-Preview-3.zip' --dir output/desktop/tools
-          $archive = 'output/desktop/tools/ClassicMac-4.0.0-Preview-3.zip'
-          if ((Get-FileHash $archive -Algorithm SHA256).Hash.ToLower() -ne '3552de300fdb809dd974f696b6e82e7b0248f94086770f46b66650477c2e8ba6') { throw 'Tools source archive checksum mismatch' }
+          gh release download v4.6.1 --repo amcchord/ClassicMac --pattern 'ClassicMac-4.6.1.zip' --dir output/desktop/tools
+          $archive = 'output/desktop/tools/ClassicMac-4.6.1.zip'
+          if ((Get-FileHash $archive -Algorithm SHA256).Hash.ToLower() -ne '6a29d2b05bb51eedae12ab02ab048ca98ce77fc5c8dc5d3b6ff16ce0a0f29350') { throw 'Tools source archive checksum mismatch' }
           Expand-Archive $archive output/desktop/tools/extracted
           Copy-Item 'output/desktop/tools/extracted/ClassicMac.app/Contents/Resources/ClassicMacTools.iso' 'output/desktop/runtime/ClassicMacTools.iso'
+          if ((Get-FileHash 'output/desktop/runtime/ClassicMacTools.iso' -Algorithm SHA256).Hash.ToLower() -ne '23a42184811c7e1ad8718b6746e061c3a1c3e3dd43af25c9c828b3fa326fca22') { throw 'Tools CD checksum mismatch' }
       - uses: actions/upload-artifact@v4
         if: always()
         with:

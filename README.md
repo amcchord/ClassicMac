@@ -29,8 +29,30 @@
   <img src="docs/screenshots/powermacg4-macos92.png" width="410" alt="Mac OS 9.2 on the emulated Power Mac G4">
 </p>
 
+## Download ClassicMac 4.6.2
+
+| System | Download | Requirements |
+| --- | --- | --- |
+| Windows | [Portable EXE](https://github.com/amcchord/ClassicMac/releases/download/v4.6.2/ClassicMac-4.6.2-windows-x64.exe) | Windows 11 x64; unsigned. |
+| macOS | [DMG](https://github.com/amcchord/ClassicMac/releases/download/v4.6.2/ClassicMac-4.6.2.dmg) · [ZIP](https://github.com/amcchord/ClassicMac/releases/download/v4.6.2/ClassicMac-4.6.2.zip) | Apple Silicon, macOS 15+; signed and notarized. |
+| Linux | [AppImage](https://github.com/amcchord/ClassicMac/releases/download/v4.6.2/ClassicMac-4.6.2-linux-x64.AppImage) | x64, glibc 2.39+ and a desktop. |
+
+[Release notes, checksums and engine sources](https://github.com/amcchord/ClassicMac/releases/tag/v4.6.2).
+Windows runs directly. Drag the Mac app to Applications. On Linux, mark the
+AppImage executable; use `--appimage-extract-and-run` if FUSE is unavailable.
+
 ## New in ClassicMac 4.6.2
 
+- **Updated RetroBoot engine.** Imports RetroBoot 2.0.1 CPU, display and timing
+  fixes, including relative Power Mac VBL and Quadra reset behavior.
+- **Measured classic controls and fonts.** Native Mac captures now verify 672
+  Mac Roman glyphs/advances, popup menus, focus rings, dialogs and scrollbars.
+- **Windows ATI startup fix.** Separates conflicting tablet/network interrupts
+  when the Tools CD is enabled. Default configurations pass the actual five-DPI
+  Windows startup, input, restart and shutdown flows.
+- **Sharp oversized displays.** Scroll a large guest at whole-pixel zoom;
+  choose Fit Window explicitly for fractional scaling. Guest full screen hides
+  host controls, and narrow action bars wrap.
 - **Whole-pixel interface zoom.** The Platinum interface snaps to1×,2× and
   larger whole zoom levels so title-bar stripes, text and bevels stay even at
   fractional Windows display scales.

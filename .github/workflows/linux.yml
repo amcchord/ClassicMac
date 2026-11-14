@@ -18,7 +18,7 @@ jobs:
           path: |
             output/desktop/runtime
             output/desktop/ClassicMac-Linux-QEMU-source.tar.gz
-          key: linux-engine-${{ hashFiles('ati/*.c', 'ati/*.h', '**/*.patch','qfb/*','screamer/*','shared/*','ppcvid/qemu_vga.ndrv','scripts/build-qemu.sh','desktop/scripts/build-linux.sh','desktop/scripts/stage-linux.py') }}
+          key: linux-engine-${{ hashFiles('ati/*.c', 'ati/*.h', '**/*.patch','qfb/*','screamer/*','shared/*','ppcvid/qemu_vga.ndrv','scripts/build-qemu.sh','desktop/scripts/build-linux.sh','desktop/scripts/stage-linux.py','.github/workflows/linux.yml') }}
       - name: Install build and desktop dependencies
         run: |
           sudo apt-get update
@@ -26,16 +26,17 @@ jobs:
       - name: Build Linux engines
         if: steps.engine.outputs.cache-hit != 'true'
         run: |
-          desktop/scripts/build-linux.sh
+          QEMU_REPO=https://github.com/qemu/qemu.git desktop/scripts/build-linux.sh
           tar --exclude=.git --exclude=build --exclude=build-linux -czf output/desktop/ClassicMac-Linux-QEMU-source.tar.gz -C vendor qemu
       - name: Include qualified Tools CD
         if: steps.engine.outputs.cache-hit != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release download v4.0.0 -p ClassicMac-4.0.0.zip -D output/desktop/tools
-          echo 'fb40c282cacc474b99a71ab23d8031f06a85e1dcf2b47c532552a640a1c1a37c  output/desktop/tools/ClassicMac-4.0.0.zip' | sha256sum -c
-          unzip -p output/desktop/tools/ClassicMac-4.0.0.zip ClassicMac.app/Contents/Resources/ClassicMacTools.iso > output/desktop/runtime/ClassicMacTools.iso
+          gh release download v4.6.1 -p ClassicMac-4.6.1.zip -D output/desktop/tools
+          echo '6a29d2b05bb51eedae12ab02ab048ca98ce77fc5c8dc5d3b6ff16ce0a0f29350  output/desktop/tools/ClassicMac-4.6.1.zip' | sha256sum -c
+          unzip -p output/desktop/tools/ClassicMac-4.6.1.zip ClassicMac.app/Contents/Resources/ClassicMacTools.iso > output/desktop/runtime/ClassicMacTools.iso
+          echo '23a42184811c7e1ad8718b6746e061c3a1c3e3dd43af25c9c828b3fa326fca22  output/desktop/runtime/ClassicMacTools.iso' | sha256sum -c
       - uses: actions/cache/save@v4
         if: steps.engine.outputs.cache-hit != 'true'
         with:
