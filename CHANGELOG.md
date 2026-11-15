@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased — Windows desktop usability (2026-11-15)
+## 4.6.3 — Windows and Linux desktop usability (2026-11-15)
 
 - Browse the Library with search, system filters, current editions, hardware
   and download sizes. Name each Mac before downloading, pause and resume with

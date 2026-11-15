@@ -96,7 +96,7 @@ public:
           (width() - 32) / 2, height() / 2 - 30,
           QImage(":/" + iconName(m ? m->family() : "powerMacG4") + "-32.png"));
       const auto hint = m ? "Start up to see your Mac's screen."
-                          : "Find your first Mac in the Library.";
+                          : "Choose a Mac from the Library.";
       text(p, elide(hint, width() - 24, "small"),
            std::max(12, (width() - textWidth(hint, "small")) / 2),
            height() / 2 + 22, 0xffffffff, "small");
@@ -423,7 +423,7 @@ void App::render() {
   machineCount->setText(QString("Your Macs · %1").arg(machines.size()));
   auto m = current();
   auto e = currentEngine();
-  nameLabel->setText(m ? m->name() : "Welcome to ClassicMac");
+  nameLabel->setText(m ? m->name() : "ClassicMac");
   statusLabel->setText(e ? (e->forcedStopRequested() ? "Stopping…" :
                             e->stoppingRequested() ? "Shutting down…" :
                             e->paused ? "Paused" : "Running")
@@ -1022,7 +1022,7 @@ void App::showSetup() {
   auto welcome = new QVBoxLayout(pages[0]);
   welcome->setSpacing(18);
   welcome->addWidget(
-      label("A classic Macintosh, ready on your computer.", pages[0]));
+      label("Set up a Mac", pages[0]));
   welcome->addWidget(
       label("Download a prepared Mac from the Library, bring your own "
             "installation CD, or open a .classic machine you already have.",

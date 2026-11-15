@@ -14,7 +14,7 @@ config. The native input must replace it and persist the expected accented name.
 Run in the logged-in user's interactive desktop, rather than service session 0:
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File native/tests/windows/run-desktop-flow.ps1 -Package C:/QA/ClassicMac-4.6.2-windows-x64.exe -Machine C:/QA/Test.classic -Output C:/QA/results/100 -DesktopScale 100
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File native/tests/windows/run-desktop-flow.ps1 -Package C:/QA/ClassicMac-4.6.3-windows-x64.exe -Machine C:/QA/Test.classic -Output C:/QA/results/100 -DesktopScale 100
 ```
 
 Repeat at actual 100/125/150/175/200% Windows desktop scale, with a new output

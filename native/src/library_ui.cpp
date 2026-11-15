@@ -236,8 +236,8 @@ void App::showLibrary() {
   auto outer = new QVBoxLayout(d.body);
   outer->setContentsMargins(14, 12, 14, 12);
   outer->setSpacing(10);
-  outer->addWidget(label("Find your next classic Mac", &d));
-  outer->addWidget(label("Choose an edition, download it, then start exploring. "
+  outer->addWidget(label("Mac OS Library", &d));
+  outer->addWidget(label("Choose a system to download. "
                          "Each download creates a separate Mac.", &d, "regular", true));
   auto searchRow = new QHBoxLayout;
   searchRow->setSpacing(8);
