@@ -7,6 +7,8 @@ constexpr const char *url = "https://mcchord.net/classicmac/catalog-v2.json";
 using Progress = std::function<void(QString, qint64, qint64)>;
 QJsonArray parse(const QByteArray &);
 QJsonArray load();
+QJsonArray load(std::atomic_bool &cancel);
+qint64 cachedBytes(const QJsonObject &entry);
 Model::Machine install(QJsonObject entry, const QString &parent,
                        const QString &name, std::atomic_bool &cancel,
                        const Progress &progress);

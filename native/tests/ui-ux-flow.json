@@ -1,0 +1,819 @@
+{
+  "output": "REPLACED_BY_RUNNER",
+  "steps": [
+    {
+      "action": "assertDpi",
+      "scale": 1,
+      "pixelScale": 1
+    },
+    {
+      "action": "assertState",
+      "machines": 0,
+      "running": 0
+    },
+    {
+      "action": "capture",
+      "name": "01-home-empty",
+      "window": "home",
+      "nativeScreen": true
+    },
+    {
+      "action": "fixtureCatalog",
+      "entries": [
+        {
+          "id": "qa-system-7-v1",
+          "name": "System 7.5.5",
+          "osVersion": "7.5.5",
+          "machineFamily": "quadra800",
+          "summary": "A small classic Mac with System 7.",
+          "minimumAppVersion": "4.0.0",
+          "archiveURL": "https://example.invalid/qualification-only.tar.gz",
+          "archiveBytes": 2048,
+          "installedBytes": 1048576,
+          "diskCapacityBytes": 1048576,
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        {
+          "id": "qa-os81-v1",
+          "name": "Mac OS 8.1",
+          "osVersion": "8.1",
+          "machineFamily": "quadra800",
+          "summary": "A Quadra with a clean Mac OS 8.1 desktop.",
+          "minimumAppVersion": "4.0.0",
+          "archiveURL": "https://example.invalid/qualification-only.tar.gz",
+          "archiveBytes": 2048,
+          "installedBytes": 1048576,
+          "diskCapacityBytes": 1048576,
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        {
+          "id": "qa-os86-v1",
+          "name": "Mac OS 8.6",
+          "osVersion": "8.6",
+          "machineFamily": "powerMacG4",
+          "summary": "A Power Mac for everyday classic applications.",
+          "minimumAppVersion": "4.0.0",
+          "archiveURL": "https://example.invalid/qualification-only.tar.gz",
+          "archiveBytes": 2048,
+          "installedBytes": 1048576,
+          "diskCapacityBytes": 1048576,
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        {
+          "id": "qa-os9-v1",
+          "name": "Mac OS 9 Clean (old revision)",
+          "osVersion": "9.2.2",
+          "machineFamily": "powerMacG4",
+          "summary": "An older catalog revision which should be hidden.",
+          "minimumAppVersion": "4.0.0",
+          "archiveURL": "https://example.invalid/qualification-only.tar.gz",
+          "archiveBytes": 2048,
+          "installedBytes": 1048576,
+          "diskCapacityBytes": 1048576,
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        {
+          "id": "qa-os9-v2",
+          "name": "Mac OS 9 Clean",
+          "osVersion": "9.2.2",
+          "machineFamily": "powerMacG4",
+          "summary": "A clean Power Mac with Mac OS 9.2.2.",
+          "minimumAppVersion": "4.0.0",
+          "archiveURL": "https://example.invalid/qualification-only.tar.gz",
+          "archiveBytes": 2048,
+          "installedBytes": 1048576,
+          "diskCapacityBytes": 1048576,
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        {
+          "id": "qa-future-v1",
+          "name": "Future Edition",
+          "osVersion": "9.2.2",
+          "machineFamily": "powerMacG4",
+          "summary": "An edition requiring a newer app.",
+          "minimumAppVersion": "99.0.0",
+          "archiveURL": "https://example.invalid/qualification-only.tar.gz",
+          "archiveBytes": 2048,
+          "installedBytes": 1048576,
+          "diskCapacityBytes": 1048576,
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        {
+          "id": "qa-copland-v1",
+          "name": "Copland Preview",
+          "osVersion": "Copland D11E4",
+          "machineFamily": "powerMac7500",
+          "summary": "A macOS-only development preview.",
+          "minimumAppVersion": "4.0.0",
+          "archiveURL": "https://example.invalid/qualification-only.tar.gz",
+          "archiveBytes": 2048,
+          "installedBytes": 1048576,
+          "diskCapacityBytes": 1048576,
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        {
+          "id": "qa-corrupt-v1",
+          "name": "Integrity Check Fixture",
+          "osVersion": "9.2.2",
+          "machineFamily": "powerMacG4",
+          "summary": "An intentionally damaged cached archive for recovery testing.",
+          "minimumAppVersion": "4.0.0",
+          "archiveURL": "https://example.invalid/qualification-only.tar.gz",
+          "archiveBytes": 2048,
+          "installedBytes": 1048576,
+          "diskCapacityBytes": 1048576,
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+        }
+      ]
+    },
+    {
+      "action": "fixtureDownload",
+      "id": "qa-os9-v2"
+    },
+    {
+      "action": "fixtureDownload",
+      "id": "qa-corrupt-v1",
+      "corrupt": true
+    },
+    {
+      "action": "click",
+      "text": "Library…",
+      "window": "home"
+    },
+    {
+      "action": "window",
+      "title": "Mac OS Library"
+    },
+    {
+      "action": "assertList",
+      "object": "libraryList",
+      "count": 7
+    },
+    {
+      "action": "capture",
+      "name": "02-library-overview",
+      "nativeScreen": true
+    },
+    {
+      "action": "resize",
+      "window": "modal",
+      "width": 560,
+      "height": 600
+    },
+    {
+      "action": "assertUI",
+      "object": "libraryDownload",
+      "withinWindow": true
+    },
+    {
+      "action": "assertFooter",
+      "buttons": [
+        "Close",
+        "Download Mac"
+      ]
+    },
+    {
+      "action": "capture",
+      "name": "02b-library-narrow",
+      "nativeScreen": true
+    },
+    {
+      "action": "resize",
+      "window": "modal",
+      "width": 790,
+      "height": 620
+    },
+    {
+      "action": "combo",
+      "object": "libraryFilter",
+      "text": "Mac OS 8"
+    },
+    {
+      "action": "assertList",
+      "object": "libraryList",
+      "count": 2
+    },
+    {
+      "action": "edit",
+      "object": "librarySearch",
+      "text": "quadra"
+    },
+    {
+      "action": "assertList",
+      "object": "libraryList",
+      "count": 1,
+      "selectedId": "qa-os81-v1"
+    },
+    {
+      "action": "capture",
+      "name": "03-library-filter-and-search",
+      "nativeScreen": true
+    },
+    {
+      "action": "edit",
+      "object": "librarySearch",
+      "text": "no such mac"
+    },
+    {
+      "action": "assertList",
+      "object": "libraryList",
+      "count": 0
+    },
+    {
+      "action": "assertUI",
+      "object": "libraryDownload",
+      "enabled": false
+    },
+    {
+      "action": "capture",
+      "name": "04-library-no-results",
+      "nativeScreen": true
+    },
+    {
+      "action": "edit",
+      "object": "librarySearch",
+      "text": ""
+    },
+    {
+      "action": "combo",
+      "object": "libraryFilter",
+      "text": "Copland"
+    },
+    {
+      "action": "assertList",
+      "object": "libraryList",
+      "count": 1
+    },
+    {
+      "action": "assertUI",
+      "object": "libraryDownload",
+      "enabled": false
+    },
+    {
+      "action": "assertUI",
+      "object": "libraryAvailability",
+      "contains": "macOS"
+    },
+    {
+      "action": "capture",
+      "name": "05-library-platform-unavailable",
+      "nativeScreen": true
+    },
+    {
+      "action": "combo",
+      "object": "libraryFilter",
+      "text": "Mac OS 9"
+    },
+    {
+      "action": "assertList",
+      "object": "libraryList",
+      "count": 3
+    },
+    {
+      "action": "listSelect",
+      "object": "libraryList",
+      "id": "qa-future-v1"
+    },
+    {
+      "action": "assertUI",
+      "object": "libraryDownload",
+      "enabled": false
+    },
+    {
+      "action": "assertUI",
+      "object": "libraryAvailability",
+      "contains": "99.0.0"
+    },
+    {
+      "action": "capture",
+      "name": "06-library-update-required",
+      "nativeScreen": true
+    },
+    {
+      "action": "listSelect",
+      "object": "libraryList",
+      "id": "qa-corrupt-v1"
+    },
+    {
+      "action": "click",
+      "object": "libraryDownload"
+    },
+    {
+      "action": "wait",
+      "milliseconds": 350
+    },
+    {
+      "action": "assertState",
+      "machines": 0
+    },
+    {
+      "action": "assertUI",
+      "object": "libraryFeedback",
+      "contains": "SHA-256"
+    },
+    {
+      "action": "capture",
+      "name": "07-library-download-recovery",
+      "nativeScreen": true
+    },
+    {
+      "action": "listSelect",
+      "object": "libraryList",
+      "id": "qa-os9-v2"
+    },
+    {
+      "action": "assertUI",
+      "object": "libraryDownload",
+      "enabled": true
+    },
+    {
+      "action": "edit",
+      "object": "libraryMachineName",
+      "text": "   "
+    },
+    {
+      "action": "click",
+      "object": "libraryDownload"
+    },
+    {
+      "action": "assertUI",
+      "object": "libraryFeedback",
+      "contains": "name"
+    },
+    {
+      "action": "edit",
+      "object": "libraryMachineName",
+      "text": "Offline Download"
+    },
+    {
+      "action": "click",
+      "object": "libraryDownload"
+    },
+    {
+      "action": "wait",
+      "milliseconds": 350
+    },
+    {
+      "action": "assertState",
+      "machines": 1,
+      "selected": "Offline Download"
+    },
+    {
+      "action": "assertPath",
+      "path": "${documents}/Offline Download.classic/disk.img",
+      "bytes": 512
+    },
+    {
+      "action": "assertUI",
+      "object": "libraryFeedback",
+      "contains": "is ready"
+    },
+    {
+      "action": "capture",
+      "name": "08-library-download-complete",
+      "nativeScreen": true
+    },
+    {
+      "action": "click",
+      "object": "libraryShowMacs"
+    },
+    {
+      "action": "capture",
+      "name": "09-home-downloaded",
+      "window": "home",
+      "nativeScreen": true
+    },
+    {
+      "action": "resize",
+      "window": "home",
+      "width": 540,
+      "height": 650
+    },
+    {
+      "action": "scrollTop",
+      "window": "home"
+    },
+    {
+      "action": "capture",
+      "name": "09b-home-narrow",
+      "nativeScreen": true,
+      "window": "home"
+    },
+    {
+      "action": "resize",
+      "window": "home",
+      "width": 940,
+      "height": 700
+    },
+    {
+      "action": "click",
+      "window": "home",
+      "text": "New Mac…"
+    },
+    {
+      "action": "window",
+      "title": "New Mac"
+    },
+    {
+      "action": "fitScreen",
+      "window": "modal"
+    },
+    {
+      "action": "assertFooter",
+      "buttons": [
+        "Cancel",
+        "Create"
+      ]
+    },
+    {
+      "action": "capture",
+      "name": "09c-new-mac",
+      "nativeScreen": true
+    },
+    {
+      "action": "click",
+      "text": "Cancel"
+    },
+    {
+      "action": "click",
+      "window": "home",
+      "text": "Get Info…"
+    },
+    {
+      "action": "window",
+      "title": "Get Info"
+    },
+    {
+      "action": "resize",
+      "window": "modal",
+      "width": 540,
+      "height": 650
+    },
+    {
+      "action": "assertFooter",
+      "buttons": [
+        "Cancel",
+        "Save"
+      ]
+    },
+    {
+      "action": "capture",
+      "name": "09d-settings-narrow",
+      "nativeScreen": true
+    },
+    {
+      "action": "click",
+      "text": "Cancel"
+    },
+    {
+      "action": "click",
+      "window": "home",
+      "text": "Media…"
+    },
+    {
+      "action": "window",
+      "title": "Media"
+    },
+    {
+      "action": "resize",
+      "window": "modal",
+      "width": 420,
+      "height": 420
+    },
+    {
+      "action": "assertFooter",
+      "buttons": [
+        "Done"
+      ]
+    },
+    {
+      "action": "capture",
+      "name": "09e-media-narrow",
+      "nativeScreen": true
+    },
+    {
+      "action": "click",
+      "text": "Done"
+    },
+    {
+      "action": "click",
+      "text": "Manage…",
+      "window": "home"
+    },
+    {
+      "action": "window",
+      "title": "Manage Mac"
+    },
+    {
+      "action": "assertUI",
+      "object": "removeMachine",
+      "enabled": true
+    },
+    {
+      "action": "capture",
+      "name": "10-machine-management",
+      "nativeScreen": true
+    },
+    {
+      "action": "assertUI",
+      "object": "machineFolderPath",
+      "contains": "Offline Download.classic",
+      "readOnly": true
+    },
+    {
+      "action": "assertFooter",
+      "buttons": [
+        "Done"
+      ]
+    },
+    {
+      "action": "click",
+      "object": "removeMachine"
+    },
+    {
+      "action": "window",
+      "title": "Remove Mac"
+    },
+    {
+      "action": "capture",
+      "name": "11-machine-remove-options",
+      "nativeScreen": true
+    },
+    {
+      "action": "click",
+      "object": "cancelRemoveMachine"
+    },
+    {
+      "action": "assertState",
+      "machines": 1
+    },
+    {
+      "action": "click",
+      "object": "removeMachine"
+    },
+    {
+      "action": "click",
+      "object": "removeMachineKeepFiles"
+    },
+    {
+      "action": "assertState",
+      "machines": 0
+    },
+    {
+      "action": "assertPath",
+      "path": "${documents}/Offline Download.classic/disk.img",
+      "bytes": 512
+    },
+    {
+      "action": "capture",
+      "name": "12-home-removed-kept-files",
+      "window": "home",
+      "nativeScreen": true
+    },
+    {
+      "action": "open",
+      "folder": "${documents}/Offline Download.classic"
+    },
+    {
+      "action": "assertState",
+      "machines": 1
+    },
+    {
+      "action": "fixtureEngine",
+      "paused": true
+    },
+    {
+      "action": "capture",
+      "name": "13-home-paused",
+      "window": "home",
+      "nativeScreen": true
+    },
+    {
+      "action": "click",
+      "text": "Manage…",
+      "window": "home"
+    },
+    {
+      "action": "assertUI",
+      "object": "removeMachine",
+      "enabled": false
+    },
+    {
+      "action": "capture",
+      "name": "14-running-machine-protection",
+      "nativeScreen": true
+    },
+    {
+      "action": "click",
+      "object": "manageMachinePower"
+    },
+    {
+      "action": "window",
+      "title": "Mac Power"
+    },
+    {
+      "action": "assertUI",
+      "object": "machinePowerStatus",
+      "contains": "Paused"
+    },
+    {
+      "action": "capture",
+      "name": "15-paused-mac-power",
+      "nativeScreen": true
+    },
+    {
+      "action": "click",
+      "object": "powerForceStop"
+    },
+    {
+      "action": "window",
+      "title": "Force Stop Mac"
+    },
+    {
+      "action": "assertSafeDefault"
+    },
+    {
+      "action": "capture",
+      "name": "16-force-stop-warning",
+      "nativeScreen": true
+    },
+    {
+      "action": "click",
+      "object": "cancelDestructiveAction"
+    },
+    {
+      "action": "assertState",
+      "running": 1,
+      "paused": true
+    },
+    {
+      "action": "click",
+      "object": "powerForceStop"
+    },
+    {
+      "action": "assertSafeDefault"
+    },
+    {
+      "action": "markTime"
+    },
+    {
+      "action": "click",
+      "object": "confirmDestructiveAction"
+    },
+    {
+      "action": "stopped",
+      "timeout": 4000
+    },
+    {
+      "action": "elapsedUnder",
+      "milliseconds": 1500
+    },
+    {
+      "action": "wait",
+      "milliseconds": 350
+    },
+    {
+      "action": "assertUI",
+      "object": "removeMachine",
+      "enabled": true
+    },
+    {
+      "action": "click",
+      "text": "Done"
+    },
+    {
+      "action": "capture",
+      "name": "17-home-force-stopped",
+      "window": "home",
+      "nativeScreen": true
+    },
+    {
+      "action": "fixtureEngine",
+      "guest": true
+    },
+    {
+      "action": "window",
+      "title": "Offline Download"
+    },
+    {
+      "action": "capture",
+      "name": "18-disposable-hung-guest",
+      "window": "guest",
+      "nativeScreen": true
+    },
+    {
+      "action": "closeWindow",
+      "window": "guest"
+    },
+    {
+      "action": "window",
+      "title": "Mac Power"
+    },
+    {
+      "action": "capture",
+      "name": "19-guest-close-power",
+      "nativeScreen": true
+    },
+    {
+      "action": "click",
+      "object": "powerShutDown"
+    },
+    {
+      "action": "assertUI",
+      "object": "machinePowerStatus",
+      "contains": "Waiting for Mac OS"
+    },
+    {
+      "action": "assertUI",
+      "object": "powerShutDown",
+      "enabled": false
+    },
+    {
+      "action": "assertUI",
+      "object": "powerForceStop",
+      "enabled": true
+    },
+    {
+      "action": "capture",
+      "name": "19b-shutdown-waiting-force-available",
+      "nativeScreen": true
+    },
+    {
+      "action": "click",
+      "object": "powerForceStop"
+    },
+    {
+      "action": "assertSafeDefault"
+    },
+    {
+      "action": "click",
+      "object": "confirmDestructiveAction"
+    },
+    {
+      "action": "stopped",
+      "timeout": 4000
+    },
+    {
+      "action": "click",
+      "text": "Manage…",
+      "window": "home"
+    },
+    {
+      "action": "click",
+      "object": "removeMachine"
+    },
+    {
+      "action": "click",
+      "object": "deleteMachineFiles"
+    },
+    {
+      "action": "window",
+      "title": "Delete Mac Files"
+    },
+    {
+      "action": "assertSafeDefault"
+    },
+    {
+      "action": "capture",
+      "name": "20-recycle-machine-warning",
+      "nativeScreen": true
+    },
+    {
+      "action": "click",
+      "object": "cancelDestructiveAction"
+    },
+    {
+      "action": "assertState",
+      "machines": 1
+    },
+    {
+      "action": "assertPath",
+      "path": "${documents}/Offline Download.classic/disk.img",
+      "bytes": 512
+    },
+    {
+      "action": "click",
+      "object": "deleteMachineFiles"
+    },
+    {
+      "action": "click",
+      "object": "confirmDeleteMachine"
+    },
+    {
+      "action": "assertState",
+      "machines": 0,
+      "running": 0
+    },
+    {
+      "action": "assertPath",
+      "path": "${documents}/Offline Download.classic",
+      "exists": false
+    },
+    {
+      "action": "capture",
+      "name": "21-home-recycled",
+      "window": "home",
+      "nativeScreen": true
+    }
+  ]
+}

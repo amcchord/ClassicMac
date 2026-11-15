@@ -81,7 +81,7 @@ void Engine::start() {
     log.clear();
     buffer.clear();
     reason.clear();
-    stopping = restarting = false;
+    stopping = restarting = forced = false;
     auto args = Model::argumentsFor(machine, port, audioUnavailable);
     process.setProgram(Model::binary(machine.family() == "quadra800"
                                          ? "qemu-system-m68k"
@@ -194,25 +194,34 @@ void Engine::resume() {
   emit changed();
 }
 void Engine::shutdown(bool restart) {
+  if (forced)
+    return;
   restarting = restart;
   stopping = true;
-  if (paused)
-    resume();
+  emit changed();
   // Ask the classic OS to quit applications and shut down. Sending Power
   // followed by a timed Return races the confirmation dialog on busy guests
   // and can instead accept an unrelated document dialog.
   // Leave time for ADB to poll all four key-downs on a busy emulated Mac.
-  hmp("sendkey ctrl-alt-meta_l-power 500");
+  try {
+    if (paused)
+      resume();
+    hmp("sendkey ctrl-alt-meta_l-power 500");
+  } catch (...) {
+    // A Force Stop can be chosen while QMP is waiting in its event loop.
+    // That deliberate process exit is not another failure to show the user.
+    if (running && !forced)
+      throw;
+  }
 }
 void Engine::forceOff() {
   restarting = false;
   stopping = true;
-  try {
-    command("quit");
-  } catch (...) {
-    process.kill();
-  }
-  process.waitForFinished(5000);
+  forced = true;
+  // A hung engine may never service QMP. Kill the owned process directly and
+  // let QProcess::finished complete normal cleanup without blocking the UI.
+  process.kill();
+  emit changed();
 }
 QList<QStringList> Engine::pastePlan(QString s) {
   s.replace("\r\n", "\n");

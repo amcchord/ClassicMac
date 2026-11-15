@@ -155,18 +155,36 @@ static void request(const QUrl &initial, const QByteArray &range,
   }
   fail("Too many download redirects.");
 }
+QJsonArray load(std::atomic_bool &cancel) {
+  QByteArray data;
+  try {
+    request(
+        secureURL(url), {}, 1048576, cancel,
+        [](QNetworkReply *r) {
+          if (r->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() !=
+              200)
+            fail("The Library catalog could not be downloaded.");
+        },
+        [&](QByteArray bytes) { data += bytes; });
+  } catch (...) {
+    if (cancel)
+      fail("Loading canceled. Your saved Macs are still available.");
+    throw;
+  }
+  return parse(data);
+}
 QJsonArray load() {
   std::atomic_bool cancel = false;
-  QByteArray data;
-  request(
-      secureURL(url), {}, 1048576, cancel,
-      [](QNetworkReply *r) {
-        if (r->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() !=
-            200)
-          fail("The Library catalog could not be downloaded.");
-      },
-      [&](QByteArray bytes) { data += bytes; });
-  return parse(data);
+  return load(cancel);
+}
+qint64 cachedBytes(const QJsonObject &m) {
+  const auto hash = m["sha256"].toString();
+  if (!QRegularExpression("^[a-f0-9]{64}$").match(hash).hasMatch())
+    return 0;
+  const auto size = qint64(m["archiveBytes"].toDouble());
+  const auto saved = QFileInfo(Model::dataDirectory() + "/Downloads/" + hash +
+                              ".tar.gz.part").size();
+  return saved > 0 && saved <= size ? saved : 0;
 }
 static QString download(const QJsonObject &m, std::atomic_bool &cancel,
                         const Progress &progress) {
@@ -186,6 +204,7 @@ static QString download(const QJsonObject &m, std::atomic_bool &cancel,
     fail("Cannot open the download cache.");
   if (!f.seek(offset))
     fail("Cannot resume the download.");
+  progress("Downloading", offset, size);
   if (offset < size) {
     auto range =
         offset ? "bytes=" + QByteArray::number(offset) + "-" : QByteArray();
@@ -385,10 +404,10 @@ Model::Machine install(QJsonObject m, const QString &parent,
   auto family = m.value("machineFamily").toString("powerMacG4");
   if (!QStringList{"powerMacG4", "quadra800"}.contains(family))
     fail("This edition needs the macOS Copland engine.");
-  auto archive = download(m, cancel, progress);
   QStorageInfo storage(parent);
   if (storage.isValid() && storage.bytesAvailable() < 268435456)
     fail("There is not enough free space to install this Mac.");
+  auto archive = download(m, cancel, progress);
   auto folder =
       Model::uniqueFolder(parent, name.isEmpty() ? m["name"].toString() : name);
   bool complete = false;

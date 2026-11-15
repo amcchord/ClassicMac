@@ -20,7 +20,7 @@ for meta in sorted(a.root.rglob('*.json')):
     capture = meta.with_suffix('.png')
     if not capture.exists() or meta.name == 'result.json':
         continue
-    state = json.loads(meta.read_text())
+    state = json.loads(meta.read_text(encoding='utf-8'))
     if 'scale' not in state:
         continue
     zoom = state['scale']

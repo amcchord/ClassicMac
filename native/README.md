@@ -52,6 +52,24 @@ native widgets and engine and records screenshots, state and results. It
 has no remote listener. Keep qualification output and disposable guests in
 ignored `output/` directories.
 
+The Library presents current editions with search, system filters, download
+sizes and hardware details. Downloads retain progress when paused; a completed
+download can create another independent Mac. Start Mac opens a newly installed
+machine directly. The Home toolbar keeps Library, New Mac and Open Mac together,
+and the layout stacks on narrow windows.
+
+Manage shows a Mac's folder and offers Remove Mac. Remove from List keeps its
+files; Delete Files moves the validated `.classic` folder to Recycle Bin/Trash
+after a separate confirmation. Running Macs must be stopped first. Power is
+available on Home and the guest toolbar; closing a running guest opens it too.
+Shut Down and Restart ask Mac OS to close safely, while confirmed Force Stop
+terminates an unresponsive engine directly. Quit offers the same choices for
+all running Macs.
+
+Run the isolated [UI regression flow](tests/ui-ux.md) after frontend changes.
+See [Windows UX validation](../docs/windows-ux-2026-11-15.md) for screenshots,
+real Library download checks, and a booted System 7.5.5 guest.
+
 Windows tracks OS DPI with Per-Monitor V2 awareness. The pixel-art interface
 snaps to the nearest whole physical-pixel zoom:1× at100/125%,2× at150/175/200%.
 Stripes, glyphs, controls and bevels keep uniform square pixels. Native resize

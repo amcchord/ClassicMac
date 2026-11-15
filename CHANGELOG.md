@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased — Windows desktop usability (2026-11-15)
+
+- Browse the Library with search, system filters, current editions, hardware
+  and download sizes. Name each Mac before downloading, pause and resume with
+  visible progress, then start the installed Mac directly.
+- Keep New Mac, Open Mac and Library in a consistent home toolbar. Compact
+  windows stack the machine list and preview while keeping controls usable.
+- Manage Macs with explicit choices to remove the list entry while keeping
+  files, or move the machine folder to Recycle Bin/Trash.
+- Reach shutdown, restart and confirmed Force Stop from Home, the guest window
+  and its close action. Hung engines stop without waiting on their control pipe;
+  quitting also handles multiple running Macs.
+- Refresh media state immediately, improve accessible control names, and handle
+  errors and guest shutdown safely across open dialogs.
+- Add isolated UI regression flows, narrow-window checks, real download and
+  guest validation, and before/after screenshots.
+
 ## 4.5.0 — Portable Platinum desktop (2026-10-23)
 
 - Windows ships as one portable EXE; Linux ships as one AppImage, with an

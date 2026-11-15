@@ -7,6 +7,12 @@
 #endif
 using Model::fail;
 using namespace Platinum;
+static void performAction(const std::function<void()> &action) {
+  try { action(); }
+  catch (const std::exception &error) {
+    problem(QApplication::activeWindow(), QString::fromUtf8(error.what()));
+  }
+}
 static QString iconName(const QString &f) {
   return f == "quadra800"      ? "quadra_800"
          : f == "powerMac7500" ? "powermac_7500"
@@ -32,7 +38,9 @@ public:
              o.state & QStyle::State_Selected ? 0xffccccff : 0xffffffff);
     text(p, elide(m.name(), p.w() - 52), 45, 17);
     auto e = app->engines.value(m.id());
-    text(p, e ? (e->paused ? "Paused" : "Running now") : modelName(m.family()),
+    text(p, e ? (e->forcedStopRequested() ? "Stopping…" :
+                 e->stoppingRequested() ? "Shutting down…" :
+                 e->paused ? "Paused" : "Running now") : modelName(m.family()),
          45, 31, 0xff555555, "small");
     QPainter painter(&p.image);
     painter.drawImage(5, 4, QImage(":/" + iconName(m.family()) + "-32.png"));
@@ -53,8 +61,13 @@ public:
   App *app;
   explicit Preview(App *a) : QWidget(a), app(a) {
     setAccessibleName("Mac preview");
-    setFixedSize(400, 300);
+    setMinimumSize(200, 150);
+    setMaximumHeight(300);
+    setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
   }
+  QSize sizeHint() const override { return {400, 300}; }
+  bool hasHeightForWidth() const override { return true; }
+  int heightForWidth(int w) const override { return std::clamp(w * 3 / 4, 150, 300); }
   void paintEvent(QPaintEvent *) override {
     Pixels p(width(), height(), 0xff63639c);
     sunken(p);
@@ -82,12 +95,17 @@ public:
       q.drawImage(
           (width() - 32) / 2, height() / 2 - 30,
           QImage(":/" + iconName(m ? m->family() : "powerMacG4") + "-32.png"));
-      text(p, "Start up this Mac to see its screen.", 65, height() / 2 + 22,
-           0xffffffff, "small");
+      const auto hint = m ? "Start up to see your Mac's screen."
+                          : "Find your first Mac in the Library.";
+      text(p, elide(hint, width() - 24, "small"),
+           std::max(12, (width() - textWidth(hint, "small")) / 2),
+           height() / 2 + 22, 0xffffffff, "small");
     }
     QPainter(this).drawImage(0, 0, p.image);
   }
-  void mouseDoubleClickEvent(QMouseEvent *) override { app->startSelected(); }
+  void mouseDoubleClickEvent(QMouseEvent *) override {
+    performAction([this] { app->startSelected(); });
+  }
 };
 template <class T>
 static T
@@ -171,23 +189,7 @@ App::App() : PWindow("ClassicMac", {940, 700}) {
     }
   }
   buildHome();
-  canClose = [&] {
-    if (!engines.isEmpty()) {
-      if (question(this, "Macs are running",
-                   "Shut down your running Macs before quitting ClassicMac. "
-                   "Send Shut Down to every running Mac?",
-                   "Shut Down")) {
-        for (auto e : engines.values())
-          if (e->running)
-            e->shutdown();
-      }
-      return false;
-    }
-    for (auto w : guests)
-      w->close();
-    QTimer::singleShot(0, qApp, &QApplication::quit);
-    return true;
-  };
+  canClose = [this] { return requestQuit(); };
   render();
   if (machines.isEmpty())
     QTimer::singleShot(0, this, [&] {
@@ -245,37 +247,54 @@ void App::buildHome() {
   auto outer = new QVBoxLayout(body);
   outer->setContentsMargins(12, 12, 12, 12);
   outer->setSpacing(10);
+  auto toolbar = new QWidget(body);
+  auto tools = new PFlowLayout(toolbar);
+  tools->setContentsMargins(0, 0, 0, 0);
+  tools->addWidget(button("Library…", [this] { showLibrary(); }, toolbar));
+  tools->addWidget(button("New Mac…", [this] { showEditor(true); }, toolbar));
+  tools->addWidget(button("Open Mac…", [this] { importMachine(); }, toolbar));
+  tools->addWidget(button("About…", [this] {
+    problem(this, "ClassicMac " CLASSICMAC_VERSION
+      "\n\nThe classic Mac OS era on your computer.\n\n"
+      "System icons © Apple Computer, Inc. Machine artwork © The Iconfactory, "
+      "included with permission.\n\nCopland requires the macOS edition.");
+  }, toolbar));
+  outer->addWidget(toolbar);
   home = new QWidget(body);
-  auto columns = new QHBoxLayout(home);
+  auto columns = new QBoxLayout(QBoxLayout::LeftToRight, home);
+  homeColumns = columns;
   columns->setContentsMargins(0, 0, 0, 0);
   columns->setSpacing(14);
   auto left = new QWidget(home);
-  left->setFixedWidth(262);
+  machineSidebar = left;
+  left->setMinimumWidth(210);
   auto l = new QVBoxLayout(left);
   l->setContentsMargins(0, 0, 0, 0);
   l->setSpacing(8);
-  l->addWidget(label("Macs on this computer:", left));
+  machineCount = label("Your Macs", left);
+  l->addWidget(machineCount);
   list = new QListWidget(left);
+  list->setObjectName("machineList");
+  list->setAccessibleName("Your Macs");
   list->setItemDelegate(new MachineDelegate(this));
   list->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
   list->setFrameStyle(QFrame::Box);
   list->setLineWidth(2);
   list->setSpacing(0);
   list->setSelectionMode(QAbstractItemView::SingleSelection);
+  list->setMinimumHeight(100);
   l->addWidget(list, 1);
-  auto actions = new QHBoxLayout;
-  actions->setSpacing(10);
-  actions->addWidget(button("New Mac…", [&] { showEditor(true); }, left));
-  actions->addWidget(button("Library…", [&] { showLibrary(); }, left));
-  actions->addStretch();
-  l->addLayout(actions);
+  auto sidebarHelp = label("Double-click a Mac to open it.\nRight-click for more actions.", left, "small", true);
+  sidebarHelp->setObjectName("machineListHelp");
+  sidebarHelp->ink = 0xff555555;
+  l->addWidget(sidebarHelp);
   columns->addWidget(left);
   auto right = new QWidget(home);
+  right->setMinimumWidth(240);
   auto panel = new QVBoxLayout(right);
   panel->setContentsMargins(0, 0, 0, 0);
   panel->setSpacing(10);
   preview = new Preview(this);
-  panel->addWidget(preview, 0, Qt::AlignHCenter);
   auto heading = new QHBoxLayout;
   nameLabel = label("", right);
   statusLabel = label("", right, "small");
@@ -283,7 +302,9 @@ void App::buildHome() {
   heading->addWidget(nameLabel, 1);
   heading->addWidget(statusLabel);
   panel->addLayout(heading);
+  panel->addWidget(preview, 1);
   auto group = new PGroup("About This Mac", right);
+  group->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Maximum);
   auto g = new QHBoxLayout(group);
   g->setContentsMargins(12, 23, 12, 12);
   g->setSpacing(12);
@@ -295,33 +316,20 @@ void App::buildHome() {
   mediaButton = button("Media…", [&] { showMedia(); }, group);
   controls->addWidget(infoButton);
   controls->addWidget(mediaButton);
-  controls->addWidget(button(
-      "Show Files",
-      [&] {
-        if (auto m = current())
-          QDesktopServices::openUrl(QUrl::fromLocalFile(m->folder));
-      },
-      group));
+  manageButton = button("Manage…", [this] { showMachineActions(); }, group);
+  controls->addWidget(manageButton);
   controls->addStretch();
   g->addLayout(controls);
   panel->addWidget(group);
   notice = label("", right, "small", true);
   notice->ink = 0xff555555;
   panel->addWidget(notice);
-  panel->addStretch();
   auto power = new QHBoxLayout;
   power->setSpacing(12);
-  power->addWidget(button("Open Mac…", [&] { importMachine(); }, right));
-  power->addWidget(button(
-      "About…",
-      [&] {
-        problem(this,
-                "ClassicMac " CLASSICMAC_VERSION
-                "\n\nSystem icons © Apple "
-                "Computer, Inc. Machine artwork © The Iconfactory, included "
-                "with permission.\n\nCopland requires the macOS edition.");
-      },
-      right));
+  powerButton = button("Power…", [this] {
+    if (auto e = currentEngine()) showPowerActions(e);
+  }, right);
+  power->addWidget(powerButton);
   power->addStretch();
   startButton = button("Start Up", [&] { startSelected(); }, right, true);
   power->addWidget(startButton);
@@ -334,6 +342,41 @@ void App::buildHome() {
   scroller->setAutoFillBackground(false);
   scroller->viewport()->setAutoFillBackground(false);
   outer->addWidget(scroller, 1);
+  list->setContextMenuPolicy(Qt::CustomContextMenu);
+  connect(list, &QListWidget::customContextMenuRequested, this, [this](QPoint pos) {
+    auto item = list->itemAt(pos);
+    if (!item) return;
+    list->setCurrentItem(item);
+    QMenu menu(this);
+    auto add = [&](const QString &text, std::function<void()> action) {
+      return menu.addAction(text, this, [action] { performAction(action); });
+    };
+    add(currentEngine() ? "Show Mac" : "Start Up", [this] { startSelected(); });
+    auto info = add("Get Info…", [this] { showEditor(); });
+    info->setEnabled(!currentEngine());
+    add("Media…", [this] { showMedia(); });
+    add("Manage…", [this] { showMachineActions(); });
+    if (currentEngine()) add("Power…", [this] { showPowerActions(currentEngine()); });
+    menu.addSeparator();
+    auto remove = add("Remove Mac…", [this] { removeSelected(); });
+    remove->setEnabled(!currentEngine());
+    menu.exec(list->viewport()->mapToGlobal(pos));
+  });
+  auto shortcut = [this](const char *key, std::function<void()> action) {
+    auto s = new QShortcut(QKeySequence(QString::fromLatin1(key)), this);
+    connect(s, &QShortcut::activated, this, [action] {
+      try { action(); } catch (const std::exception &e) { problem(QApplication::activeWindow(), e.what()); }
+    });
+  };
+  shortcut("Ctrl+L", [this] { showLibrary(); });
+  shortcut("Ctrl+N", [this] { showEditor(true); });
+  shortcut("Ctrl+O", [this] { importMachine(); });
+  shortcut("Ctrl+I", [this] { showEditor(); });
+  auto removeShortcut = new QShortcut(QKeySequence(Qt::Key_Delete), list);
+  removeShortcut->setContext(Qt::WidgetShortcut);
+  connect(removeShortcut, &QShortcut::activated, this, [this] {
+    performAction([this] { removeSelected(); });
+  });
   connect(list, &QListWidget::currentRowChanged, this, [&](int i) {
     if (i >= 0 && selected != i)
       select(i);
@@ -345,19 +388,45 @@ void App::buildHome() {
       problem(this, e.what());
     }
   });
+  reflowHome();
+}
+void App::reflowHome() {
+  if (!homeColumns || !machineSidebar) return;
+  const bool compact = body->width() < 660;
+  homeColumns->setDirection(compact ? QBoxLayout::TopToBottom : QBoxLayout::LeftToRight);
+  machineSidebar->setMinimumWidth(compact ? 0 : 210);
+  machineSidebar->setMaximumWidth(compact ? QWIDGETSIZE_MAX : 240);
+  machineSidebar->setMaximumHeight(compact ? 130 : QWIDGETSIZE_MAX);
+  if (list) list->setMinimumHeight(compact ? 64 : 100);
+  if (auto help = machineSidebar->findChild<PLabel *>("machineListHelp"))
+    help->setVisible(!compact);
+  if (preview) {
+    preview->setMinimumHeight(compact ? 100 : 150);
+    preview->setMaximumHeight(compact ? 150 : 300);
+  }
+}
+void App::resizeEvent(QResizeEvent *event) {
+  PWindow::resizeEvent(event);
+  reflowHome();
 }
 void App::render() {
   if (!home)
     return;
   QSignalBlocker block(list);
-  list->clear();
-  for (auto m : machines)
-    list->addItem(m.name());
+  while (list->count() > machines.size()) delete list->takeItem(list->count() - 1);
+  for (int i = 0; i < machines.size(); ++i) {
+    if (i >= list->count()) list->addItem(machines[i].name());
+    else list->item(i)->setText(machines[i].name());
+  }
+  list->viewport()->update();
   list->setCurrentRow(selected);
+  machineCount->setText(QString("Your Macs · %1").arg(machines.size()));
   auto m = current();
   auto e = currentEngine();
-  nameLabel->setText(m ? m->name() : "No Macs");
-  statusLabel->setText(e ? (e->paused ? "Paused" : "Running")
+  nameLabel->setText(m ? m->name() : "Welcome to ClassicMac");
+  statusLabel->setText(e ? (e->forcedStopRequested() ? "Stopping…" :
+                            e->stoppingRequested() ? "Shutting down…" :
+                            e->paused ? "Paused" : "Running")
                          : m ? "Shut down" : "");
   QString detail;
   if (m) {
@@ -375,6 +444,8 @@ void App::render() {
   details->setText(detail);
   infoButton->setEnabled(m && !e);
   mediaButton->setEnabled(m);
+  manageButton->setEnabled(m);
+  powerButton->setVisible(e != nullptr);
   startButton->setEnabled(m && m->family() != "powerMac7500");
   startButton->setText(e ? (e->paused ? "Resume Mac" : "Show Mac")
                          : "Start Up");
@@ -382,9 +453,9 @@ void App::render() {
       e   ? (e->audioUnavailable
                  ? "Sound is unavailable on this computer. This session is "
                    "running without sound."
-                 : "Use Shut Down inside Mac OS to keep its disk healthy.")
+                 : "Use Power for shutdown, restart, or a Mac that has stopped responding.")
       : m ? "Choose Start Up, or use Media to select an installation CD."
-          : "Open a .classic folder or choose New Mac to get started.");
+          : "Choose Library for a ready-to-run Mac, New Mac to use your own installation CD, or Open Mac for an existing .classic folder.");
   preview->update();
 }
 PWindow *App::guest(Engine *e) {
@@ -411,9 +482,11 @@ PWindow *App::guest(Engine *e) {
     --zoom;
   auto w = new PWindow(e->machine.name(), initialSize(zoom), this);
   w->contentOnlyFullScreen = true;
-  w->canClose = [e] {
-    if (!e->running) return true;
-    e->shutdown();
+  w->canClose = [this, guard = QPointer<Engine>(e)] {
+    if (!guard || !guard->running) return true;
+    QTimer::singleShot(0, this, [this, guard] {
+      if (guard && guard->running) showPowerActions(guard);
+    });
     return false;
   };
   w->setMinimumSize(480, 240);
@@ -484,8 +557,11 @@ PWindow *App::guest(Engine *e) {
       },
       w);
   controls->addWidget(pause);
-  controls->addWidget(button("Restart", [e] { e->shutdown(true); }, w));
-  controls->addWidget(button("Shut Down", [e] { e->shutdown(); }, w));
+  auto restart = button("Restart", [e] { e->shutdown(true); }, w);
+  auto shutdown = button("Shut Down", [e] { e->shutdown(); }, w);
+  controls->addWidget(restart);
+  controls->addWidget(shutdown);
+  controls->addWidget(button("Power…", [this, e] { showPowerActions(e); }, w));
   controls->addWidget(button("Paste…", [this, e] { showPaste(e); }, w));
   controls->addWidget(button("Media…", [this, e] {
     for (int i = 0; i < machines.size(); ++i)
@@ -513,6 +589,9 @@ PWindow *App::guest(Engine *e) {
   guests[e->machine.id()] = w;
   connect(e, &Engine::changed, w, [=] {
     pause->setText(e->paused ? "Resume" : "Pause");
+    pause->setEnabled(!e->stoppingRequested());
+    restart->setEnabled(!e->stoppingRequested());
+    shutdown->setEnabled(!e->stoppingRequested());
     bool wasPaused = screen->paused;
     screen->paused = e->paused;
     if (screen->paused)
@@ -595,65 +674,12 @@ void App::startSelected() {
   w->activateWindow();
   render();
 }
-QJsonArray App::loadCatalog() {
-  catalogRows = background<QJsonArray>(
-      this, "Loading Mac OS Library",
-      [](std::atomic_bool &, Library::Progress) { return Library::load(); },
-      false);
-  return catalogRows;
-}
-Model::Machine App::install(QJsonObject entry, const QString &name) {
-  auto parent = Model::documents();
-  auto m = background<Model::Machine>(
-      this, "Download Mac",
-      [=](std::atomic_bool &cancel, Library::Progress progress) {
-        return Library::install(entry, parent, name, cancel, progress);
-      });
-  registerMachine(m);
-  return m;
-}
-void App::showLibrary() {
-  auto rows = loadCatalog();
-  PDialog d("Mac OS Library", {650, 610}, this);
-  auto v = dialogLayout(&d);
-  v->addWidget(label("Download a ready-to-run Mac. Each edition creates its "
-                     "own independent machine.",
-                     &d, "regular", true));
-  auto area = new QScrollArea(&d);
-  area->setWidgetResizable(true);
-  area->setFrameShape(QFrame::NoFrame);
-  auto content = new QWidget;
-  auto items = new QVBoxLayout(content);
-  items->setContentsMargins(0, 0, 8, 0);
-  items->setSpacing(14);
-  for (auto row : rows) {
-    auto entry = row.toObject();
-    items->addWidget(label(entry["name"].toString(), content));
-    items->addWidget(
-        label(entry["summary"].toString(), content, "regular", true));
-    bool available =
-        entry.value("machineFamily").toString("powerMacG4") != "powerMac7500" &&
-        Model::supportedVersion(entry["minimumAppVersion"].toString());
-    auto b = button(
-        available ? "Download…" : "Requires macOS Copland engine",
-        [&, entry] {
-          install(entry, entry["name"].toString());
-          problem(&d, "Installed. Choose Start Up to begin.");
-        },
-        content);
-    b->setEnabled(available);
-    items->addWidget(b, 0, Qt::AlignLeft);
-  }
-  items->addStretch();
-  area->setWidget(content);
-  v->addWidget(area, 1);
-  buttonRow(v, {button("Close", [&] { d.done(); }, &d, true)});
-  d.exec();
-}
 void App::settingsSaved(QJsonObject c) {
   auto m = current();
   if (!m || currentEngine())
     fail("Shut down this Mac before changing its settings.");
+  if (c["id"].toString() != m->id())
+    fail("The selected Mac changed. Close this window and select the Mac again before saving.");
   c = Model::validate(c);
   Model::writeJSON(m->folder + "/config.json", c);
   m->config = c;
@@ -672,6 +698,8 @@ void App::showEditor(bool create) {
   form->setVerticalSpacing(10);
   auto c = create ? Model::freshConfig("Mac OS 9") : m->config;
   auto name = new PEdit(c["name"].toString(), &d);
+  name->setAccessibleName("Mac name");
+  name->setObjectName("machineName");
   form->addWidget(label("Name:", &d), 0, 0);
   form->addWidget(name, 0, 1);
   auto family = new PCombo(&d);
@@ -682,6 +710,7 @@ void App::showEditor(bool create) {
     capacity->addItem(QString::number(n) + " GB", n);
   capacity->setCurrentIndex(5);
   auto ram = new PEdit(QString::number(c["ramMB"].toInt()), &d);
+  ram->setAccessibleName("Memory in megabytes");
   auto resolution = new PCombo(&d);
   for (auto s :
        {"640x480", "800x600", "1024x768", "1280x960", "1600x1200", "1920x1080"})
@@ -700,6 +729,7 @@ void App::showEditor(bool create) {
                    n);
   depth->setCurrentIndex(depth->findData(c["depth"].toInt()));
   auto graphics = new PCombo(&d);
+  graphics->setAccessibleName("Graphics card");
   graphics->addItem("Standard", "standard");
   graphics->addItem("ATI Radeon (3D acceleration)", "atiRadeon");
   graphics->setCurrentIndex(graphics->findData(c["graphicsCard"].toString()));
@@ -726,6 +756,9 @@ void App::showEditor(bool create) {
     form->addWidget(graphics, 4, 1);
   }
   v->addLayout(form);
+  if (create)
+    v->addWidget(label("This creates a blank Mac. Use Library for a ready-to-run system, "
+                       "or choose an installation CD in Media after creating it.", &d, "regular", true));
   if (!create && m->family() == "powerMacG4")
     v->addWidget(label("Standard and ATI Radeon graphics change the Mac's resolution with the window. ATI requires the guest's ATI display software.",
                         &d, "small", true));
@@ -809,8 +842,11 @@ void App::showMedia() {
     return;
   PDialog d("Media", {540, 430}, this);
   auto v = dialogLayout(&d);
-  v->addWidget(label("Shut down this Mac before changing its media.", &d,
+  v->addWidget(label(m->name(), &d));
+  v->addWidget(label("Choose CD or floppy images to use with this Mac. Shut down before changing media.", &d,
                      "regular", true));
+  QList<std::function<void()>> updates;
+  auto refreshMedia = [&] { for (auto &update : updates) update(); };
   auto choose = [&](QString key, QString title, QString filters) {
     auto path = QFileDialog::getOpenFileName(&d, title, m->folder, filters);
     if (!path.isEmpty()) {
@@ -819,6 +855,7 @@ void App::showMedia() {
       if (key == "cdImagePath")
         c["bootFromCD"] = true;
       settingsSaved(c);
+      refreshMedia();
     }
   };
   for (auto key :
@@ -830,13 +867,12 @@ void App::showMedia() {
     QString title = key == "cdImagePath"       ? "CD image"
                     : key == "floppyImagePath" ? "Floppy image"
                                                : "Shared folder";
-    v->addWidget(
-        label(title + ": " + QFileInfo(m->config[key].toString()).fileName(),
-              &d, "small"));
+    auto mediaPath = label("", &d, "small", true);
+    v->addWidget(mediaPath);
     auto row = new QHBoxLayout;
     auto chooseButton = button(
         "Choose " + title + "…",
-        [&, key] {
+        [&, key, title] {
           if (key == "sharedFolderPath") {
 #ifdef Q_OS_WIN
             fail("Host folder sharing requires Linux or macOS.");
@@ -848,6 +884,7 @@ void App::showMedia() {
               c[key] = path;
               c["sharedVolumeName"] = "Shared Files";
               settingsSaved(c);
+              refreshMedia();
             }
 #endif
           } else
@@ -872,32 +909,41 @@ void App::showMedia() {
           if (key == "cdImagePath")
             c["bootFromCD"] = false;
           settingsSaved(c);
+          refreshMedia();
         },
         &d);
     eject->setEnabled(!currentEngine() && !m->config[key].toString().isEmpty());
     row->addWidget(eject);
     row->addStretch();
     v->addLayout(row);
+    updates.append([=] {
+      const auto path = m->config[key].toString();
+      mediaPath->setText(title + ": " + (path.isEmpty() ? "Not inserted" : QFileInfo(path).fileName()));
+      mediaPath->setToolTip(QDir::toNativeSeparators(path));
+      chooseButton->setEnabled(!currentEngine() && (key != "floppyImagePath" || m->family() == "quadra800"));
+      eject->setEnabled(!currentEngine() && !path.isEmpty());
+    });
   }
+  refreshMedia();
+  if (m->family() == "powerMacG4")
+    v->addWidget(label("Floppy images are supported by the Quadra 800. Power Macs use CD images.", &d, "small", true));
   v->addStretch();
-  auto force = button(
-      "Force Off…",
-      [&] {
-        auto e = currentEngine();
-        if (e && question(&d, "Force Off",
-                          "Unsaved changes will be lost. Use Shut Down in Mac "
-                          "OS whenever possible.",
-                          "Force Off")) {
-          e->forceOff();
-          d.done();
-        }
-      },
-      &d);
-  force->setEnabled(currentEngine());
-  buttonRow(v, {force, button("Done", [&] { d.done(); }, &d, true)});
+  auto power = button("Power…", [&] {
+    d.done();
+    if (auto engine = currentEngine()) showPowerActions(engine);
+  }, &d);
+  power->setVisible(currentEngine() != nullptr);
+  QTimer mediaTimer;
+  connect(&mediaTimer, &QTimer::timeout, &d, [&] {
+    refreshMedia();
+    power->setVisible(currentEngine() != nullptr);
+  });
+  mediaTimer.start(250);
+  buttonRow(v, {power, button("Done", [&] { d.done(); }, &d, true)});
   d.exec();
 }
 void App::showPaste(Engine *e) {
+  QPointer<Engine> target(e);
   PDialog d("Paste Text into Mac", {590, 400}, this);
   auto v = dialogLayout(&d);
   v->addWidget(label("Focus the destination in Mac OS first. The Mac must use "
@@ -927,10 +973,12 @@ void App::showPaste(Engine *e) {
   auto send = button(
       "Paste Text",
       [&] {
+        if (!target || !target->running)
+          fail("This Mac has shut down. Start it again before pasting text.");
         busy = true;
         cancel = false;
         auto guard = qScopeGuard([&] { busy = false; });
-        e->paste(edit->toPlainText(), slow->isChecked(), cancel,
+        target->paste(edit->toPlainText(), slow->isChecked(), cancel,
                  [&](int n, int total) {
                    status->setText(
                        QString("Typed %1 of %2 characters.").arg(n).arg(total));
@@ -938,6 +986,11 @@ void App::showPaste(Engine *e) {
         status->setText("Finished.");
       },
       &d, true);
+  connect(e, &Engine::exited, &d, [&] {
+    cancel = true;
+    send->setEnabled(false);
+    status->setText("This Mac has shut down.");
+  });
   buttonRow(v, {button(
                     "Cancel",
                     [&] {

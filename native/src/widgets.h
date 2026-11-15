@@ -31,6 +31,12 @@ public:
   bool defaultButton = false, radio = false, toggleButton = false;
   QString widgetKind;
   PButton(const QString &, QWidget *parent = nullptr, bool def = false);
+  void setText(const QString &value) {
+    QAbstractButton::setText(value);
+    setAccessibleName(value);
+    updateGeometry();
+    update();
+  }
   QSize sizeHint() const override;
 
 protected:

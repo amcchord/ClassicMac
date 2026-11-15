@@ -1,0 +1,42 @@
+{
+  "1x": {
+    "passed": true,
+    "steps": 150,
+    "uiPixelZoom": 1,
+    "windowsDpi": 144,
+    "captures": 27,
+    "forceStopElapsedMs": [
+      110
+    ]
+  },
+  "2x": {
+    "passed": true,
+    "steps": 150,
+    "uiPixelZoom": 2,
+    "windowsDpi": 144,
+    "captures": 27,
+    "forceStopElapsedMs": [
+      109
+    ]
+  },
+  "publicNetwork": {
+    "passed": true,
+    "steps": 32,
+    "installedSystem": "System 7.5.5",
+    "pauseResume": "Mac OS 9.2.2 Deluxe v9"
+  },
+  "realGuest": {
+    "passed": true,
+    "steps": 14,
+    "system": "System 7.5.5",
+    "stopped": true
+  },
+  "pixels": {
+    "independentFixtures": 122,
+    "nativeFontGlyphs": 672,
+    "matchingDesktopCaptures1x": 27,
+    "uniformTitleBars1x": 27,
+    "uniformTitleBars2x": 27,
+    "desktopComparison2x": "Retained computer-use cursor/halo overlay; rendered pixels checked separately."
+  }
+}

@@ -17,6 +17,10 @@ public:
   void showEditor(bool create = false);
   void showMedia();
   void showSetup();
+  void showMachineActions();
+  void removeSelected();
+  void showPowerActions(Engine *);
+  bool requestQuit();
   QJsonObject evidence() const;
   void saveLibrary();
   void render();
@@ -25,12 +29,17 @@ public:
   PWindow *guest(Engine *);
 
 private:
+  friend class Qualification;
   QWidget *home = nullptr;
+  QWidget *machineSidebar = nullptr;
+  QBoxLayout *homeColumns = nullptr;
+  PLabel *machineCount = nullptr;
   QListWidget *list = nullptr;
   PLabel *nameLabel = nullptr, *statusLabel = nullptr, *details = nullptr,
          *notice = nullptr;
   QWidget *preview = nullptr;
   PButton *startButton = nullptr, *infoButton = nullptr, *mediaButton = nullptr;
+  PButton *manageButton = nullptr, *powerButton = nullptr;
   QJsonArray catalogRows;
   QStringList unavailablePaths;
   void buildHome();
@@ -41,4 +50,7 @@ private:
   Model::Machine install(QJsonObject, const QString &name);
   void showPaste(Engine *);
   void select(int);
+  void reflowHome();
+protected:
+  void resizeEvent(QResizeEvent *) override;
 };

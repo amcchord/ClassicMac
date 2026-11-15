@@ -496,8 +496,36 @@ public:
   int index = 0;
   int announced = -1;
   QElapsedTimer elapsed;
+  QElapsedTimer interactionClock;
   QTimer timer;
   bool runningStep = false;
+  QWidget *scope(const QJsonObject &step) const {
+    if (step["window"].toString() == "home") return app;
+    if (step["window"].toString() == "guest" && app->currentEngine())
+      return app->guest(app->currentEngine());
+    auto w = QApplication::activeModalWidget();
+    return w ? w : QApplication::activeWindow();
+  }
+  QWidget *namedWidget(const QJsonObject &step) const {
+    const auto name = step["object"].toString();
+    require(!name.isEmpty(), "A qualification widget requires an object name");
+    QList<QWidget *> matches;
+    auto root = scope(step);
+    for (auto w : QApplication::allWidgets())
+      if (w->objectName() == name && w->isVisible() &&
+          (!root || w == root || w->window() == root))
+        matches << w;
+    require(matches.size() == 1,
+            QString("Expected one visible widget '%1', found %2")
+                .arg(name).arg(matches.size()));
+    return matches.first();
+  }
+  QString path(QString value) const {
+    value.replace("${documents}", Model::documents());
+    value.replace("${profile}", Model::dataDirectory());
+    value.replace("${output}", output);
+    return value;
+  }
   Qualification(App *a, const QJsonObject &recipe)
       : QObject(a), app(a), steps(recipe["steps"].toArray()),
         output(recipe["output"].toString()) {
@@ -551,15 +579,240 @@ public:
     try {
       if (action == "wait")
         done = elapsed.elapsed() >= step["milliseconds"].toInt();
-      else if (action == "open") {
-        app->addMachine(step["folder"].toString());
+      else if (action == "fixtureCatalog") {
+        require(!qEnvironmentVariableIsEmpty("CLASSICMAC_QUALIFY") &&
+                    !qEnvironmentVariableIsEmpty("CLASSICMAC_TEST_HOME") &&
+                    !qEnvironmentVariableIsEmpty("CLASSICMAC_TEST_DOCUMENTS"),
+                "Catalog fixtures require an isolated qualification session");
+        auto catalog = QJsonObject{{"schemaVersion", 1},
+                                  {"machines", step["entries"].toArray()}};
+        app->catalogRows = Library::parse(QJsonDocument(catalog).toJson());
+        done = true;
+      } else if (action == "fixtureDownload") {
+        require(!qEnvironmentVariableIsEmpty("CLASSICMAC_QUALIFY") &&
+                    !qEnvironmentVariableIsEmpty("CLASSICMAC_TEST_HOME") &&
+                    !qEnvironmentVariableIsEmpty("CLASSICMAC_TEST_DOCUMENTS"),
+                "Download fixtures require an isolated qualification session");
+        int found = -1;
+        for (int i = 0; i < app->catalogRows.size(); ++i)
+          if (app->catalogRows[i].toObject()["id"] == step["id"]) found = i;
+        require(found >= 0, "The cached-download fixture is not in the catalog");
+        auto entry = app->catalogRows[found].toObject();
+        require(entry.value("machineFamily").toString("powerMacG4") == "powerMacG4",
+                "The tiny download fixture must use a Power Mac");
+        const auto config = QJsonDocument(Model::freshConfig(entry["name"].toString())).toJson();
+        auto member = [](const QByteArray &name, const QByteArray &data) {
+          QByteArray header(512, 0);
+          std::copy(name.begin(), name.end(), header.begin());
+          auto octal = [](quint64 n, int width) {
+            return QByteArray::number(n, 8).rightJustified(width - 1, '0') + '\0';
+          };
+          header.replace(100, 8, octal(0600, 8));
+          header.replace(124, 12, octal(data.size(), 12));
+          header[156] = '0';
+          header.replace(148, 8, QByteArray(8, ' '));
+          quint64 sum = 0;
+          for (auto byte : header) sum += quint8(byte);
+          header.replace(148, 8, octal(sum, 7) + ' ');
+          return header + data + QByteArray((512 - data.size() % 512) % 512, 0);
+        };
+        const auto tar = member("config.json", config) + member("disk.img", QByteArray(512, 0)) +
+                         QByteArray(1024, 0);
+        QTemporaryDir temporary;
+        require(temporary.isValid(), "Cannot prepare the tiny download fixture");
+        const auto archivePath = temporary.path() + "/fixture.gz";
+        auto gzip = gzopen(QFile::encodeName(archivePath).constData(), "wb");
+        require(gzip, "Cannot open the tiny fixture archive");
+        const auto written = gzwrite(gzip, tar.constData(), tar.size());
+        const auto closed = gzclose(gzip);
+        require(written == tar.size() && closed == Z_OK, "Cannot write fixture archive");
+        QFile archive(archivePath);
+        require(archive.open(QFile::ReadOnly), "Cannot read fixture archive");
+        auto bytes = archive.readAll();
+        const auto sha = QCryptographicHash::hash(bytes, QCryptographicHash::Sha256).toHex();
+        entry["sha256"] = QString::fromLatin1(sha);
+        entry["archiveBytes"] = bytes.size();
+        entry["installedBytes"] = config.size() + 512;
+        entry["diskCapacityBytes"] = 512;
+        app->catalogRows[found] = entry;
+        if (step["corrupt"].toBool()) bytes[bytes.size() / 2] = char(bytes[bytes.size() / 2] ^ 1);
+        require(QDir().mkpath(Model::dataDirectory() + "/Downloads"), "Cannot create fixture cache");
+        QFile cache(Model::dataDirectory() + "/Downloads/" + QString::fromLatin1(sha) + ".tar.gz.part");
+        require(cache.open(QFile::WriteOnly) && cache.write(bytes) == bytes.size(),
+                "Cannot populate fixture cache");
+        done = true;
+      } else if (action == "fixtureEngine") {
+        require(!qEnvironmentVariableIsEmpty("CLASSICMAC_QUALIFY") &&
+                    !qEnvironmentVariableIsEmpty("CLASSICMAC_TEST_HOME") &&
+                    !qEnvironmentVariableIsEmpty("CLASSICMAC_TEST_DOCUMENTS"),
+                "Engine fixtures require an isolated qualification session");
+        auto m = app->current();
+        require(m && !app->currentEngine(), "Select a stopped fixture Mac first");
+        auto e = new Engine(*m, app);
+        const auto id = m->id();
+        app->engines[id] = e;
+        connect(e, &Engine::changed, app, &App::render);
+        connect(e, &Engine::exited, app, [a = app, id, e](bool, QString) {
+          a->engines.remove(id);
+          if (auto w = a->guests.take(id)) {
+            w->hide();
+            w->deleteLater();
+          }
+          e->deleteLater();
+          a->render();
+        });
+        e->process.setProgram(QCoreApplication::applicationFilePath());
+        e->process.setArguments({"--qualification-engine"});
+        e->process.start();
+        require(e->process.waitForStarted(2000),
+                "The unresponsive engine fixture could not start");
+        e->running = true;
+        e->paused = step["paused"].toBool();
+        if (step["guest"].toBool()) {
+          Pixels frame(640, 480, 0xffcccccc);
+          text(frame, "Qualification fixture: unresponsive engine", 50, 230);
+          e->vnc.frame = frame.image;
+          app->guest(e)->show();
+        }
+        app->render();
+        done = true;
+      } else if (action == "assertState") {
+        if (step.contains("machines"))
+          require(app->machines.size() == step["machines"].toInt(),
+                  "Unexpected number of machines");
+        if (step.contains("running"))
+          require(app->engines.size() == step["running"].toInt(),
+                  "Unexpected number of running engines");
+        if (step.contains("selected"))
+          require(app->current() && app->current()->name() == step["selected"].toString(),
+                  "The expected Mac is not selected");
+        if (step.contains("paused"))
+          require(app->currentEngine() &&
+                      app->currentEngine()->paused == step["paused"].toBool(),
+                  "Unexpected pause state");
+        done = true;
+      } else if (action == "assertPath") {
+        const auto location = path(step["path"].toString());
+        require(QFileInfo::exists(location) == step.value("exists").toBool(true),
+                "Unexpected path existence: " + location);
+        if (step.contains("bytes"))
+          require(QFileInfo(location).size() == step["bytes"].toDouble(),
+                  "Fixture file size changed: " + location);
+        done = true;
+      } else if (action == "assertUI") {
+        auto w = namedWidget(step);
+        if (step.contains("readOnly")) {
+          auto field = qobject_cast<QLineEdit *>(w);
+          require(field && field->isReadOnly() == step["readOnly"].toBool(),
+                  "Unexpected editable state: " + w->objectName());
+        }
+        if (step.contains("enabled"))
+          require(w->isEnabled() == step["enabled"].toBool(),
+                  "Unexpected enabled state: " + w->objectName());
+        if (step.contains("text") || step.contains("contains")) {
+          QString text = w->accessibleName();
+          if (auto b = qobject_cast<QAbstractButton *>(w)) text = b->text();
+          if (auto l = qobject_cast<PLabel *>(w)) text = l->value;
+          if (auto e = qobject_cast<QLineEdit *>(w)) text = e->text();
+          if (step.contains("text"))
+            require(text == step["text"].toString(),
+                    "Unexpected widget text: " + w->objectName() + " = " + text);
+          if (step.contains("contains"))
+            require(text.contains(step["contains"].toString()),
+                    "Missing widget text: " + w->objectName() + " = " + text);
+        }
+        if (step["withinWindow"].toBool()) {
+          auto root = w->window();
+          require(root->rect().contains(QRect(w->mapTo(root, QPoint()), w->size())),
+                  "A visible action is clipped: " + w->objectName());
+        }
+        done = true;
+      } else if (action == "assertFooter") {
+        auto root = scope(step);
+        require(root, "No window with footer actions");
+        for (const auto &text : step["buttons"].toArray()) {
+          QList<QAbstractButton *> matches;
+          for (auto b : root->findChildren<QAbstractButton *>())
+            if (b->window() == root && b->isVisible() && b->text() == text.toString())
+              matches << b;
+          require(matches.size() == 1, "Expected one footer button: " + text.toString());
+          auto b = matches.first();
+          require(root->rect().contains(QRect(b->mapTo(root, QPoint()), b->size())),
+                  "A footer action is outside the window: " + b->text());
+          for (auto parent = b->parentWidget(); parent && parent != root;
+               parent = parent->parentWidget())
+            require(!qobject_cast<QAbstractScrollArea *>(parent),
+                    "A footer action scrolls out of reach: " + b->text());
+        }
+        done = true;
+      } else if (action == "assertSafeDefault") {
+        auto dialog = QApplication::activeModalWidget();
+        require(dialog, "No destructive confirmation to inspect");
+        int defaults = 0;
+        for (auto b : dialog->findChildren<PButton *>())
+          if (b->window() == dialog && b->isVisible() && b->defaultButton) {
+            ++defaults;
+            require(b->text() == "Cancel", "A destructive action owns the default ring");
+            require(b->hasFocus(), "The safe Cancel action does not have keyboard focus");
+          }
+        require(defaults == 1, "A confirmation requires exactly one safe default");
+        done = true;
+      } else if (action == "assertList" || action == "listSelect") {
+        auto list = qobject_cast<QListWidget *>(namedWidget(step));
+        require(list, "The qualification target is not a list");
+        QList<QListWidgetItem *> visible;
+        for (int i = 0; i < list->count(); ++i)
+          if (!list->item(i)->isHidden()) visible << list->item(i);
+        if (step.contains("count"))
+          require(visible.size() == step["count"].toInt(),
+                  QString("Expected %1 list entries, found %2")
+                      .arg(step["count"].toInt()).arg(visible.size()));
+        if (action == "listSelect") {
+          QList<QListWidgetItem *> matches;
+          for (auto item : visible)
+            if ((!step.contains("text") || item->text() == step["text"].toString()) &&
+                (!step.contains("id") || item->data(Qt::UserRole).toJsonObject()["id"] == step["id"]))
+              matches << item;
+          require(matches.size() == 1, "The requested list entry is not unique");
+          list->setCurrentItem(matches.first());
+          list->scrollToItem(matches.first());
+        }
+        if (step.contains("selectedId"))
+          require(list->currentItem() &&
+                      list->currentItem()->data(Qt::UserRole).toJsonObject()["id"] == step["selectedId"],
+                  "Unexpected selected Library edition");
+        done = true;
+      } else if (action == "markTime") {
+        interactionClock.start();
+        done = true;
+      } else if (action == "elapsedUnder") {
+        require(interactionClock.isValid() &&
+                    interactionClock.elapsed() < step["milliseconds"].toInt(),
+                QString("The interaction blocked for %1 ms").arg(interactionClock.elapsed()));
+        done = true;
+      } else if (action == "closeWindow") {
+        auto w = scope(step);
+        require(w, "No qualification window to close");
+        QTimer::singleShot(0, w, [w] { w->close(); });
+        done = true;
+      } else if (action == "scrollTop") {
+        auto w = scope(step);
+        require(w, "No qualification window to scroll");
+        for (auto area : w->findChildren<QScrollArea *>())
+          area->verticalScrollBar()->setValue(0);
+        done = true;
+      } else if (action == "open") {
+        app->addMachine(path(step["folder"].toString()));
         done = true;
       } else if (action == "resize") {
         PWindow *target = app;
+        if (step["window"].toString() == "modal")
+          target = qobject_cast<PWindow *>(QApplication::activeModalWidget());
         if (step["window"].toString() == "guest") {
           require(app->currentEngine(), "No running guest to resize");
           target = app->guest(app->currentEngine());
         }
+        require(target, "No qualification window to resize");
         target->resize(step["width"].toInt(), step["height"].toInt());
         QApplication::processEvents();
         for (auto b : target->body->findChildren<PButton *>()) {
@@ -567,9 +820,15 @@ public:
             if (target == app) {
               for (auto area : app->body->findChildren<QScrollArea *>())
                 area->ensureWidgetVisible(b);
-            } else
-              require(target->rect().contains(QRect(b->mapTo(target, QPoint()), b->size())),
-                      "A guest action is clipped: " + b->text());
+            } else {
+              bool scrollable = false;
+              for (auto parent = b->parentWidget(); parent && parent != target;
+                   parent = parent->parentWidget())
+                scrollable |= qobject_cast<QAbstractScrollArea *>(parent) != nullptr;
+              if (!scrollable)
+                require(target->rect().contains(QRect(b->mapTo(target, QPoint()), b->size())),
+                        "A window action is clipped: " + b->text());
+            }
           }
         }
         done = true;
@@ -768,6 +1027,18 @@ public:
           w = app;
         if (step["window"].toString() == "guest" && app->currentEngine())
           w = app->guest(app->currentEngine());
+        if (!qEnvironmentVariableIsEmpty("CLASSICMAC_QUALIFY") && w->screen()) {
+          // Keep the real Windows pointer and its accessibility halo outside
+          // the captured app while comparing widget and desktop pixels. The
+          // step remains guarded by runningStep during this short event loop.
+          QPointer<QWidget> target(w);
+          QCursor::setPos(w->screen()->availableGeometry().bottomRight());
+          QEventLoop settle;
+          QTimer::singleShot(150, &settle, &QEventLoop::quit);
+          settle.exec();
+          require(target && target->isVisible(),
+                  "The qualification window closed before its capture");
+        }
         w->grab().save(output + "/" + step["name"].toString() + ".png");
         if (step["nativeScreen"].toBool() && w->screen()) {
           const auto origin = w->mapToGlobal(QPoint());
@@ -781,6 +1052,32 @@ public:
         state["captureHeight"] = w->height();
         state["captureTitle"] = w->windowTitle();
         state["captureFullScreen"] = w->isFullScreen();
+        QJsonArray controls;
+        for (auto control : w->findChildren<QWidget *>()) {
+          if (!control->isVisible() || control->window() != w) continue;
+          const auto position = control->mapTo(w, QPoint());
+          QJsonObject row{{"class", control->metaObject()->className()},
+                          {"object", control->objectName()},
+                          {"accessibleName", control->accessibleName()},
+                          {"enabled", control->isEnabled()},
+                          {"x", position.x()}, {"y", position.y()},
+                          {"width", control->width()}, {"height", control->height()}};
+          if (auto b = qobject_cast<QAbstractButton *>(control)) row["text"] = b->text();
+          if (auto l = qobject_cast<PLabel *>(control)) row["text"] = l->value;
+          if (auto e = qobject_cast<QLineEdit *>(control)) row["text"] = e->text();
+          if (auto c = qobject_cast<QComboBox *>(control)) row["text"] = c->currentText();
+          if (auto l = qobject_cast<QListWidget *>(control)) {
+            QJsonArray items;
+            for (int i = 0; i < l->count(); ++i)
+              if (!l->item(i)->isHidden())
+                items.append(QJsonObject{{"text", l->item(i)->text()},
+                                         {"selected", l->item(i)->isSelected()},
+                                         {"data", l->item(i)->data(Qt::UserRole).toJsonObject()}});
+            row["items"] = items;
+          }
+          controls.append(row);
+        }
+        state["controls"] = controls;
         Model::writeJSON(output + "/" + step["name"].toString() + ".json", state);
         if (auto e = app->currentEngine(); e && !e->vnc.frame.isNull())
           e->vnc.frame.save(output + "/" + step["name"].toString() +
@@ -822,40 +1119,51 @@ public:
         done = !app->currentEngine();
       else if (action == "click") {
         QString target = step["text"].toString();
-        auto scope = QApplication::activeModalWidget();
-        for (auto w : QApplication::allWidgets())
+        auto root = scope(step);
+        QList<QAbstractButton *> matches;
+        const auto widgets = step.contains("object")
+                                 ? QList<QWidget *>{namedWidget(step)}
+                                 : QApplication::allWidgets();
+        for (auto w : widgets)
           if (auto b = qobject_cast<QAbstractButton *>(w);
-              b && b->isVisible() && b->isEnabled() && b->text() == target) {
-            if (scope && b->window() != scope)
+              b && b->isVisible() && b->isEnabled() &&
+              (step.contains("object") || b->text() == target)) {
+            if (root && b->window() != root)
               continue;
-            QTimer::singleShot(0, b, [b] { b->click(); });
-            done = true;
-            break;
+            matches << b;
           }
+        require(matches.size() <= 1, "Ambiguous qualification button: " + target);
+        if (matches.size() == 1) {
+          auto b = matches.first();
+          QTimer::singleShot(0, b, [b] { b->click(); });
+          done = true;
+        }
       } else if (action == "edit") {
-        auto w = (QApplication::activeModalWidget()
-                      ? QApplication::activeModalWidget()
-                      : QApplication::activeWindow());
+        auto w = scope(step);
         if (w) {
-          auto edits = w->findChildren<PEdit *>();
+          auto edits = step.contains("object")
+                           ? QList<PEdit *>{qobject_cast<PEdit *>(namedWidget(step))}
+                           : w->findChildren<PEdit *>();
+          edits.erase(std::remove_if(edits.begin(), edits.end(),
+                      [](PEdit *edit) { return !edit || !edit->isVisible(); }), edits.end());
           int i = step.value("index").toInt();
-          if (i < edits.size()) {
+          if (i >= 0 && i < edits.size()) {
             edits[i]->setText(step["text"].toString());
             done = true;
           }
         }
       } else if (action == "combo") {
-        auto w = (QApplication::activeModalWidget()
-                      ? QApplication::activeModalWidget()
-                      : QApplication::activeWindow());
+        auto w = scope(step);
         if (step["window"].toString() == "guest" && app->currentEngine())
           w = app->guest(app->currentEngine());
         if (w) {
-          auto combos = w->findChildren<PCombo *>();
+          auto combos = step.contains("object")
+                            ? QList<PCombo *>{qobject_cast<PCombo *>(namedWidget(step))}
+                            : w->findChildren<PCombo *>();
           combos.erase(std::remove_if(combos.begin(), combos.end(),
-              [](PCombo *combo) { return !combo->isVisible(); }), combos.end());
+              [](PCombo *combo) { return !combo || !combo->isVisible(); }), combos.end());
           int i = step.value("index").toInt();
-          if (i < combos.size()) {
+          if (i >= 0 && i < combos.size()) {
             int j = combos[i]->findText(step["text"].toString());
             if (j >= 0) {
               combos[i]->setCurrentIndex(j);
@@ -894,6 +1202,17 @@ public:
     runningStep = false;
   }
 };
+int qualificationEngine() {
+  require(!qEnvironmentVariableIsEmpty("CLASSICMAC_QUALIFY") &&
+              !qEnvironmentVariableIsEmpty("CLASSICMAC_TEST_HOME") &&
+              !qEnvironmentVariableIsEmpty("CLASSICMAC_TEST_DOCUMENTS"),
+          "The unresponsive engine fixture requires isolated qualification data");
+  // No QMP responses: this child reproduces an engine whose control pipe is
+  // hung. Its parent must stop it without waiting for a QMP command timeout.
+  // A bounded lifetime prevents an interrupted qualification from leaking it.
+  QTimer::singleShot(120000, qApp, &QCoreApplication::quit);
+  return QCoreApplication::exec();
+}
 void qualify(App *app, const QString &recipe) {
   try {
     new Qualification(app, Model::readJSON(recipe, 1048576));

@@ -15,6 +15,8 @@ int main(int argc, char **argv) {
   installPlatinumStyle();
   auto args = app.arguments();
   try {
+    if (args.contains("--qualification-engine"))
+      return qualificationEngine();
     if (args.contains("--display-test")) {
       int i = args.indexOf("--display-test");
       displayTests(args.value(i + 1), args.value(i + 2));

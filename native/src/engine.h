@@ -12,6 +12,8 @@ public:
   explicit Engine(Model::Machine, QObject *parent = nullptr);
   ~Engine() override;
   qint64 processId() const { return process.processId(); }
+  bool stoppingRequested() const { return stopping; }
+  bool forcedStopRequested() const { return forced; }
   void start();
   QJsonValue command(QString name, QJsonObject args = {});
   QJsonValue hmp(const QString &);
@@ -29,9 +31,10 @@ signals:
   void greeting();
 
 private:
+  friend class Qualification;
   QProcess process;
   QByteArray buffer;
-  bool initializing = false, stopping = false, restarting = false;
+  bool initializing = false, stopping = false, restarting = false, forced = false;
   int sequence = 0;
   QString reason;
   QByteArray password;

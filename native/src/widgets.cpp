@@ -157,6 +157,9 @@ void PEdit::paintEvent(QPaintEvent *) {
                    isEnabled() ? 0xff000000 : 0xff888888);
     x += w;
   }
+  if (displayText().isEmpty() && !placeholderText().isEmpty())
+    Platinum::text(content, elide(placeholderText(), content.w()), 0, 12,
+                   0xff888888);
   if (hasFocus() && caretVisible && !hasSelectedText() && !isReadOnly())
     content.vertical(cur - scroll, 1, 14, 0xff000000);
   QPainter(&p.image).drawImage(5, 3, content.image);
