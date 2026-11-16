@@ -1,29 +1,19 @@
-# ClassicMac 4.6.3 — published, 2026-11-15
+# RetroBoot Radeon cursor import — 2026-11-15
 
-Stable/latest: https://github.com/amcchord/ClassicMac/releases/tag/v4.6.3
-PR #44 merged; main and annotated v4.6.3 pushed. Tag:
-c3cc9126d681174254550b5e72c3f252c95a47bc. Shipped product source: 36c1084;
-subsequent changes are QA scripts, documentation and evidence.
-All nine release assets match uploaded size/SHA-256 and independent anonymous
-full downloads. Latest page/API resolve to 4.6.3. Prior 4.6.2 retained for rollback.
+User requests the GPU fix just added to RetroBoot. Confirmed source is
+88d074a55b00af7507e9412734ee83fd988876b3, Radeon Mac OS 9 cursor clipping,
+prepared for RetroBoot 2.0.2 at 1c9a702. Scope: cursor composition hunks and
+state from retroboot-macosx-agp.patch, excluding OS X/AGP platform changes.
 
-Ubuntu on requested Proxmox 192.168.1.100: 150/150/40 UI/network steps,
-72 exact desktop matches, 8,582,784 exact guest pixels, nine clean runtime runs.
-Linux default ATI/tablet/network/Tools startup stall fixed. Median Finder:
-System 7 8.309 s vs old 8.447 s; OS 9 29.678 s. Interface 59–65 MiB,
-0.17–0.5% of one core; paused engine median 0%. Final Windows EXE passes
-150-step flows at 1x/2x; 50/54 exact desktop captures, four OneDrive-obstructed
-frames retained. Mac signing/notarization/stapling/full verification and actual
-Quadra smoke pass. Consolidated 143 Swift tests (3 optional skips), 122 native
-references/672 glyphs and 11 Python tests pass. Final package CI:
-Linux 43782609513, Windows 43782612504.
+Owner: codex/retroboot-gpu-cursor in worktrees/retroboot-gpu-cursor.
+Baseline main 473a525; published v4.6.3 remains the qualified rollback.
+New portable qtest reproduces the bug on the old qualified engine at the
+first clipped-left pixel (black instead of white). The new patch passes
+application checks against the qualified prepared QEMU source.
+Fresh independent Mac engine build is active; CI gates and 4.6.4 package
+versions are being prepared. Preserve root gxmetal and other worktrees.
 
-Report: docs/ubuntu-validation-2026-11-15.md; evidence: docs/evidence/4.6.3.
-Software graphics/Xorg do not qualify physical GPU/3D or every UI state.
-The earlier UI audit's remaining appearance/layout/physical-device gaps remain.
-QA VMs 401/402 stopped; Ubuntu auto-login disabled; Windows task/RDP removed;
-Mac guests stopped; private temporary keys removed. Container 300 still running.
-Root gxmetal untouched; no guest catalog/site/DNS or unrelated VM changes.
-
-Requested release work is complete. Next action: the next requested change.
-Retain stopped QA systems and qualified 4.6.2 rollback.
+Next: finish engine build, run cursor and existing GL/display gates, build
+all three packages, test actual guest edges and release regression flows,
+consolidate validation, commit/push and publish verified 4.6.4 downloads.
+Use only owned QA VMs on requested Proxmox; no catalog/site deployment.

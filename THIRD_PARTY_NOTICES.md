@@ -142,6 +142,13 @@ is from RetroBoot `432a43d4ba8502a7afeaa5dd25ecf959c23aed1c` (2.0.1).
 patch hashes and video-driver adaptations. Upstream QEMU/driver copyright
 and GPL notices are retained in the patches and sources.
 
+The Radeon cursor correction is ported from RetroBoot
+`88d074a55b00af7507e9412734ee83fd988876b3` (2.0.2), retaining only the cursor
+composition/state hunks of its macOS X AGP patch. QEMU changes remain
+GPL-2.0-or-later. The synthetic cursor test is adapted from that revision's
+`research/gfx/tests/qtest_radeon_cursor.py`; provenance, hashes and scope are
+in `docs/retroboot-2.0.2-cursor-import.json` and `ati/README.md`.
+
 ## Original Mac OS icons
 
 The CD, floppy, folder, clipboard, display, alert and other system artwork

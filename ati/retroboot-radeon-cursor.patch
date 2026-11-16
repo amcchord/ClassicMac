@@ -1,0 +1,124 @@
+diff --git a/hw/display/ati.c b/hw/display/ati.c
+--- a/hw/display/ati.c
++++ b/hw/display/ati.c
+@@ -145,8 +145,14 @@
+     uint64_t data[128];
+     uint32_t srcoff;
+ 
+-    if ((s->regs.cur_offset & BIT(31)) || s->cursor_guest_mode) {
+-        return; /* Do not update cursor if locked or rendered by guest */
++    if (s->regs.cur_offset & BIT(31)) {
++        return;
++    }
++    if (s->cursor_guest_mode) {
++        /* Cursor pixels can change at the same address on an unlock. */
++        vga_invalidate_scanlines(&s->vga, s->vga.hw_cursor_y,
++                                 s->vga.hw_cursor_y + 63);
++        return;
+     }
+     /* FIXME handle cur_hv_offs correctly */
+     srcoff = s->regs.cur_offset - (s->regs.cur_hv_offs >> 16) -
+@@ -171,22 +177,27 @@
+ {
+     ATIVGAState *s = container_of(vga, ATIVGAState, vga);
+     int size = (s->regs.crtc_gen_cntl & CRTC2_CUR_EN) ? 64 : 0;
++    unsigned mode = (s->regs.crtc_gen_cntl >> 20) & 7;
++    /* CUR_OFFSET already includes the clipped top rows. Horizontal
++     * clipping selects pixels within each row, never preceding VRAM. */
++    uint32_t offset = s->regs.cur_offset & 0x07ffffff;
+ 
+     if (s->regs.cur_offset & BIT(31)) {
+         return; /* Do not update cursor if locked */
+     }
+-    if (s->cursor_size != size ||
++    if (s->cursor_size != size || s->cursor_mode != mode ||
++        s->cursor_hv_offs != s->regs.cur_hv_offs ||
+         vga->hw_cursor_x != s->regs.cur_hv_pos >> 16 ||
+         vga->hw_cursor_y != (s->regs.cur_hv_pos & 0xffff) ||
+-        s->cursor_offset != s->regs.cur_offset - (s->regs.cur_hv_offs >> 16) -
+-        (s->regs.cur_hv_offs & 0xffff) * 16) {
++        s->cursor_offset != offset) {
+         /* Remove old cursor then update and show new one if needed */
+         vga_invalidate_scanlines(vga, vga->hw_cursor_y, vga->hw_cursor_y + 63);
+         vga->hw_cursor_x = s->regs.cur_hv_pos >> 16;
+         vga->hw_cursor_y = s->regs.cur_hv_pos & 0xffff;
+-        s->cursor_offset = s->regs.cur_offset - (s->regs.cur_hv_offs >> 16) -
+-                           (s->regs.cur_hv_offs & 0xffff) * 16;
++        s->cursor_offset = offset;
+         s->cursor_size = size;
++        s->cursor_mode = mode;
++        s->cursor_hv_offs = s->regs.cur_hv_offs;
+         if (size) {
+             vga_invalidate_scanlines(vga,
+                                      vga->hw_cursor_y, vga->hw_cursor_y + 63);
+@@ -206,8 +217,45 @@
+         scr_y > s->regs.crtc_v_total_disp >> 16) {
+         return;
+     }
+-    /* FIXME handle cur_hv_offs correctly */
+-    srcoff = s->cursor_offset + (scr_y - vga->hw_cursor_y) * 16;
++    h = ((s->regs.crtc_h_total_disp >> 16) + 1) * 8;
++    if (vga->hw_cursor_x >= h) {
++        return;
++    }
++    if (ati_is_radeon(s) && (s->cursor_mode == 2 || s->cursor_mode == 3)) {
++        unsigned xorigin = (s->regs.cur_hv_offs >> 16) & 63;
++        unsigned yorigin = s->regs.cur_hv_offs & 63;
++        unsigned row = scr_y - vga->hw_cursor_y;
++        uint64_t source = (uint64_t)s->cursor_offset + row * 256;
++
++        if (row >= 64 - yorigin || source + 256 > vga->vram_size) {
++            return;
++        }
++        dp += vga->hw_cursor_x;
++        for (unsigned i = 0; i < 64 - xorigin && vga->hw_cursor_x + i < h; i++) {
++            const uint8_t *pixel = vga->vram_ptr + source + (i + xorigin) * 4;
++            uint32_t src = vga->big_endian_fb ? ldl_be_p(pixel) : ldl_le_p(pixel);
++            unsigned alpha = src >> 24;
++            uint32_t out = 0xff000000;
++
++            for (unsigned shift = 0; shift < 24; shift += 8) {
++                unsigned value = ((src >> shift) & 255) * alpha +
++                                 ((dp[i] >> shift) & 255) * (255 - alpha);
++                out |= ((value + 127) / 255) << shift;
++            }
++            dp[i] = out;
++        }
++        return;
++    }
++    /* Legacy two-plane monochrome cursor. CUR_OFFSET points to its
++     * first visible row; each plane skips the clipped left pixels. */
++    unsigned xorigin = (s->cursor_hv_offs >> 16) & 63;
++    unsigned yorigin = s->cursor_hv_offs & 63;
++    unsigned row = scr_y - vga->hw_cursor_y;
++
++    if (row >= 64 - yorigin) {
++        return;
++    }
++    srcoff = s->cursor_offset + row * 16;
+     if (srcoff > s->vga.vram_size - 16) {
+         return;
+     }
+@@ -215,8 +263,8 @@
+     h = ((s->regs.crtc_h_total_disp >> 16) + 1) * 8;
+     abits = ldq_be_p(&vga->vram_ptr[srcoff]);
+     xbits = ldq_be_p(&vga->vram_ptr[srcoff + 8]);
+-    mask = BIT_ULL(63);
+-    for (int i = 0; i < 64; i++, mask >>= 1) {
++    mask = BIT_ULL(63) >> xorigin;
++    for (unsigned i = 0; i < 64 - xorigin; i++, mask >>= 1) {
+         if (vga->hw_cursor_x + i >= h) {
+             return; /* end of screen, don't span to next line */
+         }
+diff --git a/hw/display/ati_int.h b/hw/display/ati_int.h
+--- a/hw/display/ati_int.h
++++ b/hw/display/ati_int.h
+@@ -158,6 +158,8 @@ struct ATIVGAState {
+     bool cursor_guest_mode;
+     bool flip_pending;          /* RetroBoot: display start waits for a readback */
+     uint16_t cursor_size;
++    uint8_t cursor_mode;
++    uint32_t cursor_hv_offs;
+     uint32_t cursor_offset;
+     QEMUCursor *cursor;
+     QEMUTimer vblank_timer;

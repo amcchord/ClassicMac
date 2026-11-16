@@ -29,17 +29,24 @@
   <img src="docs/screenshots/powermacg4-macos92.png" width="410" alt="Mac OS 9.2 on the emulated Power Mac G4">
 </p>
 
-## Download ClassicMac 4.6.3
+## Download ClassicMac 4.6.4
 
 | System | Download | Requirements |
 | --- | --- | --- |
-| Windows | [Portable EXE](https://github.com/amcchord/ClassicMac/releases/download/v4.6.3/ClassicMac-4.6.3-windows-x64.exe) | Windows 11 x64; unsigned. |
-| macOS | [DMG](https://github.com/amcchord/ClassicMac/releases/download/v4.6.3/ClassicMac-4.6.3.dmg) · [ZIP](https://github.com/amcchord/ClassicMac/releases/download/v4.6.3/ClassicMac-4.6.3.zip) | Apple Silicon, macOS 15+; signed and notarized. |
-| Linux | [AppImage](https://github.com/amcchord/ClassicMac/releases/download/v4.6.3/ClassicMac-4.6.3-linux-x64.AppImage) | x64, glibc 2.39+ and a desktop. |
+| Windows | [Portable EXE](https://github.com/amcchord/ClassicMac/releases/download/v4.6.4/ClassicMac-4.6.4-windows-x64.exe) | Windows 11 x64; unsigned. |
+| macOS | [DMG](https://github.com/amcchord/ClassicMac/releases/download/v4.6.4/ClassicMac-4.6.4.dmg) · [ZIP](https://github.com/amcchord/ClassicMac/releases/download/v4.6.4/ClassicMac-4.6.4.zip) | Apple Silicon, macOS 15+; signed and notarized. |
+| Linux | [AppImage](https://github.com/amcchord/ClassicMac/releases/download/v4.6.4/ClassicMac-4.6.4-linux-x64.AppImage) | x64, glibc 2.39+ and a desktop. |
 
-[Release notes, checksums and engine sources](https://github.com/amcchord/ClassicMac/releases/tag/v4.6.3).
+[Release notes, checksums and engine sources](https://github.com/amcchord/ClassicMac/releases/tag/v4.6.4).
 Windows runs directly. Drag the Mac app to Applications. On Linux, mark the
 AppImage executable; use `--appimage-extract-and-run` if FUSE is unavailable.
+
+## New in ClassicMac 4.6.4
+
+- **Radeon cursor correction.** Imports RetroBoot 2.0.2's cursor fix so the
+  pointer clips correctly at screen edges and updates without stale pixels.
+- **Shared graphics checks.** Mac, Windows and Linux builds exercise actual
+  Radeon cursor pixels, both monochrome planes, color modes and clipping.
 
 ## New in ClassicMac 4.6.3
 

@@ -562,6 +562,7 @@ done
 log "Installing the emulated ATI Radeon R100 (ati-vga,model=r100)"
 git -C "$QEMU_DIR" apply "$ATI_DIR/retroboot-ati-r100.patch" || die "Failed to apply ATI Radeon R100 patch"
 git -C "$QEMU_DIR" apply "$ATI_DIR/classicmac-ati-macos.patch" || die "Failed to apply ATI Radeon macOS GL patch"
+git -C "$QEMU_DIR" apply "$ATI_DIR/retroboot-radeon-cursor.patch" || die "Failed to apply Radeon cursor clipping correction"
 git -C "$QEMU_DIR" apply "$ROOT_DIR/input/classicmac-game-mouse.patch" || die "Failed to apply game mouse routing patch"
 git -C "$QEMU_DIR" apply "$ATI_DIR/classicmac-radeon-idle.patch" || die "Failed to apply Radeon initial idle state patch"
 if [ -f "$PPCVID_DIR/qemu_vga.ndrv" ]; then
@@ -734,6 +735,8 @@ if [ -n "${CLASSICMAC_ATI_GL_OPTIONAL:-}" ]; then
 fi
 "$PYTHON_BIN" "$ATI_DIR/tests/test_qemu_ati.py" "${ATI_TEST_ARGS[@]+"${ATI_TEST_ARGS[@]}"}" \
   "$QEMU_PPC_BIN" "$QEMU_DIR/pc-bios" || die "ATI Radeon realization test failed"
+"$PYTHON_BIN" "$ATI_DIR/tests/test_radeon_cursor.py" \
+  --qemu "$QEMU_PPC_BIN" --support "$QEMU_DIR/pc-bios" || die "Radeon cursor pixel test failed"
 CPU_HELP="$("$QEMU_PPC_BIN" -device 7400_v2.9-powerpc-cpu,help 2>&1 || true)"
 for property in mmu-contexts fast-fpu x-fast-fpu-mask fast-branch x-fast-branch-mask; do
   printf '%s\n' "$CPU_HELP" | grep -q "$property" || \

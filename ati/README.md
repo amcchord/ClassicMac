@@ -42,6 +42,26 @@ card are unaffected.
   semantics follow AMD's documentation and the MIT-licensed X.org/Mesa
   drivers; no ATI or Apple binary is part of this repository.
 
+## RetroBoot 2.0.2 cursor correction
+
+`retroboot-radeon-cursor.patch` ports the cursor-only hunks of RetroBoot
+`emulator/patches/retroboot-macosx-agp.patch` at
+`88d074a55b00af7507e9412734ee83fd988876b3`. It retains the driver's first
+visible row, clips horizontal pixels within both monochrome planes and
+invalidates changes to clipping/mode or cursor pixels. Color cursor modes
+retain the same bounded alpha composition as upstream. It changes only
+`hw/display/ati.c` and `hw/display/ati_int.h`; AGP and OS X platform changes
+are excluded. The existing CGL, WGL and EGL renderer backends remain intact.
+The QEMU modifications retain GPL-2.0-or-later.
+
+`tests/test_radeon_cursor.py` adapts RetroBoot's actual-device pixel test to
+loopback TCP for all three desktop hosts. It programs synthetic cursor/VRAM
+through qtest and independently compares 144 edge/plane/depth cases, visible
+cursor erasure, color transparency/alpha and right-edge wrapping. It requires
+neither a guest OS nor a private ROM. It fails on the old qualified engine's
+first clipped-left case. Full provenance is in
+`docs/retroboot-2.0.2-cursor-import.json`.
+
 ## Host GL on macOS
 
 RetroBoot's Linux back end loads `libEGL.so.1`/`libGLESv2.so.2` and needs

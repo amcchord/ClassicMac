@@ -18,3 +18,7 @@ screamer/*.[ch] text eol=lf
 *.cpp text eol=lf
 *.m text eol=lf
 *.mm text eol=lf
+
+# This vendored MIT printf implementation is stored with original CRLF bytes.
+qfb/driver/include/printf.h -text
+qfb/driver/src/printf.c -text

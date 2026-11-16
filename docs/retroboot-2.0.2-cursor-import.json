@@ -1,0 +1,46 @@
+{
+  "source": "https://github.com/amcchord/RetroBoot",
+  "revision": "88d074a55b00af7507e9412734ee83fd988876b3",
+  "release": "2.0.2",
+  "releasePreparationCommit": "1c9a702632390e1ac7f4773d76c770dcefb3483d",
+  "previousImport": "432a43d4ba8502a7afeaa5dd25ecf959c23aed1c",
+  "qemu": "v11.0.2",
+  "upstreamPatch": {
+    "path": "emulator/patches/retroboot-macosx-agp.patch",
+    "sha256": "6ef9a0179067ee597270ada3fabb2d96e179b3511bdbe238e8e02dd2141790db"
+  },
+  "localPatch": {
+    "path": "ati/retroboot-radeon-cursor.patch",
+    "sha256": "0b11605478041962391753760949941a09d243233792852be4be7c23193dca7d",
+    "verbatim": false,
+    "adaptation": "Extract cursor-only ati.c hunks and cursor_mode/cursor_hv_offs state; exclude AGP/UniNorth/OS X platform changes. Hunk line metadata is rebased.",
+    "modifiedQemuFiles": [
+      "hw/display/ati.c",
+      "hw/display/ati_int.h"
+    ]
+  },
+  "test": {
+    "upstreamPath": "research/gfx/tests/qtest_radeon_cursor.py",
+    "upstreamSHA256": "90b949b698b25a6fc48932ad3f57b830150473fa43f9a3f33d88e4de9befde71",
+    "localPath": "ati/tests/test_radeon_cursor.py",
+    "adaptation": "Standalone loopback TCP qtest with shared QMP helper for Windows/macOS/Linux; retain 144 monochrome cases and color/edge checks, verify a visible cursor before disable, record JSON/pixel count.",
+    "localSHA256": "02732cff5215a22528e61509ba7b25535654c629235c91e34994a5acf0a865dc",
+    "monochromeCases": 144,
+    "exactRGBPixels": 598030
+  },
+  "excluded": [
+    "UniNorth AGP/IOMMU changes",
+    "AGP capability switches",
+    "OS X startup/runtime profiles",
+    "appliance/hostd/image policy"
+  ],
+  "preserved": [
+    "ClassicMac CGL/WGL/EGL backends",
+    "Radeon idle handoff",
+    "native display and host resize",
+    "game mouse routing",
+    "guest firmware",
+    "Linux tablet/network/Tools PCI allocation fix"
+  ],
+  "license": "QEMU changes GPL-2.0-or-later; upstream notices retained."
+}
