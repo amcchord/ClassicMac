@@ -118,6 +118,36 @@ final class QEMURunnerArgumentTests: XCTestCase {
         XCTAssertFalse(arguments.contains { $0.hasPrefix("ati-vga") })
     }
 
+    func testATIMacSeparatesTabletAndNetworkInterruptsWithTools() throws {
+        let resources = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ClassicMac-argument-tools-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: resources, withIntermediateDirectories: true)
+        try Data().write(to: resources.appendingPathComponent("ClassicMacTools.iso"))
+        let previous = ProcessInfo.processInfo.environment["CLASSICMAC_RESOURCES"]
+        setenv("CLASSICMAC_RESOURCES", resources.path, 1)
+        defer {
+            if let previous { setenv("CLASSICMAC_RESOURCES", previous, 1) }
+            else { unsetenv("CLASSICMAC_RESOURCES") }
+            try? FileManager.default.removeItem(at: resources)
+        }
+        var vm = config(cdImagePath: nil, bootFromCD: false)
+        vm.graphicsCard = .atiRadeon
+        XCTAssertTrue(optionValues("-device", in: QEMUManager.buildArguments(for: vm))
+            .contains("virtio-tablet-pci,addr=0x13"))
+
+        vm.networking = false
+        XCTAssertTrue(optionValues("-device", in: QEMUManager.buildArguments(for: vm))
+            .contains("virtio-tablet-pci"))
+        vm.networking = true
+        vm.toolsCDInserted = false
+        XCTAssertTrue(optionValues("-device", in: QEMUManager.buildArguments(for: vm))
+            .contains("virtio-tablet-pci"))
+        vm.toolsCDInserted = true
+        vm.graphicsCard = .standard
+        XCTAssertTrue(optionValues("-device", in: QEMUManager.buildArguments(for: vm))
+            .contains("virtio-tablet-pci"))
+    }
+
     func testATIRendererNameFromMonitorReply() {
         XCTAssertEqual(ATIDisplay.rendererName(fromHMP: "\"CGL; GL 4.1 Metal - 91.7; Apple M5 Max\"\r\n"), "Apple M5 Max")
         XCTAssertEqual(ATIDisplay.rendererName(fromHMP: "\"\"\r\n"), "")

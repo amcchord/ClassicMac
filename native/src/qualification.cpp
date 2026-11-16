@@ -187,17 +187,6 @@ int selfTest(const QString &fixtures, const QString &output) {
     QStringList expected;
     for (auto v : profile["arguments"].toArray())
       expected << v.toString();
-#ifdef Q_OS_WIN
-    const auto overrides = profile["windowsDeviceOverrides"].toObject();
-#elif defined(Q_OS_LINUX)
-    const auto overrides = profile["linuxDeviceOverrides"].toObject();
-#endif
-#if defined(Q_OS_WIN) || defined(Q_OS_LINUX)
-    for (auto i = overrides.begin(); i != overrides.end(); ++i)
-      expected.replaceInStrings(QRegularExpression("^" +
-                                    QRegularExpression::escape(i.key()) + "$"),
-                                i.value().toString());
-#endif
     require(actual == expected, "QEMU argument parity differs for " +
                                     QJsonDocument(profile["config"].toObject())
                                         .toJson(QJsonDocument::Compact));
@@ -973,7 +962,7 @@ public:
                                           e->vnc.frame.width(),
                           image.y() + (step["y"].toInt() + 0.5) * image.height() /
                                           e->vnc.frame.height());
-          require(view->displayViewport().contains(p.toPoint()),
+          require(QRectF(view->displayViewport()).contains(p),
                   "The requested guest input point is outside the visible screen");
           QMouseEvent move(QEvent::MouseMove, p, view->mapToGlobal(p.toPoint()),
                            Qt::NoButton, Qt::NoButton, Qt::NoModifier);

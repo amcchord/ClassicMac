@@ -1111,7 +1111,12 @@ final class QEMUManager: ObservableObject {
             args += ["-device", "loader,addr=0x4000000,file=\(AppPaths.ndrvLoader.path)"]
             args += ["-prom-env", "boot-command=init-program go"]
             if tablet {
-                args += ["-device", "virtio-tablet-pci"]
+                // Automatic slot 18 shares Sungem's interrupt when ATI and
+                // Tools are present. Mac OS 9 can stall during startup.
+                // Slot 19 shares only the non-interrupting display control.
+                let tabletDevice = ati && !legacy && toolsViaVirtio && config.networking
+                    ? "virtio-tablet-pci,addr=0x13" : "virtio-tablet-pci"
+                args += ["-device", tabletDevice]
             }
             if sharing {
                 args += ["-device", "virtio-9p-pci,fsdev=share0,mount_tag=\(config.sharedVolumeName)"]

@@ -1,0 +1,208 @@
+{
+  "output": "REPLACED_BY_RUNNER",
+  "steps": [
+    {
+      "action": "assertDpi",
+      "scale": 1,
+      "pixelScale": 1
+    },
+    {
+      "action": "open",
+      "folder": "${output}/../cursor-machines/Radeon Cursor.classic"
+    },
+    {
+      "action": "select",
+      "name": "Radeon Cursor"
+    },
+    {
+      "action": "start"
+    },
+    {
+      "action": "guestReady"
+    },
+    {
+      "action": "guestSize",
+      "width": 1024,
+      "height": 768,
+      "sharp": true
+    },
+    {
+      "action": "wait",
+      "milliseconds": 45000
+    },
+    {
+      "action": "capture",
+      "window": "guest",
+      "name": "00-finder",
+      "nativeScreen": true
+    },
+    {
+      "action": "nativePointer",
+      "x": 0,
+      "y": 0
+    },
+    {
+      "action": "wait",
+      "milliseconds": 250
+    },
+    {
+      "action": "capture",
+      "window": "guest",
+      "name": "cursor-top-left",
+      "nativeScreen": true
+    },
+    {
+      "action": "nativePointer",
+      "x": 512,
+      "y": 0
+    },
+    {
+      "action": "wait",
+      "milliseconds": 250
+    },
+    {
+      "action": "capture",
+      "window": "guest",
+      "name": "cursor-top-center",
+      "nativeScreen": true
+    },
+    {
+      "action": "nativePointer",
+      "x": 1023,
+      "y": 0
+    },
+    {
+      "action": "wait",
+      "milliseconds": 250
+    },
+    {
+      "action": "capture",
+      "window": "guest",
+      "name": "cursor-top-right",
+      "nativeScreen": true
+    },
+    {
+      "action": "nativePointer",
+      "x": 1023,
+      "y": 384
+    },
+    {
+      "action": "wait",
+      "milliseconds": 250
+    },
+    {
+      "action": "capture",
+      "window": "guest",
+      "name": "cursor-right",
+      "nativeScreen": true
+    },
+    {
+      "action": "nativePointer",
+      "x": 1023,
+      "y": 767
+    },
+    {
+      "action": "wait",
+      "milliseconds": 250
+    },
+    {
+      "action": "capture",
+      "window": "guest",
+      "name": "cursor-bottom-right",
+      "nativeScreen": true
+    },
+    {
+      "action": "nativePointer",
+      "x": 512,
+      "y": 767
+    },
+    {
+      "action": "wait",
+      "milliseconds": 250
+    },
+    {
+      "action": "capture",
+      "window": "guest",
+      "name": "cursor-bottom",
+      "nativeScreen": true
+    },
+    {
+      "action": "nativePointer",
+      "x": 0,
+      "y": 767
+    },
+    {
+      "action": "wait",
+      "milliseconds": 250
+    },
+    {
+      "action": "capture",
+      "window": "guest",
+      "name": "cursor-bottom-left",
+      "nativeScreen": true
+    },
+    {
+      "action": "nativePointer",
+      "x": 0,
+      "y": 384
+    },
+    {
+      "action": "wait",
+      "milliseconds": 250
+    },
+    {
+      "action": "capture",
+      "window": "guest",
+      "name": "cursor-left",
+      "nativeScreen": true
+    },
+    {
+      "action": "nativePointer",
+      "x": 512,
+      "y": 384
+    },
+    {
+      "action": "wait",
+      "milliseconds": 250
+    },
+    {
+      "action": "capture",
+      "window": "guest",
+      "name": "cursor-center",
+      "nativeScreen": true
+    },
+    {
+      "action": "pause"
+    },
+    {
+      "action": "capture",
+      "window": "guest",
+      "name": "paused",
+      "nativeScreen": true
+    },
+    {
+      "action": "resume"
+    },
+    {
+      "action": "closeWindow",
+      "window": "guest"
+    },
+    {
+      "action": "window",
+      "title": "Mac Power"
+    },
+    {
+      "action": "click",
+      "object": "powerShutDown"
+    },
+    {
+      "action": "stopped"
+    },
+    {
+      "action": "capture",
+      "window": "home",
+      "name": "stopped",
+      "nativeScreen": true
+    }
+  ]
+}

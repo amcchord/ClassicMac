@@ -25,6 +25,25 @@ checks pause/resume and closing into Power, and requests a clean shutdown:
 python3 native/scripts/run-ui-ux.py ./ClassicMac-4.6.3-linux-x64.AppImage --output /absolute/qa/network --recipe native/tests/linux/public-network-flow.json
 ```
 
+## Radeon cursor edges
+
+Create a disposable sparse copy of the stopped public ATI Mac OS 9.2.1
+machine at `QA/cursor-machines/Radeon Cursor.classic`. Give the copy a new
+UUID and the name `Radeon Cursor`; keep networking, sound, tablet and Tools
+enabled. The original machine must remain stopped and unchanged.
+
+```sh
+python3 native/scripts/run-ui-ux.py ./ClassicMac-4.6.4-linux-x64.AppImage --output /absolute/QA/cursor-flow --recipe native/tests/linux/radeon-cursor-flow.json
+```
+
+The 43-step flow opens that copy, boots, visits all four screen corners and
+four edge midpoints, returns to the center, pauses/resumes and shuts down.
+It waits 45 seconds before edge input. Inspect `00-finder-guest.png` for an
+actual Finder before accepting the flow; an RFB connection alone is not a
+completed boot. Run both pixel checkers on the captures. The last row/column
+use fractional pixel centers; the qualification bounds check preserves those
+coordinates rather than rounding them outside the viewport.
+
 ## Performance
 
 Use an otherwise idle desktop, identical stopped source images and the same

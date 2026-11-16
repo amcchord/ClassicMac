@@ -337,14 +337,12 @@ QStringList argumentsFor(const Machine &m, int port, bool silent) {
         << "-prom-env" << "boot-command=init-program go";
       if (b("tabletInput")) {
         QString tablet = "virtio-tablet-pci";
-#if defined(Q_OS_WIN) || defined(Q_OS_LINUX)
         // With ATI, Sungem and Tools present, automatic allocation puts the
         // tablet in slot 18, sharing Sungem's interrupt. Mac OS 9 then stalls
-        // during startup on Windows and Linux. Slot 19 uses the quiet line
+        // during startup. Slot 19 uses the quiet line on every desktop host,
         // shared with the display-control device, which has no PCI interrupt.
         if (ati && !legacy && tools && b("networking"))
           tablet += ",addr=0x13";
-#endif
         a << "-device" << tablet;
       }
     }

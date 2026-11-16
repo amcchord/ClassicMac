@@ -36,6 +36,17 @@ Apple M5 Max CGL smoke test passes context, shader/link, framebuffer, triangle
 and readback checks. Existing Mac engine/device/display gates also pass.
 These are correctness checks; no new game speedup is claimed.
 
+Full guest testing also reproduced the existing tablet/network interrupt
+conflict on the Mac frontend, with the normal display-control device order.
+The old engine's automatic slot 18 does not reach Finder within 65 seconds;
+changing only the tablet to slot 19 reaches Finder in 24.44 seconds and shuts
+down cleanly. An earlier diagnostic used a different device order and booted
+with automatic allocation; it is retained as a diagnostic, not the control.
+The shipping Swift launcher now uses the same conditional slot 19 allocation
+already qualified on Windows/Linux. Sound, networking, Tools and tablet stay
+enabled. The native argument oracle is now shared across all desktop hosts.
+This startup correction is separate from the imported cursor patch.
+
 The shared Mac build and both platform CI workflows now require the cursor
 gate. Release validation and corresponding prepared source archives will
 record the exact final packages. Current stable 4.6.3 remains available until

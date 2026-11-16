@@ -612,16 +612,10 @@
       "-prom-env",
       "boot-command=init-program go",
       "-device",
-      "virtio-tablet-pci",
+      "virtio-tablet-pci,addr=0x13",
       "-nic",
       "user,model=sungem"
-    ],
-    "windowsDeviceOverrides": {
-      "virtio-tablet-pci": "virtio-tablet-pci,addr=0x13"
-    },
-    "linuxDeviceOverrides": {
-      "virtio-tablet-pci": "virtio-tablet-pci,addr=0x13"
-    }
+    ]
   },
   {
     "config": {
