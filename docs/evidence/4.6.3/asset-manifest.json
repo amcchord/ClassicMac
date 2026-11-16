@@ -1,0 +1,49 @@
+{
+  "productCodeCommit": "36c1084da3722d673b298b3cb2917b5c46ea1928",
+  "previousLatest": "v4.6.2",
+  "assets": [
+    {
+      "name": "ClassicMac-4.6.3-linux-x64.AppImage",
+      "size": 60611064,
+      "sha256": "d8a60b874891075713386d11c02da59cd13c49d2060e64c7088e9c90dc672c62"
+    },
+    {
+      "name": "ClassicMac-4.6.3-windows-x64.exe",
+      "size": 42742123,
+      "sha256": "9361491663944a4a13395f2fe7c010968c9c91a8b3893cf80d1999c7f4c67fc1"
+    },
+    {
+      "name": "ClassicMac-4.6.3.dmg",
+      "size": 47938315,
+      "sha256": "392014202e05d16f5eddfa6b1924032e7bf7849e2f27839bc2ceeddbf80a317f"
+    },
+    {
+      "name": "ClassicMac-4.6.3.zip",
+      "size": 42566605,
+      "sha256": "0e8d6cbb19c3bde9db420bc36066e44b41dd79e5bb3824550213de85840692b6"
+    },
+    {
+      "name": "ClassicMac-Copland-source.tar.gz",
+      "size": 16899171,
+      "sha256": "35b3af17d6c4a250ba9104216c9ee6e65c956927d76bde6d0e62fc486f0d12da"
+    },
+    {
+      "name": "ClassicMac-Linux-QEMU-source.tar.gz",
+      "size": 42347907,
+      "sha256": "2ac46c2b19e160f59256fb94a36d30d9a6eafc16a80b42b8743563a8122a04fe"
+    },
+    {
+      "name": "ClassicMac-Windows-QEMU-source.tar.gz",
+      "size": 41550125,
+      "sha256": "d98ffa300bf971cad5d6acdcdae62fb78534a5d6cf94b09b363fc09c9baf9962"
+    },
+    {
+      "name": "ClassicMac-macOS-QEMU-source.tar.gz",
+      "size": 42404456,
+      "sha256": "f98717fc733ad3de93b4948b6f49b38d5bd92de9e2a176f2df83eb5c1d86329d"
+    }
+  ],
+  "linuxCI": "https://github.com/amcchord/ClassicMac/actions/runs/43782609513",
+  "windowsCI": "https://github.com/amcchord/ClassicMac/actions/runs/43782612504",
+  "engineSources": "macOS/Copland reuse the qualified unchanged 4.6.2 source; Linux and Windows archives accompany their actual platform builds."
+}

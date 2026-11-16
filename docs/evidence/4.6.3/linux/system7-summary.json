@@ -1,0 +1,28 @@
+{
+  "candidate": {
+    "package": "ClassicMac-4.6.3-linux-x64.AppImage",
+    "sha256": "d8a60b874891075713386d11c02da59cd13c49d2060e64c7088e9c90dc672c62",
+    "runs": 3,
+    "menuSamples": 24,
+    "finderMedianMs": 8309.099003000028,
+    "inputMedianMs": 50.71477500018773,
+    "inputP95Ms": 127.67122500008554,
+    "frontendIdlePercent": 0.166663127102955,
+    "engineIdlePercent": 100.49839358343058,
+    "pausedEnginePercent": 0.0,
+    "frontendRSSMiB": 59.328125
+  },
+  "baseline": {
+    "package": "ClassicMac-4.6.2-linux-x64.AppImage",
+    "sha256": "cbf562c441c15f4a82f5e888fdc5f18bb7ee15e665d1c1f787d06b66730c9fb7",
+    "runs": 3,
+    "menuSamples": 24,
+    "finderMedianMs": 8446.96718799969,
+    "inputMedianMs": 48.61450550015434,
+    "inputP95Ms": 126.99377899980391,
+    "frontendIdlePercent": 0.16666299160881334,
+    "engineIdlePercent": 100.49778394011464,
+    "pausedEnginePercent": 0.0,
+    "frontendRSSMiB": 59.18359375
+  }
+}

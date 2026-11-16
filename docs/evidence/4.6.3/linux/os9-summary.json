@@ -1,0 +1,15 @@
+{
+  "candidate": {
+    "package": "ClassicMac-4.6.3-linux-x64.AppImage",
+    "sha256": "d8a60b874891075713386d11c02da59cd13c49d2060e64c7088e9c90dc672c62",
+    "runs": 3,
+    "menuSamples": 24,
+    "finderMedianMs": 29677.620835000198,
+    "inputMedianMs": 45.844133000173315,
+    "inputP95Ms": 123.42001199976949,
+    "frontendIdlePercent": 0.49999324450795146,
+    "engineIdlePercent": 53.66572365257019,
+    "pausedEnginePercent": 0.0,
+    "frontendRSSMiB": 64.5390625
+  }
+}

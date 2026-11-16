@@ -1,0 +1,21 @@
+{
+  "captures": [
+    {
+      "capture": "18-disposable-hung-guest.json",
+      "mode": "Sharp Pixels",
+      "compared": true,
+      "zoom": 1,
+      "pixelsCompared": 307200,
+      "differingPixels": 0
+    },
+    {
+      "capture": "18-disposable-hung-guest.json",
+      "mode": "Sharp Pixels",
+      "compared": true,
+      "zoom": 1,
+      "pixelsCompared": 307200,
+      "differingPixels": 0
+    }
+  ],
+  "pixelsCompared": 614400
+}

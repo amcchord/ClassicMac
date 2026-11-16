@@ -1,0 +1,175 @@
+{
+  "captures": [
+    {
+      "capture": "paused.json",
+      "mode": "Sharp Pixels",
+      "compared": true,
+      "zoom": 1,
+      "pixelsCompared": 753984,
+      "differingPixels": 0
+    },
+    {
+      "capture": "steady.json",
+      "mode": "Sharp Pixels",
+      "compared": true,
+      "zoom": 1,
+      "pixelsCompared": 753984,
+      "differingPixels": 0
+    },
+    {
+      "capture": "paused.json",
+      "mode": "Sharp Pixels",
+      "compared": true,
+      "zoom": 1,
+      "pixelsCompared": 753984,
+      "differingPixels": 0
+    },
+    {
+      "capture": "steady.json",
+      "mode": "Sharp Pixels",
+      "compared": true,
+      "zoom": 1,
+      "pixelsCompared": 753984,
+      "differingPixels": 0
+    },
+    {
+      "capture": "paused.json",
+      "mode": "Sharp Pixels",
+      "compared": true,
+      "zoom": 1,
+      "pixelsCompared": 753984,
+      "differingPixels": 0
+    },
+    {
+      "capture": "steady.json",
+      "mode": "Sharp Pixels",
+      "compared": true,
+      "zoom": 1,
+      "pixelsCompared": 753984,
+      "differingPixels": 0
+    },
+    {
+      "capture": "paused.json",
+      "mode": "Sharp Pixels",
+      "compared": true,
+      "zoom": 1,
+      "pixelsCompared": 287040,
+      "differingPixels": 0
+    },
+    {
+      "capture": "steady.json",
+      "mode": "Sharp Pixels",
+      "compared": true,
+      "zoom": 1,
+      "pixelsCompared": 287040,
+      "differingPixels": 0
+    },
+    {
+      "capture": "paused.json",
+      "mode": "Sharp Pixels",
+      "compared": true,
+      "zoom": 1,
+      "pixelsCompared": 287040,
+      "differingPixels": 0
+    },
+    {
+      "capture": "steady.json",
+      "mode": "Sharp Pixels",
+      "compared": true,
+      "zoom": 1,
+      "pixelsCompared": 287040,
+      "differingPixels": 0
+    },
+    {
+      "capture": "paused.json",
+      "mode": "Sharp Pixels",
+      "compared": true,
+      "zoom": 1,
+      "pixelsCompared": 287040,
+      "differingPixels": 0
+    },
+    {
+      "capture": "steady.json",
+      "mode": "Sharp Pixels",
+      "compared": true,
+      "zoom": 1,
+      "pixelsCompared": 287040,
+      "differingPixels": 0
+    },
+    {
+      "capture": "paused.json",
+      "mode": "Sharp Pixels",
+      "compared": true,
+      "zoom": 1,
+      "pixelsCompared": 287040,
+      "differingPixels": 0
+    },
+    {
+      "capture": "steady.json",
+      "mode": "Sharp Pixels",
+      "compared": true,
+      "zoom": 1,
+      "pixelsCompared": 287040,
+      "differingPixels": 0
+    },
+    {
+      "capture": "paused.json",
+      "mode": "Sharp Pixels",
+      "compared": true,
+      "zoom": 1,
+      "pixelsCompared": 287040,
+      "differingPixels": 0
+    },
+    {
+      "capture": "steady.json",
+      "mode": "Sharp Pixels",
+      "compared": true,
+      "zoom": 1,
+      "pixelsCompared": 287040,
+      "differingPixels": 0
+    },
+    {
+      "capture": "paused.json",
+      "mode": "Sharp Pixels",
+      "compared": true,
+      "zoom": 1,
+      "pixelsCompared": 287040,
+      "differingPixels": 0
+    },
+    {
+      "capture": "steady.json",
+      "mode": "Sharp Pixels",
+      "compared": true,
+      "zoom": 1,
+      "pixelsCompared": 287040,
+      "differingPixels": 0
+    },
+    {
+      "capture": "06-finder.json",
+      "mode": "Fit Window",
+      "compared": false
+    },
+    {
+      "capture": "07-paused-guest.json",
+      "mode": "Fit Window",
+      "compared": false
+    },
+    {
+      "capture": "18-disposable-hung-guest.json",
+      "mode": "Sharp Pixels",
+      "compared": true,
+      "zoom": 1,
+      "pixelsCompared": 307200,
+      "differingPixels": 0
+    },
+    {
+      "capture": "18-disposable-hung-guest.json",
+      "mode": "Sharp Pixels",
+      "compared": true,
+      "zoom": 1,
+      "pixelsCompared": 307200,
+      "differingPixels": 0
+    }
+  ],
+  "pixelsCompared": 8582784
+}

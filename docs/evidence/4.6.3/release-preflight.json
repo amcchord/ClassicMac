@@ -1,0 +1,18 @@
+{
+  "date": "2026-11-15",
+  "authorization": "User requests incorporating the recent PR, an Ubuntu test on the local Proxmox host, committed GitHub changes and a downloadable release.",
+  "previousMain": "5e68920909ece6f1333889ea77007f92a5152bee",
+  "includedPR": 44,
+  "prHead": "dbf3c9f7fa09eea4ba2148f7680e530309ad66cd",
+  "productSourceCommit": "36c1084da3722d673b298b3cb2917b5c46ea1928",
+  "previousLatest": "v4.6.2",
+  "previousReleaseId": 445028007,
+  "previousTagCommit": "a98eb9949b564d7e97834c144d885cfb0b7bd14d",
+  "newTag": "v4.6.3",
+  "tagAbsentAtPreflight": true,
+  "backup": "Verified complete local Git bundle output/release-4.6.3/pre-publication.bundle; existing v4.6.2 tag/release/assets retained.",
+  "pushPolicy": "Fast-forward main, annotated version tag, no force push. Preserve unrelated gxmetal.",
+  "publishGate": "Upload draft, compare all asset names/sizes/SHA-256 digests, publish latest, independently fetch every asset anonymously.",
+  "rollback": "If public verification fails, restore v4.6.2 as latest through release 445028007; retain v4.6.3 tag/assets for diagnosis.",
+  "scope": "GitHub repository/tag/release only; public guest catalog and website unchanged."
+}

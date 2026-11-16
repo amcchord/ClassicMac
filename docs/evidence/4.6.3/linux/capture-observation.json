@@ -1,0 +1,20 @@
+{
+  "initialSet": {
+    "desktopCaptures": 72,
+    "exactMatches": 71,
+    "mismatch": "qualified-ui-1x/08-library-download-complete",
+    "bounds": [
+      471,
+      323,
+      472,
+      337
+    ],
+    "differingPixels": 14,
+    "cause": "Blinking text caret changed phase between widget grab and desktop grab. All other pixels match.",
+    "evidence": [
+      "initial-caret-widget.png",
+      "initial-caret-desktop.png"
+    ]
+  },
+  "repeat": "Repeated the entire unchanged 150-step 1x flow once on the same package and desktop; all 27 captures match exactly. Initial captures retained; no masks, tolerances or source changes applied."
+}

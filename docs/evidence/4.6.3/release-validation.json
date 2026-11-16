@@ -1,0 +1,61 @@
+{
+  "date": "2026-11-15",
+  "productSourceCommit": "36c1084da3722d673b298b3cb2917b5c46ea1928",
+  "integrationChecks": {
+    "swiftTests": 143,
+    "optionalSwiftSkips": 3,
+    "swiftFailures": 0,
+    "nativePixelComparisons": 122,
+    "nativeMacRomanGlyphs": 672,
+    "nativeResult": "passed",
+    "pythonTests": 11,
+    "pythonFailures": 0
+  },
+  "linux": {
+    "ciRun": 43782609513,
+    "packageSHA256": "d8a60b874891075713386d11c02da59cd13c49d2060e64c7088e9c90dc672c62",
+    "actualDesktop": "Ubuntu 24.04.5 GNOME Xorg on requested Proxmox, 1920x1440, 6 vCPU/8 GiB, Mesa llvmpipe software rendering",
+    "uiSteps1x": 150,
+    "uiSteps2x": 150,
+    "publicNetworkSteps": 40,
+    "allStepsPassed": true,
+    "desktopExactMatches": 72,
+    "uniformTitleBars": 81,
+    "sharpGuestPixelsCompared": 8582784,
+    "differingGuestPixels": 0,
+    "system7PairedRuns": 3,
+    "os9CandidateRuns": 3,
+    "inputSamplesPerPackageAndGuest": 24,
+    "oldDefaultOS9": "No Finder within 65 seconds; retained startup capture at 60 seconds. No valid baseline performance measurement.",
+    "fix": "Linux ATI+Sungem+Tools tablet PCI addr=0x13, matching qualified Windows allocation.",
+    "initialCaptureTiming": "One 14-pixel blinking caret mismatch retained; full unchanged 1x repeat matches all 27. No masks or tolerance."
+  },
+  "windows": {
+    "ciRun": 43782612504,
+    "packageSHA256": "9361491663944a4a13395f2fe7c010968c9c91a8b3893cf80d1999c7f4c67fc1",
+    "actualDesktop": "Windows 11 Pro owned Proxmox VM 401, persistent RDP, 1920x1440 at 100% OS DPI; app pixel zoom 1x/2x",
+    "uiSteps1x": 150,
+    "uiSteps2x": 150,
+    "allStepsPassed": true,
+    "desktopExactMatches": 50,
+    "desktopCaptures": 54,
+    "uniformTitleBars": 54,
+    "nonmatchingDesktopCaptures": "Four 2x Home captures obstructed by an unrelated OneDrive promotion. Retained and not counted as exact.",
+    "sharpMockGuestPixelsCompared": 614400,
+    "differingMockGuestPixels": 0,
+    "runnerFix": "Explicit UTF-8 input supports Windows PowerShell 5.1; initial ANSI recipe failed before Library. Final app unchanged."
+  },
+  "mac": {
+    "signedNotarizedStapledVerified": true,
+    "notaryApp": "e9160918-04c7-445f-928d-7f62de474ce2",
+    "notaryDMG": "79db7eb7-9bec-4f5b-8740-162f9a09ab16",
+    "actualFinalAppSmoke": "Disposable Quadra: Happy Mac first revealed frame, Finder, shutdown.",
+    "enginesAndFirmware": "Unchanged from qualified 4.6.2; current version metadata and signatures."
+  },
+  "limits": [
+    "Software virtual graphics, not physical GPU/3D or audible output qualification",
+    "Guest/process boot with warming caches; not cold-storage timing",
+    "Unpaused System 7 uses an emulation core; paused CPU measured separately",
+    "Earlier UI appearance/layout, physical input and mixed-monitor gaps remain"
+  ]
+}

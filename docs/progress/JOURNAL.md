@@ -1824,3 +1824,57 @@ consolidated root checks, publish and verify stable 4.1.1. Retain 4.1.0 for roll
   and startup corrections, committed source and easy downloads are delivered.
   Remaining measured-state/physical-device limits stay explicit in the audit;
   no certification of every UI state. Next action is the next requested change.
+
+
+## 2026-11-15 — PR #44 integration and final 4.6.3 Ubuntu qualification
+
+- User requests the recent PR, a new GitHub release and real Ubuntu performance
+  checks on Proxmox 192.168.1.100. Task worktree/branch github-4.6.3-ubuntu /
+  codex/github-4.6.3-ubuntu, previous main 5e68920 and stable v4.6.2 retained.
+  PR #44 dbf3c9f fast-forwarded: Library/search/filter/naming/download recovery,
+  compact Home, explicit file removal and hung-guest power management. Literal
+  copy retained; existing RetroBoot 2.0.1 engine remains. Root gxmetal untouched.
+- Shipping version 7f989d0; Windows CRLF source-preparation failure corrected
+  by 13d0807/a8c1d7d without losing Copland raw-patch exceptions. b4ef7a9 adds
+  actual Linux desktop/UI/performance runners and bounded real-focus wait.
+- Dedicated Ubuntu 24.04.5 VM 402 provisioned on requested host: 6 vCPU, 8 GiB,
+  sparse NVMe, GNOME/Xorg 1920x1440, Mesa llvmpipe. Official image hash verified.
+  Other VMs/containers left running and unchanged. Public System 7 and OS 9
+  sources imported/checksummed; every runtime test uses disposable sparse clones.
+- Actual 4.6.2 default ATI OS 9 stalls near 20% startup; no Finder in 65 s.
+  45aff78 assigns Linux tablet PCI slot 19 when ATI/network/Tools conflict,
+  matching the qualified Windows fix. Linux argument golden checks cover it.
+  All selected devices remain on. No engine, firmware or guest-image changes.
+- Final product source 36c1084 adds QA file synchronization for performance;
+  6203100 supports the older runner and centered/settled real pointer probes.
+  Final Linux CI 43782609513 and Windows CI 43782612504 pass from 36c1084.
+  Exact Linux AppImage SHA d8a60b874891075713386d11c02da59cd13c49d2060e64c7088e9c90dc672c62.
+- Final Ubuntu AppImage: 150 UI steps at each 1x/2x plus 40 public-network steps,
+  real pause/resume/install/start/Finder/close/Power/shutdown; final 72 exact
+  desktop comparisons, 81 uniform title bars, 20 guest captures/8,582,784 exact
+  pixels. One initial 14-pixel blinking-caret mismatch retained; full unchanged
+  1x flow repeated once, 27 exact captures. No masks or relaxed comparisons.
+- Three paired System 7 runs: median Finder 8.309 s vs 8.447 s, input median
+  50.7 ms vs 48.6 ms, p95 127.7 vs 127.0 ms, frontend 59.33 MiB/0.17% core.
+  Three default ATI OS 9 runs: Finder median29.678 s, input45.8ms/p95123.4ms,
+  frontend64.54MiB/0.5% core. All nine clean shutdowns pass. Unpaused System 7
+  still consumes one emulation core; paused engine median0%, range0–0.20%.
+  Earlier timing/hit-target/locked-desktop probes retained separately. Raw
+  samples/method/limits in docs/ubuntu-validation-2026-11-15.md and evidence/4.6.3.
+- Final Windows EXE SHA9361491663944a4a13395f2fe7c010968c9c91a8b3893cf80d1999c7f4c67fc1
+  passes both150-step flows on VM401 persistent RDP,100% OS DPI/app1x+2x.
+  PowerShell5.1 fixture ANSI decoding corrupted ellipsis; runner now reads
+  UTF-8 explicitly and complete reruns pass. All54 title bars whole pixels,
+  50 exact desktop matches; four2x frames obstructed by OneDrive retained and
+  not counted. No new full Windows guest/DPI matrix claim. Owned task removed.
+- Mac4.6.3 app/DMG signed, notarized and stapled; full distribution verification
+  passes. Actual disposable Quadra shows Happy Mac first, Finder, shutdown.
+  Mac/Copland engine source unchanged from qualified4.6.2. Integration checkout
+  consolidated143 Swift tests/3 optional skips,122 native refs/672glyphs and
+  11Python tests pass. Both owned QA VMs401/402 gracefully stopped, Ubuntu
+  temporary auto-login disabled. Container300 remains running.
+- Eight binary/source assets plus SHA256SUMS staged; complete git backup bundle
+  verified. README and release notes provide direct downloads. Next: commit,
+  fast-forward push/tag, draft upload/digest checks, publish latest, verify all
+  anonymous downloads. Rollback restores v4.6.2 latest, preserving tags/assets.
+  No public guest catalog, site, DNS or unrelated VM changes.

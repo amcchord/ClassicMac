@@ -20,7 +20,7 @@ $profilePath = Join-Path $outputPath 'profile'
 $documentsPath = Join-Path $outputPath 'machines'
 [IO.Directory]::CreateDirectory($profilePath) | Out-Null
 [IO.Directory]::CreateDirectory($documentsPath) | Out-Null
-$recipe = Get-Content -LiteralPath (Join-Path $repoRoot 'native/tests/ui-ux-flow.json') -Raw |
+$recipe = Get-Content -LiteralPath (Join-Path $repoRoot 'native/tests/ui-ux-flow.json') -Raw -Encoding UTF8 |
   ConvertFrom-Json
 $recipe.output = $outputPath.Replace('\', '/')
 $recipe.steps[0].scale = $PixelScale
@@ -59,7 +59,7 @@ if ($process.ExitCode -ne 0) {
   if (Test-Path -LiteralPath $result) { Get-Content -LiteralPath $result -Raw | Write-Output }
   throw "The UI qualification failed (exit $($process.ExitCode)). Inspect $outputPath."
 }
-$report = Get-Content -LiteralPath (Join-Path $outputPath 'result.json') -Raw | ConvertFrom-Json
+$report = Get-Content -LiteralPath (Join-Path $outputPath 'result.json') -Raw -Encoding UTF8 | ConvertFrom-Json
 if (-not $report.passed) { throw "The UI qualification reported failure. Inspect $outputPath." }
 Write-Output ("Passed {0} UI steps at {1}x; screenshots and evidence: {2}" -f
   @($report.steps).Count, $PixelScale, $outputPath)

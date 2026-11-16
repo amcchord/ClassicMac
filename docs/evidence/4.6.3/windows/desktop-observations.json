@@ -1,0 +1,458 @@
+{
+  "captures": [
+    {
+      "capture": "ui-1x-utf8/01-home-empty.png",
+      "exact": true,
+      "differenceBounds": null,
+      "differingPixels": 0,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true
+    },
+    {
+      "capture": "ui-1x-utf8/02-library-overview.png",
+      "exact": true,
+      "differenceBounds": null,
+      "differingPixels": 0,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true
+    },
+    {
+      "capture": "ui-1x-utf8/02b-library-narrow.png",
+      "exact": true,
+      "differenceBounds": null,
+      "differingPixels": 0,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true
+    },
+    {
+      "capture": "ui-1x-utf8/03-library-filter-and-search.png",
+      "exact": true,
+      "differenceBounds": null,
+      "differingPixels": 0,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true
+    },
+    {
+      "capture": "ui-1x-utf8/04-library-no-results.png",
+      "exact": true,
+      "differenceBounds": null,
+      "differingPixels": 0,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true
+    },
+    {
+      "capture": "ui-1x-utf8/05-library-platform-unavailable.png",
+      "exact": true,
+      "differenceBounds": null,
+      "differingPixels": 0,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true
+    },
+    {
+      "capture": "ui-1x-utf8/06-library-update-required.png",
+      "exact": true,
+      "differenceBounds": null,
+      "differingPixels": 0,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true
+    },
+    {
+      "capture": "ui-1x-utf8/07-library-download-recovery.png",
+      "exact": true,
+      "differenceBounds": null,
+      "differingPixels": 0,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true
+    },
+    {
+      "capture": "ui-1x-utf8/08-library-download-complete.png",
+      "exact": true,
+      "differenceBounds": null,
+      "differingPixels": 0,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true
+    },
+    {
+      "capture": "ui-1x-utf8/09-home-downloaded.png",
+      "exact": true,
+      "differenceBounds": null,
+      "differingPixels": 0,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true
+    },
+    {
+      "capture": "ui-1x-utf8/09b-home-narrow.png",
+      "exact": true,
+      "differenceBounds": null,
+      "differingPixels": 0,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true
+    },
+    {
+      "capture": "ui-1x-utf8/09c-new-mac.png",
+      "exact": true,
+      "differenceBounds": null,
+      "differingPixels": 0,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true
+    },
+    {
+      "capture": "ui-1x-utf8/09d-settings-narrow.png",
+      "exact": true,
+      "differenceBounds": null,
+      "differingPixels": 0,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true
+    },
+    {
+      "capture": "ui-1x-utf8/09e-media-narrow.png",
+      "exact": true,
+      "differenceBounds": null,
+      "differingPixels": 0,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true
+    },
+    {
+      "capture": "ui-1x-utf8/10-machine-management.png",
+      "exact": true,
+      "differenceBounds": null,
+      "differingPixels": 0,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true
+    },
+    {
+      "capture": "ui-1x-utf8/11-machine-remove-options.png",
+      "exact": true,
+      "differenceBounds": null,
+      "differingPixels": 0,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true
+    },
+    {
+      "capture": "ui-1x-utf8/12-home-removed-kept-files.png",
+      "exact": true,
+      "differenceBounds": null,
+      "differingPixels": 0,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true
+    },
+    {
+      "capture": "ui-1x-utf8/13-home-paused.png",
+      "exact": true,
+      "differenceBounds": null,
+      "differingPixels": 0,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true
+    },
+    {
+      "capture": "ui-1x-utf8/14-running-machine-protection.png",
+      "exact": true,
+      "differenceBounds": null,
+      "differingPixels": 0,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true
+    },
+    {
+      "capture": "ui-1x-utf8/15-paused-mac-power.png",
+      "exact": true,
+      "differenceBounds": null,
+      "differingPixels": 0,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true
+    },
+    {
+      "capture": "ui-1x-utf8/16-force-stop-warning.png",
+      "exact": true,
+      "differenceBounds": null,
+      "differingPixels": 0,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true
+    },
+    {
+      "capture": "ui-1x-utf8/17-home-force-stopped.png",
+      "exact": true,
+      "differenceBounds": null,
+      "differingPixels": 0,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true
+    },
+    {
+      "capture": "ui-1x-utf8/18-disposable-hung-guest.png",
+      "exact": true,
+      "differenceBounds": null,
+      "differingPixels": 0,
+      "uniformTitleBarPixels": true
+    },
+    {
+      "capture": "ui-1x-utf8/19-guest-close-power.png",
+      "exact": true,
+      "differenceBounds": null,
+      "differingPixels": 0,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true
+    },
+    {
+      "capture": "ui-1x-utf8/19b-shutdown-waiting-force-available.png",
+      "exact": true,
+      "differenceBounds": null,
+      "differingPixels": 0,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true
+    },
+    {
+      "capture": "ui-1x-utf8/20-recycle-machine-warning.png",
+      "exact": true,
+      "differenceBounds": null,
+      "differingPixels": 0,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true
+    },
+    {
+      "capture": "ui-1x-utf8/21-home-recycled.png",
+      "exact": true,
+      "differenceBounds": null,
+      "differingPixels": 0,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true
+    },
+    {
+      "capture": "ui-2x-utf8/01-home-empty.png",
+      "exact": true,
+      "differenceBounds": null,
+      "differingPixels": 0,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true
+    },
+    {
+      "capture": "ui-2x-utf8/02-library-overview.png",
+      "exact": true,
+      "differenceBounds": null,
+      "differingPixels": 0,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true
+    },
+    {
+      "capture": "ui-2x-utf8/02b-library-narrow.png",
+      "exact": true,
+      "differenceBounds": null,
+      "differingPixels": 0,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true
+    },
+    {
+      "capture": "ui-2x-utf8/03-library-filter-and-search.png",
+      "exact": true,
+      "differenceBounds": null,
+      "differingPixels": 0,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true
+    },
+    {
+      "capture": "ui-2x-utf8/04-library-no-results.png",
+      "exact": true,
+      "differenceBounds": null,
+      "differingPixels": 0,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true
+    },
+    {
+      "capture": "ui-2x-utf8/05-library-platform-unavailable.png",
+      "exact": true,
+      "differenceBounds": null,
+      "differingPixels": 0,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true
+    },
+    {
+      "capture": "ui-2x-utf8/06-library-update-required.png",
+      "exact": true,
+      "differenceBounds": null,
+      "differingPixels": 0,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true
+    },
+    {
+      "capture": "ui-2x-utf8/07-library-download-recovery.png",
+      "exact": true,
+      "differenceBounds": null,
+      "differingPixels": 0,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true
+    },
+    {
+      "capture": "ui-2x-utf8/08-library-download-complete.png",
+      "exact": true,
+      "differenceBounds": null,
+      "differingPixels": 0,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true
+    },
+    {
+      "capture": "ui-2x-utf8/09-home-downloaded.png",
+      "exact": true,
+      "differenceBounds": null,
+      "differingPixels": 0,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true
+    },
+    {
+      "capture": "ui-2x-utf8/09b-home-narrow.png",
+      "exact": true,
+      "differenceBounds": null,
+      "differingPixels": 0,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true
+    },
+    {
+      "capture": "ui-2x-utf8/09c-new-mac.png",
+      "exact": true,
+      "differenceBounds": null,
+      "differingPixels": 0,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true
+    },
+    {
+      "capture": "ui-2x-utf8/09d-settings-narrow.png",
+      "exact": true,
+      "differenceBounds": null,
+      "differingPixels": 0,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true
+    },
+    {
+      "capture": "ui-2x-utf8/09e-media-narrow.png",
+      "exact": true,
+      "differenceBounds": null,
+      "differingPixels": 0,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true
+    },
+    {
+      "capture": "ui-2x-utf8/10-machine-management.png",
+      "exact": true,
+      "differenceBounds": null,
+      "differingPixels": 0,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true
+    },
+    {
+      "capture": "ui-2x-utf8/11-machine-remove-options.png",
+      "exact": true,
+      "differenceBounds": null,
+      "differingPixels": 0,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true
+    },
+    {
+      "capture": "ui-2x-utf8/12-home-removed-kept-files.png",
+      "exact": false,
+      "differenceBounds": [
+        1532,
+        1082,
+        1880,
+        1371
+      ],
+      "differingPixels": 100517,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true
+    },
+    {
+      "capture": "ui-2x-utf8/13-home-paused.png",
+      "exact": false,
+      "differenceBounds": [
+        1532,
+        1082,
+        1880,
+        1371
+      ],
+      "differingPixels": 100517,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true
+    },
+    {
+      "capture": "ui-2x-utf8/14-running-machine-protection.png",
+      "exact": true,
+      "differenceBounds": null,
+      "differingPixels": 0,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true
+    },
+    {
+      "capture": "ui-2x-utf8/15-paused-mac-power.png",
+      "exact": true,
+      "differenceBounds": null,
+      "differingPixels": 0,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true
+    },
+    {
+      "capture": "ui-2x-utf8/16-force-stop-warning.png",
+      "exact": true,
+      "differenceBounds": null,
+      "differingPixels": 0,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true
+    },
+    {
+      "capture": "ui-2x-utf8/17-home-force-stopped.png",
+      "exact": false,
+      "differenceBounds": [
+        1532,
+        1082,
+        1880,
+        1371
+      ],
+      "differingPixels": 100517,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true
+    },
+    {
+      "capture": "ui-2x-utf8/18-disposable-hung-guest.png",
+      "exact": true,
+      "differenceBounds": null,
+      "differingPixels": 0,
+      "uniformTitleBarPixels": true
+    },
+    {
+      "capture": "ui-2x-utf8/19-guest-close-power.png",
+      "exact": true,
+      "differenceBounds": null,
+      "differingPixels": 0,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true
+    },
+    {
+      "capture": "ui-2x-utf8/19b-shutdown-waiting-force-available.png",
+      "exact": true,
+      "differenceBounds": null,
+      "differingPixels": 0,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true
+    },
+    {
+      "capture": "ui-2x-utf8/20-recycle-machine-warning.png",
+      "exact": true,
+      "differenceBounds": null,
+      "differingPixels": 0,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true
+    },
+    {
+      "capture": "ui-2x-utf8/21-home-recycled.png",
+      "exact": false,
+      "differenceBounds": [
+        1532,
+        1082,
+        1880,
+        1371
+      ],
+      "differingPixels": 100517,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true
+    }
+  ],
+  "totalCaptures": 54,
+  "exactDesktopMatches": 50,
+  "uniformTitleBars": 54,
+  "obstruction": "Four 2x Home captures are covered by a Windows OneDrive backup promotion window at bounds x1532..1879/y1082..1370; app grabs retain the correct pixels. Original desktop frames are retained. No exclusion or tolerance is applied to these four comparisons."
+}
