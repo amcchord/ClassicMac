@@ -618,6 +618,9 @@
     ],
     "windowsDeviceOverrides": {
       "virtio-tablet-pci": "virtio-tablet-pci,addr=0x13"
+    },
+    "linuxDeviceOverrides": {
+      "virtio-tablet-pci": "virtio-tablet-pci,addr=0x13"
     }
   },
   {

@@ -189,6 +189,10 @@ int selfTest(const QString &fixtures, const QString &output) {
       expected << v.toString();
 #ifdef Q_OS_WIN
     const auto overrides = profile["windowsDeviceOverrides"].toObject();
+#elif defined(Q_OS_LINUX)
+    const auto overrides = profile["linuxDeviceOverrides"].toObject();
+#endif
+#if defined(Q_OS_WIN) || defined(Q_OS_LINUX)
     for (auto i = overrides.begin(); i != overrides.end(); ++i)
       expected.replaceInStrings(QRegularExpression("^" +
                                     QRegularExpression::escape(i.key()) + "$"),

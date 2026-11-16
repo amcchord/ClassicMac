@@ -1,0 +1,180 @@
+{
+  "output": "REPLACED_BY_RUNNER",
+  "steps": [
+    {
+      "action": "assertDpi",
+      "scale": 1,
+      "pixelScale": 1
+    },
+    {
+      "action": "click",
+      "text": "Library\u2026"
+    },
+    {
+      "action": "window",
+      "title": "Mac OS Library"
+    },
+    {
+      "action": "wait",
+      "milliseconds": 3000
+    },
+    {
+      "action": "capture",
+      "name": "01-public-library",
+      "nativeScreen": true
+    },
+    {
+      "action": "assertList",
+      "object": "libraryList",
+      "count": 7
+    },
+    {
+      "action": "listSelect",
+      "object": "libraryList",
+      "id": "os922-deluxe-v9"
+    },
+    {
+      "action": "click",
+      "object": "libraryDownload"
+    },
+    {
+      "action": "window",
+      "title": "Download Mac"
+    },
+    {
+      "action": "wait",
+      "milliseconds": 1200
+    },
+    {
+      "action": "capture",
+      "name": "02-downloading",
+      "nativeScreen": true
+    },
+    {
+      "action": "click",
+      "object": "downloadPause"
+    },
+    {
+      "action": "wait",
+      "milliseconds": 800
+    },
+    {
+      "action": "assertUI",
+      "object": "libraryDownload",
+      "text": "Resume Download"
+    },
+    {
+      "action": "capture",
+      "name": "03-paused",
+      "nativeScreen": true
+    },
+    {
+      "action": "click",
+      "object": "libraryDownload"
+    },
+    {
+      "action": "window",
+      "title": "Download Mac"
+    },
+    {
+      "action": "wait",
+      "milliseconds": 1200
+    },
+    {
+      "action": "capture",
+      "name": "04-resumed",
+      "nativeScreen": true
+    },
+    {
+      "action": "click",
+      "object": "downloadPause"
+    },
+    {
+      "action": "wait",
+      "milliseconds": 800
+    },
+    {
+      "action": "listSelect",
+      "object": "libraryList",
+      "id": "system-7.5.5-base-v1"
+    },
+    {
+      "action": "edit",
+      "object": "libraryMachineName",
+      "text": "Ubuntu Library Download"
+    },
+    {
+      "action": "click",
+      "object": "libraryDownload"
+    },
+    {
+      "action": "wait",
+      "milliseconds": 15000
+    },
+    {
+      "action": "assertUI",
+      "object": "libraryAvailability",
+      "contains": "Your Mac is ready"
+    },
+    {
+      "action": "capture",
+      "name": "05-installed",
+      "nativeScreen": true
+    },
+    {
+      "action": "click",
+      "object": "libraryDownload"
+    },
+    {
+      "action": "guestReady"
+    },
+    {
+      "action": "wait",
+      "milliseconds": 15000
+    },
+    {
+      "action": "capture",
+      "window": "guest",
+      "name": "06-finder",
+      "nativeScreen": true
+    },
+    {
+      "action": "pause"
+    },
+    {
+      "action": "capture",
+      "window": "guest",
+      "name": "07-paused-guest",
+      "nativeScreen": true
+    },
+    {
+      "action": "resume"
+    },
+    {
+      "action": "closeWindow",
+      "window": "guest"
+    },
+    {
+      "action": "window",
+      "title": "Mac Power"
+    },
+    {
+      "action": "capture",
+      "name": "08-close-power",
+      "nativeScreen": true
+    },
+    {
+      "action": "click",
+      "object": "powerShutDown"
+    },
+    {
+      "action": "stopped"
+    },
+    {
+      "action": "capture",
+      "window": "home",
+      "name": "09-stopped",
+      "nativeScreen": true
+    }
+  ]
+}

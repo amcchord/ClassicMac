@@ -11,6 +11,8 @@ parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("executable", type=Path)
 parser.add_argument("--output", type=Path, required=True)
 parser.add_argument("--pixel-scale", type=int, choices=(1, 2, 3), default=1)
+parser.add_argument("--recipe", type=Path,
+                    help="Use another qualification recipe, such as the opt-in public Library flow")
 args = parser.parse_args()
 root = Path(__file__).resolve().parents[2]
 executable = args.executable.resolve(strict=True)
@@ -20,7 +22,7 @@ if output.exists() and any(output.iterdir()):
 output.mkdir(parents=True, exist_ok=True)
 for name in ("profile", "machines"):
     (output / name).mkdir()
-recipe = json.loads((root / "native/tests/ui-ux-flow.json").read_text())
+recipe = json.loads((args.recipe or root / "native/tests/ui-ux-flow.json").read_text())
 recipe["output"] = str(output)
 recipe["steps"][0].update(scale=args.pixel_scale, pixelScale=args.pixel_scale)
 path = output / "recipe.json"

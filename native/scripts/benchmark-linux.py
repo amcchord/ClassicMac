@@ -103,7 +103,10 @@ def run(desktop, package, source, output, hold_seconds):
         {"action": "guestReady"},
         {"action": "wait", "milliseconds": hold_seconds * 1000, "timeout": (hold_seconds + 10) * 1000},
         {"action": "capture", "window": "guest", "name": "steady", "nativeScreen": True},
-        {"action": "pause"}, {"action": "resume"}, {"action": "shutdown"},
+        {"action": "pause"},
+        {"action": "capture", "window": "guest", "name": "paused"},
+        {"action": "wait", "milliseconds": 7000},
+        {"action": "resume"}, {"action": "shutdown"},
         {"action": "stopped", "timeout": 60000}]}
     path = output / "recipe.json"
     path.write_text(json.dumps(recipe, indent=2) + "\n")
@@ -205,6 +208,14 @@ def run(desktop, package, source, output, hold_seconds):
                   "engineIdleOneCorePercent": cpu[1], "frontendRSSBytes": rss[0], "engineRSSBytes": rss[1],
                   "display": "GNOME X11 desktop root pixels, 1x, 1920x1440; virtual llvmpipe graphics",
                   "hostLoadBefore": os.getloadavg(), "menuSamples": len(latencies)}
+        pause_deadline = time.monotonic() + hold_seconds + 20
+        while not (output / "paused.json").exists():
+            assert process.poll() is None and time.monotonic() < pause_deadline, "The pause sample did not become ready"
+            time.sleep(.05)
+        paused_before = sum(engine.cpu_times()[:2])
+        paused_start = time.monotonic()
+        time.sleep(5)
+        report["pausedEngineOneCorePercent"] = (sum(engine.cpu_times()[:2]) - paused_before) / (time.monotonic() - paused_start) * 100
         process.wait(timeout=hold_seconds + 80)
         result = json.loads((output / "result.json").read_text())
         assert process.returncode == 0 and result["passed"], result.get("error")
@@ -231,7 +242,9 @@ def run(desktop, package, source, output, hold_seconds):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--baseline", type=Path, required=True)
+    parser.add_argument("--baseline", type=Path)
+    parser.add_argument("--candidate-only", action="store_true",
+                        help="Measure a configuration that the previous release cannot boot")
     parser.add_argument("--candidate", type=Path, required=True)
     parser.add_argument("--machine", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
@@ -241,12 +254,17 @@ def main():
     output = args.output.resolve()
     assert not output.exists(), "Choose a new output directory"
     output.mkdir(parents=True)
-    packages = {"baseline": args.baseline.resolve(strict=True), "candidate": args.candidate.resolve(strict=True)}
+    if not args.candidate_only and args.baseline is None:
+        parser.error("Supply --baseline or explicitly use --candidate-only")
+    packages = {"candidate": args.candidate.resolve(strict=True)}
+    if not args.candidate_only:
+        packages["baseline"] = args.baseline.resolve(strict=True)
     source = args.machine.resolve(strict=True)
     desktop = Desktop()
     rows = []
     for number in range(args.runs):
-        for version in (("baseline", "candidate") if number % 2 == 0 else ("candidate", "baseline")):
+        order = ("candidate",) if args.candidate_only else (("baseline", "candidate") if number % 2 == 0 else ("candidate", "baseline"))
+        for version in order:
             row = run(desktop, packages[version], source, output / f"{number + 1}-{version}", args.hold_seconds)
             row.update(version=version, repetition=number + 1)
             rows.append(row)
@@ -261,6 +279,7 @@ def main():
                             "inputMedianMs": statistics.median(latencies), "inputP95Ms": percentile(latencies, .95),
                             "frontendIdlePercent": statistics.median(r["frontendIdleOneCorePercent"] for r in selected),
                             "engineIdlePercent": statistics.median(r["engineIdleOneCorePercent"] for r in selected),
+                            "pausedEnginePercent": statistics.median(r["pausedEngineOneCorePercent"] for r in selected),
                             "frontendRSSMiB": statistics.median(r["frontendRSSBytes"] for r in selected) / 1048576}
     (output / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
     print(json.dumps(summary, indent=2), flush=True)
