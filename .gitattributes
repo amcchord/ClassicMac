@@ -1,10 +1,20 @@
-# Copied QEMU/device sources and patches must keep the same bytes on Windows.
+*.patch whitespace=-blank-at-eol,-blank-at-eof,-space-before-tab
+
+# Source patches and native build scripts must retain Unix line endings.
+*.patch text eol=lf
+*.sh text eol=lf
+*.py text eol=lf
+
+# Copland patch hunks intentionally preserve the upstream mixed CRLF bytes.
+copland/*.patch -text
+
+# These copied device sources are then patched inside the vendor tree.
+screamer/*.[ch] text eol=lf
+
+# All device sources copied into QEMU must also keep LF bytes.
 *.c text eol=lf
 *.h text eol=lf
 *.cc text eol=lf
 *.cpp text eol=lf
 *.m text eol=lf
 *.mm text eol=lf
-*.patch text eol=lf
-*.sh text eol=lf
-*.py text eol=lf
