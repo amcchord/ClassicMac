@@ -33,11 +33,13 @@ alternates baseline/candidate order. It measures actual desktop-root pixels:
 engine start to visible Finder, XTest mouse-down to visible Apple menu, six
 seconds of idle CPU/RSS, and five seconds of paused-engine CPU. A ready RFB
 connection or successful QMP reply does not count as Finder or input response.
-Each run also pauses, resumes and shuts the guest down normally.
+The runner signals completion through qualification-only files, so a slow boot
+cannot be paused halfway through an input measurement. Each run also pauses,
+resumes and shuts the guest down normally.
 
 ```sh
-python3 native/scripts/benchmark-linux.py --baseline ./ClassicMac-4.6.2-linux-x64.AppImage --candidate ./ClassicMac-4.6.3-linux-x64.AppImage --machine '/absolute/qa/System 7.classic' --output /absolute/qa/system7-performance --runs 3 --hold-seconds 30
-python3 native/scripts/benchmark-linux.py --candidate-only --candidate ./ClassicMac-4.6.3-linux-x64.AppImage --machine '/absolute/qa/Mac OS 9.classic' --output /absolute/qa/os9-performance --runs 3 --hold-seconds 60
+python3 native/scripts/benchmark-linux.py --baseline ./ClassicMac-4.6.2-linux-x64.AppImage --candidate ./ClassicMac-4.6.3-linux-x64.AppImage --machine '/absolute/qa/System 7.classic' --output /absolute/qa/system7-performance --runs 3 --boot-timeout 30
+python3 native/scripts/benchmark-linux.py --candidate-only --candidate ./ClassicMac-4.6.3-linux-x64.AppImage --machine '/absolute/qa/Mac OS 9.classic' --output /absolute/qa/os9-performance --runs 3 --boot-timeout 120
 ```
 
 Mac OS 9 uses candidate-only measurements because 4.6.2 Linux stalls with the

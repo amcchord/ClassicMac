@@ -85,7 +85,7 @@ def finder_bar(image):
     return light > len(pixels) * .65 and 100 < dark < len(pixels) * .3
 
 
-def run(desktop, package, source, output, hold_seconds):
+def run(desktop, package, source, output, boot_timeout):
     output.mkdir()
     clone = output / "Bench.classic"
     subprocess.run(["cp", "-a", "--reflink=auto", "--sparse=always", str(source), str(clone)], check=True)
@@ -101,11 +101,11 @@ def run(desktop, package, source, output, hold_seconds):
     recipe = {"output": str(output), "steps": [
         {"action": "open", "folder": str(clone)}, {"action": "start"},
         {"action": "guestReady"},
-        {"action": "wait", "milliseconds": hold_seconds * 1000, "timeout": (hold_seconds + 10) * 1000},
+        {"action": "waitFile", "path": "${output}/measurement.done", "timeout": (boot_timeout + 45) * 1000},
         {"action": "capture", "window": "guest", "name": "steady", "nativeScreen": True},
         {"action": "pause"},
         {"action": "capture", "window": "guest", "name": "paused"},
-        {"action": "wait", "milliseconds": 7000},
+        {"action": "waitFile", "path": "${output}/paused.done", "timeout": 20000},
         {"action": "resume"}, {"action": "shutdown"},
         {"action": "stopped", "timeout": 60000}]}
     path = output / "recipe.json"
@@ -122,7 +122,7 @@ def run(desktop, package, source, output, hold_seconds):
     native = engine = guest = None
     home_at = engine_at = finder_at = None
     ready_samples = 0
-    deadline = started + 65
+    deadline = started + boot_timeout
     try:
         while time.monotonic() < deadline:
             assert process.poll() is None, "The app exited before Finder"
@@ -152,7 +152,7 @@ def run(desktop, package, source, output, hold_seconds):
                     desktop.capture(guest, (6, 22, 320, 240)).save(output / "finder-visible.png")
                     break
             time.sleep(.04)
-        assert finder_at is not None and native and engine, "Visible Finder did not appear within 65 seconds"
+        assert finder_at is not None and native and engine, f"Visible Finder did not appear within {boot_timeout} seconds"
         print(output.name, "Finder", round(finder_at - engine_at, 3), "seconds", flush=True)
 
         # Sample an idle desktop before opening menus. CPU is percent of one
@@ -208,7 +208,8 @@ def run(desktop, package, source, output, hold_seconds):
                   "engineIdleOneCorePercent": cpu[1], "frontendRSSBytes": rss[0], "engineRSSBytes": rss[1],
                   "display": "GNOME X11 desktop root pixels, 1x, 1920x1440; virtual llvmpipe graphics",
                   "hostLoadBefore": os.getloadavg(), "menuSamples": len(latencies)}
-        pause_deadline = time.monotonic() + hold_seconds + 20
+        (output / "measurement.done").touch()
+        pause_deadline = time.monotonic() + 15
         while not (output / "paused.json").exists():
             assert process.poll() is None and time.monotonic() < pause_deadline, "The pause sample did not become ready"
             time.sleep(.05)
@@ -216,7 +217,8 @@ def run(desktop, package, source, output, hold_seconds):
         paused_start = time.monotonic()
         time.sleep(5)
         report["pausedEngineOneCorePercent"] = (sum(engine.cpu_times()[:2]) - paused_before) / (time.monotonic() - paused_start) * 100
-        process.wait(timeout=hold_seconds + 80)
+        (output / "paused.done").touch()
+        process.wait(timeout=80)
         result = json.loads((output / "result.json").read_text())
         assert process.returncode == 0 and result["passed"], result.get("error")
         report["cleanShutdown"] = True
@@ -249,7 +251,7 @@ def main():
     parser.add_argument("--machine", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--runs", type=int, default=3, choices=range(1, 6))
-    parser.add_argument("--hold-seconds", type=int, default=60)
+    parser.add_argument("--boot-timeout", type=int, default=120)
     args = parser.parse_args()
     output = args.output.resolve()
     assert not output.exists(), "Choose a new output directory"
@@ -265,7 +267,7 @@ def main():
     for number in range(args.runs):
         order = ("candidate",) if args.candidate_only else (("baseline", "candidate") if number % 2 == 0 else ("candidate", "baseline"))
         for version in order:
-            row = run(desktop, packages[version], source, output / f"{number + 1}-{version}", args.hold_seconds)
+            row = run(desktop, packages[version], source, output / f"{number + 1}-{version}", args.boot_timeout)
             row.update(version=version, repetition=number + 1)
             rows.append(row)
             (output / "runs.json").write_text(json.dumps(rows, indent=2) + "\n")

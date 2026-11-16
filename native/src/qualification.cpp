@@ -592,6 +592,8 @@ public:
     try {
       if (action == "wait")
         done = elapsed.elapsed() >= step["milliseconds"].toInt();
+      else if (action == "waitFile")
+        done = QFileInfo(path(step["path"].toString())).isFile();
       else if (action == "fixtureCatalog") {
         require(!qEnvironmentVariableIsEmpty("CLASSICMAC_QUALIFY") &&
                     !qEnvironmentVariableIsEmpty("CLASSICMAC_TEST_HOME") &&
