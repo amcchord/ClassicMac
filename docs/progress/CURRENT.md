@@ -1,30 +1,27 @@
-# ClassicMac 4.6.4 — qualified for publication, 2026-11-15
+# ClassicMac 4.6.4 — published, 2026-11-15
 
-User requests RetroBoot's new GPU fix. Source 88d074a (2.0.2 cursor clipping)
-is ported in 65b0c53; 918ae1d also corrects Mac default tablet/network IRQ
-allocation and qualification pixel-center bounds. Final product source:
-918ae1dbf85dfebdddd7bced7247b959918215cf. Later edits are recipes/docs/evidence.
-Owner: codex/retroboot-gpu-cursor in worktrees/retroboot-gpu-cursor.
+[ClassicMac 4.6.4](https://github.com/amcchord/ClassicMac/releases/tag/v4.6.4)
+is the stable/latest GitHub release. Release ID 446550995, published
+2026-11-16 02:47:31 UTC. All nine uploaded files and full anonymous downloads
+match the tested sizes and SHA-256 hashes; latest API/page both resolve 4.6.4.
 
-Final Linux CI 43790212460 and Windows CI 43790215360 pass. Each platform's
-cursor gate checks 144 cases and 598,030 exact RGB pixels. The published
-4.6.3 engine fails the old clipped-left case. Source pairs match across all
-three corresponding QEMU archives. Mac physical CGL smoke passes; final app
-signed/notarized/stapled/full verification and actual complete Finder/stop pass.
-Mac default IRQ control: old automatic slot18 stalls65s; slot19 boots24.44s.
+RetroBoot 2.0.2 Radeon cursor correction is included, along with the Mac
+startup fix for the default tablet/network/Tools configuration. Product source
+918ae1dbf85dfebdddd7bced7247b959918215cf; release tag v4.6.4 points to
+c0ebc1439c13d38573ed1daa00dc45fd105a5288. Later commits record publication only.
+Source is integrated into main. Task branch: codex/retroboot-gpu-cursor.
 
-Ubuntu: 150+150 UI steps, 44 guest edge/power steps, 67 exact desktop matches,
-10,773,120 exact guest pixels. Windows: 150+44 steps, normal process/task exit0,
-39 exact desktop matches and 8,957,952 exact guest pixels. All selected devices
-remain on. Final quiet follow-up: 4.6.3/4.6.4 Finder28.40/28.83s, input46.17/45.67ms,
-paused0%; one pair, not a speedup claim. Initial deadline/viewport/caret probes
-retained separately. Full report: docs/4.6.4-validation.md and evidence/4.6.4.
-Consolidated144Swift tests (3 optional skips),122native refs/672glyphs,11Python pass.
+All three platforms pass 598,030 exact cursor pixel comparisons each. The
+previous published engine reproduces the corrected failure. Signed/notarized
+Mac app boots to complete Finder and shuts down; physical Apple GPU GL smoke
+passes. Windows and Ubuntu pass UI and actual Mac OS 9 edge/power flows on
+Proxmox 192.168.1.100. Ubuntu paired performance remains comparable to 4.6.3;
+one pair does not establish a speedup. Consolidated Swift, native and Python
+checks pass. Details and limitations: [validation report](../4.6.4-validation.md).
 
-Windows VM401 stopped and task/RDP removed. Ubuntu VM 402 stopped and
-temporary auto-login disabled. Mac guests stopped.
-All eight binary/source assets plus SHA256SUMS staged in contained output;
-complete Git backup verified. Stable/latest is still4.6.3 until publication.
-Next: commit evidence, push source/tag, upload/verify draft, fast-forward main,
-publish4.6.4/latest and verify nine anonymous downloads. Root gxmetal preserved;
-no public catalog/site, unrelated VM or cleanup work.
+Owned QA VMs 401/402 and Mac guests are stopped. Temporary Ubuntu auto-login
+is disabled, Windows release task/RDP removed and private temporary keys
+removed. Container 300 remains running. Root gxmetal, other VMs, guest catalog
+and website are unchanged. Verified backup is retained; 4.6.3 is the rollback.
+
+No blocker or remaining release work. Next: the next user-requested change.

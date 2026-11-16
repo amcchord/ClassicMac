@@ -1953,3 +1953,22 @@ consolidated root checks, publish and verify stable 4.1.1. Retain 4.1.0 for roll
   bundle verified. Next: commit/push/tag, draft digest verification, publish
   stable/latest and redownload all nine anonymously. Retain 4.6.3 rollback. Root
   gxmetal, other VMs, guest catalog, website and DNS are unchanged.
+
+
+## 2026-11-15 — ClassicMac 4.6.4 publication completed
+
+- Integrated and pushed main and codex/retroboot-gpu-cursor through c0ebc14;
+  annotated v4.6.4 points to c0ebc1439c13d38573ed1daa00dc45fd105a5288.
+  Compiled product source remains 918ae1d; later changes are recipes and records.
+- Uploaded all eight binary/source assets plus SHA256SUMS to release 446550995.
+  Every uploaded size and GitHub SHA-256 digest matched the tested files before
+  promotion. Published stable/latest at 2026-11-16 02:47:31 UTC.
+- All nine full downloads passed anonymous size/SHA-256 verification. Anonymous
+  latest API and latest-page redirect both resolve v4.6.4. Proof is retained in
+  docs/evidence/4.6.4/public-downloads.json and upload-verification.json.
+- No publication failure or rollback. Verified Git backup retained; v4.6.3
+  release 446508082 remains available. Owned QA VMs are stopped and temporary
+  keys removed. Root gxmetal and unrelated services are unchanged.
+- Result: requested GPU correction is incorporated, tested on all three desktop
+  platforms and downloadable from GitHub. This final record is committed and
+  synced to main/task branch. Next: the next user-requested change.

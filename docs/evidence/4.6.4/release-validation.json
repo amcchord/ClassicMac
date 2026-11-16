@@ -104,5 +104,19 @@
     "macGuests": "stopped",
     "container300": "running; unchanged",
     "privateTemporaryKeys": "removed"
+  },
+  "publication": {
+    "tag": "v4.6.4",
+    "tagCommit": "c0ebc1439c13d38573ed1daa00dc45fd105a5288",
+    "releaseId": 446550995,
+    "publishedAt": "2026-11-16T02:47:31Z",
+    "releaseURL": "https://github.com/amcchord/ClassicMac/releases/tag/v4.6.4",
+    "stable": true,
+    "latest": true,
+    "allNineUploadHashesMatch": true,
+    "allNineAnonymousDownloadsMatch": true,
+    "publicVerificationAt": "2026-11-16T02:47:52.109824+00:00",
+    "rollbackReleaseId": 446508082,
+    "rollbackTag": "v4.6.3"
   }
 }

@@ -1,0 +1,84 @@
+{
+  "checkedAt": "2026-11-16T02:47:52.109824+00:00",
+  "releaseId": 446550995,
+  "publishedAt": "2026-11-16T02:47:31Z",
+  "tag": "v4.6.4",
+  "releaseURL": "https://github.com/amcchord/ClassicMac/releases/tag/v4.6.4",
+  "latestAPITag": "v4.6.4",
+  "latestPageRedirect": "https://github.com/amcchord/ClassicMac/releases/tag/v4.6.4",
+  "allNineDownloadsMatch": true,
+  "downloads": [
+    {
+      "name": "ClassicMac-4.6.4-linux-x64.AppImage",
+      "url": "https://github.com/amcchord/ClassicMac/releases/download/v4.6.4/ClassicMac-4.6.4-linux-x64.AppImage",
+      "size": 60611064,
+      "sha256": "1d6bb560775c398d6a6e162c77150ba3591cd2ff8d27beb88863db36ca54eaba",
+      "matches": true,
+      "authenticated": false
+    },
+    {
+      "name": "ClassicMac-4.6.4-windows-x64.exe",
+      "url": "https://github.com/amcchord/ClassicMac/releases/download/v4.6.4/ClassicMac-4.6.4-windows-x64.exe",
+      "size": 42750378,
+      "sha256": "2cf518313efdf0a0701ccf2dda9ac5da7c4e99a07084ac8f6dd08f370c3c9010",
+      "matches": true,
+      "authenticated": false
+    },
+    {
+      "name": "ClassicMac-4.6.4.dmg",
+      "url": "https://github.com/amcchord/ClassicMac/releases/download/v4.6.4/ClassicMac-4.6.4.dmg",
+      "size": 47939082,
+      "sha256": "0f0b003e5c2ebb078b70bc28ee193a5e6272413c04f5aa231cf1ead273a77d4f",
+      "matches": true,
+      "authenticated": false
+    },
+    {
+      "name": "ClassicMac-4.6.4.zip",
+      "url": "https://github.com/amcchord/ClassicMac/releases/download/v4.6.4/ClassicMac-4.6.4.zip",
+      "size": 42566857,
+      "sha256": "027bf5b93a36ad51a965e69863e2afad2c3e55ea0b85b65855f9fe0452e0f15b",
+      "matches": true,
+      "authenticated": false
+    },
+    {
+      "name": "ClassicMac-Copland-source.tar.gz",
+      "url": "https://github.com/amcchord/ClassicMac/releases/download/v4.6.4/ClassicMac-Copland-source.tar.gz",
+      "size": 16899171,
+      "sha256": "35b3af17d6c4a250ba9104216c9ee6e65c956927d76bde6d0e62fc486f0d12da",
+      "matches": true,
+      "authenticated": false
+    },
+    {
+      "name": "ClassicMac-Linux-QEMU-source.tar.gz",
+      "url": "https://github.com/amcchord/ClassicMac/releases/download/v4.6.4/ClassicMac-Linux-QEMU-source.tar.gz",
+      "size": 42345197,
+      "sha256": "564134c2e69405d00c71cb941f237167f78051f89a68120885082c96067b017b",
+      "matches": true,
+      "authenticated": false
+    },
+    {
+      "name": "ClassicMac-Windows-QEMU-source.tar.gz",
+      "url": "https://github.com/amcchord/ClassicMac/releases/download/v4.6.4/ClassicMac-Windows-QEMU-source.tar.gz",
+      "size": 41549116,
+      "sha256": "bf5f06505f69b73ee93661886db75a133df0b5bb68f70b64ebcce8145b6c816d",
+      "matches": true,
+      "authenticated": false
+    },
+    {
+      "name": "ClassicMac-macOS-QEMU-source.tar.gz",
+      "url": "https://github.com/amcchord/ClassicMac/releases/download/v4.6.4/ClassicMac-macOS-QEMU-source.tar.gz",
+      "size": 42523655,
+      "sha256": "a5f0ea8842b387087a1b320e5dd2a5485eebab7ed1dab9d68bd92ee1d79243fa",
+      "matches": true,
+      "authenticated": false
+    },
+    {
+      "name": "SHA256SUMS",
+      "url": "https://github.com/amcchord/ClassicMac/releases/download/v4.6.4/SHA256SUMS",
+      "size": 782,
+      "sha256": "37fbcce90a56c1402de62a14e4cc7f8384b2de1eace0b3cfdcbaba65ff669f55",
+      "matches": true,
+      "authenticated": false
+    }
+  ]
+}
