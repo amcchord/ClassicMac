@@ -322,6 +322,15 @@ int selfTest(const QString &fixtures, const QString &output) {
       native.activateWindow();
       native.setFocus();
       QApplication::processEvents();
+      // X11 window-manager activation is asynchronous. Wait for actual focus
+      // before comparing its artwork; offscreen platforms complete at once.
+      QElapsedTimer focusDeadline;
+      focusDeadline.start();
+      while (!native.hasFocus() && focusDeadline.elapsed() < 1500) {
+        QEventLoop focusWait;
+        QTimer::singleShot(10, &focusWait, &QEventLoop::quit);
+        focusWait.exec();
+      }
       require(native.hasFocus(), "Keyboard focus did not reach the test button");
       QImage capture(native.size() * scale, QImage::Format_ARGB32);
       capture.setDevicePixelRatio(scale);
