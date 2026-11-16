@@ -52,9 +52,13 @@ class Desktop:
         assert data.depth == 24 and len(data.data) == width * height * 4
         return Image.frombytes("RGB", (width, height), data.data, "raw", "BGRX")
 
-    def press(self, window, x, y):
+    def position(self, window, x, y):
         origin = self.root.translate_coords(window, 0, 0)
         xtest.fake_input(self.connection, X.MotionNotify, x=origin.x + x, y=origin.y + y)
+        self.connection.sync()
+
+    def press(self, window, x, y):
+        self.position(window, x, y)
         xtest.fake_input(self.connection, X.ButtonPress, 1)
         self.connection.sync()
 
@@ -85,7 +89,7 @@ def finder_bar(image):
     return light > len(pixels) * .65 and 100 < dark < len(pixels) * .3
 
 
-def run(desktop, package, source, output, boot_timeout):
+def run(desktop, package, source, output, boot_timeout, legacy_runner=False):
     output.mkdir()
     clone = output / "Bench.classic"
     subprocess.run(["cp", "-a", "--reflink=auto", "--sparse=always", str(source), str(clone)], check=True)
@@ -108,6 +112,12 @@ def run(desktop, package, source, output, boot_timeout):
         {"action": "waitFile", "path": "${output}/paused.done", "timeout": 20000},
         {"action": "resume"}, {"action": "shutdown"},
         {"action": "stopped", "timeout": 60000}]}
+    if legacy_runner:
+        # 4.6.2 predates waitFile. Leave enough time for its bounded boot,
+        # six-second idle sample and eight two-second input deadlines.
+        recipe["steps"][3] = {"action": "wait", "milliseconds": (boot_timeout + 30) * 1000,
+                              "timeout": (boot_timeout + 40) * 1000}
+        recipe["steps"][7] = {"action": "wait", "milliseconds": 7000}
     path = output / "recipe.json"
     path.write_text(json.dumps(recipe, indent=2) + "\n")
     env = dict(os.environ, CLASSICMAC_QUALIFY="1", CLASSICMAC_TEST_HOME=str(profile),
@@ -174,10 +184,14 @@ def run(desktop, package, source, output, boot_timeout):
             desktop.release()
             time.sleep(.15)
             before = desktop.capture(guest, (6, 44, 230, 190))
+            # Aim at the center of the Apple menu and let pointer motion reach
+            # the guest before timing the physical button-down event.
+            desktop.position(guest, 30, 31)
+            time.sleep(.06)
             tick = time.monotonic()
             # System 7 menus track while the button is held; an instantaneous
             # down/up can open and close between display refreshes.
-            desktop.press(guest, 22, 31)
+            desktop.press(guest, 30, 31)
             changed = None
             while time.monotonic() - tick < 2:
                 current = desktop.capture(guest, (6, 44, 230, 190))
@@ -209,7 +223,7 @@ def run(desktop, package, source, output, boot_timeout):
                   "display": "GNOME X11 desktop root pixels, 1x, 1920x1440; virtual llvmpipe graphics",
                   "hostLoadBefore": os.getloadavg(), "menuSamples": len(latencies)}
         (output / "measurement.done").touch()
-        pause_deadline = time.monotonic() + 15
+        pause_deadline = time.monotonic() + (boot_timeout + 45 if legacy_runner else 15)
         while not (output / "paused.json").exists():
             assert process.poll() is None and time.monotonic() < pause_deadline, "The pause sample did not become ready"
             time.sleep(.05)
@@ -267,7 +281,8 @@ def main():
     for number in range(args.runs):
         order = ("candidate",) if args.candidate_only else (("baseline", "candidate") if number % 2 == 0 else ("candidate", "baseline"))
         for version in order:
-            row = run(desktop, packages[version], source, output / f"{number + 1}-{version}", args.boot_timeout)
+            row = run(desktop, packages[version], source, output / f"{number + 1}-{version}", args.boot_timeout,
+                      legacy_runner=version == "baseline")
             row.update(version=version, repetition=number + 1)
             rows.append(row)
             (output / "runs.json").write_text(json.dumps(rows, indent=2) + "\n")
