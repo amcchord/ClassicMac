@@ -1,0 +1,19 @@
+{
+  "automatic": {
+    "passed": false,
+    "tablet": "automatic",
+    "allDefaultDevicesEnabled": true,
+    "renderer": "CGL; GL 4.1 Metal - 91.7; Apple M5 Max"
+  },
+  "slot19": {
+    "passed": true,
+    "tablet": "addr=0x13",
+    "allDefaultDevicesEnabled": true,
+    "renderer": "CGL; GL 4.1 Metal - 91.7; Apple M5 Max",
+    "finderSeconds": 24.438299749977887,
+    "cleanShutdown": true
+  },
+  "observationSeconds": 65,
+  "control": "Same old qualified engine, public image, host GL, all devices on and native device order; only tablet address differs.",
+  "earlyDiagnostics": "A different device order booted with automatic allocation; it is retained in ignored output and is not the native-order control. An early stdio parser failure was corrected before the complete control."
+}

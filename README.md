@@ -47,6 +47,10 @@ AppImage executable; use `--appimage-extract-and-run` if FUSE is unavailable.
   pointer clips correctly at screen edges and updates without stale pixels.
 - **Shared graphics checks.** Mac, Windows and Linux builds exercise actual
   Radeon cursor pixels, both monochrome planes, color modes and clipping.
+- **Mac startup.** Separate tablet and network interrupts when ATI graphics
+  and Tools are enabled, keeping all selected devices available.
+
+See the [4.6.4 validation report](docs/4.6.4-validation.md).
 
 ## New in ClassicMac 4.6.3
 

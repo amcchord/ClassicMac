@@ -1,0 +1,921 @@
+{
+    "error": "",
+    "passed": true,
+    "state": {
+        "displays": [
+        ],
+        "electron": false,
+        "frontend": "native-qt-cpp",
+        "height": 696,
+        "machines": [
+        ],
+        "processId": 4326,
+        "scale": 2,
+        "shaded": false,
+        "version": "4.6.4",
+        "webview": false,
+        "width": 919
+    },
+    "steps": [
+        {
+            "action": "assertDpi",
+            "elapsed": 95,
+            "passed": true,
+            "step": 0
+        },
+        {
+            "action": "assertState",
+            "elapsed": 95,
+            "passed": true,
+            "step": 1
+        },
+        {
+            "action": "capture",
+            "elapsed": 389,
+            "passed": true,
+            "step": 2
+        },
+        {
+            "action": "fixtureCatalog",
+            "elapsed": 1,
+            "passed": true,
+            "step": 3
+        },
+        {
+            "action": "fixtureDownload",
+            "elapsed": 94,
+            "passed": true,
+            "step": 4
+        },
+        {
+            "action": "fixtureDownload",
+            "elapsed": 94,
+            "passed": true,
+            "step": 5
+        },
+        {
+            "action": "click",
+            "elapsed": 99,
+            "passed": true,
+            "step": 6
+        },
+        {
+            "action": "window",
+            "elapsed": 117,
+            "passed": true,
+            "step": 7
+        },
+        {
+            "action": "assertList",
+            "elapsed": 82,
+            "passed": true,
+            "step": 8
+        },
+        {
+            "action": "capture",
+            "elapsed": 365,
+            "passed": true,
+            "step": 9
+        },
+        {
+            "action": "resize",
+            "elapsed": 28,
+            "passed": true,
+            "step": 10
+        },
+        {
+            "action": "assertUI",
+            "elapsed": 6,
+            "passed": true,
+            "step": 11
+        },
+        {
+            "action": "assertFooter",
+            "elapsed": 99,
+            "passed": true,
+            "step": 12
+        },
+        {
+            "action": "capture",
+            "elapsed": 340,
+            "passed": true,
+            "step": 13
+        },
+        {
+            "action": "resize",
+            "elapsed": 38,
+            "passed": true,
+            "step": 14
+        },
+        {
+            "action": "combo",
+            "elapsed": 21,
+            "passed": true,
+            "step": 15
+        },
+        {
+            "action": "assertList",
+            "elapsed": 100,
+            "passed": true,
+            "step": 16
+        },
+        {
+            "action": "edit",
+            "elapsed": 99,
+            "passed": true,
+            "step": 17
+        },
+        {
+            "action": "assertList",
+            "elapsed": 99,
+            "passed": true,
+            "step": 18
+        },
+        {
+            "action": "capture",
+            "elapsed": 382,
+            "passed": true,
+            "step": 19
+        },
+        {
+            "action": "edit",
+            "elapsed": 0,
+            "passed": true,
+            "step": 20
+        },
+        {
+            "action": "assertList",
+            "elapsed": 17,
+            "passed": true,
+            "step": 21
+        },
+        {
+            "action": "assertUI",
+            "elapsed": 100,
+            "passed": true,
+            "step": 22
+        },
+        {
+            "action": "capture",
+            "elapsed": 353,
+            "passed": true,
+            "step": 23
+        },
+        {
+            "action": "edit",
+            "elapsed": 1,
+            "passed": true,
+            "step": 24
+        },
+        {
+            "action": "combo",
+            "elapsed": 45,
+            "passed": true,
+            "step": 25
+        },
+        {
+            "action": "assertList",
+            "elapsed": 98,
+            "passed": true,
+            "step": 26
+        },
+        {
+            "action": "assertUI",
+            "elapsed": 100,
+            "passed": true,
+            "step": 27
+        },
+        {
+            "action": "assertUI",
+            "elapsed": 100,
+            "passed": true,
+            "step": 28
+        },
+        {
+            "action": "capture",
+            "elapsed": 387,
+            "passed": true,
+            "step": 29
+        },
+        {
+            "action": "combo",
+            "elapsed": 1,
+            "passed": true,
+            "step": 30
+        },
+        {
+            "action": "assertList",
+            "elapsed": 9,
+            "passed": true,
+            "step": 31
+        },
+        {
+            "action": "listSelect",
+            "elapsed": 100,
+            "passed": true,
+            "step": 32
+        },
+        {
+            "action": "assertUI",
+            "elapsed": 99,
+            "passed": true,
+            "step": 33
+        },
+        {
+            "action": "assertUI",
+            "elapsed": 100,
+            "passed": true,
+            "step": 34
+        },
+        {
+            "action": "capture",
+            "elapsed": 374,
+            "passed": true,
+            "step": 35
+        },
+        {
+            "action": "listSelect",
+            "elapsed": 1,
+            "passed": true,
+            "step": 36
+        },
+        {
+            "action": "click",
+            "elapsed": 23,
+            "passed": true,
+            "step": 37
+        },
+        {
+            "action": "wait",
+            "elapsed": 400,
+            "passed": true,
+            "step": 38
+        },
+        {
+            "action": "assertState",
+            "elapsed": 99,
+            "passed": true,
+            "step": 39
+        },
+        {
+            "action": "assertUI",
+            "elapsed": 99,
+            "passed": true,
+            "step": 40
+        },
+        {
+            "action": "capture",
+            "elapsed": 389,
+            "passed": true,
+            "step": 41
+        },
+        {
+            "action": "listSelect",
+            "elapsed": 0,
+            "passed": true,
+            "step": 42
+        },
+        {
+            "action": "assertUI",
+            "elapsed": 10,
+            "passed": true,
+            "step": 43
+        },
+        {
+            "action": "edit",
+            "elapsed": 100,
+            "passed": true,
+            "step": 44
+        },
+        {
+            "action": "click",
+            "elapsed": 100,
+            "passed": true,
+            "step": 45
+        },
+        {
+            "action": "assertUI",
+            "elapsed": 99,
+            "passed": true,
+            "step": 46
+        },
+        {
+            "action": "edit",
+            "elapsed": 100,
+            "passed": true,
+            "step": 47
+        },
+        {
+            "action": "click",
+            "elapsed": 100,
+            "passed": true,
+            "step": 48
+        },
+        {
+            "action": "wait",
+            "elapsed": 399,
+            "passed": true,
+            "step": 49
+        },
+        {
+            "action": "assertState",
+            "elapsed": 100,
+            "passed": true,
+            "step": 50
+        },
+        {
+            "action": "assertPath",
+            "elapsed": 99,
+            "passed": true,
+            "step": 51
+        },
+        {
+            "action": "assertUI",
+            "elapsed": 100,
+            "passed": true,
+            "step": 52
+        },
+        {
+            "action": "capture",
+            "elapsed": 370,
+            "passed": true,
+            "step": 53
+        },
+        {
+            "action": "click",
+            "elapsed": 0,
+            "passed": true,
+            "step": 54
+        },
+        {
+            "action": "capture",
+            "elapsed": 285,
+            "passed": true,
+            "step": 55
+        },
+        {
+            "action": "resize",
+            "elapsed": 9,
+            "passed": true,
+            "step": 56
+        },
+        {
+            "action": "scrollTop",
+            "elapsed": 34,
+            "passed": true,
+            "step": 57
+        },
+        {
+            "action": "capture",
+            "elapsed": 320,
+            "passed": true,
+            "step": 58
+        },
+        {
+            "action": "resize",
+            "elapsed": 33,
+            "passed": true,
+            "step": 59
+        },
+        {
+            "action": "click",
+            "elapsed": 46,
+            "passed": true,
+            "step": 60
+        },
+        {
+            "action": "window",
+            "elapsed": 99,
+            "passed": true,
+            "step": 61
+        },
+        {
+            "action": "fitScreen",
+            "elapsed": 100,
+            "passed": true,
+            "step": 62
+        },
+        {
+            "action": "assertFooter",
+            "elapsed": 99,
+            "passed": true,
+            "step": 63
+        },
+        {
+            "action": "capture",
+            "elapsed": 296,
+            "passed": true,
+            "step": 64
+        },
+        {
+            "action": "click",
+            "elapsed": 4,
+            "passed": true,
+            "step": 65
+        },
+        {
+            "action": "click",
+            "elapsed": 99,
+            "passed": true,
+            "step": 66
+        },
+        {
+            "action": "window",
+            "elapsed": 99,
+            "passed": true,
+            "step": 67
+        },
+        {
+            "action": "resize",
+            "elapsed": 130,
+            "passed": true,
+            "step": 68
+        },
+        {
+            "action": "assertFooter",
+            "elapsed": 69,
+            "passed": true,
+            "step": 69
+        },
+        {
+            "action": "capture",
+            "elapsed": 353,
+            "passed": true,
+            "step": 70
+        },
+        {
+            "action": "click",
+            "elapsed": 0,
+            "passed": true,
+            "step": 71
+        },
+        {
+            "action": "click",
+            "elapsed": 46,
+            "passed": true,
+            "step": 72
+        },
+        {
+            "action": "window",
+            "elapsed": 100,
+            "passed": true,
+            "step": 73
+        },
+        {
+            "action": "resize",
+            "elapsed": 119,
+            "passed": true,
+            "step": 74
+        },
+        {
+            "action": "assertFooter",
+            "elapsed": 79,
+            "passed": true,
+            "step": 75
+        },
+        {
+            "action": "capture",
+            "elapsed": 294,
+            "passed": true,
+            "step": 76
+        },
+        {
+            "action": "click",
+            "elapsed": 5,
+            "passed": true,
+            "step": 77
+        },
+        {
+            "action": "click",
+            "elapsed": 100,
+            "passed": true,
+            "step": 78
+        },
+        {
+            "action": "window",
+            "elapsed": 99,
+            "passed": true,
+            "step": 79
+        },
+        {
+            "action": "assertUI",
+            "elapsed": 100,
+            "passed": true,
+            "step": 80
+        },
+        {
+            "action": "capture",
+            "elapsed": 318,
+            "passed": true,
+            "step": 81
+        },
+        {
+            "action": "assertUI",
+            "elapsed": 0,
+            "passed": true,
+            "step": 82
+        },
+        {
+            "action": "assertFooter",
+            "elapsed": 82,
+            "passed": true,
+            "step": 83
+        },
+        {
+            "action": "click",
+            "elapsed": 99,
+            "passed": true,
+            "step": 84
+        },
+        {
+            "action": "window",
+            "elapsed": 100,
+            "passed": true,
+            "step": 85
+        },
+        {
+            "action": "capture",
+            "elapsed": 294,
+            "passed": true,
+            "step": 86
+        },
+        {
+            "action": "click",
+            "elapsed": 6,
+            "passed": true,
+            "step": 87
+        },
+        {
+            "action": "assertState",
+            "elapsed": 99,
+            "passed": true,
+            "step": 88
+        },
+        {
+            "action": "click",
+            "elapsed": 100,
+            "passed": true,
+            "step": 89
+        },
+        {
+            "action": "click",
+            "elapsed": 100,
+            "passed": true,
+            "step": 90
+        },
+        {
+            "action": "assertState",
+            "elapsed": 99,
+            "passed": true,
+            "step": 91
+        },
+        {
+            "action": "assertPath",
+            "elapsed": 100,
+            "passed": true,
+            "step": 92
+        },
+        {
+            "action": "capture",
+            "elapsed": 364,
+            "passed": true,
+            "step": 93
+        },
+        {
+            "action": "open",
+            "elapsed": 3,
+            "passed": true,
+            "step": 94
+        },
+        {
+            "action": "assertState",
+            "elapsed": 32,
+            "passed": true,
+            "step": 95
+        },
+        {
+            "action": "fixtureEngine",
+            "elapsed": 103,
+            "passed": true,
+            "step": 96
+        },
+        {
+            "action": "capture",
+            "elapsed": 361,
+            "passed": true,
+            "step": 97
+        },
+        {
+            "action": "click",
+            "elapsed": 0,
+            "passed": true,
+            "step": 98
+        },
+        {
+            "action": "assertUI",
+            "elapsed": 63,
+            "passed": true,
+            "step": 99
+        },
+        {
+            "action": "capture",
+            "elapsed": 272,
+            "passed": true,
+            "step": 100
+        },
+        {
+            "action": "click",
+            "elapsed": 0,
+            "passed": true,
+            "step": 101
+        },
+        {
+            "action": "window",
+            "elapsed": 98,
+            "passed": true,
+            "step": 102
+        },
+        {
+            "action": "assertUI",
+            "elapsed": 100,
+            "passed": true,
+            "step": 103
+        },
+        {
+            "action": "capture",
+            "elapsed": 314,
+            "passed": true,
+            "step": 104
+        },
+        {
+            "action": "click",
+            "elapsed": 0,
+            "passed": true,
+            "step": 105
+        },
+        {
+            "action": "window",
+            "elapsed": 85,
+            "passed": true,
+            "step": 106
+        },
+        {
+            "action": "assertSafeDefault",
+            "elapsed": 99,
+            "passed": true,
+            "step": 107
+        },
+        {
+            "action": "capture",
+            "elapsed": 295,
+            "passed": true,
+            "step": 108
+        },
+        {
+            "action": "click",
+            "elapsed": 4,
+            "passed": true,
+            "step": 109
+        },
+        {
+            "action": "assertState",
+            "elapsed": 100,
+            "passed": true,
+            "step": 110
+        },
+        {
+            "action": "click",
+            "elapsed": 100,
+            "passed": true,
+            "step": 111
+        },
+        {
+            "action": "assertSafeDefault",
+            "elapsed": 100,
+            "passed": true,
+            "step": 112
+        },
+        {
+            "action": "markTime",
+            "elapsed": 99,
+            "passed": true,
+            "step": 113
+        },
+        {
+            "action": "click",
+            "elapsed": 100,
+            "passed": true,
+            "step": 114
+        },
+        {
+            "action": "stopped",
+            "elapsed": 100,
+            "passed": true,
+            "step": 115
+        },
+        {
+            "action": "elapsedUnder",
+            "elapsed": 99,
+            "passed": true,
+            "step": 116
+        },
+        {
+            "action": "wait",
+            "elapsed": 399,
+            "passed": true,
+            "step": 117
+        },
+        {
+            "action": "assertUI",
+            "elapsed": 100,
+            "passed": true,
+            "step": 118
+        },
+        {
+            "action": "click",
+            "elapsed": 100,
+            "passed": true,
+            "step": 119
+        },
+        {
+            "action": "capture",
+            "elapsed": 375,
+            "passed": true,
+            "step": 120
+        },
+        {
+            "action": "fixtureEngine",
+            "elapsed": 5,
+            "passed": true,
+            "step": 121
+        },
+        {
+            "action": "window",
+            "elapsed": 18,
+            "passed": true,
+            "step": 122
+        },
+        {
+            "action": "capture",
+            "elapsed": 302,
+            "passed": true,
+            "step": 123
+        },
+        {
+            "action": "closeWindow",
+            "elapsed": 0,
+            "passed": true,
+            "step": 124
+        },
+        {
+            "action": "window",
+            "elapsed": 96,
+            "passed": true,
+            "step": 125
+        },
+        {
+            "action": "capture",
+            "elapsed": 321,
+            "passed": true,
+            "step": 126
+        },
+        {
+            "action": "click",
+            "elapsed": 0,
+            "passed": true,
+            "step": 127
+        },
+        {
+            "action": "assertUI",
+            "elapsed": 79,
+            "passed": true,
+            "step": 128
+        },
+        {
+            "action": "assertUI",
+            "elapsed": 100,
+            "passed": true,
+            "step": 129
+        },
+        {
+            "action": "assertUI",
+            "elapsed": 99,
+            "passed": true,
+            "step": 130
+        },
+        {
+            "action": "capture",
+            "elapsed": 310,
+            "passed": true,
+            "step": 131
+        },
+        {
+            "action": "click",
+            "elapsed": 0,
+            "passed": true,
+            "step": 132
+        },
+        {
+            "action": "assertSafeDefault",
+            "elapsed": 88,
+            "passed": true,
+            "step": 133
+        },
+        {
+            "action": "click",
+            "elapsed": 100,
+            "passed": true,
+            "step": 134
+        },
+        {
+            "action": "stopped",
+            "elapsed": 99,
+            "passed": true,
+            "step": 135
+        },
+        {
+            "action": "click",
+            "elapsed": 100,
+            "passed": true,
+            "step": 136
+        },
+        {
+            "action": "click",
+            "elapsed": 99,
+            "passed": true,
+            "step": 137
+        },
+        {
+            "action": "click",
+            "elapsed": 124,
+            "passed": true,
+            "step": 138
+        },
+        {
+            "action": "window",
+            "elapsed": 80,
+            "passed": true,
+            "step": 139
+        },
+        {
+            "action": "assertSafeDefault",
+            "elapsed": 95,
+            "passed": true,
+            "step": 140
+        },
+        {
+            "action": "capture",
+            "elapsed": 296,
+            "passed": true,
+            "step": 141
+        },
+        {
+            "action": "click",
+            "elapsed": 3,
+            "passed": true,
+            "step": 142
+        },
+        {
+            "action": "assertState",
+            "elapsed": 100,
+            "passed": true,
+            "step": 143
+        },
+        {
+            "action": "assertPath",
+            "elapsed": 100,
+            "passed": true,
+            "step": 144
+        },
+        {
+            "action": "click",
+            "elapsed": 99,
+            "passed": true,
+            "step": 145
+        },
+        {
+            "action": "click",
+            "elapsed": 100,
+            "passed": true,
+            "step": 146
+        },
+        {
+            "action": "assertState",
+            "elapsed": 99,
+            "passed": true,
+            "step": 147
+        },
+        {
+            "action": "assertPath",
+            "elapsed": 100,
+            "passed": true,
+            "step": 148
+        },
+        {
+            "action": "capture",
+            "elapsed": 395,
+            "passed": true,
+            "step": 149
+        }
+    ]
+}

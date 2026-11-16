@@ -1,0 +1,21 @@
+{
+  "initialDesktopSet": {
+    "total": 67,
+    "exactMatches": 66,
+    "differences": [
+      {
+        "capture": "ui-2x/08-library-download-complete.png",
+        "bounds": [
+          942,
+          646,
+          944,
+          674
+        ],
+        "differingPixels": 56
+      }
+    ]
+  },
+  "repeat": "Entire unchanged 150-step 2x flow repeated once; all 27 exact desktop captures. Original frames retained. No masks or tolerance.",
+  "edgeFlow": "Initial recipe used a viewport smaller than the full guest, so rightmost input was correctly rejected. Final 44-step recipe explicitly fits 1024x768 at 1x into a 1037x859 host window. Float hit testing preserves the last pixel center.",
+  "windowsDeadline": "The fresh 32 GiB image import completed; its initial 180-second wrapper expired around the subsequent flow. Final runtime qualification opens that stopped disposable public image, uses a 600-second deadline, completes all 44 steps and exits normally with code 0. Initial attempts remain in ignored output."
+}

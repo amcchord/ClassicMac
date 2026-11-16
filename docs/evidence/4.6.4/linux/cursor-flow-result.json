@@ -1,0 +1,313 @@
+{
+    "error": "",
+    "passed": true,
+    "state": {
+        "displays": [
+        ],
+        "electron": false,
+        "frontend": "native-qt-cpp",
+        "height": 700,
+        "machines": [
+            {
+                "config": {
+                    "bootFromCD": false,
+                    "classicInputHelpers": true,
+                    "depth": 16,
+                    "diskImageName": "disk.img",
+                    "diskSizeGB": 32,
+                    "graphicsCard": "atiRadeon",
+                    "height": 768,
+                    "id": "e34cac8d-8051-48ac-bfaa-83a6c4a5b39a",
+                    "machineFamily": "powerMacG4",
+                    "name": "Radeon Cursor",
+                    "networking": true,
+                    "pramImageName": "pram.img",
+                    "ramMB": 512,
+                    "sound": true,
+                    "tabletInput": true,
+                    "toolsCDInserted": true,
+                    "useEnhancedFramebuffer": false,
+                    "useG4CPU": true,
+                    "useVirtioDisk": false,
+                    "width": 1024
+                },
+                "folder": "/home/codex/ClassicMacQA/release-4.6.4/final/cursor-machines/Radeon Cursor.classic",
+                "id": "e34cac8d-8051-48ac-bfaa-83a6c4a5b39a",
+                "name": "Radeon Cursor",
+                "running": false
+            }
+        ],
+        "processId": 3872,
+        "scale": 1,
+        "shaded": false,
+        "version": "4.6.4",
+        "webview": false,
+        "width": 940
+    },
+    "steps": [
+        {
+            "action": "assertDpi",
+            "elapsed": 95,
+            "passed": true,
+            "step": 0
+        },
+        {
+            "action": "open",
+            "elapsed": 100,
+            "passed": true,
+            "step": 1
+        },
+        {
+            "action": "select",
+            "elapsed": 88,
+            "passed": true,
+            "step": 2
+        },
+        {
+            "action": "start",
+            "elapsed": 238,
+            "passed": true,
+            "step": 3
+        },
+        {
+            "action": "guestReady",
+            "elapsed": 47,
+            "passed": true,
+            "step": 4
+        },
+        {
+            "action": "guestSize",
+            "elapsed": 20092,
+            "passed": true,
+            "step": 5
+        },
+        {
+            "action": "resize",
+            "elapsed": 107,
+            "passed": true,
+            "step": 6
+        },
+        {
+            "action": "wait",
+            "elapsed": 45092,
+            "passed": true,
+            "step": 7
+        },
+        {
+            "action": "capture",
+            "elapsed": 345,
+            "passed": true,
+            "step": 8
+        },
+        {
+            "action": "nativePointer",
+            "elapsed": 0,
+            "passed": true,
+            "step": 9
+        },
+        {
+            "action": "wait",
+            "elapsed": 254,
+            "passed": true,
+            "step": 10
+        },
+        {
+            "action": "capture",
+            "elapsed": 330,
+            "passed": true,
+            "step": 11
+        },
+        {
+            "action": "nativePointer",
+            "elapsed": 0,
+            "passed": true,
+            "step": 12
+        },
+        {
+            "action": "wait",
+            "elapsed": 268,
+            "passed": true,
+            "step": 13
+        },
+        {
+            "action": "capture",
+            "elapsed": 335,
+            "passed": true,
+            "step": 14
+        },
+        {
+            "action": "nativePointer",
+            "elapsed": 0,
+            "passed": true,
+            "step": 15
+        },
+        {
+            "action": "wait",
+            "elapsed": 264,
+            "passed": true,
+            "step": 16
+        },
+        {
+            "action": "capture",
+            "elapsed": 340,
+            "passed": true,
+            "step": 17
+        },
+        {
+            "action": "nativePointer",
+            "elapsed": 0,
+            "passed": true,
+            "step": 18
+        },
+        {
+            "action": "wait",
+            "elapsed": 259,
+            "passed": true,
+            "step": 19
+        },
+        {
+            "action": "capture",
+            "elapsed": 343,
+            "passed": true,
+            "step": 20
+        },
+        {
+            "action": "nativePointer",
+            "elapsed": 0,
+            "passed": true,
+            "step": 21
+        },
+        {
+            "action": "wait",
+            "elapsed": 256,
+            "passed": true,
+            "step": 22
+        },
+        {
+            "action": "capture",
+            "elapsed": 341,
+            "passed": true,
+            "step": 23
+        },
+        {
+            "action": "nativePointer",
+            "elapsed": 0,
+            "passed": true,
+            "step": 24
+        },
+        {
+            "action": "wait",
+            "elapsed": 258,
+            "passed": true,
+            "step": 25
+        },
+        {
+            "action": "capture",
+            "elapsed": 334,
+            "passed": true,
+            "step": 26
+        },
+        {
+            "action": "nativePointer",
+            "elapsed": 0,
+            "passed": true,
+            "step": 27
+        },
+        {
+            "action": "wait",
+            "elapsed": 265,
+            "passed": true,
+            "step": 28
+        },
+        {
+            "action": "capture",
+            "elapsed": 350,
+            "passed": true,
+            "step": 29
+        },
+        {
+            "action": "nativePointer",
+            "elapsed": 0,
+            "passed": true,
+            "step": 30
+        },
+        {
+            "action": "wait",
+            "elapsed": 348,
+            "passed": true,
+            "step": 31
+        },
+        {
+            "action": "capture",
+            "elapsed": 324,
+            "passed": true,
+            "step": 32
+        },
+        {
+            "action": "nativePointer",
+            "elapsed": 0,
+            "passed": true,
+            "step": 33
+        },
+        {
+            "action": "wait",
+            "elapsed": 275,
+            "passed": true,
+            "step": 34
+        },
+        {
+            "action": "capture",
+            "elapsed": 346,
+            "passed": true,
+            "step": 35
+        },
+        {
+            "action": "pause",
+            "elapsed": 1,
+            "passed": true,
+            "step": 36
+        },
+        {
+            "action": "capture",
+            "elapsed": 289,
+            "passed": true,
+            "step": 37
+        },
+        {
+            "action": "resume",
+            "elapsed": 0,
+            "passed": true,
+            "step": 38
+        },
+        {
+            "action": "closeWindow",
+            "elapsed": 62,
+            "passed": true,
+            "step": 39
+        },
+        {
+            "action": "window",
+            "elapsed": 108,
+            "passed": true,
+            "step": 40
+        },
+        {
+            "action": "click",
+            "elapsed": 92,
+            "passed": true,
+            "step": 41
+        },
+        {
+            "action": "stopped",
+            "elapsed": 7399,
+            "passed": true,
+            "step": 42
+        },
+        {
+            "action": "capture",
+            "elapsed": 301,
+            "passed": true,
+            "step": 43
+        }
+    ]
+}

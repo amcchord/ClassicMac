@@ -1904,3 +1904,52 @@ consolidated root checks, publish and verify stable 4.1.1. Retain 4.1.0 for roll
 - Result:user-requested PR integration,new downloadableGitHubrelease and actual
   Ubuntuperformance qualification complete. No new physicalGPU/3D,all-edition,
   audible-output or every-state fidelity claim. Next:next user-requested change.
+
+
+## 2026-11-15 — RetroBoot cursor correction and 4.6.4 qualification
+
+- User requests the GPU fix just added upstream, following the prior GitHub
+  release instructions. Worktree/branch: retroboot-gpu-cursor /
+  codex/retroboot-gpu-cursor. Baseline main 473a525, stable v4.6.3 retained.
+- 65b0c53 extracts cursor-only ATI C/header hunks from RetroBoot 88d074a
+  (2.0.2); no AGP/OS X/appliance policy import. CGL/WGL/EGL, firmware and
+  existing display/input remain. Provenance and hashes are committed.
+  Vendored printf raw-byte exceptions preserve its original CRLF content.
+- New portable qtest gate proves the published signed 4.6.3 engine's old
+  clipped-left failure. Each final desktop engine passes 144 monochrome
+  edge/plane/depth cases, visible erasure and color/alpha/edge checks:
+  598,030 RGB comparisons, zero differences. Mac physical Apple M5 Max CGL
+  context/shader/FBO/triangle/readback checks and old engine gates pass.
+- Actual Mac defaults exposed the same tablet/Sungem IRQ conflict already
+  fixed on Windows/Linux. Controlled old-engine tests with native device
+  order: automatic slot 18 fails to reach Finder in 65 s, slot 19 alone boots
+  in 24.44 s and shuts down. Early differently ordered probes excluded from
+  that comparison. 918ae1d fixes Swift/default Mac allocation and shares the
+  native oracle. Sound, networking, tablet and Tools remain enabled.
+- Exact final signed/notarized/stapled Mac app shows startup, complete ATI
+  public Mac OS 9.2.1 Finder/Tools and shutdown. Final Linux 43790212460 and
+  Windows 43790215360 CI pass from 918ae1d. All corresponding ATI C/header
+  source archive pairs are byte-identical. Unchanged Copland source retained.
+- Ubuntu VM 402:150-step flows at 1x/2x, 44 actual OS9 edge/pause/resume/power
+  steps, 67 exact desktop captures, 10,773,120 raw guest pixels with no differences.
+  One initial caret-phase mismatch retained; entire 2x repeat passes 27 exact.
+  Initial viewport rejected last-edge points; final recipe fits the whole
+  frame. Float hit testing preserves pixel centers. No masks or tolerance.
+- Windows VM 401:150 UI and44 real OS9 steps, normal portable/task exit 0,
+  39 exact desktop captures, 8,957,952 guest pixels, zero differences. Fresh
+  public 32 GiB import completed but initial 180 s wrapper was too short. Final
+  runtime opens that stopped disposable fixture with 600 s bound and exits0;
+  earlier failed/cropped/deadline attempts retained outside Git.
+- Ubuntu follow-up with owned Windows VM stopped, one old/new pair:
+  Finder 28.395/28.834 s, input 46.17/45.67 ms, p95 123.72/121.81 ms,
+  interface 64.39/64.70 MiB,
+  engine 48.17/51.00% of one core, paused 0%. Earlier shared-load samples retained
+  separately; no statistically significant speed or physical GPU claim.
+- Consolidated integration validation: 144 Swift tests, 3 optional skips, 0 failures;
+  122 native references/672 glyphs and 11 Python tests pass. Product source 918ae1d;
+  later recipe/docs/evidence only. Evidence:docs/evidence/4.6.4 and report.
+- Windows stopped, owned task/RDP removed; Mac guests stopped; Ubuntu VM 402 stopped with temporary auto-login disabled. Container 300
+  remains running; final state independently confirmed before publication. Eight binary/source assets + SHA256SUMS staged; complete Git
+  bundle verified. Next: commit/push/tag, draft digest verification, publish
+  stable/latest and redownload all nine anonymously. Retain 4.6.3 rollback. Root
+  gxmetal, other VMs, guest catalog, website and DNS are unchanged.

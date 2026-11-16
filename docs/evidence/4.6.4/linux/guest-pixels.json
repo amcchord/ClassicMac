@@ -1,0 +1,125 @@
+{
+  "captures": [
+    {
+      "capture": "00-finder.json",
+      "mode": "Sharp Pixels",
+      "compared": true,
+      "zoom": 1,
+      "pixelsCompared": 786432,
+      "differingPixels": 0
+    },
+    {
+      "capture": "cursor-bottom-left.json",
+      "mode": "Sharp Pixels",
+      "compared": true,
+      "zoom": 1,
+      "pixelsCompared": 786432,
+      "differingPixels": 0
+    },
+    {
+      "capture": "cursor-bottom-right.json",
+      "mode": "Sharp Pixels",
+      "compared": true,
+      "zoom": 1,
+      "pixelsCompared": 786432,
+      "differingPixels": 0
+    },
+    {
+      "capture": "cursor-bottom.json",
+      "mode": "Sharp Pixels",
+      "compared": true,
+      "zoom": 1,
+      "pixelsCompared": 786432,
+      "differingPixels": 0
+    },
+    {
+      "capture": "cursor-center.json",
+      "mode": "Sharp Pixels",
+      "compared": true,
+      "zoom": 1,
+      "pixelsCompared": 786432,
+      "differingPixels": 0
+    },
+    {
+      "capture": "cursor-left.json",
+      "mode": "Sharp Pixels",
+      "compared": true,
+      "zoom": 1,
+      "pixelsCompared": 786432,
+      "differingPixels": 0
+    },
+    {
+      "capture": "cursor-right.json",
+      "mode": "Sharp Pixels",
+      "compared": true,
+      "zoom": 1,
+      "pixelsCompared": 786432,
+      "differingPixels": 0
+    },
+    {
+      "capture": "cursor-top-center.json",
+      "mode": "Sharp Pixels",
+      "compared": true,
+      "zoom": 1,
+      "pixelsCompared": 786432,
+      "differingPixels": 0
+    },
+    {
+      "capture": "cursor-top-left.json",
+      "mode": "Sharp Pixels",
+      "compared": true,
+      "zoom": 1,
+      "pixelsCompared": 786432,
+      "differingPixels": 0
+    },
+    {
+      "capture": "cursor-top-right.json",
+      "mode": "Sharp Pixels",
+      "compared": true,
+      "zoom": 1,
+      "pixelsCompared": 786432,
+      "differingPixels": 0
+    },
+    {
+      "capture": "paused.json",
+      "mode": "Sharp Pixels",
+      "compared": true,
+      "zoom": 1,
+      "pixelsCompared": 786432,
+      "differingPixels": 0
+    },
+    {
+      "capture": "paused.json",
+      "mode": "Sharp Pixels",
+      "compared": true,
+      "zoom": 1,
+      "pixelsCompared": 753984,
+      "differingPixels": 0
+    },
+    {
+      "capture": "steady.json",
+      "mode": "Sharp Pixels",
+      "compared": true,
+      "zoom": 1,
+      "pixelsCompared": 753984,
+      "differingPixels": 0
+    },
+    {
+      "capture": "18-disposable-hung-guest.json",
+      "mode": "Sharp Pixels",
+      "compared": true,
+      "zoom": 1,
+      "pixelsCompared": 307200,
+      "differingPixels": 0
+    },
+    {
+      "capture": "18-disposable-hung-guest.json",
+      "mode": "Sharp Pixels",
+      "compared": true,
+      "zoom": 1,
+      "pixelsCompared": 307200,
+      "differingPixels": 0
+    }
+  ],
+  "pixelsCompared": 10773120
+}

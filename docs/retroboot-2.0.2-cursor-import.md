@@ -48,9 +48,9 @@ enabled. The native argument oracle is now shared across all desktop hosts.
 This startup correction is separate from the imported cursor patch.
 
 The shared Mac build and both platform CI workflows now require the cursor
-gate. Release validation and corresponding prepared source archives will
-record the exact final packages. Current stable 4.6.3 remains available until
-the new packages complete validation.
+gate. The [4.6.4 validation report](4.6.4-validation.md) records the final packages,
+actual guest checks, source-archive parity and limitations. The old 4.6.3
+release remains available for rollback.
 
 The new checkout also exposed two vendored printf files whose original CRLF
 blobs conflict with the general C/H LF rule. Explicit raw-byte exceptions

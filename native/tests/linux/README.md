@@ -36,9 +36,10 @@ enabled. The original machine must remain stopped and unchanged.
 python3 native/scripts/run-ui-ux.py ./ClassicMac-4.6.4-linux-x64.AppImage --output /absolute/QA/cursor-flow --recipe native/tests/linux/radeon-cursor-flow.json
 ```
 
-The 43-step flow opens that copy, boots, visits all four screen corners and
+The 44-step flow opens that copy, boots, visits all four screen corners and
 four edge midpoints, returns to the center, pauses/resumes and shuts down.
-It waits 45 seconds before edge input. Inspect `00-finder-guest.png` for an
+It fits the entire 1024 × 768 guest into a 1037 × 859 host window, then
+waits 45 seconds before edge input. Inspect `00-finder-guest.png` for an
 actual Finder before accepting the flow; an RFB connection alone is not a
 completed boot. Run both pixel checkers on the captures. The last row/column
 use fractional pixel centers; the qualification bounds check preserves those

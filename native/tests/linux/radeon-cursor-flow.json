@@ -27,6 +27,12 @@
       "sharp": true
     },
     {
+      "action": "resize",
+      "window": "guest",
+      "width": 1037,
+      "height": 859
+    },
+    {
       "action": "wait",
       "milliseconds": 45000
     },

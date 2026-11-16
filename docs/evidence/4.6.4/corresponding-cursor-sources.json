@@ -1,0 +1,41 @@
+[
+  {
+    "archive": "ClassicMac-Linux-QEMU-source.tar.gz",
+    "cursorSources": {
+      "qemu/hw/display/ati.c": {
+        "sha256": "f4ba74b34b3cb35ee18b4253812c6265a06be67d82f258f619c1eeabb884dc04",
+        "cursorStatePresent": true
+      },
+      "qemu/hw/display/ati_int.h": {
+        "sha256": "ae6b94376be17a19f4aae02ad6137985e927eea1cc54ca45023157c889c9692b",
+        "cursorStatePresent": true
+      }
+    }
+  },
+  {
+    "archive": "ClassicMac-Windows-QEMU-source.tar.gz",
+    "cursorSources": {
+      "qemu/hw/display/ati.c": {
+        "sha256": "f4ba74b34b3cb35ee18b4253812c6265a06be67d82f258f619c1eeabb884dc04",
+        "cursorStatePresent": true
+      },
+      "qemu/hw/display/ati_int.h": {
+        "sha256": "ae6b94376be17a19f4aae02ad6137985e927eea1cc54ca45023157c889c9692b",
+        "cursorStatePresent": true
+      }
+    }
+  },
+  {
+    "archive": "ClassicMac-macOS-QEMU-source.tar.gz",
+    "cursorSources": {
+      "qemu/hw/display/ati.c": {
+        "sha256": "f4ba74b34b3cb35ee18b4253812c6265a06be67d82f258f619c1eeabb884dc04",
+        "cursorStatePresent": true
+      },
+      "qemu/hw/display/ati_int.h": {
+        "sha256": "ae6b94376be17a19f4aae02ad6137985e927eea1cc54ca45023157c889c9692b",
+        "cursorStatePresent": true
+      }
+    }
+  }
+]

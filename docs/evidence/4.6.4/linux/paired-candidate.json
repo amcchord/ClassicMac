@@ -1,0 +1,53 @@
+{
+  "package": "ClassicMac-4.6.4-linux-x64.AppImage",
+  "machineFamily": "powerMacG4",
+  "graphicsCard": "atiRadeon",
+  "sourceConfig": {
+    "bootFromCD": false,
+    "classicInputHelpers": true,
+    "depth": 16,
+    "diskImageName": "disk.img",
+    "diskSizeGB": 32,
+    "graphicsCard": "atiRadeon",
+    "height": 768,
+    "id": "8bb770ce-d14c-4495-adf3-19ae1b00b1ce",
+    "machineFamily": "powerMacG4",
+    "name": "Bench 1-candidate",
+    "networking": true,
+    "pramImageName": "pram.img",
+    "ramMB": 512,
+    "sound": true,
+    "tabletInput": true,
+    "toolsCDInserted": true,
+    "useEnhancedFramebuffer": false,
+    "useG4CPU": true,
+    "useVirtioDisk": false,
+    "width": 1024
+  },
+  "appVisibleMs": 221.77405000002182,
+  "finderFromEngineMs": 28834.06112600005,
+  "inputToVisibleMenuMs": [
+    45.88592600021002,
+    118.77788099991449,
+    46.04225000002771,
+    45.297692000076495,
+    43.876313000055234,
+    45.44733400007317,
+    121.81383100005405,
+    45.15044600020701
+  ],
+  "idleSampleSeconds": 6.000066491000325,
+  "frontendIdleOneCorePercent": 0.3333296394298063,
+  "engineIdleOneCorePercent": 50.9994348327603,
+  "frontendRSSBytes": 67842048,
+  "engineRSSBytes": 374566912,
+  "display": "GNOME X11 desktop root pixels, 1x, 1920x1440; virtual llvmpipe graphics",
+  "hostLoadBefore": [
+    0.55517578125,
+    0.232421875,
+    0.14501953125
+  ],
+  "menuSamples": 8,
+  "pausedEngineOneCorePercent": 0.0,
+  "cleanShutdown": true
+}

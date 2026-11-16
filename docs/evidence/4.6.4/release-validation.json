@@ -1,0 +1,108 @@
+{
+  "date": "2026-11-15",
+  "productSourceCommit": "918ae1dbf85dfebdddd7bced7247b959918215cf",
+  "upstreamGPUFix": "88d074a55b00af7507e9412734ee83fd988876b3",
+  "cursorPerPlatform": {
+    "monochromeCases": 144,
+    "rgbPixels": 598030,
+    "differingPixels": 0,
+    "colorModes": [
+      2,
+      3
+    ],
+    "visibleDisableErasure": true
+  },
+  "baseline": "Published signed 4.6.3 Mac engine fails the first clipped-left pixel, black instead of white.",
+  "mac": {
+    "packageSHA256": "0f0b003e5c2ebb078b70bc28ee193a5e6272413c04f5aa231cf1ead273a77d4f",
+    "packagedCursorGate": "passed",
+    "physicalGL": "CGL GL 4.1 on Apple M5 Max; shader/link/FBO/triangle/readback pass",
+    "notaryApp": "e6860765-82bd-42eb-9deb-80419c1cd783",
+    "notaryDMG": "1acebb33-e6a7-4225-ae38-1286b8b51469",
+    "signedNotarizedStapledAndVerified": true,
+    "actualApp": "Public Mac OS 9.2.1 ATI, sound/network/Tools/tablet on: startup revealed, complete Finder and shutdown",
+    "startupControl": "Native device order, old engine: automatic slot 18 no Finder within 65 s; only slot19 changed reaches Finder in 24.438 s with clean shutdown",
+    "finalAppRunningDisplays": 0
+  },
+  "linux": {
+    "ci": 43790212460,
+    "packageSHA256": "1d6bb560775c398d6a6e162c77150ba3591cd2ff8d27beb88863db36ca54eaba",
+    "actualSystem": "Proxmox 192.168.1.100 VM402; Ubuntu24.04.5 GNOME/Xorg,6vCPU/8GiB,1920x1440,Mesa llvmpipe",
+    "uiSteps1x": 150,
+    "uiSteps2x": 150,
+    "realGuestSteps": 44,
+    "allStepsPass": true,
+    "desktopMatches": 67,
+    "uniformTitleBars": 68,
+    "guestCaptures": 15,
+    "guestPixels": 10773120,
+    "differingGuestPixels": 0,
+    "followupPair": {
+      "baseline": {
+        "package": "ClassicMac-4.6.3-linux-x64.AppImage",
+        "sha256": "d8a60b874891075713386d11c02da59cd13c49d2060e64c7088e9c90dc672c62",
+        "runs": 1,
+        "menuSamples": 8,
+        "finderMedianMs": 28395.08636499977,
+        "inputMedianMs": 46.17098199992142,
+        "inputP95Ms": 123.71813799973097,
+        "frontendIdlePercent": 0.49999182838356987,
+        "engineIdlePercent": 48.16587946761729,
+        "pausedEnginePercent": 0.0,
+        "frontendRSSMiB": 64.390625
+      },
+      "candidate": {
+        "package": "ClassicMac-4.6.4-linux-x64.AppImage",
+        "sha256": "1d6bb560775c398d6a6e162c77150ba3591cd2ff8d27beb88863db36ca54eaba",
+        "runs": 1,
+        "menuSamples": 8,
+        "finderMedianMs": 28834.06112600005,
+        "inputMedianMs": 45.666630000141595,
+        "inputP95Ms": 121.81383100005405,
+        "frontendIdlePercent": 0.3333296394298063,
+        "engineIdlePercent": 50.9994348327603,
+        "pausedEnginePercent": 0.0,
+        "frontendRSSMiB": 64.69921875
+      }
+    }
+  },
+  "windows": {
+    "ci": 43790215360,
+    "packageSHA256": "2cf518313efdf0a0701ccf2dda9ac5da7c4e99a07084ac8f6dd08f370c3c9010",
+    "actualSystem": "Owned Proxmox VM401 Windows11Pro,1920x1440RDP,96DPI,1x app zoom",
+    "uiSteps": 150,
+    "realGuestSteps": 44,
+    "allStepsPass": true,
+    "portableProcessExit": 0,
+    "scheduledTaskResult": 0,
+    "desktopMatches": 39,
+    "uniformTitleBars": 39,
+    "guestCaptures": 12,
+    "guestPixels": 8957952,
+    "differingGuestPixels": 0
+  },
+  "consolidated": {
+    "swiftTests": 144,
+    "optionalSwiftSkips": 3,
+    "swiftFailures": 0,
+    "nativeReferences": 122,
+    "nativeGlyphs": 672,
+    "nativeResult": "passed",
+    "pythonTests": 11,
+    "pythonFailures": 0
+  },
+  "sourceArchives": "All three prepared ATI C/header pairs are byte-identical and include the cursor correction; unchanged Copland source retained.",
+  "limits": [
+    "Correctness update; no new game speedup or every-state UI certification",
+    "Windows/Linux virtual graphics do not qualify physical GPU/3D or audible output",
+    "Single paired follow-up does not establish a statistically significant speed difference",
+    "Earlier UI audit appearance/layout/input/monitor limits remain"
+  ],
+  "cleanup": {
+    "vm401": "stopped; release task/RDP removed",
+    "vm402": "stopped; temporary auto-login disabled",
+    "macGuests": "stopped",
+    "container300": "running; unchanged",
+    "privateTemporaryKeys": "removed"
+  }
+}

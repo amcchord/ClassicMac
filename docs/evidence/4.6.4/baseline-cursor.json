@@ -1,0 +1,19 @@
+{
+  "package": "Published signed ClassicMac 4.6.3 Mac app",
+  "result": "expected failure",
+  "case": {
+    "cursor": "monochrome",
+    "depth": 6,
+    "leftClip": 1,
+    "topClip": 0,
+    "x": 0,
+    "y": 0
+  },
+  "pixel": [
+    0,
+    0
+  ],
+  "actualRGB": "000000",
+  "expectedRGB": "ffffff",
+  "failure": "AssertionError: (('monochrome', 6, 1, 0, 0, 0), 0, 0, '000000', 'ffffff')"
+}

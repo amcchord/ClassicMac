@@ -1,0 +1,14 @@
+{
+  "date": "2026-11-15",
+  "authorization": "User asks to bake the just-added RetroBoot GPU fix into ClassicMac; prior instructions require GitHub commits and downloadable releases.",
+  "previousMain": "473a525e0226531f985d76dd3cc5717d8d6b5c67",
+  "previousLatest": "v4.6.3",
+  "previousReleaseId": 446508082,
+  "previousTagCommit": "c3cc9126d681174254550b5e72c3f252c95a47bc",
+  "newTag": "v4.6.4",
+  "tagAbsentAtPreflight": true,
+  "backup": "Verified complete local bundle output/release-4.6.4/pre-publication.bundle; previous tag/assets retained.",
+  "publishGate": "Push tested source and annotated tag. Upload draft, verify all nine names/sizes/SHA-256 digests, fast-forward main, publish stable/latest, independently redownload all nine without credentials.",
+  "rollback": "Restore v4.6.3 as latest if public verification fails; retain v4.6.4 tag/assets for diagnosis.",
+  "scope": "GitHub repository/tag/release and owned QA systems only; no public guest catalog/site/DNS or unrelated VM change."
+}

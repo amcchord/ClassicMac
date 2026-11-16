@@ -1,0 +1,11 @@
+{
+  "monochromeCases": 144,
+  "argbModes": [
+    2,
+    3
+  ],
+  "pixelsCompared": 598030,
+  "result": "passed",
+  "differingPixels": 0,
+  "cursorDisableErasure": true
+}

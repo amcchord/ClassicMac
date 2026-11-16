@@ -1,0 +1,550 @@
+{
+  "captures": [
+    {
+      "capture": "cursor-flow/00-finder.json",
+      "windowsDpi": null,
+      "uiPixelZoom": 1,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": null,
+      "desktopMatches": true
+    },
+    {
+      "capture": "cursor-flow/cursor-bottom-left.json",
+      "windowsDpi": null,
+      "uiPixelZoom": 1,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": null,
+      "desktopMatches": true
+    },
+    {
+      "capture": "cursor-flow/cursor-bottom-right.json",
+      "windowsDpi": null,
+      "uiPixelZoom": 1,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": null,
+      "desktopMatches": true
+    },
+    {
+      "capture": "cursor-flow/cursor-bottom.json",
+      "windowsDpi": null,
+      "uiPixelZoom": 1,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": null,
+      "desktopMatches": true
+    },
+    {
+      "capture": "cursor-flow/cursor-center.json",
+      "windowsDpi": null,
+      "uiPixelZoom": 1,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": null,
+      "desktopMatches": true
+    },
+    {
+      "capture": "cursor-flow/cursor-left.json",
+      "windowsDpi": null,
+      "uiPixelZoom": 1,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": null,
+      "desktopMatches": true
+    },
+    {
+      "capture": "cursor-flow/cursor-right.json",
+      "windowsDpi": null,
+      "uiPixelZoom": 1,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": null,
+      "desktopMatches": true
+    },
+    {
+      "capture": "cursor-flow/cursor-top-center.json",
+      "windowsDpi": null,
+      "uiPixelZoom": 1,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": null,
+      "desktopMatches": true
+    },
+    {
+      "capture": "cursor-flow/cursor-top-left.json",
+      "windowsDpi": null,
+      "uiPixelZoom": 1,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": null,
+      "desktopMatches": true
+    },
+    {
+      "capture": "cursor-flow/cursor-top-right.json",
+      "windowsDpi": null,
+      "uiPixelZoom": 1,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": null,
+      "desktopMatches": true
+    },
+    {
+      "capture": "cursor-flow/paused.json",
+      "windowsDpi": null,
+      "uiPixelZoom": 1,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": null,
+      "desktopMatches": true
+    },
+    {
+      "capture": "cursor-flow/stopped.json",
+      "windowsDpi": null,
+      "uiPixelZoom": 1,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true,
+      "desktopMatches": true
+    },
+    {
+      "capture": "runtime-smoke/1-candidate/paused.json",
+      "windowsDpi": null,
+      "uiPixelZoom": 1,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": null,
+      "desktopMatches": null
+    },
+    {
+      "capture": "runtime-smoke/1-candidate/steady.json",
+      "windowsDpi": null,
+      "uiPixelZoom": 1,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": null,
+      "desktopMatches": true
+    },
+    {
+      "capture": "ui-1x/01-home-empty.json",
+      "windowsDpi": null,
+      "uiPixelZoom": 1,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true,
+      "desktopMatches": true
+    },
+    {
+      "capture": "ui-1x/02-library-overview.json",
+      "windowsDpi": null,
+      "uiPixelZoom": 1,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true,
+      "desktopMatches": true
+    },
+    {
+      "capture": "ui-1x/02b-library-narrow.json",
+      "windowsDpi": null,
+      "uiPixelZoom": 1,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true,
+      "desktopMatches": true
+    },
+    {
+      "capture": "ui-1x/03-library-filter-and-search.json",
+      "windowsDpi": null,
+      "uiPixelZoom": 1,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true,
+      "desktopMatches": true
+    },
+    {
+      "capture": "ui-1x/04-library-no-results.json",
+      "windowsDpi": null,
+      "uiPixelZoom": 1,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true,
+      "desktopMatches": true
+    },
+    {
+      "capture": "ui-1x/05-library-platform-unavailable.json",
+      "windowsDpi": null,
+      "uiPixelZoom": 1,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true,
+      "desktopMatches": true
+    },
+    {
+      "capture": "ui-1x/06-library-update-required.json",
+      "windowsDpi": null,
+      "uiPixelZoom": 1,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true,
+      "desktopMatches": true
+    },
+    {
+      "capture": "ui-1x/07-library-download-recovery.json",
+      "windowsDpi": null,
+      "uiPixelZoom": 1,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true,
+      "desktopMatches": true
+    },
+    {
+      "capture": "ui-1x/08-library-download-complete.json",
+      "windowsDpi": null,
+      "uiPixelZoom": 1,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true,
+      "desktopMatches": true
+    },
+    {
+      "capture": "ui-1x/09-home-downloaded.json",
+      "windowsDpi": null,
+      "uiPixelZoom": 1,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true,
+      "desktopMatches": true
+    },
+    {
+      "capture": "ui-1x/09b-home-narrow.json",
+      "windowsDpi": null,
+      "uiPixelZoom": 1,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true,
+      "desktopMatches": true
+    },
+    {
+      "capture": "ui-1x/09c-new-mac.json",
+      "windowsDpi": null,
+      "uiPixelZoom": 1,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true,
+      "desktopMatches": true
+    },
+    {
+      "capture": "ui-1x/09d-settings-narrow.json",
+      "windowsDpi": null,
+      "uiPixelZoom": 1,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true,
+      "desktopMatches": true
+    },
+    {
+      "capture": "ui-1x/09e-media-narrow.json",
+      "windowsDpi": null,
+      "uiPixelZoom": 1,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true,
+      "desktopMatches": true
+    },
+    {
+      "capture": "ui-1x/10-machine-management.json",
+      "windowsDpi": null,
+      "uiPixelZoom": 1,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true,
+      "desktopMatches": true
+    },
+    {
+      "capture": "ui-1x/11-machine-remove-options.json",
+      "windowsDpi": null,
+      "uiPixelZoom": 1,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true,
+      "desktopMatches": true
+    },
+    {
+      "capture": "ui-1x/12-home-removed-kept-files.json",
+      "windowsDpi": null,
+      "uiPixelZoom": 1,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true,
+      "desktopMatches": true
+    },
+    {
+      "capture": "ui-1x/13-home-paused.json",
+      "windowsDpi": null,
+      "uiPixelZoom": 1,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true,
+      "desktopMatches": true
+    },
+    {
+      "capture": "ui-1x/14-running-machine-protection.json",
+      "windowsDpi": null,
+      "uiPixelZoom": 1,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true,
+      "desktopMatches": true
+    },
+    {
+      "capture": "ui-1x/15-paused-mac-power.json",
+      "windowsDpi": null,
+      "uiPixelZoom": 1,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true,
+      "desktopMatches": true
+    },
+    {
+      "capture": "ui-1x/16-force-stop-warning.json",
+      "windowsDpi": null,
+      "uiPixelZoom": 1,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true,
+      "desktopMatches": true
+    },
+    {
+      "capture": "ui-1x/17-home-force-stopped.json",
+      "windowsDpi": null,
+      "uiPixelZoom": 1,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true,
+      "desktopMatches": true
+    },
+    {
+      "capture": "ui-1x/18-disposable-hung-guest.json",
+      "windowsDpi": null,
+      "uiPixelZoom": 1,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": null,
+      "desktopMatches": true
+    },
+    {
+      "capture": "ui-1x/19-guest-close-power.json",
+      "windowsDpi": null,
+      "uiPixelZoom": 1,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true,
+      "desktopMatches": true
+    },
+    {
+      "capture": "ui-1x/19b-shutdown-waiting-force-available.json",
+      "windowsDpi": null,
+      "uiPixelZoom": 1,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true,
+      "desktopMatches": true
+    },
+    {
+      "capture": "ui-1x/20-recycle-machine-warning.json",
+      "windowsDpi": null,
+      "uiPixelZoom": 1,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true,
+      "desktopMatches": true
+    },
+    {
+      "capture": "ui-1x/21-home-recycled.json",
+      "windowsDpi": null,
+      "uiPixelZoom": 1,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true,
+      "desktopMatches": true
+    },
+    {
+      "capture": "ui-2x/01-home-empty.json",
+      "windowsDpi": null,
+      "uiPixelZoom": 2,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true,
+      "desktopMatches": true
+    },
+    {
+      "capture": "ui-2x/02-library-overview.json",
+      "windowsDpi": null,
+      "uiPixelZoom": 2,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true,
+      "desktopMatches": true
+    },
+    {
+      "capture": "ui-2x/02b-library-narrow.json",
+      "windowsDpi": null,
+      "uiPixelZoom": 2,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true,
+      "desktopMatches": true
+    },
+    {
+      "capture": "ui-2x/03-library-filter-and-search.json",
+      "windowsDpi": null,
+      "uiPixelZoom": 2,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true,
+      "desktopMatches": true
+    },
+    {
+      "capture": "ui-2x/04-library-no-results.json",
+      "windowsDpi": null,
+      "uiPixelZoom": 2,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true,
+      "desktopMatches": true
+    },
+    {
+      "capture": "ui-2x/05-library-platform-unavailable.json",
+      "windowsDpi": null,
+      "uiPixelZoom": 2,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true,
+      "desktopMatches": true
+    },
+    {
+      "capture": "ui-2x/06-library-update-required.json",
+      "windowsDpi": null,
+      "uiPixelZoom": 2,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true,
+      "desktopMatches": true
+    },
+    {
+      "capture": "ui-2x/07-library-download-recovery.json",
+      "windowsDpi": null,
+      "uiPixelZoom": 2,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true,
+      "desktopMatches": true
+    },
+    {
+      "capture": "ui-2x/08-library-download-complete.json",
+      "windowsDpi": null,
+      "uiPixelZoom": 2,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true,
+      "desktopMatches": true
+    },
+    {
+      "capture": "ui-2x/09-home-downloaded.json",
+      "windowsDpi": null,
+      "uiPixelZoom": 2,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true,
+      "desktopMatches": true
+    },
+    {
+      "capture": "ui-2x/09b-home-narrow.json",
+      "windowsDpi": null,
+      "uiPixelZoom": 2,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true,
+      "desktopMatches": true
+    },
+    {
+      "capture": "ui-2x/09c-new-mac.json",
+      "windowsDpi": null,
+      "uiPixelZoom": 2,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true,
+      "desktopMatches": true
+    },
+    {
+      "capture": "ui-2x/09d-settings-narrow.json",
+      "windowsDpi": null,
+      "uiPixelZoom": 2,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true,
+      "desktopMatches": true
+    },
+    {
+      "capture": "ui-2x/09e-media-narrow.json",
+      "windowsDpi": null,
+      "uiPixelZoom": 2,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true,
+      "desktopMatches": true
+    },
+    {
+      "capture": "ui-2x/10-machine-management.json",
+      "windowsDpi": null,
+      "uiPixelZoom": 2,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true,
+      "desktopMatches": true
+    },
+    {
+      "capture": "ui-2x/11-machine-remove-options.json",
+      "windowsDpi": null,
+      "uiPixelZoom": 2,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true,
+      "desktopMatches": true
+    },
+    {
+      "capture": "ui-2x/12-home-removed-kept-files.json",
+      "windowsDpi": null,
+      "uiPixelZoom": 2,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true,
+      "desktopMatches": true
+    },
+    {
+      "capture": "ui-2x/13-home-paused.json",
+      "windowsDpi": null,
+      "uiPixelZoom": 2,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true,
+      "desktopMatches": true
+    },
+    {
+      "capture": "ui-2x/14-running-machine-protection.json",
+      "windowsDpi": null,
+      "uiPixelZoom": 2,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true,
+      "desktopMatches": true
+    },
+    {
+      "capture": "ui-2x/15-paused-mac-power.json",
+      "windowsDpi": null,
+      "uiPixelZoom": 2,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true,
+      "desktopMatches": true
+    },
+    {
+      "capture": "ui-2x/16-force-stop-warning.json",
+      "windowsDpi": null,
+      "uiPixelZoom": 2,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true,
+      "desktopMatches": true
+    },
+    {
+      "capture": "ui-2x/17-home-force-stopped.json",
+      "windowsDpi": null,
+      "uiPixelZoom": 2,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true,
+      "desktopMatches": true
+    },
+    {
+      "capture": "ui-2x/18-disposable-hung-guest.json",
+      "windowsDpi": null,
+      "uiPixelZoom": 2,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": null,
+      "desktopMatches": true
+    },
+    {
+      "capture": "ui-2x/19-guest-close-power.json",
+      "windowsDpi": null,
+      "uiPixelZoom": 2,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true,
+      "desktopMatches": true
+    },
+    {
+      "capture": "ui-2x/19b-shutdown-waiting-force-available.json",
+      "windowsDpi": null,
+      "uiPixelZoom": 2,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true,
+      "desktopMatches": true
+    },
+    {
+      "capture": "ui-2x/20-recycle-machine-warning.json",
+      "windowsDpi": null,
+      "uiPixelZoom": 2,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true,
+      "desktopMatches": true
+    },
+    {
+      "capture": "ui-2x/21-home-recycled.json",
+      "windowsDpi": null,
+      "uiPixelZoom": 2,
+      "uniformTitleBarPixels": true,
+      "uniformFullUI": true,
+      "desktopMatches": true
+    }
+  ],
+  "uniformTitleBars": 68,
+  "matchingDesktopCaptures": 67
+}

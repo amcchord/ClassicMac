@@ -1,27 +1,30 @@
-# RetroBoot Radeon cursor import — 2026-11-15
+# ClassicMac 4.6.4 — qualified for publication, 2026-11-15
 
-User requests the GPU fix just added to RetroBoot. Confirmed source is
-88d074a55b00af7507e9412734ee83fd988876b3, Radeon Mac OS 9 cursor clipping,
-prepared for RetroBoot 2.0.2 at 1c9a702. Scope: cursor composition hunks and
-state from retroboot-macosx-agp.patch, excluding OS X/AGP platform changes.
-
+User requests RetroBoot's new GPU fix. Source 88d074a (2.0.2 cursor clipping)
+is ported in 65b0c53; 918ae1d also corrects Mac default tablet/network IRQ
+allocation and qualification pixel-center bounds. Final product source:
+918ae1dbf85dfebdddd7bced7247b959918215cf. Later edits are recipes/docs/evidence.
 Owner: codex/retroboot-gpu-cursor in worktrees/retroboot-gpu-cursor.
-Baseline main 473a525; published v4.6.3 remains the qualified rollback.
-New portable qtest reproduces the bug on the old qualified engine at the
-first clipped-left pixel (black instead of white). The new patch passes
-application checks against the qualified prepared QEMU source.
-Fresh Mac build and CGL/cursor gates pass. Initial Linux CI 43787660818 and
-Windows CI 43787664760 pass from 65b0c53, including 598,030 exact cursor pixels.
-Actual Mac defaults exposed the existing IRQ conflict: controlled old-engine
-boots with native device order stall at automatic slot 18 for 65 seconds;
-slot 19 alone reaches Finder in 24.44 seconds and cleanly shuts down. Swift
-and the native oracle now share the already qualified Windows/Linux fix.
-New argument test passes. Ubuntu is online after boot recovery; 150 UI steps
-pass. The 43-step edge flow caught QA rounding of the last pixel center;
-its bounds check now uses the actual floating-point viewport. Fresh final
-packages must include those last launcher/qualification changes. Preserve root gxmetal and other worktrees.
 
-Next: finish engine build, run cursor and existing GL/display gates, build
-all three packages, test actual guest edges and release regression flows,
-consolidate validation, commit/push and publish verified 4.6.4 downloads.
-Use only owned QA VMs on requested Proxmox; no catalog/site deployment.
+Final Linux CI 43790212460 and Windows CI 43790215360 pass. Each platform's
+cursor gate checks 144 cases and 598,030 exact RGB pixels. The published
+4.6.3 engine fails the old clipped-left case. Source pairs match across all
+three corresponding QEMU archives. Mac physical CGL smoke passes; final app
+signed/notarized/stapled/full verification and actual complete Finder/stop pass.
+Mac default IRQ control: old automatic slot18 stalls65s; slot19 boots24.44s.
+
+Ubuntu: 150+150 UI steps, 44 guest edge/power steps, 67 exact desktop matches,
+10,773,120 exact guest pixels. Windows: 150+44 steps, normal process/task exit0,
+39 exact desktop matches and 8,957,952 exact guest pixels. All selected devices
+remain on. Final quiet follow-up: 4.6.3/4.6.4 Finder28.40/28.83s, input46.17/45.67ms,
+paused0%; one pair, not a speedup claim. Initial deadline/viewport/caret probes
+retained separately. Full report: docs/4.6.4-validation.md and evidence/4.6.4.
+Consolidated144Swift tests (3 optional skips),122native refs/672glyphs,11Python pass.
+
+Windows VM401 stopped and task/RDP removed. Ubuntu VM 402 stopped and
+temporary auto-login disabled. Mac guests stopped.
+All eight binary/source assets plus SHA256SUMS staged in contained output;
+complete Git backup verified. Stable/latest is still4.6.3 until publication.
+Next: commit evidence, push source/tag, upload/verify draft, fast-forward main,
+publish4.6.4/latest and verify nine anonymous downloads. Root gxmetal preserved;
+no public catalog/site, unrelated VM or cleanup work.
