@@ -1,24 +1,29 @@
-# ClassicMac 4.6.3 — ready to publish, 2026-11-15
+# ClassicMac 4.6.3 — published, 2026-11-15
 
-PR #44 is incorporated on codex/github-4.6.3-ubuntu. Shipped product source is
-36c1084; subsequent changes are QA runners/docs/evidence. All three final
-packages are staged with hashes; Mac is signed/notarized/stapled and verified.
+Stable/latest: https://github.com/amcchord/ClassicMac/releases/tag/v4.6.3
+PR #44 merged; main and annotated v4.6.3 pushed. Tag:
+c3cc9126d681174254550b5e72c3f252c95a47bc. Shipped product source: 36c1084;
+subsequent changes are QA scripts, documentation and evidence.
+All nine release assets match uploaded size/SHA-256 and independent anonymous
+full downloads. Latest page/API resolve to 4.6.3. Prior 4.6.2 retained for rollback.
 
-Ubuntu VM 402 on requested Proxmox 192.168.1.100 passes 150/150/40 UI/network
-steps, 72 exact desktop matches, 8,582,784 exact guest pixels and nine repeated
-performance runs. Linux ATI default startup is fixed by separating the tablet
-interrupt. Median Finder: System 7 8.309 s vs old 8.447 s; OS 9 29.678 s.
-Detailed method, raw samples and limits: docs/ubuntu-validation-2026-11-15.md.
-Final Windows EXE passes 150-step flows at 1x/2x on VM 401; 50/54 desktop
-comparisons exact, four blocked by OneDrive. No masking. Both QA VMs are now
-stopped; temporary Ubuntu auto-login disabled and Windows task removed.
+Ubuntu on requested Proxmox 192.168.1.100: 150/150/40 UI/network steps,
+72 exact desktop matches, 8,582,784 exact guest pixels, nine clean runtime runs.
+Linux default ATI/tablet/network/Tools startup stall fixed. Median Finder:
+System 7 8.309 s vs old 8.447 s; OS 9 29.678 s. Interface 59–65 MiB,
+0.17–0.5% of one core; paused engine median 0%. Final Windows EXE passes
+150-step flows at 1x/2x; 50/54 exact desktop captures, four OneDrive-obstructed
+frames retained. Mac signing/notarization/stapling/full verification and actual
+Quadra smoke pass. Consolidated 143 Swift tests (3 optional skips), 122 native
+references/672 glyphs and 11 Python tests pass. Final package CI:
+Linux 43782609513, Windows 43782612504.
 
-Root main integrated through 6203100 before evidence. Consolidated validation:
-143 Swift tests (3 optional skips), 122 native comparisons/672 glyphs and
-11 Python tests pass. Final Linux CI 43782609513/Windows CI 43782612504 green.
-The UI audit's remaining physical-device/appearance/layout gaps stay explicit.
+Report: docs/ubuntu-validation-2026-11-15.md; evidence: docs/evidence/4.6.3.
+Software graphics/Xorg do not qualify physical GPU/3D or every UI state.
+The earlier UI audit's remaining appearance/layout/physical-device gaps remain.
+QA VMs 401/402 stopped; Ubuntu auto-login disabled; Windows task/RDP removed;
+Mac guests stopped; private temporary keys removed. Container 300 still running.
+Root gxmetal untouched; no guest catalog/site/DNS or unrelated VM changes.
 
-Next: commit evidence, fast-forward/push main and annotated v4.6.3, upload all
-nine draft assets, verify upload hashes, publish stable/latest and redownload
-all anonymously. Verified git backup bundle in contained output; retain v4.6.2
-for rollback. Root gxmetal untouched; no public catalog/site or other VM changes.
+Requested release work is complete. Next action: the next requested change.
+Retain stopped QA systems and qualified 4.6.2 rollback.

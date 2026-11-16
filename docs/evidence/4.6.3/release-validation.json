@@ -57,5 +57,16 @@
     "Guest/process boot with warming caches; not cold-storage timing",
     "Unpaused System 7 uses an emulation core; paused CPU measured separately",
     "Earlier UI appearance/layout, physical input and mixed-monitor gaps remain"
-  ]
+  ],
+  "tagCommit": "c3cc9126d681174254550b5e72c3f252c95a47bc",
+  "publishedReleaseId": 446508082,
+  "publishedAt": "2026-11-16T01:27:02Z",
+  "allNineAnonymousDownloadsMatch": true,
+  "taskCleanup": {
+    "ubuntuVM402": "stopped; temporary GDM automatic login disabled",
+    "windowsVM401": "stopped; release scheduled task removed; owned RDP exited",
+    "otherInfrastructure": "container 300 remains running; unrelated VMs unchanged",
+    "macGuests": "stopped",
+    "privateTemporaryKeys": "removed; ignored private directory empty"
+  }
 }

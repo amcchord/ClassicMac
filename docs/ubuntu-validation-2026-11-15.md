@@ -37,7 +37,7 @@ list entry from moving its files to Trash. Power and confirmed Force Stop
 remain available when a guest's control connection hangs. These are shared
 Windows/Linux native UI changes; the existing RetroBoot 2.0.1 engine is retained.
 
-The old Linux default ATI configuration put the USB tablet at PCI slot 18,
+The old Linux default ATI configuration put the tablet at PCI slot 18,
 sharing Sungem's interrupt. With networking and Tools enabled, the public
 Mac OS 9.2.1 image remained near 20% of startup at 60 seconds and did not reach
 Finder within the 65-second observation. The [retained startup frame](evidence/4.6.3/linux/os9-4.6.2-startup.png)
@@ -203,3 +203,13 @@ pixel-perfect reproduction of classic Mac OS.
 The release retains v4.6.2 and its assets for rollback. Only GitHub source and
 release assets are promoted; the public guest catalog is unchanged. Temporary
 desktop auto-login is disabled and the owned QA VMs are stopped after testing.
+
+
+Publication completed at 2026-11-16 01:27:02 UTC (November 15 locally).
+[4.6.3](https://github.com/amcchord/ClassicMac/releases/tag/v4.6.3) is stable/latest,
+with nine uploaded assets verified by size and SHA-256 before promotion.
+All nine were then independently downloaded without credentials and matched;
+[public verification](evidence/4.6.3/public-downloads.json) records the results.
+The annotated tag points to `c3cc9126d681174254550b5e72c3f252c95a47bc`;
+shipping product code matches qualified `36c1084` exactly. Later changes are
+benchmark/runner scripts, documentation and evidence. PR #44 is merged.

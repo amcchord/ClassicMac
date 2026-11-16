@@ -1878,3 +1878,29 @@ consolidated root checks, publish and verify stable 4.1.1. Retain 4.1.0 for roll
   fast-forward push/tag, draft upload/digest checks, publish latest, verify all
   anonymous downloads. Rollback restores v4.6.2 latest, preserving tags/assets.
   No public guest catalog, site, DNS or unrelated VM changes.
+
+
+## 2026-11-15 — 4.6.3 published and all public downloads verified
+
+- Source, QA runners and full evidence committed as c3cc912 and fast-forward
+  pushed to main; annotated v4.6.3 points to
+  c3cc9126d681174254550b5e72c3f252c95a47bc. Product paths exactly match qualified
+  36c1084; subsequent changes are runner/benchmark scripts and documentation.
+  GitHub recognizes PR #44 as merged. No force push or unrelated cleanup.
+- Release446508082 published stable/latest at2026-11-16T01:27:02Z:
+  https://github.com/amcchord/ClassicMac/releases/tag/v4.6.3 . Direct README and
+  release-note downloads cover signed/notarized MacDMG/ZIP,Windows portableEXE
+  and LinuxAppImage. All three corresponding QEMU sources,unchanged Copland
+  source andSHA256SUMS accompany the binaries:9assets total.
+- Every draft asset's size and GitHubSHA-256 digest matched local staged bytes
+  before promotion. After publication all9full unauthenticatedHTTPS downloads
+  matched size/SHA-256. Anonymous latestAPI and latest-page redirect resolve
+  v4.6.3. Proof:docs/evidence/4.6.3/public-downloads.json and upload-verification.json.
+  No failure/rollback;qualifiedv4.6.2 remains available.
+- Independent Proxmox check:ownedVM401 andVM402 stopped;container300 running.
+  Ubuntu temporary automatic login disabled,Windows release task removed,
+  ownedRDP exited,Mac guests stopped,private temporary key directory empty.
+  Existing otherVMs,publicguestcatalog,site and rootgxmetal unchanged.
+- Result:user-requested PR integration,new downloadableGitHubrelease and actual
+  Ubuntuperformance qualification complete. No new physicalGPU/3D,all-edition,
+  audible-output or every-state fidelity claim. Next:next user-requested change.

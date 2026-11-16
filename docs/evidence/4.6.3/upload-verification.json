@@ -1,0 +1,63 @@
+{
+  "releaseId": 446508082,
+  "tag": "v4.6.3",
+  "tagCommit": "c3cc9126d681174254550b5e72c3f252c95a47bc",
+  "draftVerifiedAt": "2026-11-16T01:26:50.526714+00:00",
+  "allNineUploadsMatch": true,
+  "assets": [
+    {
+      "name": "ClassicMac-4.6.3-linux-x64.AppImage",
+      "size": 60611064,
+      "sha256": "d8a60b874891075713386d11c02da59cd13c49d2060e64c7088e9c90dc672c62",
+      "label": "Download for Linux \u2014 AppImage (x64)"
+    },
+    {
+      "name": "ClassicMac-4.6.3-windows-x64.exe",
+      "size": 42742123,
+      "sha256": "9361491663944a4a13395f2fe7c010968c9c91a8b3893cf80d1999c7f4c67fc1",
+      "label": "Download for Windows \u2014 portable EXE (x64)"
+    },
+    {
+      "name": "ClassicMac-4.6.3.dmg",
+      "size": 47938315,
+      "sha256": "392014202e05d16f5eddfa6b1924032e7bf7849e2f27839bc2ceeddbf80a317f",
+      "label": "Download for Mac \u2014 DMG (Apple Silicon)"
+    },
+    {
+      "name": "ClassicMac-4.6.3.zip",
+      "size": 42566605,
+      "sha256": "0e8d6cbb19c3bde9db420bc36066e44b41dd79e5bb3824550213de85840692b6",
+      "label": "Download for Mac \u2014 ZIP (Apple Silicon)"
+    },
+    {
+      "name": "ClassicMac-Copland-source.tar.gz",
+      "size": 16899171,
+      "sha256": "35b3af17d6c4a250ba9104216c9ee6e65c956927d76bde6d0e62fc486f0d12da",
+      "label": "Copland corresponding source"
+    },
+    {
+      "name": "ClassicMac-Linux-QEMU-source.tar.gz",
+      "size": 42347907,
+      "sha256": "2ac46c2b19e160f59256fb94a36d30d9a6eafc16a80b42b8743563a8122a04fe",
+      "label": "Linux QEMU corresponding source"
+    },
+    {
+      "name": "ClassicMac-macOS-QEMU-source.tar.gz",
+      "size": 42404456,
+      "sha256": "f98717fc733ad3de93b4948b6f49b38d5bd92de9e2a176f2df83eb5c1d86329d",
+      "label": "macOS QEMU corresponding source"
+    },
+    {
+      "name": "ClassicMac-Windows-QEMU-source.tar.gz",
+      "size": 41550125,
+      "sha256": "d98ffa300bf971cad5d6acdcdae62fb78534a5d6cf94b09b363fc09c9baf9962",
+      "label": "Windows QEMU corresponding source"
+    },
+    {
+      "name": "SHA256SUMS",
+      "size": 782,
+      "sha256": "957e397bce3017424b65f648c457ea8089041288ddb3849c657d4a371de83985",
+      "label": "SHA-256 checksums for downloads"
+    }
+  ]
+}
