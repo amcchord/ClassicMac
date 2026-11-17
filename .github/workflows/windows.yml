@@ -29,7 +29,8 @@ jobs:
       - name: Run the exact portable EXE with a bounded guest check
         shell: pwsh
         env:
-          QT_QPA_PLATFORM: offscreen
+          QT_QPA_PLATFORM: windows
+          QT_LOGGING_TO_CONSOLE: 1
         run: |
           $exe = (Get-ChildItem -Path output/package-download -Filter 'ClassicMac-4.7.0-windows-x64.exe' -Recurse).FullName
           $folder = (Resolve-Path output/osx-qa/Tiger.classic).Path
