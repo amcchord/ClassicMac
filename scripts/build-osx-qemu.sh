@@ -61,6 +61,9 @@ case "$host" in
         ;;
 esac
 printf '%s\n' "$revision" > "$source_dir/CLASSICMAC-SOURCE-REVISION"
+if [ "${CLASSICMAC_PREPARE_ONLY:-0}" = 1 ]; then
+    exit 0
+fi
 
 mkdir -p "$build_dir"
 cd "$build_dir"

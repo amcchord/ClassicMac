@@ -52,11 +52,11 @@ class NVRAM:
             listener.close()
         self.sock.settimeout(20)
         self.sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-        self.stream = self.sock.makefile("rw")
+        self.stream = self.sock.makefile("rwb", buffering=0)
 
     def command(self, text):
-        self.stream.write(text + "\n")
-        self.stream.flush()
+        # qtest requires literal LF. A Windows text stream sends CRLF.
+        self.stream.write((text + "\n").encode("ascii"))
         while True:
             try:
                 line = self.stream.readline()
@@ -66,10 +66,10 @@ class NVRAM:
             if not line:
                 self.close()
                 raise RuntimeError("QEMU closed qtest: " + self.log_path.read_text(errors="replace"))
-            if line.startswith("OK"):
-                return line.split()
-            if line.startswith(("FAIL", "ERR")):
-                raise RuntimeError(line)
+            if line.startswith(b"OK"):
+                return line.decode("ascii").split()
+            if line.startswith((b"FAIL", b"ERR")):
+                raise RuntimeError(line.decode("ascii"))
 
     def read(self):
         # mac99 maps each byte twice (it_shift=1).
