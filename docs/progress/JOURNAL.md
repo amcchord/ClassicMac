@@ -1972,3 +1972,22 @@ consolidated root checks, publish and verify stable 4.1.1. Retain 4.1.0 for roll
 - Result: requested GPU correction is incorporated, tested on all three desktop
   platforms and downloadable from GitHub. This final record is committed and
   synced to main/task branch. Next: the next user-requested change.
+
+## 2026-11-17 — ClassicMac 4.7.0 and PowerPC OS X
+
+- Ported RetroBoot `ead6d3b8` into a dedicated QEMU 10.0.13 runtime on
+  `codex/retroboot-osx`. Added an explicit Power Mac G4 for OS X with
+  persistent Core99 flash, native USB and standard VGA. Compiled product
+  source is `2691984`.
+- Verified the notarized Mac app and DMG. The installed Tiger guest reached
+  Finder, paused, resumed and shut down through its Apple menu. The original
+  10.4.6 retail DVD reached Installer Introduction and formatted a disposable
+  Apple Partition Map disk. Swift, Python and classic Radeon regression
+  checks passed.
+- Exact Ubuntu AppImage and Windows portable EXE passed Tiger Finder,
+  pause/resume and guest keyboard checks. The Windows flash test needed
+  literal LF and the exact portable test used the bundled Windows display
+  plugin. Final runs were 44195943381 and 44203519759.
+- Published tag `v4.7.0` at `6fe3304` as stable latest, release ID 449345793.
+  All ten draft assets and anonymous downloads passed digest and size checks.
+  Private test media remains outside Git and the published release.
