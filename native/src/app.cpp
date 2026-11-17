@@ -559,8 +559,13 @@ PWindow *App::guest(Engine *e) {
   controls->addWidget(pause);
   auto restart = button("Restart", [e] { e->shutdown(true); }, w);
   auto shutdown = button("Shut Down", [e] { e->shutdown(); }, w);
-  controls->addWidget(restart);
-  controls->addWidget(shutdown);
+  if (e->machine.family() == "powerMacOSX") {
+    restart->hide();
+    shutdown->hide();
+  } else {
+    controls->addWidget(restart);
+    controls->addWidget(shutdown);
+  }
   controls->addWidget(button("Power…", [this, e] { showPowerActions(e); }, w));
   controls->addWidget(button("Paste…", [this, e] { showPaste(e); }, w));
   controls->addWidget(button("Media…", [this, e] {
@@ -868,6 +873,8 @@ void App::showMedia() {
   };
   for (auto key :
        QStringList{"cdImagePath", "floppyImagePath", "sharedFolderPath"}) {
+    if (m->family() == "powerMacOSX" && key != "cdImagePath")
+      continue;
 #ifdef Q_OS_WIN
     if (key == "sharedFolderPath" && m->config[key].toString().isEmpty())
       continue;

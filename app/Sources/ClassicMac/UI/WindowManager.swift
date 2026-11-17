@@ -195,6 +195,21 @@ final class WindowManager {
         let manager = QEMUManager.shared
         let vm = VMStore.shared.vms.first { $0.id == id }
         let name = vm.map { "\u{201C}\($0.name)\u{201D}" } ?? "this Mac"
+        if vm?.machineFamily == .powerMacOSX {
+            shutDownAlert?.close()
+            shutDownAlert = alert(.caution, "Power for \(name)",
+                informative: "Choose Shut Down or Restart from the Apple menu inside your Mac. Force Stop turns it off immediately and can lose unsaved work.",
+                buttons: [
+                    PlatinumAlertButton("Show Mac", role: .default) {
+                        manager.cancelStop()
+                        if manager.isPaused(id) { manager.resume(id) }
+                        manager.activate(id)
+                    },
+                    PlatinumAlertButton("Force Stop") { manager.confirmStop() },
+                    PlatinumAlertButton("Cancel", role: .cancel) { manager.cancelStop() },
+                ])
+            return
+        }
         let informative = vm?.machineFamily == .powerMac7500
             ? "This turns Copland off at once and may lose unsaved work. For a clean shut down, choose Cancel and use Shut Down in Copland's Spaz menu."
             : "Mac OS shuts down first, as if you chose Shut Down from the Special menu, so its disk stays healthy. If Mac OS does not respond within 15 seconds, the Mac turns off and unsaved work may be lost."

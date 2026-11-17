@@ -122,11 +122,18 @@ struct SettingsDialog: View {
                     if config.machineFamily == .powerMacG4 {
                         PlatinumCheckbox("PowerPC G4 processor (off for Mac OS 8.5)", isOn: $config.useG4CPU)
                     }
-                    PlatinumCheckbox("Right-click and scroll wheel in classic apps", isOn: $config.classicInputHelpers)
+                    if config.machineFamily != .powerMacOSX {
+                        PlatinumCheckbox("Right-click and scroll wheel in classic apps", isOn: $config.classicInputHelpers)
+                    }
                     PlatinumCheckbox("Seamless mouse: move in and out freely", isOn: $config.tabletInput)
-                    Text("Turn off right-click and scrolling when USB Overdrive is installed in Mac OS. Games can still capture the mouse.")
-                        .platinumText(.detail)
-                        .fixedSize(horizontal: false, vertical: true)
+                    if config.machineFamily == .powerMacOSX {
+                        Text("Turn off the seamless mouse to use a relative USB mouse.")
+                            .platinumText(.detail)
+                    } else {
+                        Text("Turn off right-click and scrolling when USB Overdrive is installed in Mac OS. Games can still capture the mouse.")
+                            .platinumText(.detail)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
                 .padding(.leading, 92)
                 .padding(.top, 4)
@@ -183,7 +190,7 @@ struct SettingsDialog: View {
                         }
                     }
                 }
-                if config.graphicsCard == .standard {
+                if config.graphicsCard == .standard && config.machineFamily != .powerMacOSX {
                     GridRow {
                         Text("Colors:").platinumText(.emphasis)
                         PlatinumPopUp(selection: $config.depth, options: depthChoices.map { ($0.rawValue, $0.label) },

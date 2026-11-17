@@ -38,6 +38,23 @@ final class QEMURunnerArgumentTests: XCTestCase {
         )
     }
 
+    func testOSXUsesDedicatedFirmwareAndNativeUSB() {
+        let vm = config(family: .powerMacOSX, cdImagePath: "/tmp/Tiger, retail.img",
+                        tabletInput: false, sharedFolderPath: "/tmp/share")
+        let args = QEMUManager.buildArguments(for: vm)
+        XCTAssertEqual(optionValues("-M", in: args), ["mac99,via=pmu,usb=off,audiodev=snd0"])
+        XCTAssertEqual(optionValues("-boot", in: args), ["d"])
+        XCTAssertEqual(optionValues("-g", in: args), ["1024x768x32"])
+        XCTAssertEqual(optionValues("-device", in: args),
+                       ["pci-ohci,id=osx-usb", "usb-kbd,bus=osx-usb.0", "usb-mouse,bus=osx-usb.0"])
+        XCTAssertTrue(optionValues("-bios", in: args).first?.hasSuffix("/openbios-ppc-osx") == true)
+        XCTAssertTrue(optionValues("-drive", in: args).contains { $0.contains("Tiger,, retail.img") })
+        XCTAssertTrue(optionValues("-drive", in: args).contains { $0.contains("/nvram.img") })
+        XCTAssertFalse(args.contains("-icount"))
+        XCTAssertFalse(args.contains("-fsdev"))
+        XCTAssertFalse(vm.toolsCDInserted)
+    }
+
     func testVirtioStartupAndCompatibilityCDHaveSelectedBootDeviceFirst() {
         for fromCD in [false, true] {
             var vm = config(cdImagePath: fromCD ? "/tmp/install.iso" : nil,

@@ -58,6 +58,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         let manager = QEMUManager.shared
         let running = manager.runningIDs.count
         guard running > 0 else { return .terminateNow }
+        if let osx = VMStore.shared.vms.first(where: {
+            $0.machineFamily == .powerMacOSX && manager.isRunning($0.id)
+        }) {
+            WindowManager.shared.alert(.caution, "Shut down Mac OS X before quitting.",
+                informative: "Choose Shut Down from the Apple menu inside your Mac.",
+                buttons: [PlatinumAlertButton("Show Mac", role: .default) {
+                    if manager.isPaused(osx.id) { manager.resume(osx.id) }
+                    manager.activate(osx.id)
+                }])
+            return .terminateCancel
+        }
         let names = VMStore.shared.vms.filter { manager.isRunning($0.id) }.map { "\u{201C}\($0.name)\u{201D}" }
         let message = running == 1 ? "Shut down \(names.first ?? "the running Mac") and quit ClassicMac?"
                                    : "Shut down \(running) running Macs and quit ClassicMac?"

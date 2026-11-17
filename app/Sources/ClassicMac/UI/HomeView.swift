@@ -322,8 +322,12 @@ struct MachinePanel: View {
                 PlatinumButton(paused ? "Resume" : "Pause") {
                     if paused { manager.resume(vm.id) } else { manager.pause(vm.id) }
                 }
-                PlatinumButton("Restart") { manager.reboot(vm.id) }
-                PlatinumButton("Shut Down…") { manager.requestStop(vm.id) }
+                if vm.machineFamily == .powerMacOSX {
+                    PlatinumButton("Power…") { manager.requestStop(vm.id) }
+                } else {
+                    PlatinumButton("Restart") { manager.reboot(vm.id) }
+                    PlatinumButton("Shut Down…") { manager.requestStop(vm.id) }
+                }
                 Spacer(minLength: 0)
                 PlatinumButton(vm.useBrowserDisplay ? "Open in Browser" : "Show Mac", role: .default, minWidth: 90) {
                     if paused { manager.resume(vm.id) }

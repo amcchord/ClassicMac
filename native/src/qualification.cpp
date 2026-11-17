@@ -1225,3 +1225,58 @@ void qualify(App *app, const QString &recipe) {
     qApp->exit(1);
   }
 }
+
+void qualifyOSX(const QString &folder) {
+  auto machine = Model::readMachine(folder);
+  require(machine.family() == "powerMacOSX", "Expected a disposable OS X test Mac.");
+  Engine engine(machine);
+  engine.start();
+  auto pump = [](int ms) {
+    QEventLoop loop;
+    QTimer::singleShot(ms, &loop, &QEventLoop::quit);
+    loop.exec();
+  };
+  auto waitFor = [&](const auto &condition, const QString &failure, int timeout) {
+    QElapsedTimer deadline;
+    deadline.start();
+    while (engine.running && !condition() && deadline.elapsed() < timeout)
+      pump(100);
+    require(condition(), failure + " " + engine.log);
+  };
+  auto finder = [&] {
+    const auto &frame = engine.vnc.frame;
+    if (!engine.vnc.ready || frame.size() != QSize(1024, 768))
+      return false;
+    QByteArray pixels;
+    for (int y = 2; y < 19; ++y)
+      for (int x = 45; x < 405; ++x) {
+        QRgb pixel = frame.pixel(x, y);
+        pixels.append(char(qRed(pixel)));
+        pixels.append(char(qGreen(pixel)));
+        pixels.append(char(qBlue(pixel)));
+      }
+    return QCryptographicHash::hash(pixels, QCryptographicHash::Sha256).toHex() ==
+        "89f979ef71b80b76f11ca94687b9b2aae55b1d3eb71019ca362e426f896a5602";
+  };
+  waitFor(finder, "Tiger Finder did not appear in the native guest display.", 180000);
+  engine.pause();
+  require(!engine.command("query-status").toObject()["running"].toBool(), "Tiger did not pause.");
+  engine.resume();
+  require(engine.command("query-status").toObject()["running"].toBool(), "Tiger did not resume.");
+
+  // Use the real native client's keyboard transport to open a Finder window.
+  const auto desktop = engine.vnc.frame.copy(QRect(300, 80, 64, 64));
+  engine.vnc.key(0xffeb, true);
+  engine.vnc.key(0xffe1, true);
+  pump(100);
+  engine.vnc.key('h', true);
+  pump(120);
+  engine.vnc.key('h', false);
+  engine.vnc.key(0xffe1, false);
+  engine.vnc.key(0xffeb, false);
+  waitFor([&] { return engine.vnc.frame.copy(QRect(300, 80, 64, 64)) != desktop; },
+          "Tiger did not open the Home folder after keyboard input.", 10000);
+  std::puts("Tiger Finder pixels, pause/resume and native keyboard input passed.");
+  engine.forceOff(); // Disposable boot fixture, discarded after the check.
+  waitFor([&] { return !engine.running; }, "Test guest process did not stop.", 10000);
+}

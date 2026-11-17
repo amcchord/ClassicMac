@@ -29,13 +29,15 @@ struct MediaDrawerView: View {
             }
             status
             PlatinumGroupBox("CD") { drive(.disc, icon: "cd") }
-            PlatinumGroupBox("ClassicMac Tools") {
-                VStack(alignment: .leading, spacing: 6) {
-                    drive(.tools, icon: "cd")
-                    Text(config.machineFamily == .powerMacG4
-                         ? "Classic Mac utilities. Tools mounts at startup; while the Mac starts from an installer CD it waits for the first hard-disk startup."
-                         : "Classic Mac utilities, including StuffIt Expander and Disk Copy.")
-                        .platinumText(.detail).fixedSize(horizontal: false, vertical: true)
+            if config.machineFamily != .powerMacOSX {
+                PlatinumGroupBox("ClassicMac Tools") {
+                    VStack(alignment: .leading, spacing: 6) {
+                        drive(.tools, icon: "cd")
+                        Text(config.machineFamily == .powerMacG4
+                             ? "Classic Mac utilities. Tools mounts at startup; while the Mac starts from an installer CD it waits for the first hard-disk startup."
+                             : "Classic Mac utilities, including StuffIt Expander and Disk Copy.")
+                            .platinumText(.detail).fixedSize(horizontal: false, vertical: true)
+                    }
                 }
             }
             if config.machineFamily.supportsFloppyDisk {
@@ -65,6 +67,7 @@ struct MediaDrawerView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(Platinum.face.color)
         .task(id: "\(config.id):\(isRunning)") {
+            guard config.machineFamily != .powerMacOSX else { return }
             while !Task.isCancelled {
                 await controller.refresh(config.id, running: isRunning)
                 do { try await Task.sleep(nanoseconds: 2_000_000_000) } catch { return }
@@ -90,7 +93,10 @@ struct MediaDrawerView: View {
     }
 
     private var visibleRecents: [RecentMedia] {
-        recents.items.filter { $0.device != .floppy || config.machineFamily.supportsFloppyDisk }
+        recents.items.filter {
+            if config.machineFamily == .powerMacOSX { return $0.device == .disc }
+            return $0.device != .floppy || config.machineFamily.supportsFloppyDisk
+        }
     }
 
     private var recentsSection: some View {
@@ -146,13 +152,14 @@ struct MediaDrawerView: View {
         let savedPath = device.path(in: config)
         let runningDrive = snapshot?[device]
         let runningPath = runningDrive?.inserted == true ? runningDrive?.path : nil
-        let displayedPath = isRunning ? runningPath : savedPath
+        let checking = isRunning && snapshot == nil && config.machineFamily != .powerMacOSX
+        let displayedPath = isRunning && config.machineFamily != .powerMacOSX ? runningPath : savedPath
         let available = displayedPath.map { FileManager.default.isReadableFile(atPath: $0) } ?? true
         let liveBlocked = live && (isPaused || snapshot == nil)
         HStack(alignment: .center, spacing: 10) {
             PlatinumIcon(icon, size: 16, dimmed: displayedPath == nil)
             VStack(alignment: .leading, spacing: 1) {
-                Text(isRunning && snapshot == nil ? "Checking…"
+                Text(checking ? "Checking…"
                      : displayedPath.map { URL(fileURLWithPath: $0).lastPathComponent } ?? "Nothing inserted")
                     .platinumText(displayedPath == nil ? .disabled : .emphasis)
                     .lineLimit(1).truncationMode(.middle)

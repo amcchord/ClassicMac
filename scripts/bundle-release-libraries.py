@@ -83,7 +83,17 @@ class Registry:
 def origin(name):
     require(Path(name).name == name and name.endswith(".dylib"), "Expected a dylib basename: " + name)
     original = PREFIX / "lib" / name
-    real = original.resolve(strict=True)
+    if original.exists():
+        real = original.resolve(strict=True)
+    else:
+        # Keg-only dependencies (such as libssh's OpenSSL 3) can be linked
+        # through /opt without a corresponding global /lib symlink.
+        matches = {
+            path.resolve(strict=True) for path in (PREFIX / "opt").glob("*/lib/" + name)
+            if path.is_file()
+        }
+        require(len(matches) == 1, "Missing or ambiguous Homebrew library: " + name)
+        real, = matches
     relative = real.relative_to((PREFIX / "Cellar").resolve())
     require(len(relative.parts) >= 4 and relative.parts[2] == "lib", "Library is not in a Homebrew keg: " + str(real))
     formula, keg = relative.parts[:2]

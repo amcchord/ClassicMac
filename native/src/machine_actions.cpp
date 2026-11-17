@@ -241,7 +241,10 @@ void App::showPowerActions(Engine *engine) {
   auto status = label(powerState(target), &dialog, "small", true);
   status->setObjectName("machinePowerStatus");
   layout->addWidget(status);
-  auto guidance = label("Shut Down asks Mac OS to close its applications safely. "
+  bool osx = target->machine.family() == "powerMacOSX";
+  auto guidance = label(osx
+      ? "Choose Shut Down or Restart from the Apple menu inside your Mac."
+      : "Shut Down asks Mac OS to close its applications safely. "
                          "Save your work and answer any dialogs on the Mac's "
                          "screen. Restart starts it again after shutdown.",
                          &dialog, "regular", true);
@@ -257,8 +260,13 @@ void App::showPowerActions(Engine *engine) {
       target->shutdown(true);
   }, &dialog);
   restart->setObjectName("powerRestart");
-  normal->addWidget(shutDown);
-  normal->addWidget(restart);
+  if (osx) {
+    shutDown->hide();
+    restart->hide();
+  } else {
+    normal->addWidget(shutDown);
+    normal->addWidget(restart);
+  }
   normal->addStretch();
   layout->addLayout(normal);
   layout->addWidget(label("Mac not responding? Force Stop turns off the "
@@ -364,13 +372,19 @@ bool App::requestQuit() {
     for (auto engine : values)
       targets.append(engine);
     for (auto engine : targets)
-      if (engine && engine->running && !engine->stoppingRequested())
+      if (engine && engine->running && !engine->stoppingRequested() &&
+          engine->machine.family() != "powerMacOSX")
         try {
           engine->shutdown();
         } catch (const std::exception &error) {
           failures.append(QString::fromUtf8(error.what()));
         }
-    guidance->setText(failures.isEmpty()
+    const auto needsGuestShutdown = std::any_of(targets.begin(), targets.end(), [](const auto &engine) {
+      return engine && engine->running && engine->machine.family() == "powerMacOSX";
+    });
+    guidance->setText(needsGuestShutdown
+        ? "Choose Cancel to return to each Mac OS X screen and select Shut Down from its Apple menu."
+        : failures.isEmpty()
         ? "Waiting for the Macs to shut down. Choose Cancel to return to "
           "their screens and save work. Force Stop All remains available "
           "if a Mac is stuck."
@@ -389,10 +403,15 @@ bool App::requestQuit() {
     bool canShutDown = false, canForce = false;
     for (auto engine : engines) {
       lines.append(engine->machine.name() + " — " + powerState(engine));
-      canShutDown |= !engine->stoppingRequested();
+      canShutDown |= !engine->stoppingRequested() && engine->machine.family() != "powerMacOSX";
       canForce |= !engine->forcedStopRequested();
     }
     states->setText(lines.join('\n'));
+    if (!canShutDown && !engines.isEmpty() &&
+        std::all_of(engines.begin(), engines.end(), [](const auto *engine) {
+          return engine->machine.family() == "powerMacOSX";
+        }))
+      guidance->setText("Choose Cancel to return to each Mac OS X screen and select Shut Down from its Apple menu.");
     shutDown->setEnabled(canShutDown);
     force->setEnabled(canForce);
   };

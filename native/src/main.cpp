@@ -36,6 +36,10 @@ int main(int argc, char **argv) {
                   static_cast<long long>(rows.size()));
       return 0;
     }
+    if (args.contains("--qualify-osx")) {
+      qualifyOSX(args.value(args.indexOf("--qualify-osx") + 1));
+      return 0;
+    }
     if (args.contains("--self-test")) {
       int i = args.indexOf("--self-test");
       return selfTest(args.value(i + 1), args.value(i + 2));

@@ -3,6 +3,11 @@ on:
   push:
     branches: [codex/windows-app, codex/linux-release]
   workflow_dispatch:
+    inputs:
+      test_tiger:
+        description: Boot a disposable Mac OS X 10.4.11 guest in the final package
+        type: boolean
+        default: false
 concurrency:
   group: linux-${{ github.ref }}
   cancel-in-progress: true
@@ -61,6 +66,14 @@ jobs:
           cmake --build output/native-build -j 4
           QT_QPA_PLATFORM=offscreen output/native-build/classicmac --self-test app/Tests/ClassicMacTests/Fixtures/Platinum output/native-pixels
           python3 native/scripts/package-linux.py output/native-build
+      - name: Boot Tiger in the packaged AppImage
+        if: inputs.test_tiger
+        run: |
+          sudo apt-get install -y p7zip-full
+          python3 osx/tests/fetch_tiger_fixture.py output/osx-qa/Tiger.classic \
+            --qemu-img output/desktop/runtime/bin/qemu-img
+          QT_QPA_PLATFORM=offscreen APPIMAGE_EXTRACT_AND_RUN=1 \
+            output/desktop/packages/ClassicMac-4.7.0-linux-x64.AppImage --qualify-osx output/osx-qa/Tiger.classic
       - uses: actions/upload-artifact@v4
         with:
           name: ClassicMac-Linux-app

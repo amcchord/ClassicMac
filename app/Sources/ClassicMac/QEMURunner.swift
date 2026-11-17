@@ -564,7 +564,11 @@ final class QEMUManager: ObservableObject {
     func confirmStop() {
         guard let id = pendingStopID else { return }
         pendingStopID = nil
-        stop(id)
+        if VMStore.shared.vms.first(where: { $0.id == id })?.machineFamily == .powerMacOSX {
+            processes[id]?.terminate()
+        } else {
+            stop(id)
+        }
     }
 
     private func stop(_ id: UUID) {
@@ -579,12 +583,6 @@ final class QEMUManager: ObservableObject {
         }
         let socketPath = QEMUManager.monitorSocketURL(for: id).path
         let wasPaused = pausedIDs.remove(id) != nil
-
-        if VMStore.shared.vms.first(where: { $0.id == id })?.machineFamily == .powerMacOSX {
-            if wasPaused { _ = HMPClient.send("cont", socketPath: socketPath) }
-            _ = HMPClient.send("sendkey ctrl-alt-meta_l-power 500", socketPath: socketPath)
-            return
-        }
 
         // An immediate SIGTERM leaves a mounted HFS/HFS+ volume marked dirty.
         // Mac OS checks that volume on its next startup, adding several seconds
@@ -654,6 +652,10 @@ final class QEMUManager: ObservableObject {
 
     func reboot(_ id: UUID) {
         guard runningIDs.contains(id) else { return }
+        if VMStore.shared.vms.first(where: { $0.id == id })?.machineFamily == .powerMacOSX {
+            requestStop(id)
+            return
+        }
         pausedIDs.remove(id)
         if coplandControls[id] != nil { sendCopland("restart", to: id); return }
         sendMonitor("system_reset", to: id, actionLabel: "Restart", onFailure: nil)
