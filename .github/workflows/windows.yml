@@ -1,6 +1,6 @@
 name: Windows desktop
 concurrency:
-  group: windows-${{ github.ref }}
+  group: windows-recovery-${{ github.ref }}
   cancel-in-progress: true
 on:
   push:
@@ -113,6 +113,14 @@ jobs:
           cmake --build output/native-build -j 4
           QT_QPA_PLATFORM=offscreen output/native-build/classicmac.exe --self-test app/Tests/ClassicMacTests/Fixtures/Platinum output/native-pixels
           python3 native/scripts/package-windows.py output/native-build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ClassicMac-Windows-app
+          path: |
+            output/desktop/packages/*.exe
+            output/native-pixels/*.json
+            output/desktop/radeon-cursor/result.json
+          retention-days: 30
       - name: Boot Tiger in the packaged Windows executable
         if: inputs.test_tiger
         shell: msys2 {0}
@@ -123,11 +131,3 @@ jobs:
             --seven-zip "$(cygpath -w '/c/Program Files/7-Zip/7z.exe')"
           QT_QPA_PLATFORM=offscreen output/desktop/packages/ClassicMac-4.7.0-windows-x64.exe \
             --qualify-osx "$(cygpath -w "$PWD/output/osx-qa/Tiger.classic")"
-      - uses: actions/upload-artifact@v4
-        with:
-          name: ClassicMac-Windows-app
-          path: |
-            output/desktop/packages/*.exe
-            output/native-pixels/*.json
-            output/desktop/radeon-cursor/result.json
-          retention-days: 30
