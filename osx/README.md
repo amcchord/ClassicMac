@@ -16,15 +16,14 @@ installation media is supplied by the user.
 
 ## Source and firmware
 
-- Engine patch: [RetroBoot ead6d3b8](https://github.com/amcchord/RetroBoot/tree/ead6d3b89b8db21e263d1e19de6ffea8b0253200/emulator/osx),
-  SHA-256 `46f87c4a24260c5d9684e5cd296ede3ad8ddf52109fdbbde4a7cc458a69fdadf`.
+- The RetroBoot engine patch has SHA-256 `46f87c4a24260c5d9684e5cd296ede3ad8ddf52109fdbbde4a7cc458a69fdadf`.
   ClassicMac applies it to upstream QEMU at
   `98f88efe8f07067667b8d9b1a5ce9551d34036c1` (v10.0.13). Native host
   display and audio are selected at build time. Windows supplies a stub
-  for RetroBoot's optional Linux EGL loader.
-- OpenBIOS: `e1e703ac0ad615ab0d7edea54db600aaa629bf07` from [OpenBIOS](https://github.com/openbios/openbios).
+  for RetroBoot's optional Linux EGL loader. [RetroBoot ead6d3b8](https://github.com/amcchord/RetroBoot/tree/ead6d3b89b8db21e263d1e19de6ffea8b0253200/emulator/osx).
+- The firmware uses OpenBIOS `e1e703ac0ad615ab0d7edea54db600aaa629bf07`.
   Apply `powermac/openbios-classic-macos-8.patch` followed by the patches
-  under `osx/openbios` in this order: airport-radio, sound-objects-terminator,
+  under `osx/openbios` in the following order. Apply airport-radio, sound-objects-terminator,
   pmu, native-find-wordlist, ati-radeon, macosx-profile, macosx-flash,
   macosx-numbers. The pinned builder and timestamp are specified in
   [RetroBoot's OpenBIOS source lock](https://github.com/amcchord/RetroBoot/blob/ead6d3b89b8db21e263d1e19de6ffea8b0253200/emulator/manifests/sources.lock.json).

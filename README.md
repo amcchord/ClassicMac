@@ -12,8 +12,8 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-black" alt="Platform">
-  <img src="https://img.shields.io/badge/guests-System%207.1%20–%20Mac%20OS%209.2.2-blueviolet" alt="Guest OS range">
-  <img src="https://img.shields.io/badge/QEMU-11.0.2%20(custom)-orange" alt="QEMU">
+  <img src="https://img.shields.io/badge/guests-System%207.1%20–%20Mac%20OS%20X%20Tiger-blueviolet" alt="Guest OS range">
+  <img src="https://img.shields.io/badge/QEMU-11.0.2%20%7C%2010.0.13-orange" alt="QEMU">
   <img src="https://img.shields.io/badge/UI-Apple%20Platinum-lightgrey" alt="Apple Platinum interface">
   <img src="https://img.shields.io/badge/3D-ATI%20Radeon%20(emulated)-c00" alt="Emulated ATI Radeon 3D">
 </p>
@@ -29,17 +29,28 @@
   <img src="docs/screenshots/powermacg4-macos92.png" width="410" alt="Mac OS 9.2 on the emulated Power Mac G4">
 </p>
 
-## Download ClassicMac 4.6.4
+## Download ClassicMac 4.7.0
 
 | System | Download | Requirements |
 | --- | --- | --- |
-| Windows | [Portable EXE](https://github.com/amcchord/ClassicMac/releases/download/v4.6.4/ClassicMac-4.6.4-windows-x64.exe) | Windows 11 x64; unsigned. |
-| macOS | [DMG](https://github.com/amcchord/ClassicMac/releases/download/v4.6.4/ClassicMac-4.6.4.dmg) · [ZIP](https://github.com/amcchord/ClassicMac/releases/download/v4.6.4/ClassicMac-4.6.4.zip) | Apple Silicon, macOS 15+; signed and notarized. |
-| Linux | [AppImage](https://github.com/amcchord/ClassicMac/releases/download/v4.6.4/ClassicMac-4.6.4-linux-x64.AppImage) | x64, glibc 2.39+ and a desktop. |
+| Windows | [Portable EXE](https://github.com/amcchord/ClassicMac/releases/download/v4.7.0/ClassicMac-4.7.0-windows-x64.exe) | Windows 11 x64; unsigned. |
+| macOS | [DMG](https://github.com/amcchord/ClassicMac/releases/download/v4.7.0/ClassicMac-4.7.0.dmg) · [ZIP](https://github.com/amcchord/ClassicMac/releases/download/v4.7.0/ClassicMac-4.7.0.zip) | Apple Silicon, macOS 15+; signed and notarized. |
+| Linux | [AppImage](https://github.com/amcchord/ClassicMac/releases/download/v4.7.0/ClassicMac-4.7.0-linux-x64.AppImage) | x64, glibc 2.39+ and a desktop. |
 
-[Release notes, checksums and engine sources](https://github.com/amcchord/ClassicMac/releases/tag/v4.6.4).
+[Release notes, checksums and engine sources](https://github.com/amcchord/ClassicMac/releases/tag/v4.7.0).
 Windows runs directly. Drag the Mac app to Applications. On Linux, mark the
 AppImage executable; use `--appimage-extract-and-run` if FUSE is unavailable.
+
+## New in ClassicMac 4.7.0
+
+- **PowerPC Mac OS X Tiger.** Choose **Power Mac G4 — Mac OS X** in
+  New Mac and attach your own PowerPC installation disc image.
+- The OS X profile uses its own firmware, persistent startup memory,
+  native USB input, sound and standard VGA display. Use the Apple menu
+  inside OS X to shut down or restart.
+- Classic Macs continue to use the separate QEMU 11 engine.
+
+[OS X setup and engine provenance](osx/README.md).
 
 ## New in ClassicMac 4.6.4
 
@@ -431,6 +442,7 @@ Requirements: an Apple Silicon Mac (M1 or later) running macOS 15 or newer.
 #    patch set and the ATI Radeon R100 last, compiles qemu-system-m68k +
 #    qemu-system-ppc, and checks the host OpenGL path) and the Copland engine
 ./scripts/build-qemu.sh
+./scripts/build-osx-qemu.sh
 ./scripts/build-copland.sh
 
 # 2. Build the guest-additions Tools CD (cached downloads, hfsutils/unar),
@@ -440,7 +452,7 @@ Requirements: an Apple Silicon Mac (M1 or later) running macOS 15 or newer.
 # 3. Build the app and bundle QEMU + firmware + dylibs into
 #    dist/ClassicMac.app (code-signed). APP_VERSION, APP_BUILD_VERSION and
 #    DIST_DIR override the version and output folder.
-APP_VERSION=4.6.2 APP_BUILD_VERSION=4.6.2 ./scripts/bundle-qemu.sh
+./scripts/bundle-qemu.sh
 
 # 4. Notarize and package a distributable disk image (DIST_NAME and
 #    DMG_VOLUME_NAME name the outputs)
@@ -448,7 +460,7 @@ APP_VERSION=4.6.2 APP_BUILD_VERSION=4.6.2 ./scripts/bundle-qemu.sh
 
 # 5. Verify the exact signed/stapled artifact, including versions, Gatekeeper,
 #    the bundled Tools CD and both Power Mac display cards
-./scripts/verify-release.sh dist/ClassicMac.dmg 4.6.2 4.6.2
+./scripts/verify-release.sh dist/ClassicMac.dmg 4.7.0 4.7.0
 ```
 
 All scripts are idempotent and safe to re-run. Building needs the Xcode command line tools and [Homebrew](https://brew.sh).

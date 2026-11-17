@@ -144,6 +144,20 @@ HELPER_BUILD="$(plutil -extract CFBundleVersion raw \
 [ "$HELPER_BUILD" = "$BUILD" ] || \
   die "Power Mac helper build $HELPER_BUILD does not match app build $BUILD"
 
+if [ "$VERSION_MAJOR" -gt 4 ] || { [ "$VERSION_MAJOR" -eq 4 ] && [ "$VERSION_MINOR" -ge 7 ]; }; then
+  log "Checking the Mac OS X engine and flash persistence"
+  OSX_QEMU="$APP/Contents/Helpers/Power Mac G4 for OS X.app/Contents/MacOS/qemu-system-ppc"
+  OSX_FIRMWARE="$APP/Contents/Resources/qemu-osx"
+  [ -x "$OSX_QEMU" ] || die "Mac OS X engine is missing"
+  [ -s "$OSX_FIRMWARE/keymaps/en-us" ] || die "Mac OS X keymaps are missing"
+  "$OSX_QEMU" --version | grep -q '^QEMU emulator version 10\.0\.13' || die "Wrong OS X engine version"
+  for fw in openbios-ppc-osx macosx-flash-seed.img qemu_vga.ndrv; do
+    cmp -s "$OSX_FIRMWARE/$fw" "$ROOT_DIR/osx/firmware/$fw" || die "Bundled Mac OS X firmware differs: $fw"
+  done
+  python3 "$ROOT_DIR/osx/tests/qtest_macosx_flash.py" --qemu "$OSX_QEMU" \
+    --firmware "$OSX_FIRMWARE" --seed-file "$OSX_FIRMWARE/macosx-flash-seed.img"
+fi
+
 log "Verifying Developer ID signatures and hardened runtime"
 codesign --verify --deep --strict --verbose=2 "$APP"
 for signed_item in "$APP" "$PPC_HELPER"; do

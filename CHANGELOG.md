@@ -1,5 +1,13 @@
 # Changelog
 
+## 4.7.0 — PowerPC Mac OS X Tiger (2026-11-17)
+
+- Add a Power Mac G4 for OS X on macOS, Windows and Linux.
+- Port the dedicated RetroBoot engine, Open Firmware, flash startup memory,
+  native USB input and widescreen standard VGA driver.
+- Install from your PowerPC Mac OS X installation disc. Shut down and restart
+  through the guest’s Apple menu.
+
 ## 4.6.3 — Windows and Linux desktop usability (2026-11-15)
 
 - Browse the Library with search, system filters, current editions, hardware

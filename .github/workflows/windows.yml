@@ -1,16 +1,12 @@
 name: Windows desktop
 concurrency:
-  group: windows-recovery-${{ github.ref }}
+  group: windows-${{ github.ref }}
   cancel-in-progress: true
 on:
   push:
     branches: [codex/windows-app]
   workflow_dispatch:
     inputs:
-      reuse_engine_run:
-        description: Reuse the staged engines from a known same-source Windows run ID
-        type: string
-        default: ''
       test_tiger:
         description: Boot a disposable Mac OS X 10.4.11 guest in the final package
         type: boolean
@@ -47,31 +43,15 @@ jobs:
             mingw-w64-ucrt-x86_64-qt6-base mingw-w64-ucrt-x86_64-cmake
             mingw-w64-ucrt-x86_64-openssl mingw-w64-ucrt-x86_64-zlib
             mingw-w64-ucrt-x86_64-nsis
-      - uses: actions/download-artifact@v4
-        if: steps.engine-cache.outputs.cache-hit != 'true' && inputs.reuse_engine_run != ''
-        with:
-          name: ClassicMac-Windows-runtime
-          path: output/desktop/runtime
-          github-token: ${{ github.token }}
-          run-id: ${{ inputs.reuse_engine_run }}
       - name: Build patched Windows engines
-        if: steps.engine-cache.outputs.cache-hit != 'true' && inputs.reuse_engine_run == ''
+        if: steps.engine-cache.outputs.cache-hit != 'true'
         shell: msys2 {0}
         run: |
           QEMU_REPO=https://github.com/qemu/qemu.git desktop/scripts/build-engine.sh
           python3 ati/tests/test_qemu_ati.py --gl-optional output/desktop/runtime/bin/qemu-system-ppc.exe output/desktop/runtime/qemu/pc-bios
           tar --exclude=.git --exclude=build --exclude=build-windows -czf output/desktop/ClassicMac-Windows-QEMU-source.tar.gz -C vendor qemu qemu-osx
-      - name: Prepare corresponding sources for the reused engines
-        if: steps.engine-cache.outputs.cache-hit != 'true' && inputs.reuse_engine_run != ''
-        shell: msys2 {0}
-        run: |
-          set -e
-          QEMU_REPO=https://github.com/qemu/qemu.git CLASSICMAC_PREPARE_ONLY=1 bash scripts/build-qemu.sh
-          python3 desktop/scripts/prepare-windows-gl.py vendor/qemu
-          CLASSICMAC_PREPARE_ONLY=1 bash scripts/build-osx-qemu.sh
-          tar --exclude=.git --exclude=build --exclude=build-windows -czf output/desktop/ClassicMac-Windows-QEMU-source.tar.gz -C vendor qemu qemu-osx
       - name: Include the qualified Tools CD
-        if: steps.engine-cache.outputs.cache-hit != 'true' && inputs.reuse_engine_run == ''
+        if: steps.engine-cache.outputs.cache-hit != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         shell: pwsh
@@ -95,7 +75,7 @@ jobs:
           path: output/desktop/runtime
           retention-days: 14
       - uses: actions/cache/save@v4
-        if: steps.engine-cache.outputs.cache-hit != 'true' && inputs.reuse_engine_run == '' && success()
+        if: steps.engine-cache.outputs.cache-hit != 'true' && success()
         with:
           path: |
             output/desktop/runtime
@@ -113,14 +93,6 @@ jobs:
           cmake --build output/native-build -j 4
           QT_QPA_PLATFORM=offscreen output/native-build/classicmac.exe --self-test app/Tests/ClassicMacTests/Fixtures/Platinum output/native-pixels
           python3 native/scripts/package-windows.py output/native-build
-      - uses: actions/upload-artifact@v4
-        with:
-          name: ClassicMac-Windows-app
-          path: |
-            output/desktop/packages/*.exe
-            output/native-pixels/*.json
-            output/desktop/radeon-cursor/result.json
-          retention-days: 30
       - name: Boot Tiger in the packaged Windows executable
         if: inputs.test_tiger
         shell: msys2 {0}
@@ -131,3 +103,11 @@ jobs:
             --seven-zip "$(cygpath -w '/c/Program Files/7-Zip/7z.exe')"
           QT_QPA_PLATFORM=offscreen output/desktop/packages/ClassicMac-4.7.0-windows-x64.exe \
             --qualify-osx "$(cygpath -w "$PWD/output/osx-qa/Tiger.classic")"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ClassicMac-Windows-app
+          path: |
+            output/desktop/packages/*.exe
+            output/native-pixels/*.json
+            output/desktop/radeon-cursor/result.json
+          retention-days: 30
