@@ -1,37 +1,113 @@
 name: Windows desktop
-on:
-  workflow_dispatch:
 concurrency:
-  group: windows-guest-range-${{ github.ref }}
+  group: windows-${{ github.ref }}
   cancel-in-progress: true
+on:
+  push:
+    branches: [codex/windows-app]
+  workflow_dispatch:
+    inputs:
+      test_tiger:
+        description: Boot a disposable Mac OS X 10.4.11 guest in the final package
+        type: boolean
+        default: false
 jobs:
   windows:
     runs-on: windows-latest
-    timeout-minutes: 15
+    timeout-minutes: 60
     steps:
+      - name: Preserve source line endings
+        run: git config --global core.autocrlf false
       - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/cache/restore@v4
+        id: engine-cache
         with:
-          name: ClassicMac-Windows-app
-          path: output/package-download
-          run-id: '44202066871'
-          github-token: ${{ github.token }}
-      - uses: actions/download-artifact@v4
+          path: |
+            output/desktop/runtime
+            output/desktop/ClassicMac-Windows-QEMU-source.tar.gz
+          key: windows-engine-${{ hashFiles('ati/*.c', 'ati/*.h', '**/*.patch','osx/**','scripts/build-osx-qemu.sh', 'qfb/*.c', 'qfb/*.h', 'qfb/*.rom', 'screamer/*', 'ppcvid/qemu_vga.ndrv', 'shared/*', 'scripts/build-qemu.sh', 'desktop/ati_gl_windows.inc', 'desktop/scripts/build-engine.sh', 'desktop/scripts/stage-runtime.py', 'desktop/scripts/prepare-windows-gl.py', '.github/workflows/windows.yml') }}
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            git make diffutils mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-python mingw-w64-ucrt-x86_64-python-pip
+            mingw-w64-ucrt-x86_64-python-distlib mingw-w64-ucrt-x86_64-python-packaging
+            mingw-w64-ucrt-x86_64-meson mingw-w64-ucrt-x86_64-ninja
+            mingw-w64-ucrt-x86_64-pkgconf mingw-w64-ucrt-x86_64-glib2
+            mingw-w64-ucrt-x86_64-pixman mingw-w64-ucrt-x86_64-libpng
+            mingw-w64-ucrt-x86_64-libslirp mingw-w64-ucrt-x86_64-dtc
+            mingw-w64-ucrt-x86_64-libgcrypt
+            mingw-w64-ucrt-x86_64-zstd
+            mingw-w64-ucrt-x86_64-qt6-base mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-openssl mingw-w64-ucrt-x86_64-zlib
+            mingw-w64-ucrt-x86_64-nsis
+      - name: Build patched Windows engines
+        if: steps.engine-cache.outputs.cache-hit != 'true'
+        shell: msys2 {0}
+        run: |
+          QEMU_REPO=https://github.com/qemu/qemu.git desktop/scripts/build-engine.sh
+          python3 ati/tests/test_qemu_ati.py --gl-optional output/desktop/runtime/bin/qemu-system-ppc.exe output/desktop/runtime/qemu/pc-bios
+          tar --exclude=.git --exclude=build --exclude=build-windows -czf output/desktop/ClassicMac-Windows-QEMU-source.tar.gz -C vendor qemu qemu-osx
+      - name: Include the qualified Tools CD
+        if: steps.engine-cache.outputs.cache-hit != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: |
+          gh release download v4.6.1 --repo amcchord/ClassicMac --pattern 'ClassicMac-4.6.1.zip' --dir output/desktop/tools
+          $archive = 'output/desktop/tools/ClassicMac-4.6.1.zip'
+          if ((Get-FileHash $archive -Algorithm SHA256).Hash.ToLower() -ne '6a29d2b05bb51eedae12ab02ab048ca98ce77fc5c8dc5d3b6ff16ce0a0f29350') { throw 'Tools source archive checksum mismatch' }
+          Expand-Archive $archive output/desktop/tools/extracted
+          Copy-Item 'output/desktop/tools/extracted/ClassicMac.app/Contents/Resources/ClassicMacTools.iso' 'output/desktop/runtime/ClassicMacTools.iso'
+          if ((Get-FileHash 'output/desktop/runtime/ClassicMacTools.iso' -Algorithm SHA256).Hash.ToLower() -ne '23a42184811c7e1ad8718b6746e061c3a1c3e3dd43af25c9c828b3fa326fca22') { throw 'Tools CD checksum mismatch' }
+      - name: Check Mac OS X flash persistence
+        shell: msys2 {0}
+        run: python3 osx/tests/qtest_macosx_flash.py --qemu output/desktop/runtime/bin/qemu-system-ppc-osx.exe --firmware output/desktop/runtime/qemu-osx --seed-file output/desktop/runtime/qemu-osx/macosx-flash-seed.img
+      - name: Check Radeon cursor pixels and clipping
+        shell: msys2 {0}
+        run: python3 ati/tests/test_radeon_cursor.py --qemu output/desktop/runtime/bin/qemu-system-ppc.exe --support output/desktop/runtime/qemu/pc-bios --output output/desktop/radeon-cursor
+      - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: ClassicMac-Windows-runtime
           path: output/desktop/runtime
-          run-id: '44202066871'
-          github-token: ${{ github.token }}
-      - name: Prepare checksum-pinned Tiger disk
-        shell: pwsh
+          retention-days: 14
+      - uses: actions/cache/save@v4
+        if: steps.engine-cache.outputs.cache-hit != 'true' && success()
+        with:
+          path: |
+            output/desktop/runtime
+            output/desktop/ClassicMac-Windows-QEMU-source.tar.gz
+          key: ${{ steps.engine-cache.outputs.cache-primary-key }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ClassicMac-Windows-QEMU-source
+          path: output/desktop/ClassicMac-Windows-QEMU-source.tar.gz
+          retention-days: 14
+      - name: Build native C++ frontend and portable package
+        shell: msys2 {0}
         run: |
-          python osx/tests/fetch_tiger_fixture.py output/osx-qa/Tiger.classic --qemu-img output/desktop/runtime/bin/qemu-img.exe --seven-zip 'C:\Program Files\7-Zip\7z.exe'
-      - name: Run the exact portable EXE with a bounded guest check
-        shell: pwsh
-        env:
-          QT_QPA_PLATFORM: windows
-          QT_LOGGING_TO_CONSOLE: 1
+          cmake -S native -B output/native-build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build output/native-build -j 4
+          QT_QPA_PLATFORM=offscreen output/native-build/classicmac.exe --self-test app/Tests/ClassicMacTests/Fixtures/Platinum output/native-pixels
+          python3 native/scripts/package-windows.py output/native-build
+      - name: Boot Tiger in the packaged Windows executable
+        if: inputs.test_tiger
+        shell: msys2 {0}
         run: |
-          $exe = (Get-ChildItem -Path output/package-download -Filter 'ClassicMac-4.7.0-windows-x64.exe' -Recurse).FullName
-          $folder = (Resolve-Path output/osx-qa/Tiger.classic).Path
-          python -c "import subprocess,sys; subprocess.run(sys.argv[1:], timeout=250, check=True); print('Portable EXE completed Tiger guest qualification.',flush=True)" $exe --qualify-osx $folder
+          set -e
+          python3 osx/tests/fetch_tiger_fixture.py output/osx-qa/Tiger.classic \
+            --qemu-img output/desktop/runtime/bin/qemu-img.exe \
+            --seven-zip "$(cygpath -w '/c/Program Files/7-Zip/7z.exe')"
+          QT_QPA_PLATFORM=windows output/desktop/packages/ClassicMac-4.7.0-windows-x64.exe \
+            --qualify-osx "$(cygpath -w "$PWD/output/osx-qa/Tiger.classic")"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ClassicMac-Windows-app
+          path: |
+            output/desktop/packages/*.exe
+            output/native-pixels/*.json
+            output/desktop/radeon-cursor/result.json
+          retention-days: 30

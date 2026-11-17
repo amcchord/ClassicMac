@@ -8,7 +8,6 @@ import hashlib
 import json
 from pathlib import Path
 import subprocess
-import sys
 import uuid
 
 
@@ -21,8 +20,10 @@ def main():
     folder = args.folder.resolve()
     folder.mkdir(parents=True, exist_ok=False)
     archive = folder / "tiger.7z"
-    subprocess.run([sys.executable, str(Path(__file__).with_name("fetch_ranges.py")), str(archive)], check=True)
-    print("Checking the Tiger fixture archive.", flush=True)
+    url = ("https://archive.org/download/mac-osx-tiger-10.4-ppc-installed-qcow2-image/"
+           "osx-tiger_10.4.11_installed.qcow2.7z")
+    subprocess.run(["curl", "-fLsS", "--retry", "2", "--max-time", "1200",
+                    "-o", str(archive), url], check=True)
     with archive.open("rb") as stream:
         digest = hashlib.file_digest(stream, "sha256").hexdigest()
     if digest != "cb37f45254a12542314593267e8215416a74b6d68eb37b642840d9c665e98bf1":
@@ -31,7 +32,6 @@ def main():
     subprocess.run([args.seven_zip, "e", "-y", "-o" + str(folder), str(archive), image],
                    check=True)
     archive.unlink()
-    print("Converting the disposable disk.", flush=True)
     subprocess.run([str(args.qemu_img.resolve()), "convert", "-f", "qcow2", "-O", "raw",
                     str(folder / image), str(folder / "disk.img")], check=True)
     (folder / image).unlink()
