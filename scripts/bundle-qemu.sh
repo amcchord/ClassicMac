@@ -43,8 +43,8 @@ BUNDLE_STAGE_DIR=""
 BUNDLE_PREVIOUS_APP=""
 BUNDLE_LOCK_HELD=0
 
-APP_VERSION="${APP_VERSION:-4.6.4}"
-APP_BUILD_VERSION="${APP_BUILD_VERSION:-4.6.4}"
+APP_VERSION="${APP_VERSION:-4.7.0}"
+APP_BUILD_VERSION="${APP_BUILD_VERSION:-4.7.0}"
 BUNDLE_ID="com.classicmac.emulator"
 
 log() { printf '\n==> %s\n' "$*"; }
@@ -116,12 +116,16 @@ HELPERS_DIR="$CONTENTS/Helpers"
 # "Power Mac G4" with a proper icon, not as a bare qemu-system executable.
 QUADRA_APP="$HELPERS_DIR/Quadra 800.app"
 PPC_APP="$HELPERS_DIR/Power Mac G4.app"
+OSX_APP="$HELPERS_DIR/Power Mac G4 for OS X.app"
+OSX_ENGINE="$VENDOR_DIR/qemu-osx/build/qemu-system-ppc"
+OSX_FIRMWARE="$ROOT_DIR/osx/firmware"
 COPLAND_APP="$HELPERS_DIR/Power Mac 7500.app"
 COPLAND_BIN="$VENDOR_DIR/dingusppc/build/bin/dingusppc.app/Contents/MacOS/dingusppc"
 
 # ---------------------------------------------------------------------------
 # 0. Preconditions
 # ---------------------------------------------------------------------------
+[ -x "$OSX_ENGINE" ] || die "Mac OS X engine missing. Run scripts/build-osx-qemu.sh first."
 [ -x "$COPLAND_BIN" ] || die "Copland engine missing. Run scripts/build-copland.sh first."
 [ -x "$QEMU_BUILD_DIR/qemu-system-m68k" ] || die "qemu-system-m68k not found. Run scripts/build-qemu.sh first."
 [ -x "$QEMU_BUILD_DIR/qemu-system-ppc" ] || die "qemu-system-ppc not found. Run scripts/build-qemu.sh first."
@@ -172,6 +176,15 @@ log "Assembling staged app at $APP"
 mkdir -p "$MACOS_DIR" "$QEMU_DEST" "$PCBIOS_DEST"
 mkdir -p "$QUADRA_APP/Contents/MacOS" "$QUADRA_APP/Contents/Frameworks" "$QUADRA_APP/Contents/Resources"
 mkdir -p "$PPC_APP/Contents/MacOS" "$PPC_APP/Contents/Frameworks" "$PPC_APP/Contents/Resources"
+
+mkdir -p "$OSX_APP/Contents/MacOS" "$OSX_APP/Contents/Frameworks" "$OSX_APP/Contents/Resources"
+cp "$OSX_ENGINE" "$OSX_APP/Contents/MacOS/"
+cp "$ROOT_DIR/Resources/MachineIcon.icns" "$OSX_APP/Contents/Resources/MachineIcon.icns"
+mkdir -p "$RES_DIR/qemu-osx"
+for file in openbios-ppc-osx macosx-flash-seed.img qemu_vga.ndrv; do
+  cp "$OSX_FIRMWARE/$file" "$RES_DIR/qemu-osx/"
+done
+cp -R "$VENDOR_DIR/qemu-osx/pc-bios/keymaps" "$RES_DIR/qemu-osx/keymaps"
 
 mkdir -p "$COPLAND_APP/Contents/MacOS" "$COPLAND_APP/Contents/Resources" "$COPLAND_APP/Contents/Frameworks"
 cp "$COPLAND_BIN" "$COPLAND_APP/Contents/MacOS/dingusppc"
@@ -429,6 +442,7 @@ PLIST
 
 write_helper_plist "$QUADRA_APP" "Quadra 800" "com.classicmac.machine.quadra800" "qemu-system-m68k"
 write_helper_plist "$PPC_APP" "Power Mac G4" "com.classicmac.machine.powermacg4" "qemu-system-ppc"
+write_helper_plist "$OSX_APP" "Power Mac G4 for OS X" "com.classicmac.machine.powermacosx" "qemu-system-ppc"
 write_helper_plist "$COPLAND_APP" "Power Mac 7500" "com.classicmac.machine.powermac7500" "dingusppc"
 
 # ---------------------------------------------------------------------------
@@ -444,11 +458,13 @@ dylibbundler -of -b \
   -p "@executable_path/../Frameworks" \
   -s "$(brew --prefix)/lib"
 
-dylibbundler -of -b \
-  -x "$PPC_APP/Contents/MacOS/qemu-system-ppc" \
-  -d "$PPC_APP/Contents/Frameworks" \
-  -p "@executable_path/../Frameworks" \
-  -s "$(brew --prefix)/lib"
+for helper in "$PPC_APP" "$OSX_APP"; do
+  dylibbundler -of -b \
+    -x "$helper/Contents/MacOS/qemu-system-ppc" \
+    -d "$helper/Contents/Frameworks" \
+    -p "@executable_path/../Frameworks" \
+    -s "$(brew --prefix)/lib"
+done
 
 # dylibbundler rewrites every pre-existing LC_RPATH to the same value, which
 # leaves duplicate LC_RPATH entries that modern dyld refuses to load. Collapse
@@ -470,12 +486,13 @@ log "Collapsing duplicate rpaths"
 dedupe_rpaths "$QUADRA_APP/Contents/MacOS/qemu-system-m68k"
 dedupe_rpaths "$QUADRA_APP/Contents/MacOS/qemu-img"
 dedupe_rpaths "$PPC_APP/Contents/MacOS/qemu-system-ppc"
+dedupe_rpaths "$OSX_APP/Contents/MacOS/qemu-system-ppc"
 
 # A newer host's Homebrew libraries may require a newer OS than ClassicMac.
 # Replace them with verified, same-version official Sequoia bottles instead
 # of changing Mach-O minimum-version headers or dropping macOS 15 support.
 log "Staging verified macOS 15 runtime libraries"
-for helper in "$QUADRA_APP" "$PPC_APP"; do
+for helper in "$QUADRA_APP" "$PPC_APP" "$OSX_APP"; do
   python3 "$ROOT_DIR/scripts/bundle-release-libraries.py" \
     --frameworks "$helper/Contents/Frameworks" \
     --cache "$ROOT_DIR/vendor/release-libraries"
@@ -509,7 +526,7 @@ else
   log "Code signing (identity: $SIGN_IDENTITY)"
 fi
 
-find "$QUADRA_APP/Contents/Frameworks" "$PPC_APP/Contents/Frameworks" -name '*.dylib' -print0 | while IFS= read -r -d '' lib; do
+find "$QUADRA_APP/Contents/Frameworks" "$PPC_APP/Contents/Frameworks" "$OSX_APP/Contents/Frameworks" -name '*.dylib' -print0 | while IFS= read -r -d '' lib; do
   codesign --force --sign "$SIGN_IDENTITY" "$TIMESTAMP_FLAG" "$lib"
 done
 
@@ -532,6 +549,8 @@ codesign --force --sign "$SIGN_IDENTITY" "$TIMESTAMP_FLAG" \
   --options runtime --entitlements "$ENTITLEMENTS" \
   "$PPC_APP"
 
+codesign --force --sign "$SIGN_IDENTITY" "$TIMESTAMP_FLAG" \
+  --options runtime --entitlements "$ENTITLEMENTS" "$OSX_APP"
 codesign --force --sign "$SIGN_IDENTITY" "$TIMESTAMP_FLAG" --options runtime "$COPLAND_APP"
 codesign --force --sign "$SIGN_IDENTITY" "$TIMESTAMP_FLAG" --options runtime "$MACOS_DIR/ClassicMac"
 

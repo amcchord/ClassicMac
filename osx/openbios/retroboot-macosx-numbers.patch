@@ -1,0 +1,31 @@
+diff --git a/forth/admin/nvram.fs b/forth/admin/nvram.fs
+index 3fbd935..d788d62 100644
+--- a/forth/admin/nvram.fs
++++ b/forth/admin/nvram.fs
+@@ -103,8 +103,15 @@ constant config-info.size
+ \ ------------------------------------------------------------
+
+ : exec-int-conf ( str len -- value )
+-  \ fixme
+-  parse-hex
++  \ Native OS X writes decimal small values and 0x-prefixed hex values.
++  dup 2 >= if
++    over c@ [char] 0 = if
++      over 1+ c@ upc [char] X = if
++        2 /string parse-hex exit
++      then
++    then
++  then
++  base @ >r decimal $number if 0 then r> base !
+ ;
+ : check-int-conf ( str len -- str len valid? )
+   true
+@@ -333,7 +340,7 @@ s" false"    s" little-endian?"       bool-config
+ s" false"    s" real-mode?"           bool-config
+ s" -1"       s" real-base"            int-config
+ s" -1"       s" real-size"            int-config
+-s" 4000000"  s" load-base"          int-config
++s" 0x4000000" s" load-base"          int-config
+ s" -1"       s" virt-base"            int-config
+ s" -1"       s" virt-size"            int-config
+ s" true"     s" vga-ndrv?"            bool-config

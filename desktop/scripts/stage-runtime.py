@@ -15,17 +15,22 @@ binary = out / 'bin'
 binary.mkdir(parents=True, exist_ok=True)
 mingw = Path(sys.executable).resolve().parents[1]
 seen = set()
-def stage(file):
-    key = file.name.lower()
+def stage(file, name=None):
+    name = name or file.name
+    key = name.lower()
     if key in seen: return
     seen.add(key)
-    shutil.copyfile(file, binary / file.name)
+    shutil.copyfile(file, binary / name)
     imports = subprocess.check_output(['objdump', '-p', str(file)], text=True)
     for dll in re.findall(r'DLL Name:\s*(\S+)', imports):
         candidate = mingw / 'bin' / dll
         if candidate.is_file(): stage(candidate)
 for name in ('qemu-system-m68k.exe', 'qemu-system-ppc.exe', 'qemu-img.exe'):
     stage(build / name)
+osx = root / 'vendor/qemu-osx'
+stage(osx / 'build/qemu-system-ppc.exe', 'qemu-system-ppc-osx.exe')
+shutil.copytree(root / 'osx/firmware', out / 'qemu-osx', dirs_exist_ok=True)
+shutil.copytree(osx / 'pc-bios/keymaps', out / 'qemu-osx/keymaps', dirs_exist_ok=True)
 firmware = out / 'qemu/pc-bios'
 firmware.mkdir(parents=True, exist_ok=True)
 for name in ('mac_qfb.rom', 'openbios-ppc', 'vgabios-stdvga.bin', 'qemu_vga.ndrv'):

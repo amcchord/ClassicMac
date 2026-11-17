@@ -1,0 +1,43 @@
+diff --git a/arch/ppc/qemu/init.c b/arch/ppc/qemu/init.c
+index cce3bcf..e923357 100644
+--- a/arch/ppc/qemu/init.c
++++ b/arch/ppc/qemu/init.c
+@@ -954,12 +954,12 @@ arch_of_init(void)
+
+         /* model */
+
+-        push_str("iMac,1");
++        push_str("PowerMac3,1");
+         fword("model");
+
+         /* compatible */
+
+-        push_str("iMac,1");
++        push_str("PowerMac3,1");
+         fword("encode-string");
+         push_str("MacRISC");
+         fword("encode-string");
+@@ -1025,19 +1025,10 @@ arch_of_init(void)
+         if (!(ph = find_dev("/rtas"))) {
+             printk("Warning: No /rtas node\n");
+         } else {
+-            unsigned long size = 0x1000;
+-            while (size < (unsigned long)of_rtas_end - (unsigned long)of_rtas_start)
+-                size *= 2;
+-            set_property(ph, "rtas-size", (char*)&size, sizeof(size));
+-            set_int_property(ph, "rtas-version", is_apple() ? 0x41 : 1);
+-            set_int_property(ph, "nvram-fetch", 1);
+-            set_int_property(ph, "nvram-store", 2);
+-            set_int_property(ph, "get-time-of-day", 3);
+-            set_int_property(ph, "set-time-of-day", 4);
+-            set_int_property(ph, "read-pci-config", 8);
+-            set_int_property(ph, "write-pci-config", 9);
+-            set_int_property(ph, "power-off", 17);
+-            set_int_property(ph, "system-reboot", 20);
++            /* OS X uses native platform drivers, as with upstream OpenBIOS.
++             * The classic RTAS glue only acknowledges NVRAM transfers. */
++            PUSH(ph);
++            fword("delete-device");
+         }
+         break;
+     }

@@ -1,0 +1,33 @@
+diff --git a/ppcvid/driver/src/QemuEdid.c b/ppcvid/driver/src/QemuEdid.c
+index f49a0bf..bd36b3a 100644
+--- a/ppcvid/driver/src/QemuEdid.c
++++ b/ppcvid/driver/src/QemuEdid.c
+@@ -384,6 +384,28 @@ static void ParseEdid(UInt8 *edid)
+         }
+     }
+     
++    /* Base-block detailed timings include widescreen modes such as
++       1280x800, which have no established-timing bit. Keep the mode records
++       for the driver's lifetime because the list stores their pointers. */
++    {
++        static struct _vMode detailedModes[4];
++        for (i = 0; i < 4; i++) {
++            UInt8 *timing = edid + 54 + 18 * i;
++            UInt32 width, height;
++            if (timing[0] == 0 && timing[1] == 0)
++                continue; /* Monitor descriptor, not a pixel timing. */
++            width = timing[2] | ((UInt32)(timing[4] & 0xf0) << 4);
++            height = timing[5] | ((UInt32)(timing[7] & 0xf0) << 4);
++            if (width < 320 || height < 200 || width > 4096 ||
++                height > 4096 || (width & 7) != 0 ||
++                width * height * 4 > GLOBAL.boardFBMappedSize)
++                continue;
++            detailedModes[i].width = width;
++            detailedModes[i].height = height;
++            addVModeToList(&detailedModes[i]);
++        }
++    }
++
+     /* Extended standard modes */
+     lprintf("Extended standard modes: \n");
+     d = i = 54;

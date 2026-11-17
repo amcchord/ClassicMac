@@ -1,0 +1,37 @@
+OpenBIOS (not QEMU) patch: the screamer/AWACS "sound-objects" property keeps
+the last entry's NUL and the empty string that ends the list.
+
+Applies with `patch -p1` to OpenBIOS e1e703ac (upstream "macio: add
+awacs/screamer device") with or without ClassicMac's
+powermac/openbios-classic-macos-8.patch and RetroBoot's
+emulator/openbios/retroboot-airport-radio.patch (wave3/airport).  The
+property grows from 0x3e4 to 0x3e6 bytes; nothing else in the device tree
+changes.  Mac OS 9's Apple Audio Extension parses the property up to an empty
+entry: with 0x3e4 it read on into stale heap bytes and, when no space byte
+came within 264 bytes, overran a stack buffer and returned to 0x1000
+("Sorry, a system error occurred. 'Apple Audio Extension' illegal
+instruction").  See emulator/reports/restart-crash-20261011.md.
+
+--- a/drivers/macio.c
++++ b/drivers/macio.c
+@@ -238,6 +238,11 @@
+             set_int_property(dnode, "name-id", 0xffffbf4d);
+             set_property(dnode, "default-monitor", "none", 5);
+     
++            /* Mac OS 9 reads these NUL-terminated entries up to an empty
++             * one: keep the last entry's NUL and the empty string that
++             * ends the list.  With 0x3e4 (both cut off) the Apple Audio
++             * Extension parsed stale heap bytes past the copied property
++             * and overran a stack buffer ("illegal instruction"). */
+             set_property(dnode, "sound-objects",
+                                 "init operation 2 param 00000001 param-size 4\0"
+                                 "feature index 0 model Proj7PowerControl\0"
+@@ -256,7 +261,7 @@
+                                 "output device-mask 2 device-match 0 icon-id -16563 index 0 name-id -20525 "
+                                 "port-connection 2 port-type 0x6973706B model OutputPort\0"
+                                 "output device-mask 2 device-match 2 icon-id -16563 index 1 name-id -20524 "
+-                                "port-connection 1 port-type 0x6864706E model OutputPort\0", 0x3e4);
++                                "port-connection 1 port-type 0x6864706E model OutputPort\0", 0x3e6);
+         }
+ 
+         fword("finish-device");

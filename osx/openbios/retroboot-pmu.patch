@@ -1,0 +1,127 @@
+diff --git a/drivers/pmu.c b/drivers/pmu.c
+index f74a30b..a24c8aa 100644
+--- a/drivers/pmu.c
++++ b/drivers/pmu.c
+@@ -20,6 +20,7 @@
+ #include "libc/byteorder.h"
+ #include "libc/vsprintf.h"
+ 
++#include "arch/common/fw_cfg.h"
+ #include "macio.h"
+ #include "pmu.h"
+ 
+@@ -337,6 +338,11 @@ static int pmu_adb_req(void *host, const uint8_t *snd_buf, int len,
+     PMU_DPRINTF("pmu_resp=%d int=0x%02x\n", olen, buffer[0]);
+     if (olen <= 2) {
+         return 0;
++    } else if (buffer[1] == snd_buf[0]) {
++        /* RetroBoot QEMU (as a real PMU and Mac OS expect): interrupt
++         * flags, the ADB command byte, then the register data */
++        pos = &buffer[2];
++        olen -= 2;
+     } else {
+         pos = &buffer[3];
+         olen -= 3;
+@@ -527,6 +533,27 @@ static void rtc_init(char *path)
+     set_property(aliases, "rtc", buf, strlen(buf) + 1);
+ }
+ 
++#define RETROBOOT_BATTERY_FW_CFG "etc/retroboot/battery"
++
++static int pmu_retroboot_battery_present(void)
++{
++    uint16_t select;
++    uint32_t size;
++
++    /* No static state (see macio_retroboot_airport_present) */
++    return fw_cfg_find_file(RETROBOOT_BATTERY_FW_CFG, &select, &size) != 0;
++}
++
++#define RETROBOOT_BACKLIGHT_FW_CFG "etc/retroboot/backlight"
++
++static int pmu_retroboot_backlight_present(void)
++{
++    uint16_t select;
++    uint32_t size;
++
++    return fw_cfg_find_file(RETROBOOT_BACKLIGHT_FW_CFG, &select, &size) != 0;
++}
++
+ static void powermgt_init(char *path)
+ {
+     phandle_t ph;
+@@ -559,7 +586,7 @@ static void powermgt_init(char *path)
+      * the MacMini (PowerMac10,1) do not have this property, however
+      * MacOS 9 seems to require it (it hangs during boot otherwise).
+      */
+-    const char prim[] = { 0x00, 0x00, 0x00, 0xff,
++    char prim[] = { 0x00, 0x00, 0x00, 0xff,
+                           0x00, 0x00, 0x00, 0x2c,
+                           0x00, 0x03, 0x0d, 0x40,
+                           /* Public PM features */
+@@ -584,6 +611,25 @@ static void powermgt_init(char *path)
+                           0x46, 0x00, 0x02, 0x78,
+                           0x78, 0x3c, 0x00 };
+ 
++    /* RetroBoot: a PowerBook's battery bay when QEMU emulates the battery
++     * (-global via-pmu.battery=on publishes etc/retroboot/battery): one
++     * battery, so Mac OS's PowerMgrPlugin queries the smart battery and
++     * shows it, and no "open case prevents sleep" (a desktop's case switch:
++     * QEMU's PMU puts the processor to sleep and wakes it, see its pmu.c). */
++    if (pmu_retroboot_battery_present()) {
++        prim[25] = 0x01;
++        prim[18] &= ~0x20;
++    }
++
++    /* RetroBoot: a PowerBook's display backlight and keyboard buttons
++     * (-global via-pmu.backlight=on publishes etc/retroboot/backlight):
++     * private feature 0x00000200, without which Mac OS's PowerBook button
++     * driver (ADB address 7, handler 0x1f) leaves the brightness, volume and
++     * mute keys alone; see backlight_init for the backlight itself. */
++    if (pmu_retroboot_backlight_present()) {
++        prim[18] |= 0x02;
++    }
++
+     ph = get_cur_dev();
+     BIND_NODE_METHODS(ph, rtc);
+ 
+@@ -592,6 +638,28 @@ static void powermgt_init(char *path)
+     fword("finish-device");
+ }
+ 
++/* RetroBoot: the PMU-controlled display backlight of a PowerBook, a sibling
++ * of via-pmu as on Apple's machines.  Mac OS's backlight driver matches the
++ * node and, for backlight-control "pmu", sets the level with PMU commands
++ * that QEMU passes to the host (hw/misc/macio/pmu.c "Backlight"). */
++static void backlight_init(void)
++{
++    fword("new-device");
++
++    push_str("backlight");
++    fword("device-name");
++
++    push_str("backlight");
++    fword("device-type");
++
++    push_str("pmu");
++    fword("encode-string");
++    push_str("backlight-control");
++    fword("property");
++
++    fword("finish-device");
++}
++
+ pmu_t *pmu_init(const char *path, phys_addr_t base)
+ {
+     pmu_t *pmu;
+@@ -672,6 +740,10 @@ pmu_t *pmu_init(const char *path, phys_addr_t base)
+ 
+     fword("finish-device");
+ 
++    if (pmu_retroboot_backlight_present()) {
++        backlight_init();
++    }
++
+     bind_func("pmu-power-off", pmu_poweroff);
+     feval("['] pmu-power-off to power-off");
+     bind_func("pmu-reset-all", pmu_reset_all);

@@ -18,7 +18,7 @@ jobs:
           path: |
             output/desktop/runtime
             output/desktop/ClassicMac-Linux-QEMU-source.tar.gz
-          key: linux-engine-${{ hashFiles('ati/*.c', 'ati/*.h', '**/*.patch','qfb/*','screamer/*','shared/*','ppcvid/qemu_vga.ndrv','scripts/build-qemu.sh','desktop/scripts/build-linux.sh','desktop/scripts/stage-linux.py','.github/workflows/linux.yml') }}
+          key: linux-engine-${{ hashFiles('ati/*.c', 'ati/*.h', '**/*.patch','osx/**','scripts/build-osx-qemu.sh','qfb/*','screamer/*','shared/*','ppcvid/qemu_vga.ndrv','scripts/build-qemu.sh','desktop/scripts/build-linux.sh','desktop/scripts/stage-linux.py','.github/workflows/linux.yml') }}
       - name: Install build and desktop dependencies
         run: |
           sudo apt-get update
@@ -27,7 +27,7 @@ jobs:
         if: steps.engine.outputs.cache-hit != 'true'
         run: |
           QEMU_REPO=https://github.com/qemu/qemu.git desktop/scripts/build-linux.sh
-          tar --exclude=.git --exclude=build --exclude=build-linux -czf output/desktop/ClassicMac-Linux-QEMU-source.tar.gz -C vendor qemu
+          tar --exclude=.git --exclude=build --exclude=build-linux -czf output/desktop/ClassicMac-Linux-QEMU-source.tar.gz -C vendor qemu qemu-osx
       - name: Include qualified Tools CD
         if: steps.engine.outputs.cache-hit != 'true'
         env:
@@ -46,6 +46,8 @@ jobs:
           key: ${{ steps.engine.outputs.cache-primary-key }}
       - name: Check Linux display devices
         run: python3 ati/tests/test_qemu_ati.py --gl-api gles --gl-optional output/desktop/runtime/bin/qemu-system-ppc output/desktop/runtime/qemu/pc-bios
+      - name: Check Mac OS X flash persistence
+        run: python3 osx/tests/qtest_macosx_flash.py --qemu output/desktop/runtime/bin/qemu-system-ppc-osx --firmware output/desktop/runtime/qemu-osx --seed-file output/desktop/runtime/qemu-osx/macosx-flash-seed.img
       - name: Check Radeon cursor pixels and clipping
         run: python3 ati/tests/test_radeon_cursor.py --qemu output/desktop/runtime/bin/qemu-system-ppc --support output/desktop/runtime/qemu/pc-bios --output output/desktop/radeon-cursor
       - name: Check Quadra shared display pixels

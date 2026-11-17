@@ -43,3 +43,6 @@ tmp/
 
 # Windows desktop dependencies
 node_modules/
+
+# Original, reproducible Core99 flash template.
+!osx/firmware/macosx-flash-seed.img

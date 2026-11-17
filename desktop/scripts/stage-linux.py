@@ -14,10 +14,15 @@ def stage_libs(file):
   path=Path(m[1]);name=path.name
   if name in seen or name.startswith(excluded):continue
   seen.add(name);shutil.copyfile(path,lib_dir/name);stage_libs(path)
-for name in ['qemu-system-m68k','qemu-system-ppc','qemu-img']:
- target=bin_dir/name;shutil.copyfile(build/name,target);target.chmod(0o755)
+osx=root/'vendor/qemu-osx'
+engines={name:build/name for name in ['qemu-system-m68k','qemu-system-ppc','qemu-img']}
+engines['qemu-system-ppc-osx']=osx/'build/qemu-system-ppc'
+for name,source in engines.items():
+ target=bin_dir/name;shutil.copyfile(source,target);target.chmod(0o755)
  subprocess.check_call(['patchelf','--set-rpath','$ORIGIN/../lib',str(target)])
- stage_libs(build/name)
+ stage_libs(source)
+shutil.copytree(root/'osx/firmware',out/'qemu-osx',dirs_exist_ok=True)
+shutil.copytree(osx/'pc-bios/keymaps',out/'qemu-osx/keymaps',dirs_exist_ok=True)
 for path in lib_dir.iterdir():subprocess.check_call(['patchelf','--set-rpath','$ORIGIN',str(path)])
 firmware=out/'qemu/pc-bios';firmware.mkdir(parents=True,exist_ok=True)
 for name in ['mac_qfb.rom','openbios-ppc','vgabios-stdvga.bin','qemu_vga.ndrv']:shutil.copyfile(root/'vendor/qemu/pc-bios'/name,firmware/name)

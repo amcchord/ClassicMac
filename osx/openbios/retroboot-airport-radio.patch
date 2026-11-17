@@ -1,0 +1,109 @@
+diff --git a/drivers/macio.c b/drivers/macio.c
+index 8e26f76..07c513b 100644
+--- a/drivers/macio.c
++++ b/drivers/macio.c
+@@ -21,6 +21,7 @@
+ #include "pmu.h"
+ #include "escc.h"
+ #include "drivers/pci.h"
++#include "arch/common/fw_cfg.h"
+ 
+ #define OW_IO_NVRAM_SIZE   0x00020000
+ #define OW_IO_NVRAM_OFFSET 0x00060000
+@@ -511,6 +512,58 @@ ob_macio_heathrow_init(const char *path, phys_addr_t addr)
+     set_property(aliases, "mac-io", path, strlen(path) + 1);
+ }
+ 
++/*
++ * RetroBoot AirPort card node.  QEMU publishes the fw_cfg file
++ * "etc/retroboot/airport" only when the machine has the emulated card
++ * (-global macio-newworld.airport=true); without it nothing below runs and
++ * the device tree is exactly the one this firmware built before the patch.
++ *
++ * Apple's original Mac OS 9 "AirPort Driver" matches the node name "radio",
++ * rejects nodes carrying "SocketNumber", and uses Name Registry
++ * "AAPL,address" entry 0 as the Hermes register window and entry 1 as PC
++ * Card attribute memory (CIS, COR at +0x3e0).  The Mac OS ROM derives
++ * "AAPL,address" from the two "reg" entries.  Offsets follow the public
++ * Linux/NetBSD power-up sequence; the interrupt number matches QEMU's
++ * NEWWORLD_AIRPORT_IRQ.
++ */
++#define RETROBOOT_AIRPORT_FW_CFG "etc/retroboot/airport"
++
++int
++macio_retroboot_airport_present(void)
++{
++    uint16_t select;
++    uint32_t size;
++
++    /* No static state: the firmware data/bss layout (and with it every
++     * phandle in the tree) stays exactly as in the unpatched build. */
++    return fw_cfg_find_file(RETROBOOT_AIRPORT_FW_CFG, &select, &size) != 0;
++}
++
++static void
++retroboot_radio_init(const char *path, phys_addr_t addr)
++{
++    phandle_t node;
++    uint32_t props[4];
++    char buf[256];
++
++    fword("new-device");
++    push_str("radio");
++    fword("device-name");
++    snprintf(buf, sizeof(buf), "%s/radio", path);
++    node = find_dev(buf);
++    set_property(node, "built-in", "", 0);
++    props[0] = __cpu_to_be32(0x30000);
++    props[1] = __cpu_to_be32(0x1000);
++    props[2] = __cpu_to_be32(0x1a000);
++    props[3] = __cpu_to_be32(0x1000);
++    set_property(node, "reg", (char *)props, sizeof(props));
++    props[0] = __cpu_to_be32(0x39);
++    props[1] = __cpu_to_be32(1);
++    set_property(node, "interrupts", (char *)props, 2 * sizeof(props[0]));
++
++    fword("finish-device");
++}
++
+ void
+ ob_macio_keylargo_init(const char *path, phys_addr_t addr)
+ {
+@@ -528,6 +581,9 @@ ob_macio_keylargo_init(const char *path, phys_addr_t addr)
+     escc_init(path, addr);
+     macio_ide_init(path, addr, 2);
+     openpic_init(path, addr);
++    if (macio_retroboot_airport_present()) {
++        retroboot_radio_init(path, addr);
++    }
+     davbus_init(path, addr);
+ 
+     aliases = find_dev("/aliases");
+diff --git a/drivers/macio.h b/drivers/macio.h
+index 36cc4bf..5e928aa 100644
+--- a/drivers/macio.h
++++ b/drivers/macio.h
+@@ -2,3 +2,4 @@ extern phandle_t pic_handle;
+ 
+ void ob_macio_heathrow_init(const char *path, phys_addr_t addr);
+ void ob_macio_keylargo_init(const char *path, phys_addr_t addr);
++int macio_retroboot_airport_present(void);
+diff --git a/drivers/pci.c b/drivers/pci.c
+index c7ae0aa..c9c5608 100644
+--- a/drivers/pci.c
++++ b/drivers/pci.c
+@@ -1943,6 +1943,14 @@ static phandle_t ob_pci_host_set_interrupt_map(phandle_t host)
+         target_node = find_dev(buf);
+         set_int_property(target_node, "interrupt-parent", dnode);
+ 
++        if (macio_retroboot_airport_present()) {
++            snprintf(buf, sizeof(buf), "%s/mac-io/radio", path);
++            target_node = find_dev(buf);
++            if (target_node) {
++                set_int_property(target_node, "interrupt-parent", dnode);
++            }
++        }
++
+         /* QEMU only emulates 2 of the 3 ata buses currently */
+         /* On a new world Mac these are not numbered but named by the
+          * ATA version they support. Thus we have: ata-3, ata-3, ata-4

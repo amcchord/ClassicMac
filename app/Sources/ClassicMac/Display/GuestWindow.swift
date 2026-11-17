@@ -142,7 +142,7 @@ final class GuestWindows {
     private func followsWindow(_ id: UUID) -> Bool {
         guard let config = VMStore.shared.vms.first(where: { $0.id == id }) else { return false }
         switch config.machineFamily {
-        case .powerMacG4: return true
+        case .powerMacG4, .powerMacOSX: return true
         case .quadra800: return config.useEnhancedFramebuffer
         case .powerMac7500: return false
         }

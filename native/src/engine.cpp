@@ -64,6 +64,14 @@ void Engine::start() {
     Model::machineFile(machine.folder,
                        machine.config["pramImageName"].toString());
   }
+  if (machine.family() == "powerMacOSX") {
+    const auto flash = machine.folder + "/nvram.img";
+    if (!QFileInfo::exists(flash) &&
+        !QFile::copy(Model::runtime() + "/qemu-osx/macosx-flash-seed.img", flash))
+      fail("Cannot prepare Mac OS X startup memory.");
+    if (QFileInfo(Model::machineFile(machine.folder, "nvram.img")).size() != 16384)
+      fail("Mac OS X startup memory must be a 16 KB file named nvram.img.");
+  }
   for (auto key : {"cdImagePath", "floppyImagePath"})
     if (!machine.config[key].toString().isEmpty() &&
         !QFileInfo(machine.config[key].toString()).isFile())
@@ -83,9 +91,10 @@ void Engine::start() {
     reason.clear();
     stopping = restarting = forced = false;
     auto args = Model::argumentsFor(machine, port, audioUnavailable);
-    process.setProgram(Model::binary(machine.family() == "quadra800"
-                                         ? "qemu-system-m68k"
-                                         : "qemu-system-ppc"));
+    auto executable = machine.family() == "quadra800" ? "qemu-system-m68k"
+                      : machine.family() == "powerMacOSX" ? "qemu-system-ppc-osx"
+                                                         : "qemu-system-ppc";
+    process.setProgram(Model::binary(executable));
     process.setArguments(args);
     process.setWorkingDirectory(Model::runtime() + "/bin");
 #ifdef Q_OS_WIN

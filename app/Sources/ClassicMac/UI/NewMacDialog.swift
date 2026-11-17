@@ -34,6 +34,7 @@ struct NewMacDialog: View {
                     Text("Model:").platinumText(.emphasis).gridColumnAlignment(.trailing)
                     PlatinumPopUp(selection: familyBinding, options: [
                         (MachineFamily.powerMacG4, "Power Mac G4 — Mac OS 8.5 to 9.2.2"),
+                        (MachineFamily.powerMacOSX, "Power Mac G4 — Mac OS X"),
                         (MachineFamily.quadra800, "Quadra 800 — System 7.1 to Mac OS 8.1"),
                     ], width: 300)
                 }

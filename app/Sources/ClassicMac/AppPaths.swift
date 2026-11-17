@@ -31,6 +31,7 @@ enum AppPaths {
         switch family {
         case .quadra800: return "Quadra 800"
         case .powerMacG4: return "Power Mac G4"
+        case .powerMacOSX: return "Power Mac G4 for OS X"
         case .powerMac7500: return "Power Mac 7500"
         }
     }
@@ -63,6 +64,9 @@ enum AppPaths {
         switch family {
         case .quadra800: return qemuSystemBinary
         case .powerMacG4: return qemuSystemPPCBinary
+        case .powerMacOSX:
+            return helperBinary(app: helperAppName(for: family), binary: "qemu-system-ppc") ??
+                developmentRepoRoot.appendingPathComponent("vendor/qemu-osx/build/qemu-system-ppc")
         case .powerMac7500:
             return helperBinary(app: "Power Mac 7500", binary: "dingusppc") ??
                 developmentRepoRoot.appendingPathComponent("vendor/dingusppc/build/bin/dingusppc.app/Contents/MacOS/dingusppc")
@@ -82,6 +86,14 @@ enum AppPaths {
             return bundled
         }
         return developmentRepoRoot.appendingPathComponent("vendor/qemu/pc-bios")
+    }
+
+    static var osxFirmwareDir: URL {
+        let bundled = resourcesDir.appendingPathComponent("qemu-osx")
+        if FileManager.default.fileExists(atPath: bundled.path) {
+            return bundled
+        }
+        return developmentRepoRoot.appendingPathComponent("osx/firmware")
     }
 
     static var quadraROM: URL {
@@ -235,6 +247,10 @@ enum AppPaths {
         case .powerMac7500: return [] // Its matched ROM travels inside the downloaded machine.
         case .quadra800:
             return [quadraROM, pcBiosDir.appendingPathComponent("mac_qfb.rom")]
+        case .powerMacOSX:
+            return ["openbios-ppc-osx", "macosx-flash-seed.img", "qemu_vga.ndrv"].map {
+                osxFirmwareDir.appendingPathComponent($0)
+            }
         case .powerMacG4:
             return [
                 pcBiosDir.appendingPathComponent("openbios-ppc"),

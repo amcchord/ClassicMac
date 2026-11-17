@@ -14,6 +14,7 @@ cd "$QEMU_DIR/build-windows"
   --disable-guest-agent --disable-werror --disable-debug-info \
   --extra-cflags='-O2 -ffp-contract=off' --extra-ldflags='-lgdi32 -luser32'
 ninja -j 3 qemu-system-m68k.exe qemu-system-ppc.exe qemu-img.exe
+PYTHON_BIN=python3 bash "$ROOT_DIR/scripts/build-osx-qemu.sh"
 python3 "$ROOT_DIR/desktop/scripts/stage-runtime.py" "$PWD" "$ROOT_DIR/output/desktop/runtime"
 "$ROOT_DIR/output/desktop/runtime/bin/qemu-system-ppc.exe" -device ati-vga,help | grep x-gl-renderer
 "$ROOT_DIR/output/desktop/runtime/bin/qemu-system-m68k.exe" -device nubus-qfb,help | grep width

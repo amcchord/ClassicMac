@@ -1,0 +1,148 @@
+diff --git a/drivers/macio.c b/drivers/macio.c
+index e9a5d72..34a777b 100644
+--- a/drivers/macio.c
++++ b/drivers/macio.c
+@@ -42,6 +42,109 @@
+
+ static char *nvram;
+
++/* A gated Core99 flash profile presents two contiguous 8KiB banks. */
++static int retroboot_core99_flash(void)
++{
++    uint16_t select;
++    uint32_t size;
++    return fw_cfg_find_file("etc/retroboot/osx-nvram-flash", &select, &size) != 0;
++}
++
++static uint32_t flash_read_be32(volatile unsigned char *data)
++{
++    return ((uint32_t)data[0] << 24) | ((uint32_t)data[1] << 16) |
++           ((uint32_t)data[2] << 8) | data[3];
++}
++
++static void flash_write_be32(unsigned char *data, uint32_t value)
++{
++    data[0] = value >> 24;
++    data[1] = value >> 16;
++    data[2] = value >> 8;
++    data[3] = value;
++}
++
++static unsigned flash_header_sum(volatile unsigned char *data)
++{
++    unsigned sum = 0, i;
++    for (i = 0; i < 16; i++) {
++        if (i != 1) {
++            sum += data[i];
++            sum = (sum & 255) + (sum >> 8);
++        }
++    }
++    return sum;
++}
++
++static uint32_t flash_adler(volatile unsigned char *data)
++{
++    uint32_t a = 1, b = 0;
++    unsigned i;
++    for (i = 20; i < 8192; i++) {
++        a = (a + data[i]) % 65521;
++        b = (b + a) % 65521;
++    }
++    return (b << 16) | a;
++}
++
++static int flash_bank_valid(volatile unsigned char *data)
++{
++    return data[0] == 0x5a && data[2] == 0 && data[3] == 2 &&
++           data[1] == flash_header_sum(data) &&
++           flash_read_be32(data + 16) == flash_adler(data);
++}
++
++static unsigned flash_current_bank(void)
++{
++    volatile unsigned char *base = (volatile unsigned char *)nvram;
++    int first = flash_bank_valid(base);
++    int second = flash_bank_valid(base + 8192);
++    if (!second || (first && flash_read_be32(base + 20) >
++                             flash_read_be32(base + 8192 + 20))) {
++        return 0;
++    }
++    return 8192;
++}
++
++static int flash_wait(volatile unsigned char *base)
++{
++    unsigned count;
++    for (count = 0; count < 65536; count++) {
++        unsigned status = base[0];
++        if (status & 0x80) {
++            return (status & 0x38) ? -1 : 0;
++        }
++    }
++    return -1;
++}
++
++static void flash_store(unsigned char *data)
++{
++    volatile unsigned char *base = (volatile unsigned char *)nvram;
++    unsigned current = flash_current_bank(), next = current ^ 8192;
++    uint32_t generation = flash_read_be32(base + current + 20) + 1;
++    unsigned i;
++    int failed;
++
++    flash_write_be32(data + 20, generation);
++    data[1] = flash_header_sum(data);
++    flash_write_be32(data + 16, flash_adler(data));
++    base[next] = 0x20;
++    base[next] = 0xd0;
++    failed = flash_wait(base + next);
++    base[next] = 0xff;
++    for (i = 0; !failed && i < 8192; i++) {
++        base[next + i] = 0x40;
++        base[next + i] = data[i];
++        failed = flash_wait(base + next);
++    }
++    base[next] = 0xff;
++    if (failed) {
++        printk("Core99 NVRAM flash write failed; prior bank retained\n");
++    }
++}
++
++
+ static int macio_nvram_shift(void)
+ {
+ 	int nvram_flat;
+@@ -57,6 +160,8 @@ int
+ macio_get_nvram_size(void)
+ {
+ 	int shift = macio_nvram_shift();
++        if (!is_oldworld() && retroboot_core99_flash())
++                return 8192;
+         if (is_oldworld())
+                 return OW_IO_NVRAM_SIZE >> shift;
+         else
+@@ -144,6 +249,10 @@ void
+ macio_nvram_put(char *buf)
+ {
+ 	int i;
++        if (!is_oldworld() && retroboot_core99_flash()) {
++                flash_store((unsigned char *)buf);
++                return;
++        }
+         unsigned int it_shift = macio_nvram_shift();
+
+ 	for (i=0; i < arch_nvram_size(); i++)
+@@ -158,6 +267,13 @@ void
+ macio_nvram_get(char *buf)
+ {
+ 	int i;
++        if (!is_oldworld() && retroboot_core99_flash()) {
++                volatile unsigned char *base = (volatile unsigned char *)nvram;
++                unsigned bank = flash_current_bank();
++                for (i = 0; i < 8192; i++)
++                        buf[i] = base[bank + i];
++                return;
++        }
+         unsigned int it_shift = macio_nvram_shift();
+
+ 	for (i=0; i< arch_nvram_size(); i++)

@@ -1,0 +1,119 @@
+diff --git a/forth/bootstrap/bootstrap.fs b/forth/bootstrap/bootstrap.fs
+index 7b66f5c..f8ba483 100644
+--- a/forth/bootstrap/bootstrap.fs
++++ b/forth/bootstrap/bootstrap.fs
+@@ -913,23 +913,14 @@ variable #out  0 #out  !
+ 
+ \ $find is an fcode word, but we place it here since we use it for find.
+ 
++\ RetroBoot: the walk is native ((find-wordlist), kernel/forth.c); same
++\ result as the Forth loop it replaces (lfa2name + comp-word per entry).
+ : find-wordlist ( name-str name-len last -- xt true | name-str name-len false )
+-
+-  @ >r
+-
+-  begin
+-    2dup r@ dup if comp-word dup false = then
+-  while
+-    r> @ >r drop
+-  repeat
+-
+-  r@ if \ successful?
+-    -rot 2drop r> cell+ swap
+-  else
+-    r> drop drop drop false
+-  then
+-
++  (find-wordlist)
+   ;
++\ Keep the size of the dictionary image (and so the address of everything
++\ created at run time, phandles included) as it was with the Forth loop.
++74 allot  \ 0x74 bytes (the bootstrap reads hex)
+ 
+ : $find ( name-str name-len -- xt true | name-str name-len false )
+   locals-dict 0<> if
+diff --git a/kernel/bootstrap.c b/kernel/bootstrap.c
+index b7658ab..197f6ab 100644
+--- a/kernel/bootstrap.c
++++ b/kernel/bootstrap.c
+@@ -89,7 +89,8 @@ static const char *wordnames[] = {
+ 	"here", "here!", "dobranch", "do?branch", "unaligned-w@",
+ 	"unaligned-w!", "unaligned-l@", "unaligned-l!", "ioc@", "iow@",
+ 	"iol@", "ioc!", "iow!", "iol!", "i", "j", "call", "sys-debug",
+-	"$include", "$encode-file", "(debug", "(debug-off)"
++	"$include", "$encode-file", "(debug", "(debug-off)",
++	"(find-wordlist)"
+ };
+ 
+ /*
+diff --git a/kernel/forth.c b/kernel/forth.c
+index 61dd70d..ce205a6 100644
+--- a/kernel/forth.c
++++ b/kernel/forth.c
+@@ -1857,6 +1857,60 @@ static void loop_j(void)
+  * THE END). ANY OTHER CHANGE WILL BREAK COMPATIBILITY TO OLDER
+  * BINARY DICTIONARIES.
+  */
++/*
++ *  (find-wordlist)  ( name-str name-len last -- xt true | name-str name-len false )
++ *
++ *  RetroBoot: native body of bootstrap.fs find-wordlist. Same walk (the
++ *  link chain from the cell at last), same name decoding as lfa2name
++ *  (skip the status byte and zero padding, length byte & 0x7f) and the
++ *  same case-insensitive compare as comp-nocase (upc folds a-z only).
++ *  The Forth version cost ~20 primitives per dictionary entry, so every
++ *  evaluate, $find and client-interface lookup walked ~1650 words slowly.
++ */
++
++static inline u8 find_upc(u8 c)
++{
++	return (c >= 0x61 && c <= 0x7a) ? c - 0x20 : c;
++}
++
++static void findwordlist(void)
++{
++	ucell wl = POP();
++	ucell len = POP();
++	ucell str = POP();
++	const u8 *s = (const u8 *)cell2pointer(str);
++	ucell lfa = read_ucell(cell2pointer(wl));
++
++	while (lfa) {
++		const u8 *p = (const u8 *)cell2pointer(lfa) - 1;	/* status byte */
++		ucell n;
++
++		do {
++			p--;
++		} while (read_byte(p) == 0);	/* zero padding */
++		n = read_byte(p) & 0x7f;
++		if (n == len) {
++			const u8 *name = p - n;
++			ucell i;
++
++			for (i = 0; i < n; i++) {
++				if (find_upc(read_byte(s + i)) != find_upc(read_byte(name + i))) {
++					break;
++				}
++			}
++			if (i == n) {
++				PUSH(lfa + sizeof(cell));
++				PUSH(-1);
++				return;
++			}
++		}
++		lfa = read_ucell(cell2pointer(lfa));
++	}
++	PUSH(str);
++	PUSH(len);
++	PUSH(0);
++}
++
+ static forth_word * const words[] = {
+     /*
+      * CFAs and special words
+@@ -1963,4 +2017,5 @@ static forth_word * const words[] = {
+     do_encode_file,         /* $encode-file */
+     do_debug_xt,            /* (debug  */
+     do_debug_off,           /* (debug-off) */
++    findwordlist,           /* (find-wordlist) */
+ };

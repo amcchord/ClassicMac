@@ -7,7 +7,7 @@ extension MachineFamily {
     var iconName: String {
         switch self {
         case .quadra800: return "quadra_800"
-        case .powerMacG4: return "powermac_g4"
+        case .powerMacG4, .powerMacOSX: return "powermac_g4"
         case .powerMac7500: return "powermac_7500"
         }
     }

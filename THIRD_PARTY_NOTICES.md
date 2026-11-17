@@ -176,3 +176,12 @@ HTTPS uses the platform Qt TLS backend with normal certificate verification.
 The native desktop packages contain no Electron or Chromium runtime. The
 optional browser display in the macOS edition retains its existing noVNC
 and pako notices above.
+
+### PowerPC Mac OS X engine
+
+ClassicMac includes QEMU 10.0.13 for Mac OS X, under the same QEMU licenses
+described above. The corresponding QEMU 10 engine source is included in
+the platform QEMU source archives. The RetroBoot patch, Windows adapter,
+OpenBIOS source pins/patches and VGA driver build provenance are in
+`osx/` in the matching ClassicMac source. The OS X OpenBIOS firmware is
+GPL-2.0-or-later, with upstream notices retained in its source.

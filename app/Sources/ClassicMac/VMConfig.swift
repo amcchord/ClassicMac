@@ -8,6 +8,8 @@ enum MachineFamily: String, Codable, CaseIterable, Identifiable {
     // PowerPC Power Mac G4 (qemu-system-ppc -M mac99). Mac OS 8.5 - 9.2.2.
     // Boots through OpenBIOS, so no Apple ROM file is needed.
     case powerMacG4
+    // PowerPC Mac OS X uses a dedicated QEMU 10 engine and PMU hardware.
+    case powerMacOSX
     // Copland D11E4 on the DingusPPC Power Mac 7500 engine.
     case powerMac7500
 
@@ -16,7 +18,7 @@ enum MachineFamily: String, Codable, CaseIterable, Identifiable {
     var label: String {
         switch self {
         case .quadra800: return "Quadra 800"
-        case .powerMacG4: return "Power Mac G4"
+        case .powerMacG4, .powerMacOSX: return "Power Mac G4"
         case .powerMac7500: return "Power Mac 7500"
         }
     }
@@ -24,7 +26,7 @@ enum MachineFamily: String, Codable, CaseIterable, Identifiable {
     var cpuLabel: String {
         switch self {
         case .quadra800: return "Motorola 68040"
-        case .powerMacG4: return "PowerPC G4"
+        case .powerMacG4, .powerMacOSX: return "PowerPC G4"
         case .powerMac7500: return "PowerPC 601"
         }
     }
@@ -32,7 +34,7 @@ enum MachineFamily: String, Codable, CaseIterable, Identifiable {
     var hardwareLabel: String {
         switch self {
         case .quadra800: return "Macintosh Quadra 800 - Motorola 68040"
-        case .powerMacG4: return "Power Mac G4 - PowerPC"
+        case .powerMacG4, .powerMacOSX: return "Power Mac G4 - PowerPC"
         case .powerMac7500: return "Power Mac 7500 - PowerPC 601"
         }
     }
@@ -41,6 +43,7 @@ enum MachineFamily: String, Codable, CaseIterable, Identifiable {
         switch self {
         case .quadra800: return "System 7.1 - Mac OS 8.1"
         case .powerMacG4: return "Mac OS 8.5 - 9.2.2"
+        case .powerMacOSX: return "Mac OS X (PowerPC)"
         case .powerMac7500: return "Copland D11E4 (experimental)"
         }
     }
@@ -49,6 +52,7 @@ enum MachineFamily: String, Codable, CaseIterable, Identifiable {
         switch self {
         case .quadra800: return "Mac OS 8.1"
         case .powerMacG4: return "Mac OS 9.2"
+        case .powerMacOSX: return "Mac OS X"
         case .powerMac7500: return "Copland D11E4"
         }
     }
@@ -59,6 +63,7 @@ enum MachineFamily: String, Codable, CaseIterable, Identifiable {
         switch self {
         case .quadra800: return [64, 128, 256, 512, 1000]
         case .powerMacG4: return [128, 256, 512, 768, 896]
+        case .powerMacOSX: return [256, 512, 768, 1024, 1536, 2048]
         case .powerMac7500: return [32]
         }
     }
@@ -67,6 +72,7 @@ enum MachineFamily: String, Codable, CaseIterable, Identifiable {
         switch self {
         case .quadra800: return 128
         case .powerMacG4: return 512
+        case .powerMacOSX: return 1024
         case .powerMac7500: return 32
         }
     }
@@ -74,7 +80,7 @@ enum MachineFamily: String, Codable, CaseIterable, Identifiable {
     var diskSizePresets: [Int] {
         switch self {
         case .quadra800: return [1, 2, 4, 8, 16, 32, 64, 120]
-        case .powerMacG4: return [2, 4, 8, 16, 32, 64, 120]
+        case .powerMacG4, .powerMacOSX: return [2, 4, 8, 16, 32, 64, 120]
         case .powerMac7500: return [1]
         }
     }
@@ -82,7 +88,7 @@ enum MachineFamily: String, Codable, CaseIterable, Identifiable {
     var defaultDiskSizeGB: Int {
         switch self {
         case .quadra800: return 2
-        case .powerMacG4: return 32
+        case .powerMacG4, .powerMacOSX: return 32
         case .powerMac7500: return 1
         }
     }
@@ -97,7 +103,7 @@ enum MachineFamily: String, Codable, CaseIterable, Identifiable {
     // Sound works on both: the Quadra has the Apple Sound Chip and the Power
     // Mac the screamer (AWACS) port.
     var supportsEnhancedFramebuffer: Bool { self == .quadra800 }
-    var supportsSharedFolder: Bool { self != .powerMac7500 }
+    var supportsSharedFolder: Bool { self == .quadra800 || self == .powerMacG4 }
     var supportsSound: Bool { self != .powerMac7500 }
     var supportsCustomResolution: Bool { self != .powerMac7500 }
     var supportsFloppyDisk: Bool { self == .quadra800 }
@@ -468,6 +474,13 @@ struct VMConfig: Codable, Identifiable, Hashable {
         }
         if !machineFamily.supportsFloppyDisk {
             floppyImagePath = nil
+        }
+        if machineFamily == .powerMacOSX {
+            ramMB = min(max(ramMB, 256), 2048)
+            depth = ColorDepth.millions.rawValue
+            useEnhancedFramebuffer = false
+            toolsCDInserted = false
+            classicInputHelpers = false
         }
         if machineFamily == .powerMac7500 {
             ramMB = 32

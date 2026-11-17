@@ -697,6 +697,7 @@ void App::showEditor(bool create) {
   form->setHorizontalSpacing(12);
   form->setVerticalSpacing(10);
   auto c = create ? Model::freshConfig("Mac OS 9") : m->config;
+  bool osx = !create && m->family() == "powerMacOSX";
   auto name = new PEdit(c["name"].toString(), &d);
   name->setAccessibleName("Mac name");
   name->setObjectName("machineName");
@@ -704,6 +705,7 @@ void App::showEditor(bool create) {
   form->addWidget(name, 0, 1);
   auto family = new PCombo(&d);
   family->addItem("Power Mac G4", "powerMacG4");
+  family->addItem("Power Mac G4 — Mac OS X", "powerMacOSX");
   family->addItem("Quadra 800", "quadra800");
   auto capacity = new PCombo(&d);
   for (int n : {1, 2, 4, 8, 16, 32, 64, 120})
@@ -750,10 +752,15 @@ void App::showEditor(bool create) {
     form->addWidget(ram, 1, 1);
     form->addWidget(label("Screen:", &d), 2, 0);
     form->addWidget(resolution, 2, 1);
-    form->addWidget(label("Colors:", &d), 3, 0);
-    form->addWidget(depth, 3, 1);
-    form->addWidget(label("Graphics:", &d), 4, 0);
-    form->addWidget(graphics, 4, 1);
+    if (osx) {
+      depth->hide();
+      graphics->hide();
+    } else {
+      form->addWidget(label("Colors:", &d), 3, 0);
+      form->addWidget(depth, 3, 1);
+      form->addWidget(label("Graphics:", &d), 4, 0);
+      form->addWidget(graphics, 4, 1);
+    }
   }
   v->addLayout(form);
   if (create)
@@ -783,7 +790,8 @@ void App::showEditor(bool create) {
       check->setCheckable(true);
       check->setChecked(c[pair.first].toBool());
       checks[pair.first] = check;
-      if ((pair.first == "useG4CPU" && m->family() != "powerMacG4") ||
+      if ((osx && (pair.first == "toolsCDInserted" || pair.first == "classicInputHelpers")) ||
+          (pair.first == "useG4CPU" && m->family() != "powerMacG4") ||
           (pair.first == "useEnhancedFramebuffer" && m->family() != "quadra800")) {
         check->hide();
         continue;
@@ -1065,6 +1073,7 @@ void App::showSetup() {
   auto editions = new PCombo(pages[2]);
   auto model = new PCombo(pages[2]);
   model->addItem("Power Mac G4", "powerMacG4");
+  model->addItem("Power Mac G4 — Mac OS X", "powerMacOSX");
   model->addItem("Quadra 800", "quadra800");
   auto summary = label("", pages[2], "regular", true);
   auto name = new PEdit("Mac OS 9", pages[2]);

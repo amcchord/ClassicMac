@@ -174,6 +174,7 @@ struct FirstMacSetupView: View {
                 name = $0.defaultName
             }), options: [
                 (MachineFamily.powerMacG4, "Power Mac G4 — Mac OS 8.5 to 9.2.2"),
+                (MachineFamily.powerMacOSX, "Power Mac G4 — Mac OS X"),
                 (MachineFamily.quadra800, "Quadra 800 — System 7.1 to Mac OS 8.1"),
             ], width: 360)
             HStack(spacing: 8) {
@@ -218,7 +219,9 @@ struct FirstMacSetupView: View {
             Text(created?.name ?? "Your Mac").platinumText(.emphasis)
             if source == .installer {
                 Text("Start the installer, then follow these steps inside Mac OS:").platinumText(.body)
-                Text(family == .powerMacG4
+                Text(family == .powerMacOSX
+                     ? "1. In the installer, open Disk Utility and format the blank disk with Apple Partition Map and Mac OS Extended.\n2. Install Mac OS X on that disk.\n3. If the installer opens again, shut down, choose the hard disk as the startup disk in ClassicMac, and start your Mac."
+                     : family == .powerMacG4
                      ? "1. Open Utilities → Drive Setup on the CD and initialize the blank hard disk.\n2. Open Installer. In Options…, turn off Update Apple Hard Disk Drivers, then install Mac OS.\n3. Restart when installation finishes. Your Mac will start from its hard disk."
                      : "1. Use the disk utility on your CD to initialize the blank hard disk.\n2. Run the Mac OS installer and follow its instructions.\n3. Shut down when finished, eject the CD from Media, then start your Mac.")
                     .platinumText(.small).fixedSize(horizontal: false, vertical: true)

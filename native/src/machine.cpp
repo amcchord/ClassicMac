@@ -85,7 +85,7 @@ QJsonObject validate(QJsonObject c) {
            .hasMatch())
     fail("Invalid machine identity.");
   auto family = c["machineFamily"].toString();
-  if (!QStringList{"powerMacG4", "quadra800", "powerMac7500"}.contains(family))
+  if (!QStringList{"powerMacG4", "quadra800", "powerMac7500", "powerMacOSX"}.contains(family))
     fail("Unknown Mac model.");
   auto name = c["name"].toString().trimmed();
   if (name.isEmpty() || name.size() > 100 ||
@@ -93,13 +93,16 @@ QJsonObject validate(QJsonObject c) {
     fail("Give your Mac a name of up to 100 characters.");
   c["name"] = name;
   bool quad = family == "quadra800", copland = family == "powerMac7500";
+  bool osx = family == "powerMacOSX";
   integer(c, "ramMB",
           quad      ? 128
           : copland ? 32
+          : osx     ? 1024
                     : 512,
-          quad ? 16 : 32,
+          quad ? 16 : osx ? 256 : 32,
           quad      ? 1000
           : copland ? 32
+          : osx     ? 2048
                     : 896);
   integer(c, "width", 1024, 480, 3840);
   integer(c, "height", 768, 480, 2160);
@@ -124,10 +127,20 @@ QJsonObject validate(QJsonObject c) {
   }
   if (family != "powerMacG4")
     c["useVirtioDisk"] = false;
+  if (osx) {
+    c["graphicsCard"] = "standard";
+    c["depth"] = 32;
+    c["classicInputHelpers"] = false;
+    c["toolsCDInserted"] = false;
+  }
   for (auto key : {"cdImagePath", "floppyImagePath", "sharedFolderPath"})
     if (c.contains(key) && !c[key].isNull() &&
         (!c[key].isString() || c[key].toString().contains(QChar(0))))
       fail("Invalid media path.");
+  if (osx) {
+    c.remove("sharedFolderPath");
+    c.remove("floppyImagePath");
+  }
   return c;
 }
 QJsonObject freshConfig(QString name, QString family) {
@@ -182,7 +195,7 @@ QString binary(const QString &name) {
 }
 Machine createMachine(QString name, QString family, int size,
                       const QString &parent, const QString &cd) {
-  if (!QStringList{"powerMacG4", "quadra800"}.contains(family) ||
+  if (!QStringList{"powerMacG4", "quadra800", "powerMacOSX"}.contains(family) ||
       !QList<int>{1, 2, 4, 8, 16, 32, 64, 120}.contains(size))
     fail("Choose a supported Mac model and disk capacity.");
   auto c = freshConfig(name, family);
@@ -252,7 +265,7 @@ QStringList argumentsFor(const Machine &m, int port, bool silent) {
        compatCD = cdBoot && (!b("useG4CPU") || legacy),
        ati = ppc && !cdBoot && s("graphicsCard") == "atiRadeon";
   QStringList a = {"-L",
-                   r + "/qemu/pc-bios",
+                   r + (m.family() == "powerMacOSX" ? "/qemu-osx" : "/qemu/pc-bios"),
                    "-name",
                    opt(m.name()),
                    "-m",
@@ -270,6 +283,34 @@ QStringList argumentsFor(const Machine &m, int port, bool silent) {
                    "none",
                    "-action",
                    "reboot=shutdown"};
+  if (m.family() == "powerMacOSX") {
+    const auto width = c["width"].toInt() / 8 * 8;
+    const auto height = c["height"].toInt();
+    const auto flash = opt(m.folder + "/nvram.img");
+    QString cd = "if=ide,index=2,media=cdrom,id=cd0,readonly=on";
+    if (!s("cdImagePath").isEmpty())
+      cd += ",file=" + opt(s("cdImagePath")) + ",format=raw";
+    a << "-accel" << "tcg,tb-size=512"
+      << "-M" << "mac99,via=pmu,usb=off,audiodev=snd0" << "-cpu" << "7400"
+      << "-bios" << r + "/qemu-osx/openbios-ppc-osx"
+      << "-global" << "macio-nvram.osx-flash=on"
+      << "-drive" << "if=none,id=osxnv,file=" + flash + ",format=raw"
+      << "-global" << "macio-nvram.drive=osxnv"
+      << "-drive" << "file=" + disk + ",format=raw,media=disk,index=0"
+      << "-drive" << cd << "-boot" << (cdBoot ? "d" : "c")
+      << "-vga" << "std" << "-global" << "VGA.romfile="
+      << "-global" << "VGA.vgamem_mb=64"
+      << "-global" << QString("VGA.xres=%1").arg(width)
+      << "-global" << QString("VGA.yres=%1").arg(height)
+      << "-g" << QString("%1x%2x32").arg(width).arg(height)
+      << "-prom-env" << "output-device=ttya"
+      << "-device" << "pci-ohci,id=osx-usb"
+      << "-device" << "usb-kbd,bus=osx-usb.0"
+      << "-device" << (b("tabletInput") ? "usb-tablet,bus=osx-usb.0"
+                                       : "usb-mouse,bus=osx-usb.0")
+      << "-nic" << (b("networking") ? "user,model=sungem" : "none");
+    return a;
+  }
   if (ppc) {
     if (legacy)
       a << "-nodefaults" << "-global" << "cuda.idle-irq-ms=50";

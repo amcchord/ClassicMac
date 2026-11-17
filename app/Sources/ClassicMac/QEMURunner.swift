@@ -580,6 +580,12 @@ final class QEMUManager: ObservableObject {
         let socketPath = QEMUManager.monitorSocketURL(for: id).path
         let wasPaused = pausedIDs.remove(id) != nil
 
+        if VMStore.shared.vms.first(where: { $0.id == id })?.machineFamily == .powerMacOSX {
+            if wasPaused { _ = HMPClient.send("cont", socketPath: socketPath) }
+            _ = HMPClient.send("sendkey ctrl-alt-meta_l-power 500", socketPath: socketPath)
+            return
+        }
+
         // An immediate SIGTERM leaves a mounted HFS/HFS+ volume marked dirty.
         // Mac OS checks that volume on its next startup, adding several seconds
         // and risking data loss. The ADB power key opens the guest's native
@@ -728,6 +734,21 @@ final class QEMUManager: ObservableObject {
             )
         }
 
+        if config.machineFamily == .powerMacOSX {
+            let flash = config.folder.appendingPathComponent("nvram.img")
+            if !fm.fileExists(atPath: flash.path) {
+                do {
+                    try fm.copyItem(at: AppPaths.osxFirmwareDir.appendingPathComponent("macosx-flash-seed.img"), to: flash)
+                } catch {
+                    return AppError(title, "The Mac OS X startup memory could not be created.")
+                }
+            }
+            let values = try? flash.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey])
+            guard values?.isRegularFile == true, values?.isSymbolicLink == false, values?.fileSize == 16_384 else {
+                return AppError(title, "The Mac OS X startup memory must be a 16 KB file named nvram.img.")
+            }
+        }
+
         if config.machineFamily.usesPRAMImage && !fm.fileExists(atPath: config.pramImageURL.path) {
             // A PRAM is tiny and recreatable; restore it rather than failing.
             if fm.fileExists(atPath: AppPaths.pramSeed.path) {
@@ -775,9 +796,49 @@ final class QEMUManager: ObservableObject {
             return buildQuadraArguments(for: config, display: display)
         case .powerMacG4:
             return buildPowerMacArguments(for: config, display: display)
+        case .powerMacOSX:
+            return buildOSXArguments(for: config, display: display)
         case .powerMac7500:
             return CoplandMachine.arguments(for: config)
         }
+    }
+
+    private static func buildOSXArguments(
+        for config: VMConfig, display: BrowserDisplayEndpoint
+    ) -> [String] {
+        let firmware = AppPaths.osxFirmwareDir
+        let name = config.name.replacingOccurrences(of: ",", with: ",,")
+        let disk = config.diskImageURL.path.replacingOccurrences(of: ",", with: ",,")
+        let flash = config.folder.appendingPathComponent("nvram.img").path.replacingOccurrences(of: ",", with: ",,")
+        let width = config.width / 8 * 8
+        let height = config.height
+        let bootCD = config.bootFromCD && config.cdImagePath?.isEmpty == false
+        var cd = "if=ide,index=2,media=cdrom,id=cd0,readonly=on"
+        if let path = config.cdImagePath, !path.isEmpty {
+            cd += ",file=\(path.replacingOccurrences(of: ",", with: ",,")),format=raw"
+        }
+        return [
+            "-L", firmware.path, "-bios", firmware.appendingPathComponent("openbios-ppc-osx").path,
+            "-name", name, "-accel", "tcg,tb-size=512", "-cpu", "7400",
+            "-m", String(config.ramMB),
+            "-M", "mac99,via=pmu,usb=off,audiodev=snd0",
+            "-audiodev", config.sound ? "coreaudio,id=snd0" : "none,id=snd0",
+            "-global", "macio-nvram.osx-flash=on",
+            "-drive", "if=none,id=osxnv,file=\(flash),format=raw",
+            "-global", "macio-nvram.drive=osxnv",
+            "-drive", "file=\(disk),format=raw,media=disk,index=0",
+            "-drive", cd, "-boot", bootCD ? "d" : "c",
+            "-vga", "std", "-global", "VGA.romfile=",
+            "-global", "VGA.vgamem_mb=64", "-global", "VGA.xres=\(width)",
+            "-global", "VGA.yres=\(height)", "-g", "\(width)x\(height)x32",
+            "-prom-env", "output-device=ttya",
+            "-device", "pci-ohci,id=osx-usb", "-device", "usb-kbd,bus=osx-usb.0",
+            "-device", config.tabletInput ? "usb-tablet,bus=osx-usb.0" : "usb-mouse,bus=osx-usb.0",
+            "-nic", config.networking ? "user,model=sungem" : "none",
+            "-serial", "none", "-action", "reboot=shutdown",
+            "-monitor", "unix:\(monitorSocketURL(for: config.id).path),server=on,wait=off",
+            "-qmp", "unix:\(qmpSocketURL(for: config.id).path),server=on,wait=off",
+        ] + displayArguments(for: config, browser: display)
     }
 
     private static func displayArguments(
@@ -786,6 +847,9 @@ final class QEMUManager: ObservableObject {
     ) -> [String] {
         if config.useBrowserDisplay {
             return ["-display", display.qemuDisplay]
+        }
+        if config.machineFamily == .powerMacOSX {
+            return ["-display", "cocoa,swap-opt-cmd=off"]
         }
         if usesClassicMacDisplay(config) {
             // ClassicMac draws the Mac's screen in its own Platinum window;
@@ -801,6 +865,7 @@ final class QEMUManager: ObservableObject {
     /// Whether this Mac's screen appears in ClassicMac's own window.
     static func usesClassicMacDisplay(_ config: VMConfig) -> Bool {
         !config.useBrowserDisplay && config.machineFamily != .powerMac7500 &&
+            config.machineFamily != .powerMacOSX &&
             !UserDefaults.standard.bool(forKey: "ClassicMacUseQEMUWindow")
     }
 
