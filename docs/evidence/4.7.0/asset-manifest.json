@@ -1,0 +1,38 @@
+{
+  "ClassicMac-4.7.0.dmg": {
+    "sha256": "cc50033077769904e5c7a0a4327fd74a8a21a6cd17942414d21496c2e39ece70",
+    "bytes": 51651460
+  },
+  "ClassicMac-4.7.0.zip": {
+    "sha256": "b285822a2e77cbefde34384c70b2d7a96388cdf8410ac7d01d6cedb8df3d041a",
+    "bytes": 45483346
+  },
+  "ClassicMac-4.7.0-windows-x64.exe": {
+    "sha256": "1dd5013a73f1fe7b5878484fa35de3f0e5af0e3ea5cfcb98164dcec4b54f6546",
+    "bytes": 46988963
+  },
+  "ClassicMac-4.7.0-linux-x64.AppImage": {
+    "sha256": "8e9a51513c7607a3a3fce4b2338f166acc5c72a47c0a4ef71cacd9b705fe7025",
+    "bytes": 65587704
+  },
+  "ClassicMac-macOS-QEMU-source.tar.gz": {
+    "sha256": "c42dec3aa2712e423213861164001e75d404649c26ce030783b5b9d9de4de2d7",
+    "bytes": 85976558
+  },
+  "ClassicMac-Windows-QEMU-source.tar.gz": {
+    "sha256": "d90ef3a6a089d8b7d79c18984198e6c28859cf84d3691f1a7eaaf9122d960578",
+    "bytes": 80669351
+  },
+  "ClassicMac-Linux-QEMU-source.tar.gz": {
+    "sha256": "29ceaed159d22eded7c86ae475c07672ee9ef32d33f8243cfdfa7cd38aff2ac5",
+    "bytes": 83172825
+  },
+  "ClassicMac-Copland-source.tar.gz": {
+    "sha256": "8bf17807714f0661af6852458be0194f722061dc11af652966b923a48045d106",
+    "bytes": 16899453
+  },
+  "ClassicMac-OSX-OpenBIOS-source.tar.gz": {
+    "sha256": "ff890d72704cf4101e014cd5555f317f7cba53fa4fe920b8ceaa16400e9fdac6",
+    "bytes": 969766
+  }
+}
