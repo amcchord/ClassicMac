@@ -7,12 +7,38 @@ on:
     branches: [codex/windows-app]
   workflow_dispatch:
     inputs:
+      diagnose_runtime_run:
+        description: Inspect the staged runtime from this workflow run ID
+        type: string
+        default: ''
       test_tiger:
         description: Boot a disposable Mac OS X 10.4.11 guest in the final package
         type: boolean
         default: false
 jobs:
+  diagnose:
+    if: inputs.diagnose_runtime_run != ''
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: ClassicMac-Windows-runtime
+          path: output/desktop/runtime
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.diagnose_runtime_run }}
+      - name: Diagnose the existing PowerPC engine
+        shell: pwsh
+        run: |
+          $bin = Resolve-Path 'output/desktop/runtime/bin/qemu-system-ppc-osx.exe'
+          $fw = Resolve-Path 'output/desktop/runtime/qemu-osx'
+          & $bin --version
+          '{"execute":"qmp_capabilities"}', '{"execute":"query-status"}', '{"execute":"quit"}' |
+            & $bin -M mac99,via=pmu,audiodev=snd0 -S -nodefaults -nic none -audiodev none,id=snd0 -display none -monitor none -serial none -L $fw.Path -bios "$($fw.Path)/openbios-ppc-osx" -qmp stdio
+          Write-Host "QMP launch status: $LASTEXITCODE"
+          python osx/tests/qtest_macosx_flash.py --qemu $bin.Path --firmware $fw.Path --seed-file "$($fw.Path)/macosx-flash-seed.img"
   windows:
+    if: inputs.diagnose_runtime_run == ''
     runs-on: windows-latest
     timeout-minutes: 60
     steps:

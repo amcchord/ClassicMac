@@ -21,7 +21,8 @@ class NVRAM:
     def __init__(self, qemu, firmware, run, osx=False, backing=None, flash=False):
         self.flash = flash
         self.run = Path(run)
-        self.log = (self.run / "qemu.log").open("w")
+        self.log_path = self.run / "qemu.log"
+        self.log = self.log_path.open("w")
         listener = socket.socket()
         listener.bind(("127.0.0.1", 0))
         listener.listen(1)
@@ -44,9 +45,9 @@ class NVRAM:
                                      stderr=subprocess.STDOUT)
         try:
             self.sock, _ = listener.accept()
-        except BaseException:
+        except BaseException as error:
             self.close()
-            raise
+            raise RuntimeError(self.log_path.read_text(errors="replace")) from error
         finally:
             listener.close()
         self.sock.settimeout(20)
@@ -57,9 +58,14 @@ class NVRAM:
         self.stream.write(text + "\n")
         self.stream.flush()
         while True:
-            line = self.stream.readline()
+            try:
+                line = self.stream.readline()
+            except OSError as error:
+                self.close()
+                raise RuntimeError(self.log_path.read_text(errors="replace")) from error
             if not line:
-                raise RuntimeError("QEMU closed qtest")
+                self.close()
+                raise RuntimeError("QEMU closed qtest: " + self.log_path.read_text(errors="replace"))
             if line.startswith("OK"):
                 return line.split()
             if line.startswith(("FAIL", "ERR")):
