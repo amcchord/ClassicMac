@@ -1,0 +1,77 @@
+diff --git a/hw/ide/atapi.c b/hw/ide/atapi.c
+--- a/hw/ide/atapi.c
++++ b/hw/ide/atapi.c
+@@ -614,6 +614,19 @@
+     /* TODO: Move abort back into core.c and introduce proper error flow between
+      *       ATAPI layer and IDE core layer */
+     ide_abort_command(s);
++    if (s->bus->atapi_abort_irq) {
++        /*
++         * RetroBoot: complete the aborted PACKET command like any other
++         * (interrupt reason C/D and I/O, INTRQ), as ATA8-ACS describes for
++         * PACKET error outputs.  Without the interrupt a guest that waits
++         * for it times out: Mac OS 9's ATAPI driver sends MODE SENSE (page
++         * 0x2a) with a byte count limit of 0 to every CD drive at startup
++         * and waited 1 s per drive.
++         */
++        trace_ide_atapi_bcl_abort(s);
++        s->nsector = (s->nsector & ~7) | ATAPI_INT_REASON_IO | ATAPI_INT_REASON_CD;
++        ide_bus_set_irq(s->bus);
++    }
+     return false;
+ }
+ 
+diff --git a/hw/ide/macio.c b/hw/ide/macio.c
+--- a/hw/ide/macio.c
++++ b/hw/ide/macio.c
+@@ -618,6 +618,8 @@
+ {
+     MACIOIDEState *s = MACIO_IDE(dev);
+ 
++    s->bus.atapi_abort_irq = s->atapi_abort_irq;
++
+     ide_bus_init_output_irq(&s->bus,
+                             qdev_get_gpio_in(dev, MACIO_IDE_PMAC_IDE_IRQ));
+ 
+@@ -675,6 +675,7 @@
+     DEFINE_PROP_UINT64("dma-completion-delay-ns", MACIOIDEState,
+                        dma_completion_delay_ns,
+                        MACIO_IDE_DEFAULT_COMPLETION_DELAY_NS),
++    DEFINE_PROP_BOOL("atapi-abort-irq", MACIOIDEState, atapi_abort_irq, true),
+     DEFINE_PROP_BOOL("srst-complete-on-access", MACIOIDEState,
+                      srst_complete_on_access, true),
+ };
+diff --git a/hw/ide/trace-events b/hw/ide/trace-events
+--- a/hw/ide/trace-events
++++ b/hw/ide/trace-events
+@@ -65,6 +65,7 @@
+ ide_atapi_cmd_reply_end_bcl(void *s, int bcl) "IDEState: %p; byte_count_limit=%d"
+ ide_atapi_cmd_reply_end_new(void *s, int status) "IDEState: %p; new transfer started, status=0x%x"
+ ide_atapi_cmd_check_status(void *s) "IDEState: %p"
++ide_atapi_bcl_abort(void *s) "IDEState: %p; PIO data command with byte count limit 0 aborted, interrupt raised"
+ ide_atapi_cmd_read(void *s, const char *method, int lba, int nb_sectors) "IDEState: %p; read %s: LBA=%d nb_sectors=%d"
+ ide_atapi_cmd(void *s, uint8_t cmd) "IDEState: %p; cmd: 0x%02x"
+ ide_atapi_cmd_read_dma_cb_aio(void *s, int lba, int n) "IDEState: %p; aio read: lba=%d n=%d"
+diff --git a/include/hw/ide/ide-bus.h b/include/hw/ide/ide-bus.h
+--- a/include/hw/ide/ide-bus.h
++++ b/include/hw/ide/ide-bus.h
+@@ -29,6 +29,8 @@
+ 
+     /* RetroBoot: a software reset requested but not yet carried out */
+     bool srst_pending;
++    /* RetroBoot: raise INTRQ when a PACKET command is aborted for BCL 0 */
++    bool atapi_abort_irq;
+ };
+ 
+ #define TYPE_IDE_BUS "IDE"
+diff --git a/include/hw/misc/macio/macio.h b/include/hw/misc/macio/macio.h
+--- a/include/hw/misc/macio/macio.h
++++ b/include/hw/misc/macio/macio.h
+@@ -101,6 +101,7 @@
+     uint64_t dma_completion_delay_ns;
+     bool pio_status_drain;
+     bool srst_complete_on_access;
++    bool atapi_abort_irq;
+     QEMUTimer *dma_completion_timer;
+     uint32_t timing_reg;
+     uint32_t irq_reg;

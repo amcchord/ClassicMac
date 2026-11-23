@@ -137,7 +137,10 @@ struct LibraryEntry: Identifiable, Hashable {
     var osLabel: String {
         if let edition { return edition.osLabel }
         let version = machine.osVersion
-        return version.first?.isNumber == true ? "Mac OS \(version)" : version
+        guard version.first?.isNumber == true else { return version }
+        if machine.family == .powerMacOSX { return "Mac OS X \(version)" }
+        if version.hasPrefix("7.") { return "System \(version)" }
+        return "Mac OS \(version)"
     }
 
     var tagline: String { edition?.tagline ?? machine.summary }

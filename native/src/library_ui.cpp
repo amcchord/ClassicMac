@@ -20,14 +20,15 @@ QString familyName(const QJsonObject &entry) {
 QString systemName(const QJsonObject &entry) {
   auto version = entry["osVersion"].toString();
   if (!version.isEmpty() && version[0].isDigit())
-    version.prepend(version.startsWith("7.") ? "System " : "Mac OS ");
+    version.prepend(version.startsWith("10.") ? "Mac OS X " : version.startsWith("7.") ? "System " : "Mac OS ");
   return version;
 }
 QString systemCategory(const QJsonObject &entry) {
   auto version = systemName(entry);
   return version.contains("Copland", Qt::CaseInsensitive) ? "Copland"
-       : version.contains("7.") ? "System 7"
-       : version.contains("8.") ? "Mac OS 8" : "Mac OS 9";
+       : version.startsWith("Mac OS X ") ? "Mac OS X"
+       : version.startsWith("System 7") ? "System 7"
+       : version.startsWith("Mac OS 8") ? "Mac OS 8" : "Mac OS 9";
 }
 bool compatible(const QJsonObject &entry) {
   return entry.value("machineFamily").toString("powerMacG4") != "powerMac7500" &&
@@ -256,7 +257,7 @@ void App::showLibrary() {
   auto filter = new PCombo(&d);
   filter->setObjectName("libraryFilter");
   filter->setAccessibleName("Filter by Mac OS");
-  filter->addItems({"All systems", "System 7", "Mac OS 8", "Mac OS 9", "Copland"});
+  filter->addItems({"All systems", "System 7", "Mac OS 8", "Mac OS 9", "Mac OS X", "Copland"});
   filterRow->addWidget(filter);
   auto count = label("Loading editions…", &d, "small");
   count->setObjectName("libraryCount");

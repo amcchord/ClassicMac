@@ -1,0 +1,87 @@
+RetroBoot: keep nubus-qfb rendering inside the dirty snapshot's mode.
+
+A dirty snapshot synchronizes the vCPU's dirty TLB entries. The vCPU can
+complete mode-register writes during that boundary, so the old narrow
+snapshot was followed by a row walk using a new base/height/width. Besides
+wrong pixels, that can ask physmem about a range outside the snapshot and
+abort QEMU. Capture every draw dependency, check them and the surface after
+the snapshot, then invalidate and defer if any changed. Keep the range
+assertions and the unchanged-screen fast path intact.
+
+diff --git a/hw/display/mac_qfb.c b/hw/display/mac_qfb.c
+--- a/hw/display/mac_qfb.c
++++ b/hw/display/mac_qfb.c
+@@ -276,9 +276,12 @@
+     uint32_t v = 0;
+     int y, ymin;
+     int qfb_stride = s->stride;
++    uint32_t width = s->width, height = s->height;
++    uint32_t base = s->regs[QFB_MODE_BASE >> 2];
++    uint8_t depth = s->depth;
+     qfb_draw_line_func *qfb_draw_line;
+ 
+-    switch (s->depth) {
++    switch (depth) {
+     case 1:
+         v = QFB_DRAW_LINE1;
+         break;
+@@ -309,8 +312,8 @@
+      * vCPU (tlb_reset_dirty), on every refresh of an idle Finder.
+      */
+     {
+-        ram_addr_t first = s->regs[QFB_MODE_BASE >> 2];
+-        ram_addr_t len = (ram_addr_t)qfb_stride * s->height;
++        ram_addr_t first = base;
++        ram_addr_t len = (ram_addr_t)qfb_stride * height;
+         ram_addr_t ram = memory_region_get_ram_addr(&s->mem_vram);
+         ram_addr_t off;
+         bool dirty = false;
+@@ -333,28 +336,43 @@
+                                                       DIRTY_MEMORY_VGA);
+     }
+ 
++    /*
++     * The snapshot clears dirty bits and synchronizes vCPU TLBs, which can
++     * let the vCPU finish MMIO writes while this refresh is in progress.
++     * A new mode/base would make the row walk query outside this snapshot
++     * (or draw new-sized rows into the previous surface). Keep the previous
++     * frame, invalidate again and retry with one coherent mode next time.
++     */
++    if (base != s->regs[QFB_MODE_BASE >> 2] || qfb_stride != s->stride ||
++        width != s->width || height != s->height || depth != s->depth ||
++        surface != qemu_console_surface(s->con)) {
++        g_free(snap);
++        memory_region_set_dirty(&s->mem_vram, 0, QFB_VRAM_SIZE);
++        return;
++    }
++
+     ymin = -1;
+-    page = s->regs[QFB_MODE_BASE >> 2];
+-    for (y = 0; y < s->height; y++, page += qfb_stride) {
++    page = base;
++    for (y = 0; y < height; y++, page += qfb_stride) {
+         if (qfb_check_dirty(s, snap, page, qfb_stride)) {
+             uint8_t *data_display;
+ 
+             data_display = surface_data(surface) + y * surface_stride(surface);
+-            qfb_draw_line(s, data_display, page, s->width);
++            qfb_draw_line(s, data_display, page, width);
+ 
+             if (ymin < 0) {
+                 ymin = y;
+             }
+         } else {
+             if (ymin >= 0) {
+-                dpy_gfx_update(s->con, 0, ymin, s->width, y - ymin);
++                dpy_gfx_update(s->con, 0, ymin, width, y - ymin);
+                 ymin = -1;
+             }
+         }
+     }
+ 
+     if (ymin >= 0) {
+-        dpy_gfx_update(s->con, 0, ymin, s->width, y - ymin);
++        dpy_gfx_update(s->con, 0, ymin, width, y - ymin);
+     }
+ 
+     g_free(snap);

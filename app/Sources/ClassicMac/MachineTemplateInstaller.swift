@@ -1,6 +1,7 @@
 import Foundation
 import Darwin
 import CryptoKit
+import CMachineArchive
 
 // A catalog's smaller storage bound is usable only on a destination that
 // reports sparse-file support. Missing metadata retains the 3.0 space check.
@@ -61,7 +62,7 @@ enum MachineTemplateInstaller {
 
     private static func checkAllocatedStorage(in directory: URL, maximumBytes: Int64) throws {
         var total: Int64 = 0
-        for name in ["disk.img", "config.json", "preview.png", "bootrom.bin", "nvram.bin", "Quadra800.rom", "pram.img", VMTemplateMetadata.fileName] {
+        for name in ["disk.img", "config.json", "preview.png", "bootrom.bin", "nvram.bin", "nvram.img", "Quadra800.rom", "pram.img", VMTemplateMetadata.fileName] {
             let path = directory.appendingPathComponent(name)
             var info = stat()
             if lstat(path.path, &info) != 0 {
@@ -113,13 +114,17 @@ enum MachineTemplateInstaller {
                                attributes: [.posixPermissions: 0o700])
         defer { try? fm.removeItem(at: staging) }
         try extract(archive, into: staging, expectedBytes: machine.installedBytes,
-                    expectedDiskBytes: machine.diskCapacityBytes, maximumStorageBytes: plan.sparseWriteLimit, copland: machine.family == .powerMac7500, quadra: machine.family == .quadra800,
+                    expectedDiskBytes: machine.diskCapacityBytes, maximumStorageBytes: plan.sparseWriteLimit,
+                    copland: machine.family == .powerMac7500, quadra: machine.family == .quadra800,
+                    osx: machine.family == .powerMacOSX,
                     cancelled: cancelled, progress: progress)
         if cancelled() { throw CancellationError() }
 
         let configURL = staging.appendingPathComponent("config.json")
         let source: VMConfig
-        do { source = try JSONDecoder().decode(VMConfig.self, from: Data(contentsOf: configURL)) }
+        let decoder = JSONDecoder()
+        decoder.userInfo[VMConfig.importingTemplate] = true
+        do { source = try decoder.decode(VMConfig.self, from: Data(contentsOf: configURL)) }
         catch { throw MachineDownloadError.unsafeArchive("The machine's settings are damaged.") }
         guard source.machineFamily == machine.family,
               source.diskImageName == "disk.img",
@@ -187,10 +192,11 @@ enum MachineTemplateInstaller {
 
     // Deliberately narrow tar reader: gzip + flat regular files only. No shell,
     // archive-provided paths, links, extended headers, ownership, permissions,
-    // devices or sparse extents are interpreted. GNU's positive base-256 size
+    // or devices are interpreted. The one supported extension is GNU sparse
+    // 1.0 for disk.img. GNU's positive base-256 size
     // encoding supports raw disks larger than USTAR's 8 GB limit.
     static func extract(_ archive: URL, into directory: URL, expectedBytes: Int64,
-                        expectedDiskBytes: Int64? = nil, maximumStorageBytes: Int64? = nil, copland: Bool = false, quadra: Bool = false,
+                        expectedDiskBytes: Int64? = nil, maximumStorageBytes: Int64? = nil, copland: Bool = false, quadra: Bool = false, osx: Bool = false,
                         cancelled: () -> Bool = { false },
                         progress: (Int64) -> Void = { _ in }) throws {
         let pipe = Pipe()
@@ -211,10 +217,12 @@ enum MachineTemplateInstaller {
         var chargedStorage: Int64 = 0
         var previousAllocation: Int64 = 0
         var seen = Set<String>()
+        var sparseDiskSize: Int64?
         while true {
             if cancelled() { throw CancellationError() }
             let header = try readExactly(512, from: input)
             if header.allSatisfy({ $0 == 0 }) {
+                guard sparseDiskSize == nil else { throw invalidArchive() }
                 let second = try readExactly(512, from: input)
                 guard second.allSatisfy({ $0 == 0 }) else { throw invalidArchive() }
                 // Standard tar block padding is bounded; reject concatenated
@@ -232,19 +240,35 @@ enum MachineTemplateInstaller {
                 total + ((148..<156).contains(item.offset) ? 32 : Int64(item.element))
             }
             guard checksum == actualChecksum,
-                  header[156] == 0 || header[156] == 48,
                   header.subdata(in: 157..<257).allSatisfy({ $0 == 0 }),
                   header.subdata(in: 345..<500).allSatisfy({ $0 == 0 }) else { throw invalidArchive() }
+            let memberSize = try number(header.subdata(in: 124..<136))
+            if header[156] == 120 {
+                guard sparseDiskSize == nil, !seen.contains("disk.img"), memberSize > 0,
+                      memberSize <= CM_SPARSE_HEADER_LIMIT else { throw invalidArchive() }
+                let pax = try readExactly(Int(memberSize), from: input)
+                var diskSize: Int64 = 0
+                guard pax.withUnsafeBytes({ cm_sparse_disk_size($0.bindMemory(to: UInt8.self).baseAddress, $0.count, &diskSize) }) else {
+                    throw invalidArchive()
+                }
+                try readPadding(after: memberSize, from: input)
+                sparseDiskSize = diskSize
+                continue
+            }
+            guard header[156] == 0 || header[156] == 48 else { throw invalidArchive() }
             let nameBytes = header.prefix(100).prefix(while: { $0 != 0 })
-            guard let name = String(data: nameBytes, encoding: .utf8),
-                  (["config.json", "disk.img", "preview.png"] + (copland ? ["bootrom.bin", "nvram.bin"] : []) + (quadra ? ["Quadra800.rom", "pram.img"] : [])).contains(name),
-                  seen.insert(name).inserted else { throw invalidArchive() }
-            let size = try number(header.subdata(in: 124..<136))
+            guard let headerName = String(data: nameBytes, encoding: .utf8) else { throw invalidArchive() }
+            let name = sparseDiskSize == nil ? headerName : "disk.img"
+            let allowed = ["config.json", "disk.img", "preview.png"] + (copland ? ["bootrom.bin", "nvram.bin"] : [])
+                + (quadra ? ["Quadra800.rom", "pram.img"] : []) + (osx ? ["nvram.img"] : [])
+            guard allowed.contains(name), seen.insert(name).inserted else { throw invalidArchive() }
+            let size = sparseDiskSize ?? memberSize
             guard size > 0, size <= expectedBytes - extracted else { throw invalidArchive() }
             if name == "Quadra800.rom" && size != 1_048_576 { throw invalidArchive() }
             if name == "pram.img" && size != 256 && size != 512 { throw invalidArchive() }
             if name == "bootrom.bin" && size != 4_194_304 { throw invalidArchive() }
             if name == "nvram.bin" && size != 8209 { throw invalidArchive() }
+            if name == "nvram.img" && size != 16_384 { throw invalidArchive() }
             if name == "config.json" && size > 65_536 { throw invalidArchive() }
             if name == "preview.png" && size > 16 * 1_048_576 { throw invalidArchive() }
             if name == "disk.img" && (size < 512 || size % 512 != 0) { throw invalidArchive() }
@@ -261,6 +285,20 @@ enum MachineTemplateInstaller {
             guard fd >= 0 else { throw invalidArchive() }
             let output = FileHandle(fileDescriptor: fd, closeOnDealloc: true)
             do {
+                if sparseDiskSize != nil {
+                    try writeSparseDisk(input, to: output, size: size, memberSize: memberSize,
+                        maximumStorageBytes: maximumStorageBytes.map { $0 - previousAllocation },
+                        cancelled: cancelled, progress: { progress(extracted + $0) })
+                    extracted += size
+                    if maximumStorageBytes != nil { previousAllocation += try allocatedBytes(fd) }
+                    // Subsequent flat members still account for disk blocks already written.
+                    chargedStorage = max(chargedStorage, previousAllocation)
+                    sparseDiskSize = nil
+                    try output.close()
+                    try readPadding(after: memberSize, from: input)
+                    progress(extracted)
+                    continue
+                }
                 if name == "disk.img", maximumStorageBytes != nil {
                     // Extending a raw APFS file does not allocate its contents.
                     // Punching skipped ranges below prevents APFS from filling
@@ -310,15 +348,79 @@ enum MachineTemplateInstaller {
                 try? output.close()
                 throw error
             }
-            let padding = Int((512 - size % 512) % 512)
-            if padding > 0 {
-                guard try readExactly(padding, from: input).allSatisfy({ $0 == 0 }) else { throw invalidArchive() }
-            }
+            try readPadding(after: size, from: input)
         }
         process.waitUntilExit()
         guard process.terminationStatus == 0, extracted == expectedBytes,
               seen.contains("config.json"), seen.contains("disk.img"),
               !copland || (seen.contains("bootrom.bin") && seen.contains("nvram.bin")) else { throw invalidArchive() }
+    }
+
+    private static func writeSparseDisk(_ input: FileHandle, to output: FileHandle,
+                                        size: Int64, memberSize: Int64, maximumStorageBytes: Int64?,
+                                        cancelled: () -> Bool, progress: (Int64) -> Void) throws {
+        var count = 0
+        let context = Unmanaged.passUnretained(input).toOpaque()
+        guard let extents = cm_sparse_read_map({ context, block in
+            let handle = Unmanaged<FileHandle>.fromOpaque(context!).takeUnretainedValue()
+            guard let data = try? MachineTemplateInstaller.readExactly(Int(CM_TAR_BLOCK), from: handle) else { return false }
+            data.copyBytes(to: block!, count: Int(CM_TAR_BLOCK))
+            return true
+        }, context, size, memberSize, &count) else { throw invalidArchive() }
+        defer { free(extents) }
+        if let maximumStorageBytes {
+            let stored = UnsafeBufferPointer(start: extents, count: count).reduce(Int64(0)) { $0 + $1.length }
+            guard stored <= maximumStorageBytes else { throw storageBudgetExceeded() }
+        }
+        try output.truncate(atOffset: UInt64(size))
+        let diskExtents = UnsafeBufferPointer(start: extents, count: count)
+        for extent in diskExtents {
+            if cancelled() { throw CancellationError() }
+            try output.seek(toOffset: UInt64(extent.offset))
+            var remaining = extent.length
+            while remaining > 0 {
+                if cancelled() { throw CancellationError() }
+                let data = try readExactly(Int(min(sparseChunkBytes, remaining)), from: input)
+                try output.write(contentsOf: data)
+                remaining -= Int64(data.count)
+                if let maximumStorageBytes, try allocatedBytes(output.fileDescriptor) > maximumStorageBytes {
+                    throw storageBudgetExceeded()
+                }
+                progress(extent.offset + extent.length - remaining)
+            }
+        }
+        if maximumStorageBytes != nil {
+            // APFS can allocate gaps between neighboring writes. Release
+            // full filesystem blocks after all extents have been written.
+            var volume = statfs()
+            let fd = output.fileDescriptor
+            guard fstatfs(fd, &volume) == 0, volume.f_bsize > 0 else { throw invalidArchive() }
+            let blockSize = Int64(volume.f_bsize)
+            var end: Int64 = 0
+            for extent in diskExtents {
+                if cancelled() { throw CancellationError() }
+                try punchHole(fd, from: end, to: extent.offset, blockSize: blockSize)
+                end = extent.offset + extent.length
+            }
+            try punchHole(fd, from: end, to: size, blockSize: blockSize)
+        }
+    }
+
+    private static func punchHole(_ fd: Int32, from start: Int64, to end: Int64, blockSize: Int64) throws {
+        let offset = ((start + blockSize - 1) / blockSize) * blockSize
+        let length = (end / blockSize) * blockSize - offset
+        if length <= 0 { return }
+        var hole = fpunchhole_t(fp_flags: 0, reserved: 0, fp_offset: off_t(offset), fp_length: off_t(length))
+        guard fcntl(fd, F_PUNCHHOLE, &hole) == 0 else {
+            throw MachineDownloadError.unsafeArchive("This folder could not preserve the machine's empty disk space.")
+        }
+    }
+
+    private static func readPadding(after size: Int64, from input: FileHandle) throws {
+        let padding = Int((512 - size % 512) % 512)
+        if padding > 0 {
+            guard try readExactly(padding, from: input).allSatisfy({ $0 == 0 }) else { throw invalidArchive() }
+        }
     }
 
     private static func readExactly(_ count: Int, from input: FileHandle) throws -> Data {

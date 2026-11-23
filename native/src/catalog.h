@@ -4,6 +4,7 @@
 #include <functional>
 namespace Library {
 constexpr const char *url = "https://mcchord.net/classicmac/catalog-v2.json";
+constexpr const char *retroBootURL = "https://mcchord.net/retroboot-downloads/catalog.json";
 using Progress = std::function<void(QString, qint64, qint64)>;
 QJsonArray parse(const QByteArray &);
 QJsonArray load();

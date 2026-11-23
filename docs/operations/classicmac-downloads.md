@@ -213,3 +213,19 @@ Rollback: verify the recorded pre-4.4 catalog backup's hash, copy it to a new
 same-directory temporary file under the public download directory, chmod 0644,
 then atomically rename it to catalog.json. Verify HTTPS retrieval matches the
 backup. Keep the new and old immutable archives. No server restart is needed.
+
+
+## Shared RetroBoot catalog — November 22, 2026
+
+The desktop Library reads the existing ClassicMac catalog and the
+[public RetroBoot catalog](https://mcchord.net/retroboot-downloads/catalog.json).
+ClassicMac keeps its copy of an entry when both catalogs use the same ID.
+Either catalog can load independently. The RetroBoot catalog is public HTTPS
+and includes Quadra, Classic PowerPC and PowerPC Mac OS X archives.
+
+The importers accept ordinary flat archives and GNU sparse 1.0 disks. Archive
+length and SHA-256 are verified before extracting. The sparse map is bounded
+and checked against the disk capacity and stored member size. OS X archives can
+carry the matching 16 KiB startup memory. Import assigns a fresh machine ID.
+
+[Integration and verification](../retroboot-3.0.0-parity.md)

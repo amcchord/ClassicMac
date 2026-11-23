@@ -393,6 +393,8 @@ ClassicMac exists because of years of brilliant work by other engineers. The pat
    writable disk.
 
 You can add more Macs later through **File → Mac OS Library…** (⇧⌘L).
+The current source reads the ClassicMac and [RetroBoot public image catalogs](https://mcchord.net/retroboot-downloads/#macs).
+It imports standard and sparse archives for Quadra, Classic PowerPC and PowerPC Mac OS X.
 For a manual installation, choose **File → New Mac…** (⌘N): a Quadra 800
 (System 7.1–8.1) or Power Mac G4 (Mac OS 8.5–9.2.2), memory, a virtual disk up
 to 120 GB and your Mac OS CD image. The Mac starts from the CD; once Mac OS is

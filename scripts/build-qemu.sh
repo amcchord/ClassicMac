@@ -51,6 +51,9 @@ PATCHED_FILES=(
   ui/cocoa.m
   ui/input.c
   hw/usb/dev-hid.c
+  hw/usb/hcd-ohci-pci.c
+  hw/usb/hcd-ohci.c
+  hw/usb/hcd-ohci.h
   include/ui/input.h
   ui/console.c
   qapi/ui.json
@@ -126,6 +129,7 @@ PATCHED_FILES=(
   hw/misc/mos6522.c
   include/hw/misc/mos6522.h
   hw/misc/macio/pmu.c
+  hw/ide/atapi.c
   hw/ide/core.c
   include/hw/ide/ide-bus.h
   accel/tcg/internal-common.h
@@ -546,6 +550,16 @@ for patch in "$CPU_DIR/retroboot-tcg-notdirty-fast" \
              "$QFB_DIR/retroboot-qfb-vbl-sync" \
              "$QFB_DIR/retroboot-qfb-refresh" \
              "$QFB_DIR/retroboot-qfb-millions"; do
+  git -C "$QEMU_DIR" apply "$patch.patch" || die "Failed to apply ${patch#"$ROOT_DIR"/}.patch"
+done
+
+log "Installing RetroBoot storage, USB and Quadra timing improvements"
+for patch in "$STARTUP_DIR/retroboot-macio-ide-pio-status-drain" \
+             "$STARTUP_DIR/retroboot-ide-atapi-bcl-abort-irq" \
+             "$ROOT_DIR/usb/retroboot-ohci-idle-frames" \
+             "$ROOT_DIR/usb/retroboot-ohci-idle-hid" \
+             "$QFB_DIR/retroboot-q800-t2-slow-host" \
+             "$QFB_DIR/retroboot-qfb-snapshot-mode"; do
   git -C "$QEMU_DIR" apply "$patch.patch" || die "Failed to apply ${patch#"$ROOT_DIR"/}.patch"
 done
 

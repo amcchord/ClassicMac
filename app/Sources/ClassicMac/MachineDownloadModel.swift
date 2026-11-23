@@ -13,14 +13,14 @@ final class MachineDownloadModel: ObservableObject {
     @Published private(set) var errorMessage: String?
     @Published private(set) var isCancelling = false
 
-    private let catalogURL: URL
+    private let catalogURLs: [URL]
     private let cacheDirectory: URL
     private var operation: Task<Void, Never>?
     private var cancellation = MachineDownloadCancellation()
     private var operationID = UUID()
 
-    init(catalogURL: URL = MachineCatalog.defaultURL, cacheDirectory: URL? = nil) {
-        self.catalogURL = catalogURL
+    init(catalogURL: URL? = nil, cacheDirectory: URL? = nil) {
+        self.catalogURLs = catalogURL.map { [$0] } ?? [MachineCatalog.defaultURL, MachineCatalog.retroBootURL]
         self.cacheDirectory = cacheDirectory ?? AppPaths.supportDir.appendingPathComponent("Downloads", isDirectory: true)
     }
 
@@ -48,26 +48,42 @@ final class MachineDownloadModel: ObservableObject {
         phase = .loadingCatalog
         errorMessage = nil
         operation = Task {
-            let file = cacheDirectory.appendingPathComponent("catalog-\(UUID().uuidString).json")
-            defer { try? FileManager.default.removeItem(at: file) }
             do {
                 try prepareCache()
-                let transfer = MachineDownloadTransfer(
-                    source: catalogURL, destination: file, expectedBytes: nil,
-                    maximumBytes: MachineCatalog.maximumCatalogBytes
-                )
-                _ = try await transfer.run()
-                machines = try MachineCatalog.decode(Data(contentsOf: file)).machines
-                phase = .idle
+                var results: [MachineCatalog] = []
+                var firstError: Error?
+                for url in catalogURLs {
+                    do {
+                        results.append(try await fetchCatalog(url))
+                    } catch is CancellationError {
+                        throw CancellationError()
+                    } catch {
+                        if firstError == nil { firstError = error }
+                    }
+                }
+                try Task.checkCancellation()
+                if results.isEmpty, let firstError { throw firstError }
+                var ids = Set<String>()
+                machines = results.flatMap(\.machines).filter { ids.insert($0.id).inserted }
             } catch is CancellationError {
-                phase = .idle
             } catch {
                 errorMessage = error.localizedDescription
-                phase = .idle
             }
+            phase = .idle
             isCancelling = false
             operation = nil
         }
+    }
+
+    private func fetchCatalog(_ url: URL) async throws -> MachineCatalog {
+        let file = cacheDirectory.appendingPathComponent("catalog-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: file) }
+        let transfer = MachineDownloadTransfer(
+            source: url, destination: file, expectedBytes: nil,
+            maximumBytes: MachineCatalog.maximumCatalogBytes
+        )
+        _ = try await transfer.run()
+        return try MachineCatalog.decode(Data(contentsOf: file))
     }
 
     func hasPartialDownload(_ machine: DownloadableMachine) -> Bool {

@@ -1057,6 +1057,9 @@ final class QEMUManager: ObservableObject {
             "-global",
             "macio-ide.dma-completion-delay-ns=\(ideDMACompletionDelay)"
         ]
+        if !bootingFromUserCD && !legacy {
+            args += ["-global", "macio-ide.pio-status-drain=on"]
+        }
         // Route the OpenBIOS firmware console to the (disconnected) serial
         // port so the firmware text screens never appear. Together with the
         // bundled OpenBIOS's console background being repainted black (see

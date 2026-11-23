@@ -1,0 +1,147 @@
+diff --git a/hw/usb/hcd-ohci-pci.c b/hw/usb/hcd-ohci-pci.c
+--- a/hw/usb/hcd-ohci-pci.c
++++ b/hw/usb/hcd-ohci-pci.c
+@@ -113,6 +113,7 @@ static const Property ohci_pci_properties[] = {
+     DEFINE_PROP_STRING("masterbus", OHCIPCIState, masterbus),
+     DEFINE_PROP_UINT32("num-ports", OHCIPCIState, num_ports, 3),
+     DEFINE_PROP_UINT32("firstport", OHCIPCIState, firstport, 0),
++    DEFINE_PROP_UINT32("idle-frames", OHCIPCIState, state.idle_frames, 8),
+ };
+ 
+ static const VMStateDescription vmstate_ohci = {
+diff --git a/hw/usb/hcd-ohci.c b/hw/usb/hcd-ohci.c
+--- a/hw/usb/hcd-ohci.c
++++ b/hw/usb/hcd-ohci.c
+@@ -1184,10 +1184,38 @@ static int ohci_service_ed_list(OHCIState *ohci, uint32_t head)
+     return active;
+ }
+ 
++/*
++ * With no device on the root hub and the SOF interrupt disabled a frame
++ * changes nothing but the frame number, so up to idle_frames frames run
++ * per timer (one host wakeup each idle_frames ms instead of every 1 ms).
++ * Register accesses first catch up with the frames that have ended, so the
++ * guest always sees the current frame number and interrupt state; only the
++ * HCCA frame number in guest memory advances in steps.
++ */
++static bool ohci_frames_idle(OHCIState *ohci)
++{
++    int i;
++
++    if (ohci->idle_frames <= 1 || (ohci->intr & OHCI_INTR_SF)) {
++        return false;
++    }
++    for (i = 0; i < ohci->num_ports; i++) {
++        if (ohci->rhport[i].port.dev) {
++            return false;
++        }
++    }
++    return true;
++}
++
+ /* set a timer for EOF */
+ static void ohci_eof_timer(OHCIState *ohci)
+ {
+-    timer_mod(ohci->eof_timer, ohci->sof_time + usb_frame_time);
++    int64_t when = ohci->sof_time + usb_frame_time;
++
++    if (ohci_frames_idle(ohci)) {
++        when += (int64_t)(ohci->idle_frames - 1) * usb_frame_time;
++    }
++    timer_mod(ohci->eof_timer, when);
+ }
+ /* Set a timer for EOF and generate a SOF event */
+ static void ohci_sof(OHCIState *ohci)
+@@ -1218,10 +1246,35 @@ static void ohci_process_lists(OHCIState *ohci)
+     }
+ }
+ 
++static void ohci_frame_boundary_one(OHCIState *ohci);
++
++/* Run every frame that has ended (several of them while frames are batched) */
++static void ohci_frame_catch_up(OHCIState *ohci)
++{
++    int64_t now = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
++
++    while (timer_pending(ohci->eof_timer) &&
++           ohci->sof_time + usb_frame_time <= now) {
++        int64_t sof = ohci->sof_time;
++
++        ohci_frame_boundary_one(ohci);
++        if (ohci->sof_time == sof) {
++            break;      /* unrecoverable error: no further frames */
++        }
++    }
++}
++
+ /* Do frame processing on frame boundary */
+ static void ohci_frame_boundary(void *opaque)
+ {
+     OHCIState *ohci = opaque;
++
++    ohci_frame_boundary_one(ohci);
++    ohci_frame_catch_up(ohci);
++}
++
++static void ohci_frame_boundary_one(OHCIState *ohci)
++{
+     struct ohci_hcca hcca;
+ 
+     if (ohci_read_hcca(ohci, ohci->hcca, &hcca)) {
+@@ -1527,6 +1580,7 @@ static uint64_t ohci_mem_read(void *opaque,
+     OHCIState *ohci = opaque;
+     uint32_t retval;
+ 
++    ohci_frame_catch_up(ohci);
+     /* Only aligned reads are allowed on OHCI */
+     if (addr & 3) {
+         trace_usb_ohci_mem_read_unaligned(addr);
+@@ -1649,6 +1703,9 @@ static uint64_t ohci_mem_read(void *opaque,
+     return retval;
+ }
+ 
++static void ohci_mem_write_one(OHCIState *ohci, hwaddr addr, uint64_t val,
++                               unsigned size);
++
+ static void ohci_mem_write(void *opaque,
+                            hwaddr addr,
+                            uint64_t val,
+@@ -1656,6 +1713,17 @@ static void ohci_mem_write(void *opaque,
+ {
+     OHCIState *ohci = opaque;
+ 
++    ohci_frame_catch_up(ohci);
++    ohci_mem_write_one(ohci, addr, val, size);
++    if (timer_pending(ohci->eof_timer)) {
++        ohci_eof_timer(ohci);   /* the SOF interrupt may have changed */
++    }
++}
++
++static void ohci_mem_write_one(OHCIState *ohci, hwaddr addr, uint64_t val,
++                               unsigned size)
++{
++
+     /* Only aligned reads are allowed on OHCI */
+     if (addr & 3) {
+         trace_usb_ohci_mem_write_unaligned(addr);
+@@ -1815,6 +1883,9 @@ static void ohci_attach(USBPort *port1)
+     if (old_state != port->ctrl) {
+         ohci_set_interrupt(s, OHCI_INTR_RHSC);
+     }
++    if (timer_pending(s->eof_timer)) {
++        ohci_eof_timer(s);      /* a device on the bus: every frame again */
++    }
+ }
+ 
+ static void ohci_child_detach(USBPort *port1, USBDevice *dev)
+diff --git a/hw/usb/hcd-ohci.h b/hw/usb/hcd-ohci.h
+--- a/hw/usb/hcd-ohci.h
++++ b/hw/usb/hcd-ohci.h
+@@ -46,6 +46,7 @@ struct OHCIState {
+ 
+     QEMUTimer *eof_timer;
+     int64_t sof_time;
++    uint32_t idle_frames;   /* frames per timer while nothing uses the bus */
+ 
+     /* OHCI state */
+     /* Control partition */

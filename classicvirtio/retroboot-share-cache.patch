@@ -1,0 +1,379 @@
+diff --git a/device-9p.c b/device-9p.c
+index 2c8ee02..3e3d6a5 100644
+--- a/device-9p.c
++++ b/device-9p.c
+@@ -7,6 +7,7 @@
+ #include <CodeFragments.h>
+ #include <Devices.h>
+ #include <Disks.h>
++#include <Events.h>
+ #include <DriverGestalt.h>
+ #include <DriverServices.h>
+ #include <Errors.h>
+@@ -78,7 +79,7 @@ static void getBootBlocks(void);
+ static void useMountTag(const void *conf, char *retname, char *retformat);
+ static void setDirPBInfo(struct DirInfo *pb, int32_t cnid, int32_t pcnid, const char *name, uint32_t fid);
+ static void setFilePBInfo(struct HFileInfo *pb, int32_t cnid, int32_t pcnid, const char *name, uint32_t fid);
+-static int16_t countDir(int fid, bool dirOK);
++static void countDir(int fid, int16_t *retall, int16_t *retfiles);
+ static void updateKnownLength(struct MyFCB *fcb, int32_t length);
+ static int32_t pbDirID(void *_pb);
+ static struct WDCBRec *findWD(short refnum);
+@@ -130,6 +131,36 @@ static struct GetVolParmsInfoBuffer vparms = {
+ 	.vMServerAdr = 0, // might be used for uniqueness checking -- ?set uniq
+ };
+ 
++// RetroBoot: directory information cache (emulator/classicvirtio/README.md).
++// The Finder asks for the share's root folder (GetCatInfo by dirID) as often as
++// every tick, and each answer used to cost a walk, a getattr and a full readdir
++// of the host directory, each waited for in a spin loop.  Answers are now kept
++// and compared with the host directory's modification time at most once a second
++// (one Tgetattr); the directory is read again only when that time changed.  A
++// change that was not made through this driver (the host's) moves vcbLsMod, which
++// the Finder watches to look at its open windows' folders again, so new files
++// appear without user action.
++enum {
++	DIRCACHE = 8,
++	RECHECK_TICKS = 60,
++};
++
++struct dirInfo {
++	int32_t cnid; // 0 = free slot
++	int32_t parent;
++	uint32_t checked; // TickCount() when last compared with the host
++	uint32_t used; // TickCount() when last used, for replacement
++	bool local; // changed through this driver since last compared
++	uint64_t msec, mnsec; // the host directory's modification time
++	int32_t mdate; // the same as a Mac date
++	int16_t nall, nfiles; // visible children: all of them, files only
++	struct MFAttr attr;
++	char name[MAXNAME];
++};
++
++static struct dirInfo dirCache[DIRCACHE];
++static void fillDirPB(struct DirInfo *pb, const struct dirInfo *d);
++
+ DriverDescription TheDriverDescription = {
+ 	kTheDescriptionSignature,
+ 	kInitialDriverDescriptor,
+@@ -488,6 +519,8 @@ static OSErr fsMountVol(struct IOParam *pb) {
+ 		vparms.vMLocalHand = NewHandleSysClear(2);
+ 	}
+ 	
++	memset(dirCache, 0, sizeof dirCache);
++
+ 	vcb.vcbDrvNum = dqe.dqe.dQDrive;
+ 	vcb.vcbDRefNum = drvrRefNum;
+ 	vcb.vcbVRefNum = -1;
+@@ -540,12 +573,107 @@ static OSErr fsUnmountVol(struct IOParam *pb) {
+ 	return noErr;
+ }
+ 
++// Like HFS, move vcbLsMod on every change: the Finder (9.2.1 has no FNNotify)
++// looks at its open windows' folders again a few seconds after vcbLsMod changes.
++static void bumpLsMod(void) {
++	unsigned long now = 0;
++	GetDateTime(&now);
++	if (now <= (unsigned long)vcb.vcbLsMod) now = (unsigned long)vcb.vcbLsMod + 1;
++	vcb.vcbLsMod = now;
++}
++
++static struct dirInfo *dirFind(int32_t cnid) {
++	for (int i=0; i<DIRCACHE; i++) {
++		if (dirCache[i].cnid == cnid) return &dirCache[i];
++	}
++	return NULL;
++}
++
++static bool dirFresh(const struct dirInfo *d) {
++	return (uint32_t)(TickCount() - d->checked) < RECHECK_TICKS;
++}
++
++// A change made through this driver: compare every cached folder with the host
++// again when it is next asked for, and do not take a new time of the folders it
++// touched (all of them when cnid is 0) for a host change
++static void dirLocalChange(int32_t cnid) {
++	uint32_t stale = TickCount() - RECHECK_TICKS;
++	for (int i=0; i<DIRCACHE; i++) {
++		dirCache[i].checked = stale;
++		if (cnid == 0 || dirCache[i].cnid == cnid) dirCache[i].local = true;
++	}
++}
++
++// Information about directory cnid, which fid already points to
++static struct dirInfo *dirInfo(int32_t cnid, int32_t parent, const char *name, uint32_t fid) {
++	uint32_t now = TickCount();
++	struct dirInfo *d = dirFind(cnid);
++	if (d != NULL && dirFresh(d)) {
++		d->used = now;
++		return d;
++	}
++
++	struct Stat9 stat = {};
++	bool statOK = Getattr9(fid, STAT_MTIME, &stat) == 0;
++
++	if (d != NULL && statOK && stat.mtime_sec == d->msec && stat.mtime_nsec == d->mnsec) {
++		// Unchanged on the host: only the parent or the name can have changed here
++		d->parent = parent;
++		strcpy(d->name, name);
++		d->checked = d->used = now;
++		d->local = false;
++		return d;
++	}
++
++	// A new time that no call through this driver explains came from the host
++	bool hostChange = (d != NULL) && !d->local;
++
++	if (d == NULL) {
++		d = &dirCache[0];
++		for (int i=0; i<DIRCACHE; i++) {
++			if (dirCache[i].cnid == 0) {
++				d = &dirCache[i];
++				break;
++			}
++			if ((uint32_t)(now - dirCache[i].used) > (uint32_t)(now - d->used)) d = &dirCache[i];
++		}
++	}
++
++	d->cnid = cnid;
++	d->parent = parent;
++	strcpy(d->name, name);
++	MF.DGetAttr(cnid, fid, name, MF_FINFO, &d->attr);
++	d->attr.unixtime = statOK ? (int64_t)stat.mtime_sec : 0;
++	d->msec = statOK ? stat.mtime_sec : 0;
++	d->mnsec = statOK ? stat.mtime_nsec : 0;
++	d->mdate = mactime(d->attr.unixtime);
++	countDir(fid, &d->nall, &d->nfiles);
++	d->checked = d->used = TickCount();
++	d->local = false;
++
++	if (hostChange) {
++		// The host may have changed other folders too: check each again when next asked
++		for (int i=0; i<DIRCACHE; i++) {
++			if (&dirCache[i] != d) dirCache[i].checked = d->checked - RECHECK_TICKS;
++		}
++		bumpLsMod();
++	}
++	return d;
++}
++
+ static OSErr fsGetVolInfo(struct XVolumeParam *pb) {
+-	// Sizes
+-	struct Statfs9 statfs = {};
+-	Statfs9(ROOTFID, &statfs);
+-	uint64_t total = statfs.blocks * statfs.bsize;
+-	uint64_t free = statfs.bavail * statfs.bsize;
++	// Sizes: the host's free space, asked at most once a second
++	static uint64_t total, free;
++	static uint32_t statfsChecked;
++	static bool statfsValid;
++	if (!statfsValid || (uint32_t)(TickCount() - statfsChecked) >= RECHECK_TICKS) {
++		struct Statfs9 statfs = {};
++		Statfs9(ROOTFID, &statfs);
++		total = statfs.blocks * statfs.bsize;
++		free = statfs.bavail * statfs.bsize;
++		statfsChecked = TickCount();
++		statfsValid = true;
++	}
+ 
+ 	if ((pb->ioTrap&0x00ff) == 0x60) { // XGetVolInfo
+ 		pb->ioVTotalBytes = total;
+@@ -553,15 +681,19 @@ static OSErr fsGetVolInfo(struct XVolumeParam *pb) {
+ 	}
+ 
+ 	// Clip sizes to less than 2 GB, reported as 32k blocks
+-	if (total > 0x7fffffff) total = 0x7fffffff;
+-	if (free > 0x7fffffff) free = 0x7fffffff;
+-	vcb.vcbNmAlBlks = pb->ioVNmAlBlks = total >> 15;
+-	vcb.vcbFreeBks = pb->ioVFrBlk = total >> 15;
+-
+-	// Get root dir modification date
+-	struct Stat9 stat = {};
+-	Getattr9(ROOTFID, STAT_MTIME, &stat);
+-	vcb.vcbLsMod = pb->ioVLsMod = mactime(stat.mtime_sec);
++	uint64_t clipTotal = total, clipFree = free;
++	if (clipTotal > 0x7fffffff) clipTotal = 0x7fffffff;
++	if (clipFree > 0x7fffffff) clipFree = 0x7fffffff;
++	vcb.vcbNmAlBlks = pb->ioVNmAlBlks = clipTotal >> 15;
++	vcb.vcbFreeBks = pb->ioVFrBlk = clipFree >> 15;
++
++	// The volume's modification date starts as the root directory's; after that
++	// only bumpLsMod moves it (a second move would make the Finder rescan twice)
++	char rootName[MAXNAME];
++	CatalogGet(2, rootName);
++	struct dirInfo *d = dirInfo(2, 1, rootName, ROOTFID);
++	if (vcb.vcbLsMod == 0) vcb.vcbLsMod = d->mdate;
++	pb->ioVLsMod = vcb.vcbLsMod;
+ 
+ 	// Allow working directories to pretend to be disks
+ 	int32_t cnid = 2;
+@@ -570,9 +702,17 @@ static OSErr fsGetVolInfo(struct XVolumeParam *pb) {
+ 		if (wdcb) cnid = wdcb->wdDirID;
+ 	}
+ 
+-	int err = CatalogWalk(FID1, cnid, NULL, NULL, NULL);
+-	if (err < 0) return err;
+-	vcb.vcbNmFls = pb->ioVNmFls = countDir(FID1, false);
++	if (cnid != 2) {
++		d = dirFind(cnid);
++		if (d == NULL || !dirFresh(d)) {
++			int32_t parent;
++			char name[MAXNAME];
++			int err = CatalogWalk(FID1, cnid, NULL, &parent, name);
++			if (err < 0) return err;
++			d = dirInfo(cnid, parent, name, FID1);
++		}
++	}
++	vcb.vcbNmFls = pb->ioVNmFls = d->nfiles;
+ 
+ 	return noErr;
+ }
+@@ -618,6 +758,17 @@ static OSErr fsGetFileInfo(struct HFileInfo *pb) {
+ 	int32_t parent, cnid = pbDirID(pb);
+ 	char name[MAXNAME];
+ 
++	// RetroBoot: a folder described less than a second ago (the Finder's poll)
++	if (idx < 0) {
++		struct dirInfo *d = dirFind(cnid);
++		if (d != NULL && dirFresh(d)) {
++			d->used = TickCount();
++			if (pb->ioNamePtr != NULL) mr31name(pb->ioNamePtr, d->name);
++			fillDirPB((void *)pb, d);
++			return noErr;
++		}
++	}
++
+ 	if (idx > 0) { // DIRID + INDEX
+ 		parent = cnid;
+ 		cnid = ReadDirSorted(FID1, cnid, idx, catalogCall, name);
+@@ -626,6 +777,11 @@ static OSErr fsGetFileInfo(struct HFileInfo *pb) {
+ 	} else if (idx == 0) { // DIRID + PATH
+ 		cnid = CatalogWalk(FID1, cnid, pb->ioNamePtr, &parent, name);
+ 		if (IsErr(cnid)) return cnid;
++	} else if (cnid == 2) { // DIRID ONLY, the root: ROOTFID needs no walk
++		CatalogGet(2, name);
++		if (pb->ioNamePtr != NULL) mr31name(pb->ioNamePtr, name);
++		fillDirPB((void *)pb, dirInfo(2, 1, name, ROOTFID));
++		return noErr;
+ 	} else { // DIRID ONLY
+ 		cnid = CatalogWalk(FID1, cnid, NULL, &parent, name);
+ 		if (IsErr(cnid)) return cnid;
+@@ -646,21 +802,22 @@ static OSErr fsGetFileInfo(struct HFileInfo *pb) {
+ 	return noErr;
+ }
+ 
+-static void setDirPBInfo(struct DirInfo *pb, int32_t cnid, int32_t pcnid, const char *name, uint32_t fid) {
+-	struct MFAttr attr;
+-	MF.DGetAttr(cnid, fid, name, MF_FINFO|MF_TIME, &attr);
+-
++static void fillDirPB(struct DirInfo *pb, const struct dirInfo *d) {
+ 	// Clear fields from ioFlAttrib onward
+ 	memset((char *)pb + 30, 0, 100 - 30);
+ 
+ 	pb->ioFRefNum = 0; // not sure what this means for dirs?
+ 	pb->ioFlAttrib = ioDirMask;
+-	memcpy(&pb->ioDrUsrWds, attr.finfo, sizeof pb->ioDrUsrWds);
+-	pb->ioDrDirID = cnid;
+-	pb->ioDrNmFls = countDir(fid, true);
+-	pb->ioDrCrDat = pb->ioDrMdDat = mactime(attr.unixtime);
+-	memcpy(&pb->ioDrFndrInfo, attr.fxinfo, sizeof pb->ioDrFndrInfo);
+-	pb->ioDrParID = pcnid;
++	memcpy(&pb->ioDrUsrWds, d->attr.finfo, sizeof pb->ioDrUsrWds);
++	pb->ioDrDirID = d->cnid;
++	pb->ioDrNmFls = d->nall;
++	pb->ioDrCrDat = pb->ioDrMdDat = d->mdate;
++	memcpy(&pb->ioDrFndrInfo, d->attr.fxinfo, sizeof pb->ioDrFndrInfo);
++	pb->ioDrParID = d->parent;
++}
++
++static void setDirPBInfo(struct DirInfo *pb, int32_t cnid, int32_t pcnid, const char *name, uint32_t fid) {
++	fillDirPB(pb, dirInfo(cnid, pcnid, name, fid));
+ }
+ 
+ static void setFilePBInfo(struct HFileInfo *pb, int32_t cnid, int32_t pcnid, const char *name, uint32_t fid) {
+@@ -700,35 +857,46 @@ static void setFilePBInfo(struct HFileInfo *pb, int32_t cnid, int32_t pcnid, con
+ 	pb->ioFlParID = pcnid;
+ }
+ 
+-static int16_t countDir(int fid, bool dirOK) {
++// Visible children: all of them, and files only, in one pass
++static void countDir(int fid, int16_t *retall, int16_t *retfiles) {
+ 	char scratch[40000];
+ 	uint64_t magic = 0;
+ 	uint32_t bytes = 0;
+-	int16_t n = 0;
++	int16_t all = 0, files = 0;
++	*retall = *retfiles = 0;
+ 	WalkPath9(fid, FIDCOUNT, "");
+-	if (Lopen9(FIDCOUNT, O_RDONLY|O_DIRECTORY, NULL, NULL)) return 0;
++	if (Lopen9(FIDCOUNT, O_RDONLY|O_DIRECTORY, NULL, NULL)) return;
+ 	while (Readdir9(FIDCOUNT, magic, sizeof scratch, &bytes, scratch), bytes>0) {
+ 		char *ptr = scratch;
+ 		while (ptr < scratch + bytes) {
+ 			char type = 0;
+ 			char childname[MAXNAME] = "";
+ 			DirRecord9(&ptr, NULL, &magic, &type, childname);
+-			if (visName(childname) && (dirOK || type!=4)) n++;
+-			if (n == 0x7fff) goto done;
++			if (visName(childname)) {
++				all++;
++				if (type != 4) files++;
++			}
++			if (all == 0x7fff) goto done;
+ 		}
+ 	}
+ done:
+ 	Clunk9(FIDCOUNT);
+-	return n;
++	*retall = all;
++	*retfiles = files;
+ }
+ 
+ // Set creator and type on files only
+ // TODO set timestamps, the attributes byte (comes with AppleDouble etc)
+ static OSErr fsSetFileInfo(struct HFileInfo *pb) {
+ 	char name[MAXNAME];
+-	int32_t cnid = CatalogWalk(FID1, pbDirID(pb), pb->ioNamePtr, NULL, name);
++	int32_t parent;
++	int32_t cnid = CatalogWalk(FID1, pbDirID(pb), pb->ioNamePtr, &parent, name);
+ 	if (IsErr(cnid)) return cnid;
+ 
++	// The Finder info goes to a sidecar in the parent folder
++	dirLocalChange(parent);
++	if (IsDir(cnid)) dirLocalChange(cnid);
++
+ 	// TODO: mtime setting
+ 	struct MFAttr attr = {};
+ 	memcpy(attr.finfo, &pb->ioFlFndrInfo, sizeof pb->ioFlFndrInfo); // same field as ioDrUsrWds
+@@ -1428,8 +1596,31 @@ static long fsCall(void *pb, long selector) {
+ 		printf("FS_%s", PBPrint(pb, selector, 1));
+ 	}
+ 
++	// RetroBoot: a file's data, resource fork (written at close) and sidecars
++	// live in its parent folder
++	int32_t fileDir = 0;
++	switch (selector & 0xf0ff) {
++	case kFSMWrite: case kFSMSetEOF: case kFSMClose: {
++		struct MyFCB *fcb = UnivGetFCB(((struct IOParam *)pb)->ioRefNum);
++		if (fcb != NULL) fileDir = fcb->fcbDirID;
++		break;
++	}
++	}
++
+ 	OSErr result = fsDispatch(pb, selector);
+ 
++	// RetroBoot: changes made through this driver are never taken for the
++	// host's; one that adds, removes or moves items moves vcbLsMod, as HFS does
++	switch (selector & 0xf0ff) {
++	case kFSMCreate: case kFSMDirCreate: case kFSMDelete: case kFSMRename: case kFSMCatMove:
++		dirLocalChange(0);
++		if (result == noErr) bumpLsMod();
++		break;
++	case kFSMWrite: case kFSMSetEOF: case kFSMClose:
++		if (fileDir != 0) dirLocalChange(fileDir);
++		break;
++	}
++
+ 	if (LogEnable) {
+ 		printf("%s", PBPrint(pb, selector, result));
+ 	}

@@ -1,6 +1,9 @@
 #include "catalog.h"
+#include "CMachineArchive.h"
 #include <QtNetwork>
+#include <cstdlib>
 #include <cstring>
+#include <memory>
 #include <zlib.h>
 #ifdef Q_OS_WIN
 #include <io.h>
@@ -56,9 +59,21 @@ QJsonArray parse(const QByteArray &data) {
     if (m["installedBytes"].toDouble() < 512)
       fail("Invalid installed size.");
     auto family = m.value("machineFamily").toString("powerMacG4");
-    if (!QStringList{"powerMacG4", "quadra800", "powerMac7500"}.contains(
+    if (!QStringList{"powerMacG4", "quadra800", "powerMac7500", "powerMacOSX"}.contains(
             family))
       fail("Unknown Library Mac model.");
+    const auto installed = m["installedBytes"].toDouble();
+    const auto capacity = m["diskCapacityBytes"].toDouble();
+    if (m.contains("diskCapacityBytes") &&
+        (capacity < 512 || capacity >= installed || capacity != qint64(capacity) ||
+         qint64(capacity) % 512))
+      fail("Invalid Library disk capacity.");
+    if (m.contains("requiredStorageBytes")) {
+      const auto storage = m["requiredStorageBytes"].toDouble();
+      if (!capacity || storage < 1048576 || storage > installed + 5 * 1048576 ||
+          storage != qint64(storage) || qint64(storage) % 1048576)
+        fail("Invalid Library storage requirement.");
+    }
     secureURL(m["archiveURL"].toString());
     seen.insert(id);
   }
@@ -156,22 +171,38 @@ static void request(const QUrl &initial, const QByteArray &range,
   fail("Too many download redirects.");
 }
 QJsonArray load(std::atomic_bool &cancel) {
-  QByteArray data;
-  try {
-    request(
-        secureURL(url), {}, 1048576, cancel,
-        [](QNetworkReply *r) {
-          if (r->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() !=
-              200)
-            fail("The Library catalog could not be downloaded.");
-        },
-        [&](QByteArray bytes) { data += bytes; });
-  } catch (...) {
-    if (cancel)
-      fail("Loading canceled. Your saved Macs are still available.");
-    throw;
+  QJsonArray rows;
+  QSet<QString> ids;
+  bool loaded = false;
+  QString failure;
+  for (const auto *url : {Library::url, Library::retroBootURL}) {
+    QByteArray data;
+    try {
+      request(
+          secureURL(url), {}, 1048576, cancel,
+          [](QNetworkReply *r) {
+            if (r->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() != 200)
+              fail("The Library catalog could not be downloaded.");
+          },
+          [&](QByteArray bytes) { data += bytes; });
+      for (const auto &row : parse(data)) {
+        const auto id = row.toObject()["id"].toString();
+        if (!ids.contains(id)) {
+          rows.append(row);
+          ids.insert(id);
+        }
+      }
+      loaded = true;
+    } catch (const std::exception &error) {
+      if (cancel)
+        fail("Loading canceled. Your saved Macs are still available.");
+      if (failure.isEmpty())
+        failure = QString::fromUtf8(error.what());
+    }
   }
-  return parse(data);
+  if (!loaded)
+    fail(failure);
+  return rows;
 }
 QJsonArray load() {
   std::atomic_bool cancel = false;
@@ -318,18 +349,61 @@ public:
     return b;
   }
 };
+static void writeSparseDisk(Reader &reader, QFile &file, qint64 size,
+                            qint64 memberSize, qint64 storage,
+                            std::atomic_bool &cancel, qint64 total,
+                            qint64 installed, const Progress &progress) {
+  size_t count = 0;
+  const auto readBlock = [](void *context, uint8_t *block) {
+    try {
+      const auto bytes = static_cast<Reader *>(context)->read(CM_TAR_BLOCK);
+      memcpy(block, bytes.constData(), CM_TAR_BLOCK);
+      return true;
+    } catch (const std::exception &) {
+      return false;
+    }
+  };
+  std::unique_ptr<CMSparseExtent, decltype(&std::free)> extents(
+      cm_sparse_read_map(readBlock, &reader, size, memberSize, &count), &std::free);
+  if (!extents)
+    fail("Invalid sparse machine disk.");
+  qint64 stored = 0;
+  for (size_t i = 0; i < count; ++i)
+    stored += extents.get()[i].length;
+  if (stored > storage)
+    fail("The machine needs more storage than its catalog allows.");
+  if (!file.resize(size))
+    fail("Could not size the imported machine disk.");
+  for (size_t i = 0; i < count; ++i) {
+    const auto &extent = extents.get()[i];
+    if (!file.seek(extent.offset))
+      fail("Could not seek within the imported machine disk.");
+    for (qint64 written = 0; written < extent.length;) {
+      checkCancel(cancel);
+      const auto bytes = reader.read(int(std::min<qint64>(1048576, extent.length - written)));
+      if (file.write(bytes) != bytes.size())
+        fail("The disk stopped accepting the imported machine.");
+      written += bytes.size();
+      progress("Installing", total + extent.offset + written, installed);
+    }
+  }
+  if (!file.flush())
+    fail("Could not finish the imported machine disk.");
+}
+
 void extract(const QString &archive, const QString &folder,
              const QJsonObject &m, std::atomic_bool &cancel,
              const Progress &progress) {
   qint64 installed = qint64(m["installedBytes"].toDouble()), total = 0;
-  Reader reader(archive, installed + 65536);
+  Reader reader(archive, installed + CM_SPARSE_HEADER_LIMIT + CM_SPARSE_MAP_LIMIT + 65536);
+  int64_t sparseDiskSize = 0;
   QSet<QString> seen;
   QByteArray zero(1048576, 0);
   for (;;) {
     checkCancel(cancel);
     auto h = reader.read(512);
     if (h == zero.left(512)) {
-      if (reader.read(512) != zero.left(512))
+      if (sparseDiskSize || reader.read(512) != zero.left(512))
         fail("Invalid archive end.");
       int padding = 0;
       for (;;) {
@@ -346,17 +420,34 @@ void extract(const QString &archive, const QString &folder,
     qint64 sum = 0;
     for (int i = 0; i < 512; ++i)
       sum += i >= 148 && i < 156 ? 32 : quint8(h[i]);
-    QString name = QString::fromUtf8(h.left(100).split('\0').first());
+    if (sum != checksum || h.mid(157, 100) != zero.left(100) ||
+        h.mid(345, 155) != zero.left(155))
+      fail("Unsafe machine archive member.");
+    const auto memberSize = number(h.data() + 124, 12);
+    const int pad = int((512 - memberSize % 512) % 512);
+    if (h[156] == 'x') {
+      if (sparseDiskSize || seen.contains("disk.img") || memberSize <= 0 ||
+          memberSize > CM_SPARSE_HEADER_LIMIT)
+        fail("Invalid sparse machine disk header.");
+      const auto pax = reader.read(int(memberSize));
+      if (!cm_sparse_disk_size(reinterpret_cast<const uint8_t *>(pax.constData()),
+                               pax.size(), &sparseDiskSize) ||
+          (pad && reader.read(pad) != zero.left(pad)))
+        fail("Invalid sparse machine disk header.");
+      continue;
+    }
+    const auto name = sparseDiskSize ? QString("disk.img")
+        : QString::fromUtf8(h.left(100).split('\0').first());
     QStringList allowed = {"config.json", "disk.img", "preview.png"};
-    if (m["machineFamily"].toString() == "quadra800")
+    const auto family = m["machineFamily"].toString();
+    if (family == "quadra800")
       allowed << "Quadra800.rom" << "pram.img";
-    if (sum != checksum || (h[156] != 0 && h[156] != '0') ||
-        h.mid(157, 100) != zero.left(100) ||
-        h.mid(345, 155) != zero.left(155) || !allowed.contains(name) ||
-        seen.contains(name))
+    if (family == "powerMacOSX")
+      allowed << "nvram.img";
+    if ((h[156] != 0 && h[156] != '0') || !allowed.contains(name) || seen.contains(name))
       fail("Unsafe machine archive member.");
     seen.insert(name);
-    qint64 size = number(h.data() + 124, 12);
+    const qint64 size = sparseDiskSize ? sparseDiskSize : memberSize;
     if (size <= 0 || size > installed - total ||
         (name == "config.json" && size > 65536) ||
         (name == "preview.png" && size > 16 * 1048576) ||
@@ -364,6 +455,7 @@ void extract(const QString &archive, const QString &folder,
          (size < 512 || size % 512 ||
           (m.contains("diskCapacityBytes") &&
            size != qint64(m["diskCapacityBytes"].toDouble())))) ||
+        (name == "nvram.img" && size != 16384) ||
         (name == "Quadra800.rom" && size != 1048576) ||
         (name == "pram.img" && size != 256 && size != 512))
       fail("Archive member size does not match its catalog.");
@@ -372,6 +464,16 @@ void extract(const QString &archive, const QString &folder,
       fail("Cannot create imported machine file.");
     if (name == "disk.img" && !Model::makeSparse(f))
       fail("The destination does not support sparse virtual disks.");
+    if (sparseDiskSize) {
+      const auto storage = qint64(m["requiredStorageBytes"].toDouble(installed));
+      writeSparseDisk(reader, f, size, memberSize, storage, cancel, total, installed, progress);
+      sparseDiskSize = 0;
+      total += size;
+      if (pad && reader.read(pad) != zero.left(pad))
+        fail("Invalid archive member padding.");
+      progress("Installing", total, installed);
+      continue;
+    }
     qint64 pos = 0;
     while (pos < size) {
       checkCancel(cancel);
@@ -388,7 +490,6 @@ void extract(const QString &archive, const QString &folder,
     }
     if (!f.resize(size) || !f.flush())
       fail("Could not finish the imported machine file.");
-    int pad = int((512 - size % 512) % 512);
     if (pad && reader.read(pad) != zero.left(pad))
       fail("Invalid archive member padding.");
   }
@@ -402,10 +503,11 @@ Model::Machine install(QJsonObject m, const QString &parent,
   if (!Model::supportedVersion(m["minimumAppVersion"].toString()))
     fail("Update ClassicMac to install this edition.");
   auto family = m.value("machineFamily").toString("powerMacG4");
-  if (!QStringList{"powerMacG4", "quadra800"}.contains(family))
+  if (!QStringList{"powerMacG4", "quadra800", "powerMacOSX"}.contains(family))
     fail("This edition needs the macOS Copland engine.");
   QStorageInfo storage(parent);
-  if (storage.isValid() && storage.bytesAvailable() < 268435456)
+  const auto required = qint64(m["requiredStorageBytes"].toDouble(m["installedBytes"].toDouble()));
+  if (storage.isValid() && storage.bytesAvailable() < required + 268435456)
     fail("There is not enough free space to install this Mac.");
   auto archive = download(m, cancel, progress);
   auto folder =
@@ -418,7 +520,7 @@ Model::Machine install(QJsonObject m, const QString &parent,
   extract(archive, folder, m, cancel, progress);
   auto source = Model::readJSON(folder + "/config.json");
   if (source.value("machineFamily").toString("powerMacG4") != family ||
-      source["diskImageName"].toString() != "disk.img" ||
+      source.value("diskImageName").toString("disk.img") != "disk.img" ||
       source.value("pramImageName").toString("pram.img") != "pram.img")
     fail("The template does not match its Library entry.");
   if (family == "quadra800" && QFileInfo::exists(folder + "/Quadra800.rom")) {

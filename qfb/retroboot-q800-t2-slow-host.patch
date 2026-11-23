@@ -1,0 +1,23 @@
+RetroBoot: allow slow ARM hosts enough translation time during Quadra calibration.
+
+The existing VIA timer-2 hold protects the ROM's delay-loop calibration from
+TCG translation pauses, but its 4 ms maximum can expire in the middle of the
+first-time instruction window. The earlier injected 14-block/4.2 ms test
+already exposed this limit. A nested ARM warm start now reproduced the same
+zero/ffff calibration globals and corrupted exception vectors. Give q800 a
+20 ms maximum. Keep the 100 us quiet release, cancellation on a new timer
+load, explicit off switch, and hard upper bound. Other VIA classes and the
+PowerPC lock are unchanged; no ROM code or global clock is modified.
+
+diff --git a/hw/misc/mac_via.c b/hw/misc/mac_via.c
+--- a/hw/misc/mac_via.c
++++ b/hw/misc/mac_via.c
+@@ -1339,7 +1339,7 @@
+     DEFINE_PROP_UINT32("x-t2-hold-quiet-us", MOS6522Q800VIA1State,
+                        parent_obj.t2_hold_quiet_us, 100),
+     DEFINE_PROP_UINT32("x-t2-hold-max-us", MOS6522Q800VIA1State,
+-                       parent_obj.t2_hold_max_us, 4000),
++                       parent_obj.t2_hold_max_us, 20000),
+     DEFINE_PROP_DRIVE("drive", MOS6522Q800VIA1State, blk),
+     /*
+      * RetroBoot: ADB autopolling every 100 ms instead of 11 ms once the

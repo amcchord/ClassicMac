@@ -367,10 +367,16 @@ struct VMConfig: Codable, Identifiable, Hashable {
         min(max(value, minHeight), maxHeight)
     }
 
+    static let importingTemplate = CodingUserInfoKey(rawValue: "classicmac.importingTemplate")!
+
     // Tolerant decoding so VMs created by older builds keep loading.
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        id = try c.decode(UUID.self, forKey: .id)
+        if decoder.userInfo[Self.importingTemplate] as? Bool == true {
+            id = UUID()
+        } else {
+            id = try c.decode(UUID.self, forKey: .id)
+        }
         name = try c.decode(String.self, forKey: .name)
         // VMs created before PPC support have no machineFamily key; they are
         // all Quadra 800s.

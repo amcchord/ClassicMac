@@ -24,9 +24,10 @@ enum MachineDownloadError: LocalizedError {
 
 struct MachineCatalog: Codable {
     static let defaultURL = URL(string: "https://mcchord.net/classicmac/catalog-v2.json")!
+    static let retroBootURL = URL(string: "https://mcchord.net/retroboot-downloads/catalog.json")!
     static let maximumCatalogBytes: Int64 = 1_048_576
     static var currentAppVersion: String {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "4.6.0"
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "4.7.0"
     }
 
     let schemaVersion: Int
@@ -67,6 +68,14 @@ struct DownloadableMachine: Codable, Identifiable, Hashable {
     let requiredStorageBytes: Int64?
     let machineFamily: MachineFamily?
     var family: MachineFamily { machineFamily ?? .powerMacG4 }
+    private var archiveFirmware: (bytes: Int64, files: Int64) {
+        switch family {
+        case .powerMacG4: return (0, 0)
+        case .powerMacOSX: return (16_384, 1)
+        case .powerMac7500: return (4_202_513, 2)
+        case .quadra800: return (1_049_088, 2)
+        }
+    }
 
     init(id: String, name: String, summary: String, osVersion: String,
          minimumAppVersion: String, archiveURL: URL,
@@ -99,16 +108,16 @@ struct DownloadableMachine: Codable, Identifiable, Hashable {
         }
         if let capacity = diskCapacityBytes {
             guard capacity >= 512, capacity % 512 == 0, capacity < installedBytes,
-                  installedBytes - capacity <= 16 * 1_048_576 + 65_536 + (family == .powerMac7500 ? 4_202_513 : family == .quadra800 ? 1_049_088 : 0) else {
+                  installedBytes - capacity <= 16 * 1_048_576 + 65_536 + archiveFirmware.bytes else {
                 throw MachineDownloadError.invalidCatalog("Its disk capacity does not match the expanded files.")
             }
         }
         if let storage = requiredStorageBytes {
-            // Three flat archive members can each round up by less than one
+            // Each flat archive member can round up by less than one
             // accounting chunk. Metadata never relaxes the full expansion cap.
             guard diskCapacityBytes != nil, storage >= 1_048_576,
                   storage % 1_048_576 == 0,
-                  storage <= installedBytes + (family == .powerMac7500 || family == .quadra800 ? 5 : 3) * 1_048_576 else {
+                  storage <= installedBytes + (3 + archiveFirmware.files) * 1_048_576 else {
                 throw MachineDownloadError.invalidCatalog("Its initial storage requirement is not valid.")
             }
         }

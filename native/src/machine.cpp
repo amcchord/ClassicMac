@@ -323,6 +323,8 @@ QStringList argumentsFor(const Machine &m, int port, bool silent) {
       << QString("macio-ide.dma-completion-delay-ns=%1")
              .arg(cdBoot ? 1000000 : 0)
       << "-prom-env" << "output-device=ttya";
+    if (!cdBoot && !legacy)
+      a << "-global" << "macio-ide.pio-status-drain=on";
     if (legacy) {
       a << "-drive" << "file=" + disk + ",format=raw,if=none,id=startup0";
       if (!compatCD)

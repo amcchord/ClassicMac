@@ -28,11 +28,12 @@ int main(int argc, char **argv) {
       for (auto row : rows)
         ids.insert(row.toObject()["id"].toString());
       for (auto id :
-           {"system-7.5.5-base-v1", "mac-os-8.1-base-v1", "mac-os-8.6-base-v1"})
+           {"system-7.5.5-base-v1", "mac-os-8.1-base-v1", "mac-os-8.6-base-v1",
+            "mac-os-7.5.5-v1", "os921-full-v4", "mac-os-x-10-4-11-tiger-period-v1"})
         if (!ids.contains(id))
-          Model::fail("Missing public base image.");
+          Model::fail("Missing ClassicMac or RetroBoot Library image.");
       std::printf("Native HTTPS catalog check passed: %lld editions, including "
-                  "all three classic bases.\n",
+                  "ClassicMac and RetroBoot images.\n",
                   static_cast<long long>(rows.size()));
       return 0;
     }

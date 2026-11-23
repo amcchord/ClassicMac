@@ -66,6 +66,72 @@ final class MachineDownloadTests: XCTestCase {
         XCTAssertEqual(VMTemplateMetadata.load(from: bundle)?.templateID, machine.id)
     }
 
+    func testRetroBootSparseDiskKeepsHolesAndRejectsInvalidMaps() throws {
+        let config = Data("{}".utf8)
+        let values = ["GNU.sparse.major=1", "GNU.sparse.minor=0",
+                      "GNU.sparse.name=disk.img", "GNU.sparse.realsize=4096"]
+        let pax = Data(values.map { "\($0.utf8.count + 4) \($0)\n" }.joined().utf8)
+        let bytes = Data(repeating: 0x69, count: 512)
+        for (mapText, valid) in [("2\n512\n512\n4096\n0\n", true),
+                                 ("2\n512\n512\n512\n512\n", false),
+                                 ("2\n512\n512\n4608\n0\n", false),
+                                 ("1\n512\n1024\n", false)] {
+            var map = Data(mapText.utf8)
+            map.append(Data(repeating: 0, count: 512 - map.count))
+            let archive = try makeArchive([
+                Entry("config.json", data: config), Entry("PaxHeaders/disk.img", data: pax, type: 120),
+                Entry("GNUSparseFile/disk.img", data: map + bytes),
+            ])
+            let staging = directory.appendingPathComponent(UUID().uuidString)
+            try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: false)
+            if valid {
+                try MachineTemplateInstaller.extract(archive, into: staging, expectedBytes: 4098,
+                    expectedDiskBytes: 4096)
+                let installed = try Data(contentsOf: staging.appendingPathComponent("disk.img"))
+                XCTAssertEqual(installed, Data(repeating: 0, count: 512) + bytes + Data(repeating: 0, count: 3072))
+            } else {
+                XCTAssertThrowsError(try MachineTemplateInstaller.extract(archive, into: staging,
+                    expectedBytes: 4098, expectedDiskBytes: 4096))
+            }
+        }
+    }
+
+    func testPublicRetroBootImports() async throws {
+        guard let fixtures = ProcessInfo.processInfo.environment["RETROBOOT_TEST_FIXTURES"] else {
+            throw XCTSkip("Set RETROBOOT_TEST_FIXTURES to qualify the public RetroBoot downloads")
+        }
+        let fixturesDirectory = URL(fileURLWithPath: fixtures)
+        let destination = fixturesDirectory.appendingPathComponent("swift-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: false)
+        let catalogFile = directory.appendingPathComponent("catalog.json")
+        _ = try await MachineDownloadTransfer(source: MachineCatalog.retroBootURL, destination: catalogFile,
+            expectedBytes: nil, maximumBytes: MachineCatalog.maximumCatalogBytes).run()
+        let entries = try MachineCatalog.decode(Data(contentsOf: catalogFile)).machines
+        for (id, file) in [("mac-os-7.5.5-v1", "system7.thin.tar.gz"),
+                           ("os921-full-v4", "os9.thin.tar.gz"),
+                           ("mac-os-x-10-4-11-tiger-period-v1", "tiger.thin.tar.gz")] {
+            let machine = try XCTUnwrap(entries.first { $0.id == id })
+            let archive = machine.family == .quadra800 ? directory.appendingPathComponent(file)
+                : fixturesDirectory.appendingPathComponent(file)
+            if machine.family == .quadra800 {
+                _ = try await MachineDownloadTransfer(source: machine.archiveURL, destination: archive,
+                    expectedBytes: machine.archiveBytes, maximumBytes: machine.archiveBytes).run()
+            }
+            try MachineDownloadTransfer.verify(archive, machine: machine)
+            let bundle = try MachineTemplateInstaller.installVerifiedArchive(archive, machine: machine,
+                name: machine.name, in: destination)
+            let config = try JSONDecoder().decode(VMConfig.self,
+                from: Data(contentsOf: bundle.appendingPathComponent("config.json")))
+            XCTAssertEqual(config.machineFamily, machine.family)
+            XCTAssertEqual(try bundle.appendingPathComponent("disk.img").resourceValues(forKeys: [.fileSizeKey]).fileSize,
+                           Int(try XCTUnwrap(machine.diskCapacityBytes)))
+            XCTAssertEqual(VMTemplateMetadata.load(from: bundle)?.archiveSHA256, machine.sha256)
+            if machine.family == .powerMacOSX {
+                XCTAssertEqual(try Data(contentsOf: bundle.appendingPathComponent("nvram.img")).count, 16_384)
+            }
+        }
+    }
+
     func testClassicBaseTemplatesPreserveTheirHardwareAndOptionalMedia() throws {
         for family in [MachineFamily.quadra800, .powerMacG4] {
             let original = VMConfig(name: "Base source", machineFamily: family,

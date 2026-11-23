@@ -1,0 +1,99 @@
+RetroBoot: batch idle OHCI frames also while the only devices on the root hub
+are USB HID devices with nothing to report (RetroBoot's usb-mouse for USB
+Overdrive). Their interrupt endpoint only NAKs; new input calls usb_wakeup(),
+which ends the batch at once (bus op wakeup_endpoint). Applies after
+retroboot-ohci-idle-frames.patch (apps/reports/mouse-2026-10-11.md).
+
+diff --git a/hw/usb/hcd-ohci.c b/hw/usb/hcd-ohci.c
+--- a/hw/usb/hcd-ohci.c
++++ b/hw/usb/hcd-ohci.c
+@@ -1191,19 +1191,42 @@ static int ohci_service_ed_list(OHCIState *ohci, uint32_t head)
+  * Register accesses first catch up with the frames that have ended, so the
+  * guest always sees the current frame number and interrupt state; only the
+  * HCCA frame number in guest memory advances in steps.
++ *
++ * The same holds while the only devices are USB HID devices (RetroBoot's
++ * usb-mouse) that have nothing to report: their interrupt endpoint NAKs, which
++ * changes nothing either, provided no control or bulk work is queued, no
++ * transfer is in flight, no retired TD waits for the done queue and no
++ * transfer completed in the last OHCI_ACTIVE_FRAMES frames.  New input calls
++ * usb_wakeup() on the endpoint (ohci_wakeup_endpoint), which runs the frames
++ * that have ended and puts the next frame boundary one frame away, so input
++ * waits no longer than the endpoint's own polling interval.
+  */
++#define OHCI_ACTIVE_FRAMES 32
++
+ static bool ohci_frames_idle(OHCIState *ohci)
+ {
++    bool devices = false;
+     int i;
+ 
+     if (ohci->idle_frames <= 1 || (ohci->intr & OHCI_INTR_SF)) {
+         return false;
+     }
+     for (i = 0; i < ohci->num_ports; i++) {
+-        if (ohci->rhport[i].port.dev) {
+-            return false;
++        USBDevice *dev = ohci->rhport[i].port.dev;
++
++        if (dev) {
++            if (!object_dynamic_cast(OBJECT(dev), "usb-hid")) {
++                return false;
++            }
++            devices = true;
+         }
+     }
++    if (devices &&
++        (ohci->active_frames || ohci->done || ohci->done_count != 7 ||
++         ohci->async_td ||
++         (ohci->status & (OHCI_STATUS_CLF | OHCI_STATUS_BLF)))) {
++        return false;
++    }
+     return true;
+ }
+ 
+@@ -1332,6 +1355,11 @@ static void ohci_frame_boundary_one(OHCIState *ohci)
+     if (ohci->done_count != 7 && ohci->done_count != 0) {
+         ohci->done_count--;
+     }
++    if (ohci->done) {
++        ohci->active_frames = OHCI_ACTIVE_FRAMES;   /* a transfer completed */
++    } else if (ohci->active_frames) {
++        ohci->active_frames--;
++    }
+     /* Do SOF stuff here */
+     ohci_sof(ohci);
+ 
+@@ -1964,7 +1992,21 @@ static USBPortOps ohci_port_ops = {
+     .complete = ohci_async_complete_packet,
+ };
+ 
++/* A device has data for an endpoint (HID input): stop batching idle frames. */
++static void ohci_wakeup_endpoint(USBBus *bus, USBEndpoint *ep,
++                                 unsigned int stream)
++{
++    OHCIState *ohci = container_of(bus, OHCIState, bus);
++
++    ohci->active_frames = OHCI_ACTIVE_FRAMES;
++    if (timer_pending(ohci->eof_timer)) {
++        ohci_frame_catch_up(ohci);
++        ohci_eof_timer(ohci);
++    }
++}
++
+ static USBBusOps ohci_bus_ops = {
++    .wakeup_endpoint = ohci_wakeup_endpoint,
+ };
+ 
+ void usb_ohci_init(OHCIState *ohci, DeviceState *dev, uint32_t num_ports,
+diff --git a/hw/usb/hcd-ohci.h b/hw/usb/hcd-ohci.h
+--- a/hw/usb/hcd-ohci.h
++++ b/hw/usb/hcd-ohci.h
+@@ -47,6 +47,7 @@ struct OHCIState {
+     QEMUTimer *eof_timer;
+     int64_t sof_time;
+     uint32_t idle_frames;   /* frames per timer while nothing uses the bus */
++    uint32_t active_frames; /* frames left before HID-only idle batching */
+ 
+     /* OHCI state */
+     /* Control partition */

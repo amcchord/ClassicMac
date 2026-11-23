@@ -1,0 +1,35 @@
+diff --git a/device-9p.c b/device-9p.c
+index b3fadfd..2c8ee02 100644
+--- a/device-9p.c
++++ b/device-9p.c
+@@ -648,7 +648,7 @@ static OSErr fsGetFileInfo(struct HFileInfo *pb) {
+ 
+ static void setDirPBInfo(struct DirInfo *pb, int32_t cnid, int32_t pcnid, const char *name, uint32_t fid) {
+ 	struct MFAttr attr;
+-	MF.DGetAttr(cnid, fid, name, MF_FINFO, &attr);
++	MF.DGetAttr(cnid, fid, name, MF_FINFO|MF_TIME, &attr);
+ 
+ 	// Clear fields from ioFlAttrib onward
+ 	memset((char *)pb + 30, 0, 100 - 30);
+diff --git a/multifork-3.c b/multifork-3.c
+index 93a1418..4f00895 100644
+--- a/multifork-3.c
++++ b/multifork-3.c
+@@ -250,8 +250,16 @@ int fsetattr3(int32_t cnid, uint32_t fid, const char *name, unsigned fields, con
+ }
+ 
+ int dgetattr3(int32_t cnid, uint32_t fid, const char *name, unsigned fields, struct MFAttr *attr) {
+-	// Benignly unimplemented
++	// Folder Finder info is still not stored (benignly unimplemented), but the
++	// modification date is real: the Finder refreshes an open window when its
++	// folder's date changes, so files added by the host show up promptly.
+ 	memset(attr, 0, sizeof *attr);
++	if (fields & MF_TIME) {
++		struct Stat9 stat = {};
++		if (!Getattr9(fid, STAT_MTIME, &stat)) {
++			attr->unixtime = stat.mtime_sec;
++		}
++	}
+ 	return 0;
+ }
+ 
