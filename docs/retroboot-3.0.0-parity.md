@@ -13,7 +13,7 @@ configuration and appliance setup.
 | USB idle | OHCI batches idle frames on empty buses and on buses with idle HID devices. An input event resumes normal frame scheduling. |
 | Quadra | The display keeps the mode and surface consistent with each dirty snapshot. Timer 2 allows up to 20 ms for slow translation while retaining its early release condition. |
 | Shared folders | The guest driver caches directory details and refreshes on host changes. Both the Quadra ROM and Power Mac loader were rebuilt from the pinned classicvirtio revision with RetroBoot's folder date and cache patches. |
-| Mac OS X | The 4.7.0 QEMU 10 patch matches the RetroBoot 3.0.0 engine patch byte for byte. The desktop profile selects standard VGA. RetroBoot's separate AMD core placement, ALSA device tuning and hardware presenter are appliance policies. The experimental packed 1555 change is outside the RetroBoot 3.0.0 release. |
+| Mac OS X | The 4.7.0 QEMU 10 patch matches the RetroBoot 3.0.0 engine patch byte for byte. The desktop profile selects standard VGA. RetroBoot's separate AMD core placement, ALSA device tuning and hardware presenter are appliance policies. Packed 1555 acceleration is an experimental branch change. |
 
 ## Checks
 
@@ -28,3 +28,25 @@ The Apple Silicon QEMU build passed its device, firmware, CGL and display
 checks, including 598,030 exact Radeon cursor pixels. The Quadra snapshot
 regression passed nine mode and surface cases. Both classicvirtio artifacts
 built with the existing Retro68 toolchain.
+
+Three alternating pairs on an Apple Silicon host used disposable copies of
+the same RetroBoot Mac OS 9.2.1 image, the same devices and real-time
+emulation. Median time to Finder was 14.543 s with the signed 4.7.0 engine
+and 9.440 s with the rebuilt engine and PIO status drain enabled. Every
+boot shut down normally. This measures the combined engine changes on
+this host.
+
+The imported System 7.5.5 disk reached Finder on the built-in and enhanced
+Quadra framebuffers. Both accepted the ADB power key and displayed the
+guest's shutdown dialog. The updated Power Mac engine also booted an
+existing Mac OS 9.2.1 installer disc. Tiger reached the expected Finder pixels using
+its imported startup memory and opened Home after a keyboard command.
+The final macOS suite ran 147 Swift tests with three optional fixture
+skips and zero failures. Native self-tests and 11 Python tests passed.
+
+Three further alternating pairs used ClassicMac's normal accounted startup
+clock and its Finder handoff to real time. Median time to Finder went from
+9.806 s to 8.952 s. Each boot returned to real time and shut down normally.
+
+[Linux package and engine checks](https://github.com/amcchord/ClassicMac/actions/runs/45094919620) ·
+[Windows package and engine checks](https://github.com/amcchord/ClassicMac/actions/runs/45094922315)

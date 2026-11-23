@@ -1,3 +1,16 @@
+# ClassicMac source synced with RetroBoot downloads — November 22, 2026
+
+Source commit `e664ec0` adds the public RetroBoot catalog, sparse disk imports,
+and the classic IDE, USB, Quadra and folder-sharing updates. The local
+control checkout and GitHub main contain the source. The built Mac app is
+under `output/retroboot-parity/ClassicMac.app`.
+
+The supported Library shows 18 distinct editions across the two catalogs.
+System 7.5.5, Mac OS 9.2.1 and Tiger 10.4.11 passed import and boot checks.
+Median Finder startup in three default-clock Mac OS 9 boot pairs dropped
+from 9.806 s to 8.952 s. See the [compatibility report](../retroboot-3.0.0-parity.md)
+for measurement conditions and desktop build checks.
+
 # ClassicMac 4.7.0 published on November 17, 2026
 
 ClassicMac 4.7.0 is the stable latest GitHub release. The three desktop

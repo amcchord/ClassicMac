@@ -1991,3 +1991,23 @@ consolidated root checks, publish and verify stable 4.1.1. Retain 4.1.0 for roll
 - Published tag `v4.7.0` at `6fe3304` as stable latest, release ID 449345793.
   All ten draft assets and anonymous downloads passed digest and size checks.
   Private test media remains outside Git and the published release.
+
+
+## 2026-11-22 — RetroBoot public Library and performance parity
+
+- Fast-forwarded the local ClassicMac main by 11 commits to GitHub's
+  published 4.7.0 source at `a516acc`. Integrated and pushed `e664ec0` from
+  `codex/retroboot-parity`. Git reports the existing local `gxmetal/` as
+  untracked.
+- The desktop Library reads both public HTTPS catalogs. All 13 RetroBoot
+  URLs passed size and byte-range checks. Swift and Qt installed System
+  7.5.5, Mac OS 9.2.1 and Tiger, and disposable guests reached Finder.
+- Compared RetroBoot 3.0.0 with the existing CPU, VGA, ATI, audio and OS X
+  patches. Ported the missing classic storage, idle USB, Quadra snapshot
+  and timing, and guest folder-cache changes. Rebuilt both guest drivers.
+  Real-time Mac OS 9 boot median moved from 14.543 s to 9.440 s. The default
+  startup clock moved from 9.806 s to 8.952 s. All 12 guest boots shut down.
+- Consolidated Swift, native and Python tests passed. The local Mac app
+  passed its signature check and all three engines ran. GitHub desktop
+  package checks and source boundaries are in the
+  [compatibility report](../retroboot-3.0.0-parity.md).
