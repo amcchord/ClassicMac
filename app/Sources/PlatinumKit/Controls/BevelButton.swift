@@ -11,6 +11,17 @@ public struct PlatinumBevelButtonStyle: ButtonStyle {
     }
 }
 
+private struct BevelControlStateKey: EnvironmentKey {
+    static let defaultValue = ControlState.normal
+}
+
+private extension EnvironmentValues {
+    var bevelControlState: ControlState {
+        get { self[BevelControlStateKey.self] }
+        set { self[BevelControlStateKey.self] = newValue }
+    }
+}
+
 private struct BevelBody: View {
     let configuration: ButtonStyleConfiguration
     @Environment(\.isEnabled) private var isEnabled
@@ -19,7 +30,8 @@ private struct BevelBody: View {
         let state: ControlState = !isEnabled ? .disabled : configuration.isPressed ? .pressed : .normal
         configuration.label
             .font(.platinumSmall)
-            .foregroundStyle(state == .disabled ? Platinum.disabledText.color : Platinum.black.color)
+            .foregroundStyle(Chrome.buttonText(state).color)
+            .environment(\.bevelControlState, state)
             .lineLimit(1)
             .fixedSize()
             .padding(.horizontal, 7)
@@ -38,7 +50,6 @@ public struct PlatinumBevelButton: View {
     let title: String?
     let icon: String?
     let action: () -> Void
-    @Environment(\.isEnabled) private var isEnabled
 
     public init(_ title: String? = nil, icon: String? = nil, action: @escaping () -> Void) {
         self.title = title
@@ -48,20 +59,32 @@ public struct PlatinumBevelButton: View {
 
     public var body: some View {
         Button(action: action) {
-            HStack(spacing: 4) {
-                if let icon { PlatinumIcon(icon, size: 16) }
-                if let title {
-                    PixelCanvas { p, _ in
-                        p.text(title, font: .system, x: 0, baseline: 12,
-                               color: isEnabled ? Platinum.black : Platinum.disabledText)
-                    }
-                    .frame(width: PlatinumFonts.width(title, font: .system), height: 16)
-                    .accessibilityHidden(true)
-                }
-            }
+            BevelLabel(title: title, icon: icon)
         }
         .buttonStyle(PlatinumBevelButtonStyle())
         .accessibilityLabel(title ?? icon ?? "")
+    }
+}
+
+private struct BevelLabel: View {
+    let title: String?
+    let icon: String?
+    @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.bevelControlState) private var bevelState
+
+    var body: some View {
+        let state: ControlState = !isEnabled ? .disabled : bevelState
+        HStack(spacing: 4) {
+            if let icon { PlatinumIcon(icon, size: 16) }
+            if let title {
+                PixelCanvas { p, _ in
+                    p.text(title, font: .system, x: 0, baseline: 12,
+                           color: Chrome.buttonText(state))
+                }
+                .frame(width: PlatinumFonts.width(title, font: .system), height: 16)
+                .accessibilityHidden(true)
+            }
+        }
     }
 }
 

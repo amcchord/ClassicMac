@@ -10,6 +10,51 @@ struct ScrollMetrics: Equatable {
     var canScroll: Bool { maxOffset > 0.5 }
 }
 
+/// Reference-type auto-repeat controller so repeating timers always read live
+/// scroll metrics instead of a stale SwiftUI struct snapshot.
+@MainActor
+final class ScrollBarRepeater {
+    var metrics = ScrollMetrics()
+    var line: CGFloat = Platinum.listRowHeight
+    var scrollTo: (CGFloat) -> Void = { _ in }
+    private var timer: Timer?
+
+    var isActive: Bool { timer != nil }
+
+    func start(step delta: @escaping (ScrollMetrics, CGFloat) -> CGFloat) {
+        stop()
+        applyStep(delta)
+        // Mac OS waits a moment, then repeats about every 50 ms.
+        let first = Timer(timeInterval: 0.3, repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.applyStep(delta)
+                let repeating = Timer(timeInterval: 0.05, repeats: true) { [weak self] _ in
+                    MainActor.assumeIsolated {
+                        self?.applyStep(delta)
+                    }
+                }
+                RunLoop.main.add(repeating, forMode: .common)
+                self.timer = repeating
+            }
+        }
+        RunLoop.main.add(first, forMode: .common)
+        timer = first
+    }
+
+    func applyStep(_ delta: (ScrollMetrics, CGFloat) -> CGFloat) {
+        guard metrics.canScroll else { return }
+        let amount = delta(metrics, line)
+        let target = min(max(0, metrics.offset + amount), metrics.maxOffset)
+        scrollTo(target)
+    }
+
+    func stop() {
+        timer?.invalidate()
+        timer = nil
+    }
+}
+
 /// A vertical Platinum scroll bar: paired lower arrows, a sunken channel and
 /// the lavender thumb. Arrows and the channel auto-repeat while held.
 struct PlatinumScrollBar: View {
@@ -19,12 +64,13 @@ struct PlatinumScrollBar: View {
 
     @State private var pressedArrow: Int?
     @State private var dragStart: (offset: CGFloat, y: CGFloat)?
-    @State private var repeater: Timer?
+    @State private var trackingSessionActive = false
+    @State private var repeater = ScrollBarRepeater()
 
     var body: some View {
         GeometryReader { geo in
             let h = Int(geo.size.height)
-            let thumbY = thumbTop(height: h)
+            let thumbY = thumbTop(height: h, metrics: metrics)
             PixelCanvas { p, r in
                 Chrome.scrollBar(p, PixelRect(0, 0, 16, r.h), thumbY: thumbY, pressedArrow: pressedArrow)
             }
@@ -37,9 +83,18 @@ struct PlatinumScrollBar: View {
         }
         .frame(width: Platinum.scrollbarWidth)
         .accessibilityHidden(true)
+        .onAppear { syncRepeater() }
+        .onChange(of: metrics) { _, new in repeater.metrics = new }
+        .onDisappear { ended() }
     }
 
-    private func thumbTop(height: Int) -> Int? {
+    private func syncRepeater() {
+        repeater.metrics = metrics
+        repeater.line = line
+        repeater.scrollTo = scrollTo
+    }
+
+    private func thumbTop(height: Int, metrics: ScrollMetrics) -> Int? {
         guard metrics.canScroll else { return nil }
         let trackY = 0, trackH = height - 31
         let span = trackH - Chrome.thumbHeight
@@ -48,68 +103,59 @@ struct PlatinumScrollBar: View {
     }
 
     private func changed(_ value: DragGesture.Value, height: Int) {
-        guard metrics.canScroll else { return }
+        syncRepeater()
+        let live = repeater.metrics
+        guard live.canScroll else { return }
         if let start = dragStart {
             // Dragging the thumb: map pointer motion onto the scroll range.
             let span = CGFloat(height - 31 - Chrome.thumbHeight)
             guard span > 0 else { return }
-            let delta = (value.location.y - start.y) / span * metrics.maxOffset
-            scrollTo(min(max(0, start.offset + delta), metrics.maxOffset))
+            let delta = (value.location.y - start.y) / span * live.maxOffset
+            repeater.scrollTo(min(max(0, start.offset + delta), live.maxOffset))
             return
         }
-        guard repeater == nil, pressedArrow == nil else {
+        if trackingSessionActive {
             // Track whether the pointer is still over the pressed arrow.
             if let arrow = pressedArrow, arrow != 0 {
                 let y = value.location.y
                 let inside = arrow < 0 ? y >= CGFloat(height - 31) && y < CGFloat(height - 16)
                                       : y >= CGFloat(height - 16)
-                if !inside { stopRepeat() }
+                if !inside {
+                    stopRepeat()
+                    pressedArrow = nil
+                }
             }
             return
         }
+        trackingSessionActive = true
         let y = value.startLocation.y
-        let thumb = CGFloat(thumbTop(height: height) ?? 0)
+        let thumb = CGFloat(thumbTop(height: height, metrics: live) ?? 0)
         if y >= CGFloat(height - 31) && y < CGFloat(height - 16) {
-            begin(arrow: -1) { step(-line) }
+            pressedArrow = -1
+            repeater.start { _, line in -line }
         } else if y >= CGFloat(height - 16) {
-            begin(arrow: 1) { step(line) }
+            pressedArrow = 1
+            repeater.start { _, line in line }
         } else if y < thumb {
-            begin(arrow: 0) { step(-metrics.visible + line) }
+            pressedArrow = nil
+            repeater.start { m, line in -max(line, m.visible - line) }
         } else if y >= thumb + CGFloat(Chrome.thumbHeight) {
-            begin(arrow: 0) { step(metrics.visible - line) }
+            pressedArrow = nil
+            repeater.start { m, line in max(line, m.visible - line) }
         } else {
-            dragStart = (metrics.offset, value.startLocation.y)
+            dragStart = (live.offset, value.startLocation.y)
         }
-    }
-
-    private func begin(arrow: Int, _ action: @escaping () -> Void) {
-        pressedArrow = arrow == 0 ? nil : arrow
-        action()
-        // Mac OS waits a moment, then repeats about every 50 ms.
-        let first = Timer(timeInterval: 0.3, repeats: false) { _ in
-            let repeating = Timer(timeInterval: 0.05, repeats: true) { _ in
-                MainActor.assumeIsolated { action() }
-            }
-            RunLoop.main.add(repeating, forMode: .common)
-            MainActor.assumeIsolated { repeater = repeating }
-        }
-        RunLoop.main.add(first, forMode: .common)
-        repeater = first
-    }
-
-    private func step(_ delta: CGFloat) {
-        scrollTo(min(max(0, metrics.offset + delta), metrics.maxOffset))
     }
 
     private func stopRepeat() {
-        repeater?.invalidate()
-        repeater = nil
+        repeater.stop()
     }
 
     private func ended() {
         stopRepeat()
         pressedArrow = nil
         dragStart = nil
+        trackingSessionActive = false
     }
 }
 
@@ -176,6 +222,9 @@ public struct PlatinumList<Item: Identifiable, Row: View>: View {
     let row: (Item, Bool) -> Row
     @FocusState private var focused: Bool
     @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.platinumWindow) private var platinumWindow
+
+    private var windowActive: Bool { (platinumWindow?.isActive ?? true) || PlatinumDebug.forceActive }
 
     public init(_ items: [Item], selection: Binding<Item.ID?>, rowHeight: CGFloat = Platinum.listRowHeight,
                 onDoubleClick: ((Item) -> Void)? = nil,
@@ -196,9 +245,10 @@ public struct PlatinumList<Item: Identifiable, Row: View>: View {
                             let selected = item.id == selection
                             row(item, selected)
                                 .frame(maxWidth: .infinity, minHeight: rowHeight, maxHeight: rowHeight, alignment: .leading)
-                                .background(selected ? Platinum.highlight.color : Color.clear)
+                                .background(selected ? ((windowActive && isEnabled) ? Platinum.highlight.color : Platinum.highlight.dimmed.color) : Color.clear)
                                 .contentShape(Rectangle())
                                 .id(item.id)
+                                .accessibilityAddTraits(selected ? .isSelected : [])
                                 .onTapGesture(count: 2) {
                                     selection = item.id
                                     onDoubleClick?(item)
@@ -215,9 +265,11 @@ public struct PlatinumList<Item: Identifiable, Row: View>: View {
                 PixelCanvas { p, r in Chrome.listBox(p, r.inset(1), disabled: !isEnabled) }
             }
             .overlay {
-                if focused {
+                if focused && isEnabled {
                     PixelCanvas { p, r in Chrome.focusRing(p, around: r.inset(2)) }
                         .padding(-1)
+                        .saturation(windowActive ? 1 : 0)
+                        .opacity(windowActive ? 1 : 0.55)
                         .allowsHitTesting(false)
                 }
             }
@@ -227,7 +279,10 @@ public struct PlatinumList<Item: Identifiable, Row: View>: View {
             .onKeyPress(.upArrow) { move(-1, proxy); return .handled }
             .onKeyPress(.downArrow) { move(1, proxy); return .handled }
             .onKeyPress(.return) {
-                if let id = selection, let item = items.first(where: { $0.id == id }) { onDoubleClick?(item) }
+                guard let onDoubleClick, let id = selection, let item = items.first(where: { $0.id == id }) else {
+                    return .ignored
+                }
+                onDoubleClick(item)
                 return .handled
             }
         }

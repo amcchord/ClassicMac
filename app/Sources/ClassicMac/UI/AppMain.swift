@@ -58,16 +58,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         let manager = QEMUManager.shared
         let running = manager.runningIDs.count
         guard running > 0 else { return .terminateNow }
-        if let osx = VMStore.shared.vms.first(where: {
+        let osxRunning = VMStore.shared.vms.filter {
             $0.machineFamily == .powerMacOSX && manager.isRunning($0.id)
-        }) {
+        }
+        if let osx = osxRunning.first {
             WindowManager.shared.alert(.caution, "Shut down Mac OS X before quitting.",
-                informative: "Choose Shut Down from the Apple menu inside your Mac.",
-                buttons: [PlatinumAlertButton("Show Mac", role: .default) {
-                    if manager.isPaused(osx.id) { manager.resume(osx.id) }
-                    manager.activate(osx.id)
-                }])
-            return .terminateCancel
+                informative: "Choose Shut Down from the Apple menu inside your Mac. Force Stop turns it off immediately and can lose unsaved work.",
+                buttons: [
+                    PlatinumAlertButton("Show Mac", role: .default) {
+                        if manager.isPaused(osx.id) { manager.resume(osx.id) }
+                        manager.activate(osx.id)
+                        NSApp.reply(toApplicationShouldTerminate: false)
+                    },
+                    PlatinumAlertButton("Force Stop") {
+                        for vm in osxRunning {
+                            // TODO(merge): replace requestStop+confirmStop with manager.forceStop(vm.id)
+                            manager.requestStop(vm.id)
+                            manager.confirmStop()
+                        }
+                        let remainingNonOSX = manager.runningIDs.subtracting(osxRunning.map(\.id))
+                        if remainingNonOSX.isEmpty {
+                            let deadline = Date().addingTimeInterval(5)
+                            @MainActor func waitForOSXExit() {
+                                if manager.runningIDs.isEmpty || Date() > deadline {
+                                    NSApp.reply(toApplicationShouldTerminate: true)
+                                    return
+                                }
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                    MainActor.assumeIsolated { waitForOSXExit() }
+                                }
+                            }
+                            waitForOSXExit()
+                        } else {
+                            manager.shutDownAll { NSApp.reply(toApplicationShouldTerminate: true) }
+                        }
+                    },
+                    PlatinumAlertButton("Cancel", role: .cancel) {
+                        NSApp.reply(toApplicationShouldTerminate: false)
+                    },
+                ])
+            return .terminateLater
         }
         let names = VMStore.shared.vms.filter { manager.isRunning($0.id) }.map { "\u{201C}\($0.name)\u{201D}" }
         let message = running == 1 ? "Shut down \(names.first ?? "the running Mac") and quit ClassicMac?"
@@ -157,7 +187,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case #selector(pauseOrResume(_:)):
             item.title = paused ? "Resume" : "Pause"
             return running
-        case #selector(restart(_:)), #selector(shutDown(_:)):
+        case #selector(restart(_:)):
+            return running && vm?.machineFamily != .powerMacOSX
+        case #selector(shutDown(_:)):
             return running
         case #selector(showMedia(_:)):
             return vm != nil && !copland

@@ -13,8 +13,10 @@ public final class PlatinumWindowState: ObservableObject {
     @Published public var title: String
     @Published public var isCollapsed = false
     @Published public var isActive = true
-    /// A modal dialog is in front of this window; its content ignores clicks.
+    /// A modal dialog is in front of this window; its content and frame ignore clicks.
     @Published public var isBlockedByModal = false
+    /// True while the user is actively dragging the window's grow box.
+    @Published public var isGrowDragging = false
 
     public var close: () -> Void = {}
     public var zoom: () -> Void = {}
@@ -92,12 +94,6 @@ public struct PlatinumWindowChrome<Content: View>: View {
                         .clipped()
                         .offset(x: CGFloat(insets.left), y: CGFloat(insets.top))
                         .disabled(state.isBlockedByModal)
-                        .overlay {
-                            if state.isBlockedByModal {
-                                Color.white.opacity(0.001)
-                                    .onTapGesture { state.blockedClick() }
-                            }
-                        }
                 }
 
                 // The placard/content would otherwise paint over the grow box.
@@ -109,14 +105,14 @@ public struct PlatinumWindowChrome<Content: View>: View {
                 }
 
                 #if os(macOS)
-                if titled && !staticRender {
+                if titled && !staticRender && !state.isBlockedByModal {
                     // The whole title bar moves the window; the boxes sit on top.
                     WindowDragArea(onDoubleClick: boxes.collapse ? { state.collapse() } : nil)
                         .frame(width: CGFloat(w - 2), height: CGFloat(insets.top - 2))
                         .offset(x: 1, y: 1)
                 }
-                if growable && !state.isCollapsed && !staticRender {
-                    WindowGrowArea()
+                if growable && !state.isCollapsed && !staticRender && !state.isBlockedByModal {
+                    WindowGrowArea(state: state)
                         .frame(width: 15, height: 15)
                         .offset(x: CGFloat(w - 1 - insets.right - 15), y: CGFloat(h - 1 - insets.bottom - 15))
                 }
@@ -138,20 +134,34 @@ public struct PlatinumWindowChrome<Content: View>: View {
                         let o = Chrome.closeBoxOrigin()
                         TitleBoxButton(kind: .close, action: state.close)
                             .offset(x: CGFloat(o.x), y: CGFloat(o.y))
+                            .disabled(state.isBlockedByModal)
                             .accessibilityLabel("Close")
                     }
                     if boxes.zoom {
                         let o = Chrome.zoomBoxOrigin(width: w - 1, collapse: boxes.collapse)
                         TitleBoxButton(kind: .zoom, action: state.zoom)
                             .offset(x: CGFloat(o.x), y: CGFloat(o.y))
+                            .disabled(state.isBlockedByModal)
                             .accessibilityLabel("Zoom")
                     }
                     if boxes.collapse {
                         let o = Chrome.collapseBoxOrigin(width: w - 1)
                         TitleBoxButton(kind: .collapse, action: state.collapse)
                             .offset(x: CGFloat(o.x), y: CGFloat(o.y))
+                            .disabled(state.isBlockedByModal)
                             .accessibilityLabel(state.isCollapsed ? "Expand" : "Collapse")
                     }
+                }
+
+                if state.isBlockedByModal && !staticRender {
+                    #if os(macOS)
+                    WindowBlockerArea(onBlocked: state.blockedClick)
+                        .frame(width: CGFloat(w), height: CGFloat(h))
+                    #else
+                    Color.white.opacity(0.001)
+                        .frame(width: CGFloat(w), height: CGFloat(h))
+                        .onTapGesture { state.blockedClick() }
+                    #endif
                 }
             }
             .frame(width: CGFloat(w), height: CGFloat(h), alignment: .topLeading)
@@ -212,14 +222,48 @@ struct WindowDragArea: NSViewRepresentable {
     }
 }
 
+/// Blocks mouse clicks and drags across the entire window while a modal dialog is active.
+struct WindowBlockerArea: NSViewRepresentable {
+    let onBlocked: () -> Void
+
+    func makeNSView(context: Context) -> BlockerView { BlockerView() }
+
+    func updateNSView(_ view: BlockerView, context: Context) {
+        view.onBlocked = onBlocked
+    }
+
+    final class BlockerView: NSView {
+        var onBlocked: (() -> Void)?
+
+        override func mouseDown(with event: NSEvent) { onBlocked?() }
+        override func rightMouseDown(with event: NSEvent) { onBlocked?() }
+        override func otherMouseDown(with event: NSEvent) { onBlocked?() }
+        override func scrollWheel(with event: NSEvent) { onBlocked?() }
+        override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+        override var mouseDownCanMoveWindow: Bool { false }
+    }
+}
+
 /// The grow box: drag to resize the window, keeping its top-left corner fixed.
 struct WindowGrowArea: NSViewRepresentable {
+    let state: PlatinumWindowState
+
     func makeNSView(context: Context) -> GrowView { GrowView() }
-    func updateNSView(_ view: GrowView, context: Context) {}
+    func updateNSView(_ view: GrowView, context: Context) {
+        view.state = state
+    }
 
     final class GrowView: NSView {
+        weak var state: PlatinumWindowState?
+
         override func mouseDown(with event: NSEvent) {
             guard let window else { return }
+            if state?.isBlockedByModal == true {
+                state?.blockedClick()
+                return
+            }
+            state?.isGrowDragging = true
+            defer { state?.isGrowDragging = false }
             let start = NSEvent.mouseLocation
             let startFrame = window.frame
             while let e = NSApp.nextEvent(matching: [.leftMouseDragged, .leftMouseUp],

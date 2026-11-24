@@ -110,7 +110,7 @@ public struct PlatinumPopUp<Value: Hashable>: View {
 #if os(macOS)
 import AppKit
 
-private struct PopUpTrackingArea: NSViewRepresentable {
+struct PopUpTrackingArea: NSViewRepresentable {
     let titles: [String]
     let separators: [Bool]
     let enabled: [Bool]
@@ -135,8 +135,25 @@ private struct PopUpTrackingArea: NSViewRepresentable {
         var onPress: ((Bool) -> Void)?
         var onSelect: ((Int) -> Void)?
 
+        override var acceptsFirstResponder: Bool { true }
+        override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
         override func mouseDown(with event: NSEvent) {
-            guard let window else { return }
+            window?.makeFirstResponder(self)
+            openMenu(with: event)
+        }
+
+        override func keyDown(with event: NSEvent) {
+            switch event.keyCode {
+            case 49, 36, 76, 125, 126: // Space, Return, Enter, Down, Up
+                openMenu(with: nil)
+            default:
+                super.keyDown(with: event)
+            }
+        }
+
+        private func openMenu(with event: NSEvent?) {
+            guard let window, !items.isEmpty else { return }
             let anchor = window.convertToScreen(convert(bounds, to: nil))
             onPress?(true)
             let choice = PlatinumMenu.popUp(items: items, selected: selected, anchor: anchor,
@@ -145,7 +162,18 @@ private struct PopUpTrackingArea: NSViewRepresentable {
             if let choice { onSelect?(choice) }
         }
 
-        override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+        override func isAccessibilityElement() -> Bool { true }
+        override func accessibilityRole() -> NSAccessibility.Role? { .popUpButton }
+        override func accessibilityTitle() -> String? {
+            selected.flatMap { items.indices.contains($0) ? items[$0].title : nil } ?? ""
+        }
+        override func accessibilityValue() -> Any? { accessibilityTitle() }
+        override func accessibilityChildren() -> [Any]? { nil }
+        override func accessibilityPerformPress() -> Bool {
+            guard window != nil, !items.isEmpty else { return false }
+            openMenu(with: nil)
+            return true
+        }
     }
 }
 #endif

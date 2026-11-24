@@ -14,13 +14,15 @@ final class DialogHandle {
 @MainActor
 final class WindowManager {
     static let shared = WindowManager()
+    static let didShowMainNotification = Notification.Name("com.classicmac.didShowMain")
 
     private(set) var mainWindow: PlatinumWindow?
     private var libraryWindow: PlatinumWindow?
     var libraryWindowRef: PlatinumWindow? { libraryWindow }
     private var aboutWindow: PlatinumWindow?
     private var subscriptions: Set<AnyCancellable> = []
-    private var showingError = false
+    private(set) var showingError = false
+    private var pendingErrors: [(error: AppError, clear: () -> Void)] = []
     private weak var shutDownAlert: PlatinumWindow?
 
     static let mainContentSize = NSSize(width: 780, height: 500)
@@ -39,9 +41,9 @@ final class WindowManager {
             .store(in: &subscriptions)
         manager.$pendingStopID.receive(on: RunLoop.main)
             .sink { [weak self] id in
-                if let id {
+                if let id, manager.pendingStopID == id {
                     self?.confirmShutDown(id)
-                } else {
+                } else if manager.pendingStopID == nil {
                     // Confirmed or cancelled elsewhere: take the question down.
                     self?.shutDownAlert?.close()
                 }
@@ -60,6 +62,7 @@ final class WindowManager {
     func showMain() {
         if let mainWindow {
             mainWindow.makeKeyAndOrderFront(nil)
+            NotificationCenter.default.post(name: Self.didShowMainNotification, object: nil)
             return
         }
         let window = PlatinumWindow(title: "ClassicMac", kind: .document, boxes: .document, growable: true,
@@ -103,7 +106,7 @@ final class WindowManager {
         }
         let window = PlatinumWindow(title: "About ClassicMac", kind: .document,
                                     boxes: Chrome.TitleBoxes(close: true, collapse: true),
-                                    contentSize: NSSize(width: 460, height: 300)) {
+                                    contentSize: NSSize(width: 460, height: 328)) {
             AboutView()
         }
         window.center()
@@ -174,21 +177,28 @@ final class WindowManager {
         return window
     }
 
-    private func presentError(_ error: AppError, clear: @escaping () -> Void) {
-        guard !showingError else { return }
+    func presentError(_ error: AppError, clear: @escaping () -> Void) {
+        if showingError {
+            pendingErrors.append((error, clear))
+            return
+        }
         showingError = true
-        var buttons = [PlatinumAlertButton("OK", role: .default) { [weak self] in
-            self?.showingError = false
-            clear()
-        }]
+        var buttons = [PlatinumAlertButton("OK", role: .default)]
         if let log = error.logURL {
-            buttons.append(PlatinumAlertButton("Show Details") { [weak self] in
-                self?.showingError = false
-                clear()
+            buttons.append(PlatinumAlertButton("Show Details") {
                 NSWorkspace.shared.activateFileViewerSelecting([log])
             })
         }
-        alert(.stop, error.title, informative: error.message, buttons: buttons)
+        let window = alert(.stop, error.title, informative: error.message, buttons: buttons)
+        window.onClose = { [weak self] in
+            clear()
+            guard let self else { return }
+            self.showingError = false
+            if !self.pendingErrors.isEmpty {
+                let next = self.pendingErrors.removeFirst()
+                self.presentError(next.error, clear: next.clear)
+            }
+        }
     }
 
     private func confirmShutDown(_ id: UUID) {
