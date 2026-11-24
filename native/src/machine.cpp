@@ -84,38 +84,48 @@ QJsonObject validate(QJsonObject c) {
            .match(c["id"].toString())
            .hasMatch())
     fail("Invalid machine identity.");
+  if (!c.contains("machineFamily") || c["machineFamily"].isNull() ||
+      (c["machineFamily"].isString() &&
+       c["machineFamily"].toString().isEmpty()))
+    c["machineFamily"] = c.contains("pramImageName")
+                             ? QStringLiteral("quadra800")
+                             : QStringLiteral("powerMacG4");
   auto family = c["machineFamily"].toString();
-  if (!QStringList{"powerMacG4", "quadra800", "powerMac7500", "powerMacOSX"}.contains(family))
+  if (!QStringList{"powerMacG4", "quadra800", "powerMac7500", "powerMacOSX"}
+           .contains(family))
     fail("Unknown Mac model.");
   auto name = c["name"].toString().trimmed();
   if (name.isEmpty() || name.size() > 100 ||
-      name.contains(QRegularExpression("[\\x00-\\x1f]")))
+      name.contains(QRegularExpression("[\\x00-\\x1f\\x7f]")))
     fail("Give your Mac a name of up to 100 characters.");
   c["name"] = name;
   bool quad = family == "quadra800", copland = family == "powerMac7500";
   bool osx = family == "powerMacOSX";
-  integer(c, "ramMB",
-          quad      ? 128
-          : copland ? 32
-          : osx     ? 1024
-                    : 512,
-          quad ? 16 : osx ? 256 : 32,
-          quad      ? 1000
-          : copland ? 32
-          : osx     ? 2048
-                    : 896);
-  integer(c, "width", 1024, 480, 3840);
-  integer(c, "height", 768, 480, 2160);
+  const int defaultRam = quad      ? 128
+                         : copland ? 32
+                         : osx     ? 1024
+                                   : 512;
+  const int minRam = quad ? 16 : osx ? 256 : 32;
+  const int maxRam = quad      ? 1000
+                     : copland ? 32
+                     : osx     ? 2048
+                               : 896;
+  int ram = integer(c, "ramMB", defaultRam, 8, 65536);
+  c["ramMB"] = std::clamp(ram, minRam, maxRam);
+  int width = integer(c, "width", 1024, 480, 3840);
+  int height = integer(c, "height", 768, 384, 2160);
   int depth = integer(c, "depth", 16, 1, 32);
-  if (!QList<int>{1, 2, 4, 8, 16, 32}.contains(depth))
+  if (!QList<int>{1, 2, 4, 8, 16, 24, 32}.contains(depth))
     fail("Unsupported color depth.");
   c["diskImageName"] = localName(c["diskImageName"], "disk.img");
   c["pramImageName"] = localName(c["pramImageName"], "pram.img");
-  if (!c.contains("graphicsCard"))
+  if (!c.contains("graphicsCard") || c["graphicsCard"].isNull())
     c["graphicsCard"] = "standard";
   if (!QStringList{"standard", "atiRadeon"}.contains(
           c["graphicsCard"].toString()))
     fail("Unknown graphics card.");
+  if (family != "powerMacG4")
+    c["graphicsCard"] = "standard";
   for (auto key : {"sound", "networking", "tabletInput", "classicInputHelpers",
                    "useG4CPU", "useEnhancedFramebuffer", "bootFromCD",
                    "toolsCDInserted", "useVirtioDisk"}) {
@@ -125,8 +135,38 @@ QJsonObject validate(QJsonObject c) {
     if (!c[key].isBool())
       fail("Invalid " + QString(key) + " option.");
   }
+  if (c.contains("swapAltCommand") && !c["swapAltCommand"].isBool())
+    fail("Invalid swapAltCommand option.");
   if (family != "powerMacG4")
     c["useVirtioDisk"] = false;
+  if (family != "quadra800")
+    c["useEnhancedFramebuffer"] = false;
+  if (quad && !c["useEnhancedFramebuffer"].toBool()) {
+    struct Mode {
+      int w, h;
+    };
+    const Mode modes[] = {{640, 480}, {800, 600}, {1152, 870}};
+    Mode best = modes[0];
+    int bestDist = std::abs(width - best.w) + std::abs(height - best.h);
+    for (const auto &mode : modes) {
+      const int dist = std::abs(width - mode.w) + std::abs(height - mode.h);
+      if (dist < bestDist) {
+        best = mode;
+        bestDist = dist;
+      }
+    }
+    width = best.w;
+    height = best.h;
+    c["width"] = width;
+    c["height"] = height;
+    if (width == 1152) {
+      if (depth > 8)
+        depth = 8;
+    } else if (depth == 16 || depth >= 24) {
+      depth = 24;
+    }
+    c["depth"] = depth;
+  }
   if (osx) {
     c["graphicsCard"] = "standard";
     c["depth"] = 32;
@@ -150,17 +190,40 @@ QJsonObject freshConfig(QString name, QString family) {
                    {"diskSizeGB", family == "quadra800" ? 2 : 32}});
 }
 Machine readMachine(const QString &folder) {
-  auto c = validate(readJSON(machineFile(folder, "config.json")));
+  auto raw = readJSON(machineFile(folder, "config.json"));
+  if (!raw.contains("machineFamily") || raw["machineFamily"].isNull() ||
+      (raw["machineFamily"].isString() &&
+       raw["machineFamily"].toString().isEmpty())) {
+    const QString root = QFileInfo(folder).canonicalFilePath();
+    const QString pramName =
+        raw.contains("pramImageName") && raw["pramImageName"].isString()
+            ? raw["pramImageName"].toString()
+            : QStringLiteral("pram.img");
+    const bool validPramName =
+        !pramName.isEmpty() && pramName != "." && pramName != ".." &&
+        !pramName.contains(QRegularExpression("[\\\\/:\\x00-\\x1f]"));
+    const bool hasPram = !root.isEmpty() && validPramName &&
+                         QFileInfo::exists(root + "/" + pramName);
+    raw["machineFamily"] =
+        hasPram ? QStringLiteral("quadra800") : QStringLiteral("powerMacG4");
+  }
+  auto c = validate(raw);
   machineFile(folder, c["diskImageName"].toString());
   return {QFileInfo(folder).canonicalFilePath(), c};
 }
 QString uniqueFolder(const QString &parent, const QString &name) {
   QString base = name.trimmed();
   base.replace(QRegularExpression("[<>:\"/\\\\|?*\\x00-\\x1f]"), "-");
+  base.remove(QRegularExpression("^[. ]+"));
   base.remove(QRegularExpression("[. ]+$"));
   base = base.left(100);
   if (base.isEmpty())
     base = "Mac OS";
+  if (QRegularExpression("^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\\..*)?$",
+                         QRegularExpression::CaseInsensitiveOption)
+          .match(base)
+          .hasMatch())
+    base = "Mac " + base.left(96);
   QDir d(parent);
   if (!d.exists() && !d.mkpath("."))
     fail("Cannot create the machine destination.");
@@ -211,9 +274,16 @@ Machine createMachine(QString name, QString family, int size,
       !disk.resize(qint64(size) * 1073741824))
     fail("Could not create a sparse hard disk.");
   disk.close();
-  if (family == "quadra800" &&
-      !QFile::copy(runtime() + "/pram-seed.img", folder + "/pram.img"))
-    fail("Could not prepare the Mac's parameter memory.");
+  if (family == "quadra800") {
+    const QString pram = folder + "/pram.img";
+    if (!QFile::copy(runtime() + "/pram-seed.img", pram))
+      fail("Could not prepare the Mac's parameter memory.");
+    QFile::setPermissions(pram, QFile::permissions(pram) |
+                                    QFileDevice::ReadOwner |
+                                    QFileDevice::WriteOwner |
+                                    QFileDevice::ReadUser |
+                                    QFileDevice::WriteUser);
+  }
   if (!cd.isEmpty()) {
     QString suffix = QFileInfo(cd).suffix().toLower();
     if (!QStringList{"iso", "img", "toast", "cdr"}.contains(suffix) ||
@@ -222,6 +292,11 @@ Machine createMachine(QString name, QString family, int size,
     QString target = folder + "/Install CD." + suffix;
     if (!QFile::copy(cd, target))
       fail("Could not copy the installation CD.");
+    QFile::setPermissions(target, QFile::permissions(target) |
+                                      QFileDevice::ReadOwner |
+                                      QFileDevice::WriteOwner |
+                                      QFileDevice::ReadUser |
+                                      QFileDevice::WriteUser);
     c["cdImagePath"] = target;
     c["bootFromCD"] = true;
   }
@@ -238,7 +313,68 @@ bool supportedVersion(const QString &minimum) {
   }
   return true;
 }
-QStringList argumentsFor(const Machine &m, int port, bool silent) {
+bool supportsHostSharing() {
+#ifdef Q_OS_WIN
+  return false;
+#else
+  return true;
+#endif
+}
+QString sanitizedName(const QString &raw) {
+  QString s = raw;
+  s.remove(QRegularExpression("[\\x00-\\x1f\\x7f]"));
+  return s.trimmed().left(100).trimmed();
+}
+QProcessEnvironment hostEnvironment() {
+  QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+#ifdef Q_OS_WIN
+  const QString appDir =
+      QDir::toNativeSeparators(QCoreApplication::applicationDirPath());
+  const QString currentPath = env.value("PATH");
+  if (!appDir.isEmpty() &&
+      !currentPath.split(';', Qt::SkipEmptyParts)
+           .contains(appDir, Qt::CaseInsensitive))
+    env.insert("PATH",
+               currentPath.isEmpty() ? appDir : (appDir + ";" + currentPath));
+#elif defined(Q_OS_LINUX)
+  if (env.contains("CLASSICMAC_ORIG_LD_LIBRARY_PATH")) {
+    const QString orig = env.value("CLASSICMAC_ORIG_LD_LIBRARY_PATH");
+    if (orig.isEmpty())
+      env.remove("LD_LIBRARY_PATH");
+    else
+      env.insert("LD_LIBRARY_PATH", orig);
+  } else if (env.contains("APPDIR")) {
+    const QString appDir = env.value("APPDIR");
+    QStringList kept;
+    for (const auto &entry :
+         env.value("LD_LIBRARY_PATH").split(':', Qt::SkipEmptyParts))
+      if (!entry.startsWith(appDir))
+        kept << entry;
+    if (kept.isEmpty())
+      env.remove("LD_LIBRARY_PATH");
+    else
+      env.insert("LD_LIBRARY_PATH", kept.join(':'));
+  }
+  if (env.contains("CLASSICMAC_ORIG_QT_PLUGIN_PATH")) {
+    const QString orig = env.value("CLASSICMAC_ORIG_QT_PLUGIN_PATH");
+    if (orig.isEmpty())
+      env.remove("QT_PLUGIN_PATH");
+    else
+      env.insert("QT_PLUGIN_PATH", orig);
+  } else if (env.contains("APPDIR") ||
+             env.value("QT_PLUGIN_PATH")
+                 .startsWith(QCoreApplication::applicationDirPath())) {
+    env.remove("QT_PLUGIN_PATH");
+  }
+  env.remove("CLASSICMAC_ORIG_LD_LIBRARY_PATH");
+  env.remove("CLASSICMAC_ORIG_QT_PLUGIN_PATH");
+#endif
+  return env;
+}
+QStringList qemuArguments(const Machine &m, int port,
+                          const QString &audioOverride) {
+  if (port < 5900 || port > 65535)
+    fail("Invalid VNC display port.");
   auto c = validate(m.config);
   auto s = [&](const char *k) { return c[k].toString(); };
   auto b = [&](const char *k) { return c[k].toBool(); };
@@ -257,13 +393,24 @@ QStringList argumentsFor(const Machine &m, int port, bool silent) {
 #else
   QString audio = "pa";
 #endif
-  if (silent || !b("sound"))
+  if (!b("sound"))
     audio = "none";
+  else if (!audioOverride.isEmpty()) {
+    if (!QStringList{"none", "pa", "alsa", "dsound", "coreaudio", "pipewire",
+                     "jack", "sdl"}
+             .contains(audioOverride))
+      fail("Unsupported audio backend.");
+    audio = audioOverride;
+  }
   bool ppc = m.family() == "powerMacG4",
        cdBoot = b("bootFromCD") && !s("cdImagePath").isEmpty(),
        legacy = ppc && b("useVirtioDisk"),
        compatCD = cdBoot && (!b("useG4CPU") || legacy),
-       ati = ppc && !cdBoot && s("graphicsCard") == "atiRadeon";
+       ati = ppc && !cdBoot && s("graphicsCard") == "atiRadeon",
+       tools = ppc && b("toolsCDInserted") && !cdBoot,
+       sharing = !cdBoot && !s("sharedFolderPath").isEmpty(),
+       needsNdrvLoader =
+           ppc && (tools || b("tabletInput") || ati || legacy || compatCD || sharing);
   QStringList a = {"-L",
                    r + (m.family() == "powerMacOSX" ? "/qemu-osx" : "/qemu/pc-bios"),
                    "-name",
@@ -348,12 +495,14 @@ QStringList argumentsFor(const Machine &m, int port, bool silent) {
     } else {
       a << "-vga" << "std" << "-global" << "VGA.host-resize=on" << "-global"
         << "VGA.vgamem_mb=64" << "-global" << "VGA.packed-lowbpp=on"
-        << "-global" << "VGA.untracked-vram=on" << "-global"
-        << "VGA.hardware-cursor=on" << "-g"
+        << "-global" << "VGA.untracked-vram=on";
+      if (b("tabletInput"))
+        a << "-global" << "VGA.hardware-cursor=on";
+      a << "-g"
         << QString("%1x%2x%3")
                .arg(c["width"].toInt())
                .arg(c["height"].toInt())
-               .arg(c["depth"].toInt() == 32 ? 32 : 15);
+               .arg(c["depth"].toInt() >= 24 ? 32 : 15);
       if (!cdBoot && !legacy)
         a << "-icount" << "shift=4,sleep=off" << "-global"
           << "VGA.classicmac-boot-handoff=on";
@@ -369,30 +518,25 @@ QStringList argumentsFor(const Machine &m, int port, bool silent) {
       a << "-drive"
         << QString("if=ide,index=%1,media=cdrom,id=tools0,readonly=on")
                .arg(cdBoot ? 3 : 2);
-    bool tools = b("toolsCDInserted") && !cdBoot;
     if (tools)
       a << "-drive"
         << "if=none,id=classicmac-tools,file=" +
                opt(r + "/ClassicMacTools.iso") + ",format=raw,readonly=on"
         << "-device" << "virtio-blk-pci,drive=classicmac-tools";
-    if (b("tabletInput") || tools || legacy || ati) {
+    if (needsNdrvLoader)
       a << "-device" << "loader,addr=0x4000000,file=" + opt(r + "/ndrvloader")
         << "-prom-env" << "boot-command=init-program go";
-      if (b("tabletInput")) {
-        QString tablet = "virtio-tablet-pci";
-        // With ATI, Sungem and Tools present, automatic allocation puts the
-        // tablet in slot 18, sharing Sungem's interrupt. Mac OS 9 then stalls
-        // during startup. Slot 19 uses the quiet line on every desktop host,
-        // shared with the display-control device, which has no PCI interrupt.
-        if (ati && !legacy && tools && b("networking"))
-          tablet += ",addr=0x13";
-        a << "-device" << tablet;
-      }
+    if (b("tabletInput")) {
+      QString tablet = "virtio-tablet-pci";
+      // With ATI, Sungem and Tools present, automatic allocation puts the
+      // tablet in slot 18, sharing Sungem's interrupt. Mac OS 9 then stalls
+      // during startup. Slot 19 uses the quiet line on every desktop host,
+      // shared with the display-control device, which has no PCI interrupt.
+      if (ati && !legacy && tools && b("networking"))
+        tablet += ",addr=0x13";
+      a << "-device" << tablet;
     }
     if (compatCD) {
-      if (!b("tabletInput") && !tools && !legacy && !ati)
-        a << "-device" << "loader,addr=0x4000000,file=" + opt(r + "/ndrvloader")
-          << "-prom-env" << "boot-command=init-program go";
       a << "-drive"
         << "if=none,id=bootcd,file=" + opt(s("cdImagePath")) +
                ",format=raw,readonly=on"
@@ -401,7 +545,7 @@ QStringList argumentsFor(const Machine &m, int port, bool silent) {
                    : "virtio-blk-pci,drive=bootcd")
         << "-prom-env"
         << (legacy ? "boot-device=/pci@f2000000/scsi@f/disk:\\\\:tbxi"
-                   : "boot-device=virtio0:\\:tbxi");
+                   : "boot-device=virtio0:\\\\:tbxi");
       if (legacy)
         a << "-device" << "virtio-blk-pci,drive=startup0,addr=0x10";
     } else if (cdBoot)
@@ -443,25 +587,29 @@ QStringList argumentsFor(const Machine &m, int port, bool silent) {
         << QString("%1x%2x%3")
                .arg(c["width"].toInt())
                .arg(c["height"].toInt())
-               .arg(c["depth"].toInt());
+               .arg(c["depth"].toInt() >= 24 ? 24 : c["depth"].toInt());
     if (b("tabletInput"))
       a << "-device" << "virtio-tablet-device";
     if (cdBoot)
       a << "-boot" << "d";
   }
-  if (!s("sharedFolderPath").isEmpty()) {
+  if (sharing) {
     QString tag = c.value("sharedVolumeName").toString("Shared Files");
-    if (tag.size() > 31 || tag.contains(QRegularExpression("[\\x00-\\x1f]")))
+    if (tag.contains(QRegularExpression("[\\x00-\\x1f]")))
       fail("Invalid shared volume name.");
+    tag.remove(':');
+    tag = tag.trimmed().left(27).trimmed();
+    if (tag.isEmpty())
+      tag = "Shared Files";
+    QString dev = ppc ? QStringLiteral("virtio-9p-pci")
+                      : QStringLiteral("virtio-9p-device");
+    if (ppc && ati && !legacy && b("networking"))
+      dev += ",addr=0x14";
     a << "-fsdev"
       << "local,id=share0,security_model=none,path=" +
              opt(s("sharedFolderPath"))
       << "-device"
-      << QString(ppc ? "virtio-9p-pci" : "virtio-9p-device") +
-             ",fsdev=share0,mount_tag=" + opt(tag);
-    if (ppc && !legacy && !ati && !b("tabletInput") && !b("toolsCDInserted"))
-      a << "-device" << "loader,addr=0x4000000,file=" + opt(r + "/ndrvloader")
-        << "-prom-env" << "boot-command=init-program go";
+      << dev + ",fsdev=share0,mount_tag=" + opt(tag);
   }
   a << "-nic"
     << (b("networking")
@@ -472,5 +620,8 @@ QStringList argumentsFor(const Machine &m, int port, bool silent) {
     a << "-global" << "rtl8139.romfile=" << "-global"
       << "rtl8139.tx-delay-ns=1000000";
   return a;
+}
+QStringList argumentsFor(const Machine &m, int port, bool silent) {
+  return qemuArguments(m, port, silent ? QStringLiteral("none") : QString());
 }
 } // namespace Model

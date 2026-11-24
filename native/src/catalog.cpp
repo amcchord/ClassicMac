@@ -1,5 +1,7 @@
 #include "catalog.h"
 #include "CMachineArchive.h"
+#include <QMutex>
+#include <QMutexLocker>
 #include <QtNetwork>
 #include <cstdlib>
 #include <cstring>
@@ -7,23 +9,135 @@
 #include <zlib.h>
 #ifdef Q_OS_WIN
 #include <io.h>
+#include <windows.h>
 #else
+#include <fcntl.h>
+#include <sys/file.h>
 #include <unistd.h>
+#ifdef Q_OS_LINUX
+#include <sys/vfs.h>
+#elif defined(Q_OS_MACOS)
+#include <sys/mount.h>
+#endif
 #endif
 using Model::fail;
 namespace Library {
 static constexpr qint64 limit = 140LL * 1073741824;
+static QMutex gPartialWarningMutex;
+static QString gPartialWarning;
 static void checkCancel(std::atomic_bool &cancel) {
   if (cancel)
     fail("Paused. Your download is saved. Choose Download again to resume.");
 }
+static bool isValidSecureURL(const QString &s) {
+  QUrl u(s);
+  return u.isValid() && u.scheme() == "https" && u.userInfo().isEmpty() &&
+         !u.hasFragment() && !u.host().isEmpty();
+}
 static QUrl secureURL(const QString &s) {
   QUrl u(s);
-  if (!u.isValid() || u.scheme() != "https" || !u.userInfo().isEmpty() ||
-      u.hasFragment() || u.host().isEmpty())
+  if (!isValidSecureURL(s))
     fail("Library downloads require HTTPS.");
   return u;
 }
+static QJsonObject resolvedArchiveEntry(QJsonObject m) {
+  if (m.contains("thinArchive") && m["thinArchive"].isObject()) {
+    const auto thin = m["thinArchive"].toObject();
+    if (thin["format"].toString() == "retroboot-thin-1") {
+      const double thinBytes = thin["archiveBytes"].toDouble();
+      const QString thinSha = thin["sha256"].toString();
+      const QString thinUrl = thin["archiveURL"].toString();
+      if (isValidSecureURL(thinUrl) && thin["archiveBytes"].isDouble() &&
+          thinBytes > 0 && thinBytes <= limit &&
+          thinBytes == qint64(thinBytes) &&
+          QRegularExpression("^[a-f0-9]{64}$").match(thinSha).hasMatch()) {
+        m["archiveURL"] = thinUrl;
+        m["archiveBytes"] = thinBytes;
+        m["sha256"] = thinSha;
+      }
+    }
+  }
+  return m;
+}
+static QString legacyCacheDirectory() {
+  return Model::dataDirectory() + "/Downloads";
+}
+static QString cacheDirectory() {
+  if (!qEnvironmentVariableIsEmpty("CLASSICMAC_TEST_HOME"))
+    return legacyCacheDirectory();
+  const QString base =
+      QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
+  return base.isEmpty() ? legacyCacheDirectory() : base + "/Downloads";
+}
+static QString existingAncestor(const QString &path) {
+  QString probe = QDir::cleanPath(path);
+  while (!probe.isEmpty() && !QFileInfo::exists(probe)) {
+    const QString up = QFileInfo(probe).path();
+    if (up == probe)
+      break;
+    probe = up;
+  }
+  return probe;
+}
+class DownloadLock {
+#ifdef Q_OS_WIN
+  HANDLE handle = INVALID_HANDLE_VALUE;
+#else
+  int fd = -1;
+#endif
+public:
+  DownloadLock() = default;
+  ~DownloadLock() { unlock(); }
+  DownloadLock(const DownloadLock &) = delete;
+  DownloadLock &operator=(const DownloadLock &) = delete;
+  bool tryLock(const QString &lockPath) {
+    unlock();
+#ifdef Q_OS_WIN
+    handle = CreateFileW(reinterpret_cast<LPCWSTR>(lockPath.utf16()),
+                         GENERIC_READ | GENERIC_WRITE,
+                         FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                         nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (handle == INVALID_HANDLE_VALUE)
+      return false;
+    OVERLAPPED ov{};
+    if (!LockFileEx(handle,
+                    LOCKFILE_EXCLUSIVE_LOCK | LOCKFILE_FAIL_IMMEDIATELY, 0,
+                    MAXDWORD, MAXDWORD, &ov)) {
+      CloseHandle(handle);
+      handle = INVALID_HANDLE_VALUE;
+      return false;
+    }
+    return true;
+#else
+    fd = ::open(QFile::encodeName(lockPath).constData(),
+                O_RDWR | O_CREAT | O_NOFOLLOW, 0600);
+    if (fd < 0)
+      return false;
+    if (::flock(fd, LOCK_EX | LOCK_NB) != 0) {
+      ::close(fd);
+      fd = -1;
+      return false;
+    }
+    return true;
+#endif
+  }
+  void unlock() {
+#ifdef Q_OS_WIN
+    if (handle != INVALID_HANDLE_VALUE) {
+      OVERLAPPED ov{};
+      UnlockFileEx(handle, 0, MAXDWORD, MAXDWORD, &ov);
+      CloseHandle(handle);
+      handle = INVALID_HANDLE_VALUE;
+    }
+#else
+    if (fd >= 0) {
+      ::flock(fd, LOCK_UN);
+      ::close(fd);
+      fd = -1;
+    }
+#endif
+  }
+};
 QJsonArray parse(const QByteArray &data) {
   if (data.size() > 1048576)
     fail("The Library catalog is too large.");
@@ -35,15 +149,23 @@ QJsonArray parse(const QByteArray &data) {
       o["machines"].toArray().size() > 50)
     fail("Unsupported Library catalog.");
   QSet<QString> seen;
+  QJsonArray result;
   for (auto row : o["machines"].toArray()) {
     auto m = row.toObject();
     auto id = m["id"].toString();
+    const QString name = m["name"].toString();
+    const QString summary = m["summary"].toString();
+    const QString osVersion = m["osVersion"].toString();
     if (!QRegularExpression("^[a-z0-9][a-z0-9._-]{0,99}$")
              .match(id)
              .hasMatch() ||
-        seen.contains(id) || m["name"].toString().trimmed().isEmpty() ||
-        m["name"].toString().size() > 100 || !m["summary"].isString() ||
-        m["summary"].toString().size() > 1000 ||
+        seen.contains(id) || name.trimmed().isEmpty() || name.size() > 100 ||
+        name.contains(QRegularExpression("[\\x00-\\x1f\\x7f]")) ||
+        !m["summary"].isString() || summary.size() > 1000 ||
+        summary.contains(QRegularExpression("[\\x00-\\x09\\x0b-\\x1f\\x7f]")) ||
+        !m["osVersion"].isString() || osVersion.trimmed().isEmpty() ||
+        osVersion.size() > 80 ||
+        osVersion.contains(QRegularExpression("[\\x00-\\x1f\\x7f]")) ||
         !QRegularExpression("^\\d{1,6}\\.\\d{1,6}(\\.\\d{1,6})?$")
              .match(m["minimumAppVersion"].toString())
              .hasMatch() ||
@@ -76,8 +198,9 @@ QJsonArray parse(const QByteArray &data) {
     }
     secureURL(m["archiveURL"].toString());
     seen.insert(id);
+    result.append(resolvedArchiveEntry(m));
   }
-  return o["machines"].toArray();
+  return result;
 }
 // One request per worker thread; no network objects cross Qt thread boundaries.
 static void request(const QUrl &initial, const QByteArray &range,
@@ -104,6 +227,8 @@ static void request(const QUrl &initial, const QByteArray &range,
     bool redirecting = false;
     qint64 total = 0;
     auto consume = [&] {
+      if (!failure.isEmpty())
+        return;
       try {
         checkCancel(cancel);
         if (!checked) {
@@ -145,8 +270,9 @@ static void request(const QUrl &initial, const QByteArray &range,
     });
     poll.start();
     loop.exec();
-    consume();
     poll.stop();
+    if (failure.isEmpty())
+      consume();
     auto status =
         reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
     auto next =
@@ -170,7 +296,15 @@ static void request(const QUrl &initial, const QByteArray &range,
   }
   fail("Too many download redirects.");
 }
+QString partialWarning() {
+  QMutexLocker locker(&gPartialWarningMutex);
+  return gPartialWarning;
+}
 QJsonArray load(std::atomic_bool &cancel) {
+  {
+    QMutexLocker locker(&gPartialWarningMutex);
+    gPartialWarning.clear();
+  }
   QJsonArray rows;
   QSet<QString> ids;
   bool loaded = false;
@@ -202,27 +336,141 @@ QJsonArray load(std::atomic_bool &cancel) {
   }
   if (!loaded)
     fail(failure);
+  if (!failure.isEmpty()) {
+    QMutexLocker locker(&gPartialWarningMutex);
+    gPartialWarning = "One catalog could not be loaded (" + failure +
+                      "). Some editions may not be listed.";
+  }
   return rows;
 }
 QJsonArray load() {
   std::atomic_bool cancel = false;
   return load(cancel);
 }
-qint64 cachedBytes(const QJsonObject &m) {
-  const auto hash = m["sha256"].toString();
+QString cacheFile(const QJsonObject &entry) {
+  const auto resolved = resolvedArchiveEntry(entry);
+  const auto hash = resolved["sha256"].toString();
   if (!QRegularExpression("^[a-f0-9]{64}$").match(hash).hasMatch())
+    return {};
+  const QString fileName = hash + ".tar.gz.part";
+  const QString primary = cacheDirectory() + "/" + fileName;
+  const QString legacy = legacyCacheDirectory() + "/" + fileName;
+  if (primary != legacy) {
+    const QFileInfo primaryInfo(primary);
+    const QFileInfo legacyInfo(legacy);
+    if (!primaryInfo.exists() && legacyInfo.exists() &&
+        !legacyInfo.isSymLink() && legacyInfo.isFile())
+      return legacy;
+  }
+  return primary;
+}
+bool discardDownload(const QJsonObject &entry) {
+  const auto resolved = resolvedArchiveEntry(entry);
+  const auto hash = resolved["sha256"].toString();
+  if (!QRegularExpression("^[a-f0-9]{64}$").match(hash).hasMatch())
+    return false;
+  const QString fileName = hash + ".tar.gz.part";
+  QStringList candidates = {cacheDirectory() + "/" + fileName};
+  const QString legacy = legacyCacheDirectory() + "/" + fileName;
+  if (legacy != candidates.first())
+    candidates << legacy;
+  for (const QString &path : candidates) {
+    const QFileInfo info(path);
+    if (!info.exists() && !info.isSymLink())
+      continue;
+    if (info.isSymLink() || !info.isFile())
+      return false;
+    DownloadLock lock;
+    if (!lock.tryLock(info.absolutePath() + "/" + hash + ".lock"))
+      return false;
+    if (QFileInfo::exists(path) && !QFile::remove(path))
+      return false;
+  }
+  return true;
+}
+qint64 cachedBytes(const QJsonObject &m) {
+  const auto resolved = resolvedArchiveEntry(m);
+  const QString path = cacheFile(resolved);
+  if (path.isEmpty())
     return 0;
-  const auto size = qint64(m["archiveBytes"].toDouble());
-  const auto saved = QFileInfo(Model::dataDirectory() + "/Downloads/" + hash +
-                              ".tar.gz.part").size();
+  const QFileInfo info(path);
+  if (!info.exists() || info.isSymLink() || !info.isFile())
+    return 0;
+  const auto size = qint64(resolved["archiveBytes"].toDouble());
+  const auto saved = info.size();
   return saved > 0 && saved <= size ? saved : 0;
 }
-static QString download(const QJsonObject &m, std::atomic_bool &cancel,
+bool supportsSparse(const QString &dir) {
+  const QString probe = existingAncestor(dir.isEmpty() ? Model::documents() : dir);
+  if (probe.isEmpty())
+    return false;
+#ifdef Q_OS_WIN
+  std::wstring native = QDir::toNativeSeparators(probe).toStdWString();
+  wchar_t rootPath[MAX_PATH] = {};
+  if (!GetVolumePathNameW(native.c_str(), rootPath, MAX_PATH))
+    return false;
+  DWORD flags = 0;
+  if (!GetVolumeInformationW(rootPath, nullptr, 0, nullptr, nullptr, &flags,
+                             nullptr, 0))
+    return false;
+  return (flags & FILE_SUPPORTS_SPARSE_FILES) != 0;
+#elif defined(Q_OS_LINUX)
+  struct statfs st{};
+  if (::statfs(QFile::encodeName(probe).constData(), &st) != 0)
+    return false;
+  constexpr unsigned long kMsdosSuperMagic = 0x4d44;
+  constexpr unsigned long kExfatSuperMagic = 0x2011BAB0UL;
+  const auto fsType = static_cast<unsigned long>(st.f_type);
+  return fsType != kMsdosSuperMagic && fsType != kExfatSuperMagic;
+#elif defined(Q_OS_MACOS)
+  struct statfs st{};
+  if (::statfs(QFile::encodeName(probe).constData(), &st) != 0)
+    return false;
+  return std::strcmp(st.f_fstypename, "apfs") == 0;
+#else
+  return false;
+#endif
+}
+qint64 requiredDiskBytes(const QJsonObject &entry, const QString &targetDir) {
+  const auto resolved = resolvedArchiveEntry(entry);
+  const qint64 archiveSize = qint64(resolved["archiveBytes"].toDouble());
+  const qint64 saved = cachedBytes(resolved);
+  const qint64 remaining = qMax<qint64>(0, archiveSize - saved);
+  const QString dest = targetDir.isEmpty() ? Model::documents() : targetDir;
+  const qint64 installed = qint64(resolved["installedBytes"].toDouble());
+  const qint64 requiredStorage =
+      (supportsSparse(dest) && resolved.contains("requiredStorageBytes"))
+          ? qint64(resolved["requiredStorageBytes"].toDouble(installed))
+          : installed;
+  const QString part = cacheFile(resolved);
+  const QString cacheDir =
+      part.isEmpty() ? cacheDirectory() : QFileInfo(part).absolutePath();
+  const QStorageInfo cacheVol(existingAncestor(cacheDir));
+  const QStorageInfo targetVol(existingAncestor(dest));
+  const bool sameVolume = !cacheVol.isValid() || !targetVol.isValid() ||
+                          (cacheVol.rootPath() == targetVol.rootPath() &&
+                           cacheVol.device() == targetVol.device());
+  constexpr qint64 reserve = 256LL * 1048576;
+  return (sameVolume ? remaining : 0) + requiredStorage + reserve;
+}
+static QString download(const QJsonObject &entry, std::atomic_bool &cancel,
                         const Progress &progress) {
-  auto cache = Model::dataDirectory() + "/Downloads";
+  const auto m = resolvedArchiveEntry(entry);
+  const QString path = cacheFile(m);
+  if (path.isEmpty())
+    fail("Invalid Library archive checksum.");
+  const QString cache = QFileInfo(path).absolutePath();
   if (!QDir().mkpath(cache))
     fail("Cannot create the download cache.");
-  QString path = cache + "/" + m["sha256"].toString() + ".tar.gz.part";
+  if (QFileInfo(cache).isSymLink())
+    fail("The download cache folder is unavailable.");
+  const QString hashStr = m["sha256"].toString();
+  DownloadLock lock;
+  if (!lock.tryLock(cache + "/" + hashStr + ".lock"))
+    fail("This edition is already downloading in another window.");
+  const QFileInfo partInfo(path);
+  if (partInfo.isSymLink())
+    fail("The cached download is not a regular file.");
   qint64 size = qint64(m["archiveBytes"].toDouble());
   QFile f(path);
   qint64 offset = f.exists() ? f.size() : 0;
@@ -242,24 +490,33 @@ static QString download(const QJsonObject &m, std::atomic_bool &cancel,
     request(
         secureURL(m["archiveURL"].toString()), range, size, cancel,
         [&](QNetworkReply *r) {
-          int status =
+          const int status =
               r->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+          const QByteArray encoding =
+              r->rawHeader("Content-Encoding").trimmed().toLower();
+          if (!encoding.isEmpty() && encoding != "identity")
+            fail("The server changed the download encoding.");
+          qint64 nextOffset = offset;
           if (offset && status == 200) {
-            offset = 0;
-            if (!f.resize(0) || !f.seek(0))
-              fail("Cannot restart the download.");
+            nextOffset = 0;
           } else if (offset) {
             auto expected = "bytes " + QByteArray::number(offset) + "-" +
                             QByteArray::number(size - 1) + "/" +
                             QByteArray::number(size);
             if (status != 206 || r->rawHeader("Content-Range") != expected)
               fail("The server could not resume this download safely.");
-          } else if (status != 200)
+          } else if (status != 200) {
             fail("The archive could not be downloaded.");
-          bool ok;
+          }
+          bool ok = false;
           auto n = r->rawHeader("Content-Length").toLongLong(&ok);
-          if (!ok || n != size - offset)
+          if (!ok || n != size - nextOffset)
             fail("The archive size does not match the catalog.");
+          if (nextOffset != offset) {
+            offset = nextOffset;
+            if (!f.resize(0) || !f.seek(0))
+              fail("Cannot restart the download.");
+          }
         },
         [&](const QByteArray &bytes) {
           if (offset + bytes.size() > size)
@@ -284,7 +541,7 @@ static QString download(const QJsonObject &m, std::atomic_bool &cancel,
     progress("Checking download", checked, size);
   }
   f.close();
-  if (hash.result().toHex() != m["sha256"].toString().toLatin1()) {
+  if (hash.result().toHex() != hashStr.toLatin1()) {
     QFile::remove(path);
     fail("The archive failed its SHA-256 check. Retry the download.");
   }
@@ -322,15 +579,27 @@ public:
     if (!f.open(QFile::ReadOnly))
       fail("Cannot read archive.");
 #ifdef Q_OS_WIN
-    gzip = gzdopen(_dup(f.handle()), "rb");
+    int fd = _dup(f.handle());
 #else
-    gzip = gzdopen(dup(f.handle()), "rb");
+    int fd = dup(f.handle());
 #endif
-    if (!gzip)
+    if (fd < 0)
       fail("Cannot open compressed archive.");
+    gzip = gzdopen(fd, "rb");
+    if (!gzip) {
+#ifdef Q_OS_WIN
+      _close(fd);
+#else
+      close(fd);
+#endif
+      fail("Cannot open compressed archive.");
+    }
     gzbuffer(gzip, 1048576);
   }
-  ~Reader() { gzclose(gzip); }
+  ~Reader() {
+    if (gzip)
+      gzclose(gzip);
+  }
   QByteArray read(int n, bool optional = false) {
     QByteArray b(n, 0);
     int at = 0;
@@ -462,8 +731,12 @@ void extract(const QString &archive, const QString &folder,
     QFile f(folder + "/" + name);
     if (!f.open(QFile::WriteOnly | QFile::NewOnly))
       fail("Cannot create imported machine file.");
-    if (name == "disk.img" && !Model::makeSparse(f))
-      fail("The destination does not support sparse virtual disks.");
+    if (name == "disk.img") {
+      if (supportsSparse(folder) && !Model::makeSparse(f))
+        fail("The destination does not support sparse virtual disks.");
+      else if (!supportsSparse(folder))
+        Model::makeSparse(f);
+    }
     if (sparseDiskSize) {
       const auto storage = qint64(m["requiredStorageBytes"].toDouble(installed));
       writeSparseDisk(reader, f, size, memberSize, storage, cancel, total, installed, progress);
@@ -497,21 +770,81 @@ void extract(const QString &archive, const QString &folder,
       !seen.contains("config.json"))
     fail("Incomplete machine archive.");
 }
-Model::Machine install(QJsonObject m, const QString &parent,
+QString displayTitle(const QJsonObject &entry) {
+  const QString id = entry["id"].toString();
+  const auto match = QRegularExpression("^(.*)-v(\\d+)$").match(id);
+  const QString base = match.hasMatch() ? match.captured(1) : id;
+  if (base == "system-7.5.5-base")
+    return QStringLiteral("System 7.5.5 (Clean)");
+  if (base == "mac-os-7.5.5")
+    return QStringLiteral("System 7.5.5 (RetroBoot)");
+  if (base == "mac-os-8.1-base")
+    return QStringLiteral("Mac OS 8.1 (Clean)");
+  if (base == "mac-os-8.1")
+    return QStringLiteral("Mac OS 8.1 (Full)");
+  if (base == "mac-os-9.2.1-ati-32gb")
+    return QStringLiteral("Mac OS 9.2.1 (Clean)");
+  if (base == "os921-full")
+    return QStringLiteral("Mac OS 9.2.1 (Full)");
+  return entry["name"].toString();
+}
+QString cleanSummary(const QJsonObject &entry) {
+  const QString original = entry["summary"].toString().trimmed();
+  QString s = original;
+  s.replace("Select 2048 MB of Mac OS X memory and the ATI Radeon for the Deluxe setup.",
+            "Runs on ClassicMac's standard Mac OS X display; 1024 MB RAM recommended.");
+  s.remove(QRegularExpression("\\s+from the user's CD(?=[\\s:.,;]|$)"));
+  s.remove(QRegularExpression(
+      "\\s*Includes the Quadra 800 ROM this Mac needs \\(Apple's; kept private\\)\\."));
+  s.remove(QRegularExpression("\\s*(?:Needs|Requires) RetroBoot .*?\\.(?=\\s|$)",
+                              QRegularExpression::CaseInsensitiveOption |
+                                  QRegularExpression::DotMatchesEverythingOption));
+  s.remove(QRegularExpression("\\s*RetroBoot lab build\\.",
+                              QRegularExpression::CaseInsensitiveOption));
+  s.replace(QRegularExpression("\\s+([:.,;])"), "\\1");
+  s.replace(QRegularExpression(" {2,}"), " ");
+  s = s.trimmed();
+  return s.isEmpty() ? original : s;
+}
+Model::Machine install(QJsonObject entry, const QString &parent,
                        const QString &name, std::atomic_bool &cancel,
                        const Progress &progress) {
+  const auto m = resolvedArchiveEntry(entry);
   if (!Model::supportedVersion(m["minimumAppVersion"].toString()))
     fail("Update ClassicMac to install this edition.");
   auto family = m.value("machineFamily").toString("powerMacG4");
   if (!QStringList{"powerMacG4", "quadra800", "powerMacOSX"}.contains(family))
     fail("This edition needs the macOS Copland engine.");
-  QStorageInfo storage(parent);
-  const auto required = qint64(m["requiredStorageBytes"].toDouble(m["installedBytes"].toDouble()));
-  if (storage.isValid() && storage.bytesAvailable() < required + 268435456)
+  const QString dest = parent.isEmpty() ? Model::documents() : parent;
+  if (!QDir().mkpath(dest))
+    fail("Cannot create the machine destination.");
+  const qint64 archiveSize = qint64(m["archiveBytes"].toDouble());
+  const qint64 saved = cachedBytes(m);
+  const qint64 remaining = qMax<qint64>(0, archiveSize - saved);
+  const qint64 installed = qint64(m["installedBytes"].toDouble());
+  const qint64 required =
+      (supportsSparse(dest) && m.contains("requiredStorageBytes"))
+          ? qint64(m["requiredStorageBytes"].toDouble(installed))
+          : installed;
+  constexpr qint64 reserve = 256LL * 1048576;
+  const QString partPath = cacheFile(m);
+  const QString cacheDir =
+      partPath.isEmpty() ? cacheDirectory() : QFileInfo(partPath).absolutePath();
+  const QStorageInfo cacheVol(existingAncestor(cacheDir));
+  const QStorageInfo targetVol(existingAncestor(dest));
+  const bool sameVolume = !cacheVol.isValid() || !targetVol.isValid() ||
+                          (cacheVol.rootPath() == targetVol.rootPath() &&
+                           cacheVol.device() == targetVol.device());
+  if (targetVol.isValid() &&
+      targetVol.bytesAvailable() <
+          required + reserve + (sameVolume ? remaining : 0))
     fail("There is not enough free space to install this Mac.");
+  if (!sameVolume && cacheVol.isValid() &&
+      cacheVol.bytesAvailable() < remaining + reserve)
+    fail("There is not enough free space in the download cache.");
   auto archive = download(m, cancel, progress);
-  auto folder =
-      Model::uniqueFolder(parent, name.isEmpty() ? m["name"].toString() : name);
+  const QString machineName = name.isEmpty() ? displayTitle(m) : name;
+  auto folder = Model::uniqueFolder(dest, machineName);
   bool complete = false;
   auto cleanup = qScopeGuard([&] {
     if (!complete)
@@ -531,19 +864,20 @@ Model::Machine install(QJsonObject m, const QString &parent,
             "05ad753fb594e656cf078023ec189e09e2a7655a780de993b75b8c51ed6b09ca")
       fail("The Quadra ROM failed its integrity check.");
   }
-  auto c =
-      Model::freshConfig(name.isEmpty() ? m["name"].toString() : name, family);
+  auto c = Model::freshConfig(machineName, family);
   for (auto key : {"ramMB", "width", "height", "depth", "networking", "sound",
                    "useG4CPU", "useVirtioDisk", "tabletInput",
-                   "classicInputHelpers", "useEnhancedFramebuffer"})
+                   "classicInputHelpers", "useEnhancedFramebuffer",
+                   "graphicsCard"})
     if (source.contains(key))
       c[key] = source[key];
   c["diskSizeGB"] =
       int((QFileInfo(folder + "/disk.img").size() + 1073741823) / 1073741824);
   c["toolsCDInserted"] =
       source.value("toolsCDInserted").toBool(family == "powerMacG4");
-  if (QRegularExpression(
-          "^(os922-(superdeluxe|deluxe)|mac-os-9\\.2\\.1-ati-32gb)-v\\d+$")
+  if (family == "powerMacG4" &&
+      QRegularExpression(
+          "^(os922-(superdeluxe|deluxe|mega-deluxe|full)|mac-os-9\\.2\\.1-ati-32gb)-v\\d+$")
           .match(m["id"].toString())
           .hasMatch())
     c["graphicsCard"] = "atiRadeon";
@@ -558,5 +892,12 @@ Model::Machine install(QJsonObject m, const QString &parent,
                    QDateTime::currentDateTimeUtc().toString(Qt::ISODate)}});
   complete = true;
   return Model::readMachine(folder);
+}
+QString install(const QJsonObject &entry, const QString &name,
+                std::atomic_bool &cancel, Progress progress,
+                const QString &destinationDir) {
+  const QString dest =
+      destinationDir.isEmpty() ? Model::documents() : destinationDir;
+  return install(entry, dest, name, cancel, progress).folder;
 }
 } // namespace Library
