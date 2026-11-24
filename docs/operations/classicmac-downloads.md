@@ -2,10 +2,8 @@
 
 ## Target
 
-Austin authorized hosting the configured OS 9 template on the existing
-50day.io server under mcchord.net. AustinLand's live inventory identifies this
-as Linode instance 8852533, `50DayEdge`, `172.104.216.89`. Both domains already
-resolve to that host. No DNS, firewall, or virtual-host changes are required.
+Public template archives and catalogs are hosted under `mcchord.net`. No DNS,
+firewall, or virtual-host changes are required for catalog updates.
 
 - Site: `https://mcchord.net`
 - Apache document root: `/var/www/mcchord.net`
@@ -13,9 +11,8 @@ resolve to that host. No DNS, firewall, or virtual-host changes are required.
 - Download directory: `/var/www/mcchord.net/classicmac`
 - Existing HTTPS vhost: `/etc/apache2/sites-enabled/001-mcchord.net-le-ssl.conf`
 - Existing service: Apache 2.4 on Ubuntu 22.04.
-- Access: existing SSH authorization as `root@mcchord.net`; use the pinned
-  hostname (the old bare-IP SSH entry refers to a different server key).
-  Never place keys in this repository.
+- Access: authorized SSH publishing access to `mcchord.net` using the pinned
+  host key. Never place keys in this repository.
 
 The server had 277 GB free during preflight. HTTPS, a valid certificate, and
 byte-range support were verified before any write. The `classicmac` path did
@@ -118,7 +115,7 @@ through an atomic rename. HTTPS retrieval, exact catalog match, and HTTP 206
 for a 1,024-byte range passed. The final app's public wizard download imported
 the new machine successfully. No Apache, DNS, or existing site changes occurred.
 
-Rollback catalog: `/root/classicmac-catalog-backups/pre-32gb-v2-20260911.json`
+Rollback catalog: `<private-backup-dir>/pre-32gb-v2-20260911.json`
 on the server (mode 0600), with local evidence in
 `output/3.0.1/hosting/catalog-before.json`. Its SHA-256 is
 `4dd6280156441749e93879beadaf6e780ac12fc3c78b589c329a0ed86e2cdc5d`.
@@ -157,7 +154,7 @@ Copland. Expected catalog SHA-256:
 The prior catalog SHA is
 `8a939ca347fcf809a4837314a900429572f372bb536cadb09c11aa9b6570abf6`.
 The release procedure saves it at
-`/root/classicmac-catalog-backups/pre-copland-20260921.json` (0600), verifies both
+`<private-backup-dir>/pre-copland-20260921.json` (0600), verifies both
 hashes and the old live catalog, then atomically promotes the new catalog.
 Rollback uses a checked copy of that backup and an atomic rename to `catalog.json`;
 retain both OS 9 and Copland archives so existing users and cached downloads work.
@@ -183,7 +180,7 @@ No full developer manuals or local compatibility-research disks are published.
 - Archive SHA-256: `9edff56ec94e3dcd5a0804f327705e3f38ffca73ac701ac5a5ee3d581267af19`.
 - Expanded bound: `541138786`; initial storage bound: `98566144`.
 - Catalog SHA-256: `eaaa1b3a4bd9bd44f14765f498cd900e160fbd10af3ce86c6139e91cce50949d`.
-- Rollback catalog: `/root/classicmac-catalog-backups/pre-copland-activities-20260921.json`
+- Rollback catalog: `<private-backup-dir>/pre-copland-activities-20260921.json`
   (0600), SHA-256 `eb0cd8d736809ae2f2c8d463f4c974b9ec6da0563e480f8dc40ee5bf0d57b847`.
 
 The archive was uploaded to a temporary name, verified by size/hash on the server,
@@ -207,7 +204,7 @@ ClassicMac Display, using the emulated ATI Radeon. Existing machines and old
 immutable archives are preserved. [Exact publication and rollback evidence](../evidence/4.4.0/image-publication.json).
 The live schema-1 catalog retains a legacy unavailable-version marker for
 older app decoders; new archives/provenance have no driver-version field.
-Use `root@mcchord.net` with its pinned SSH key for publication.
+Use authorized SSH access to `mcchord.net` with its pinned host key for publication.
 
 Rollback: verify the recorded pre-4.4 catalog backup's hash, copy it to a new
 same-directory temporary file under the public download directory, chmod 0644,

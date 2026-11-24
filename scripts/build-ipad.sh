@@ -8,7 +8,12 @@ UTM_REVISION="8e4de50817e76a83d6840212311627a78dd4f8b2"
 UTM_DIR="$BUILD_DIR/UTM-$UTM_REVISION"
 SYSROOT_NAME="sysroot-iOS-TCI-arm64"
 SYSROOT_ARTIFACT="Sysroot-ios-tci-arm64"
+# Note: GitHub Actions artifacts expire after 90 days. Override SYSROOT_URL
+# (and optionally SYSROOT_SHA256) to point to a preserved sysroot.tgz if the
+# pinned workflow run artifact is no longer available.
 SYSROOT_RUN_ID="30986822409"
+SYSROOT_URL="${CLASSICMAC_SYSROOT_URL:-${SYSROOT_URL:-}}"
+SYSROOT_SHA256="${CLASSICMAC_SYSROOT_SHA256:-${SYSROOT_SHA256:-}}"
 MARKETING_VERSION="${CLASSICMAC_MARKETING_VERSION:-1.0.0}"
 BUILD_NUMBER="${CLASSICMAC_BUILD_NUMBER:-1}"
 ARCHIVE_PATH="${CLASSICMAC_ARCHIVE_PATH:-$BUILD_DIR/ClassicMac-iPad-$BUILD_NUMBER.xcarchive}"
@@ -35,15 +40,35 @@ if [[ ! -f "$UTM_DIR/.classicmac-patch-applied" ]]; then
 fi
 
 if [[ ! -d "$UTM_DIR/$SYSROOT_NAME" ]]; then
-    command -v gh >/dev/null || {
-        echo "GitHub CLI is required to download the pinned UTM iOS sysroot." >&2
-        exit 1
-    }
-    gh run download "$SYSROOT_RUN_ID" \
-        --repo utmapp/UTM \
-        --name "$SYSROOT_ARTIFACT" \
-        --dir "$UTM_DIR"
+    if [[ -n "$SYSROOT_URL" ]]; then
+        curl -fsSL --retry 3 -o "$UTM_DIR/sysroot.tgz.tmp" "$SYSROOT_URL"
+        mv "$UTM_DIR/sysroot.tgz.tmp" "$UTM_DIR/sysroot.tgz"
+    else
+        command -v gh >/dev/null || {
+            echo "GitHub CLI is required to download the pinned UTM iOS sysroot (or set SYSROOT_URL)." >&2
+            exit 1
+        }
+        if ! gh run download "$SYSROOT_RUN_ID" \
+            --repo utmapp/UTM \
+            --name "$SYSROOT_ARTIFACT" \
+            --dir "$UTM_DIR"; then
+            echo "Failed to download sysroot artifact $SYSROOT_RUN_ID (GitHub Actions artifacts expire after 90 days). Set SYSROOT_URL (and optionally SYSROOT_SHA256) to supply a mirrored sysroot.tgz." >&2
+            exit 1
+        fi
+    fi
+    if [[ -n "$SYSROOT_SHA256" ]]; then
+        actual_sha="$(shasum -a 256 "$UTM_DIR/sysroot.tgz" | awk '{ print $1 }')"
+        if [[ "$actual_sha" != "$SYSROOT_SHA256" ]]; then
+            rm -f "$UTM_DIR/sysroot.tgz"
+            echo "Sysroot SHA-256 mismatch: expected $SYSROOT_SHA256, got $actual_sha" >&2
+            exit 1
+        fi
+    fi
     tar -xzf "$UTM_DIR/sysroot.tgz" -C "$UTM_DIR"
+    if [[ ! -d "$UTM_DIR/$SYSROOT_NAME" ]]; then
+        echo "Expected sysroot directory $SYSROOT_NAME missing after extraction" >&2
+        exit 1
+    fi
 fi
 
 if ! xcrun --find metal >/dev/null 2>&1; then

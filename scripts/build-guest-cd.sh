@@ -18,6 +18,7 @@
 # not the Retro68 toolchain. TOOLS_CD_OUTPUT overrides the output path.
 
 set -euo pipefail
+export COPYFILE_DISABLE=1
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MANIFEST="$ROOT_DIR/guestcd/manifest.tsv"
@@ -31,9 +32,33 @@ DISPLAY_BIN_DIR="$ROOT_DIR/guestcd/classicmac-display/bin"
 # 32 MiB: plenty for ~10 MB of expanded tools, and a multiple of the
 # 2048-byte CD sector size.
 IMAGE_BYTES=$((32 * 1024 * 1024))
+MOUNTED=0
+CURRENT_WORKDIR=""
+WORK_IMAGE=""
 
 log() { printf '\n==> %s\n' "$*"; }
 die() { printf '\nERROR: %s\n' "$*" >&2; exit 1; }
+
+cleanup() {
+  local status=$?
+  trap - EXIT HUP INT TERM
+  set +e
+  if [ "$MOUNTED" -eq 1 ]; then
+    humount >/dev/null 2>&1 || true
+  fi
+  if [ -n "$CURRENT_WORKDIR" ] && [ -d "$CURRENT_WORKDIR" ]; then
+    rm -rf -- "$CURRENT_WORKDIR"
+  fi
+  if [ -n "$WORK_IMAGE" ] && [ -e "$WORK_IMAGE" ]; then
+    rm -f -- "$WORK_IMAGE"
+  fi
+  exit "$status"
+}
+
+trap cleanup EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 [ -f "$MANIFEST" ] || die "manifest not found: $MANIFEST"
 
@@ -65,28 +90,64 @@ fi
 mkdir -p "$DL_DIR"
 
 md5_of() {
-  md5 -q "$1"
+  if command -v md5 >/dev/null 2>&1; then
+    md5 -q "$1"
+  else
+    md5sum "$1" | awk '{print $1}'
+  fi
+}
+
+sha256_of() {
+  if command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$1" | awk '{print $1}'
+  else
+    sha256sum "$1" | awk '{print $1}'
+  fi
+}
+
+checksum_matches() {
+  local file="$1" primary="$2" extra_sha256="${3:-}"
+  [ -f "$file" ] || return 1
+  case "$primary" in
+    sha256:*)
+      [ "$(sha256_of "$file")" = "${primary#sha256:}" ] || return 1
+      ;;
+    md5:*)
+      [ "$(md5_of "$file")" = "${primary#md5:}" ] || return 1
+      ;;
+    *)
+      if [ "${#primary}" -eq 64 ]; then
+        [ "$(sha256_of "$file")" = "$primary" ] || return 1
+      else
+        [ "$(md5_of "$file")" = "$primary" ] || return 1
+      fi
+      ;;
+  esac
+  if [ -n "$extra_sha256" ]; then
+    [ "$(sha256_of "$file")" = "${extra_sha256#sha256:}" ] || return 1
+  fi
+  return 0
 }
 
 download_verified() {
-  local url="$1" md5="$2" dest="$3"
-  if [ -f "$dest" ] && [ "$(md5_of "$dest")" = "$md5" ]; then
+  local url="$1" checksum="$2" dest="$3" extra_sha256="${4:-}"
+  if checksum_matches "$dest" "$checksum" "$extra_sha256"; then
     printf '    cached  %s\n' "$(basename "$dest")"
     return 0
   fi
   printf '    fetch   %s\n' "$url"
   curl -fsSL --retry 3 --max-time 300 -o "$dest.tmp" "$url" || die "download failed: $url"
-  if [ "$(md5_of "$dest.tmp")" != "$md5" ]; then
+  if ! checksum_matches "$dest.tmp" "$checksum" "$extra_sha256"; then
     rm -f "$dest.tmp"
-    die "MD5 mismatch for $url (expected $md5)"
+    die "Checksum mismatch for $url (expected $checksum${extra_sha256:+, sha256:$extra_sha256})"
   fi
   mv "$dest.tmp" "$dest"
 }
 
 log "Downloading guest tools (cached in vendor/guest-cd/downloads)"
-while IFS=$'\t' read -r name handling md5 url; do
+while IFS=$'\t' read -r name handling checksum url extra_sha256; do
   case "$name" in ''|'#'*) continue ;; esac
-  download_verified "$url" "$md5" "$DL_DIR/$(basename "$url")"
+  download_verified "$url" "$checksum" "$DL_DIR/$(basename "$url")" "${extra_sha256:-}"
 done < "$MANIFEST"
 
 # ---------------------------------------------------------------------------
@@ -222,6 +283,7 @@ PYEOF
 
 hformat -l "$VOLUME_NAME" "$WORK_IMAGE" 1 >/dev/null
 hmount "$WORK_IMAGE" >/dev/null
+MOUNTED=1
 
 # Read Me first so it lands at the top of the (unsorted) catalog.
 hcopy -t "$README" ":Read Me"
@@ -244,7 +306,7 @@ PYEOF
   hcopy -m "$DISPLAY_BIN_DIR/$bin" ":ClassicMac Display:$mac_name"
 done
 
-while IFS=$'\t' read -r name handling md5 url; do
+while IFS=$'\t' read -r name handling checksum url extra_sha256; do
   case "$name" in ''|'#'*) continue ;; esac
   src="$DL_DIR/$(basename "$url")"
   printf '    add     %s\n' "$name"
@@ -259,6 +321,7 @@ while IFS=$'\t' read -r name handling md5 url; do
       # (a file, or the archive's own folder) becomes ":$name" directly;
       # multiple entries land inside a ":$name" folder.
       workdir="$(mktemp -d)"
+      CURRENT_WORKDIR="$workdir"
       unar -quiet -no-directory -output-directory "$workdir" "$src" || die "unar failed for $src"
       entries=()
       while IFS= read -r entry; do
@@ -270,6 +333,7 @@ while IFS=$'\t' read -r name handling md5 url; do
         "$PYTHON_BIN" "$HFS_COPY" "$workdir" ":$name"
       fi
       rm -rf "$workdir"
+      CURRENT_WORKDIR=""
       ;;
     *)
       die "unknown handling '$handling' for $name"
@@ -280,7 +344,9 @@ done < "$MANIFEST"
 log "Volume contents:"
 hls -l
 humount
+MOUNTED=0
 
 mv "$WORK_IMAGE" "$OUT_IMAGE"
+WORK_IMAGE=""
 log "Done. Built: $OUT_IMAGE"
 log "Bundle it into the app with scripts/bundle-qemu.sh"

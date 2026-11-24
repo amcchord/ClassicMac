@@ -6,32 +6,38 @@ ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 BUILD_DIR="${CLASSICMAC_IOS_BUILD_DIR:-$ROOT_DIR/build/ipad}"
 MARKETING_VERSION="${CLASSICMAC_MARKETING_VERSION:-1.0.0}"
 BUILD_NUMBER="${CLASSICMAC_BUILD_NUMBER:-1}"
-TEAM_ID="${CLASSICMAC_TEAM_ID:-7PTN7E8EDS}"
+TEAM_ID="${APPLE_TEAM_ID:-${CLASSICMAC_TEAM_ID:-}}"
+KEY_ID="${ASC_KEY_ID:-${APP_STORE_CONNECT_KEY_ID:-}}"
+ISSUER_ID="${ASC_ISSUER_ID:-${APP_STORE_CONNECT_ISSUER_ID:-}}"
+KEY_FILE="${ASC_KEY_FILE:-${APP_STORE_CONNECT_KEY_PATH:-}}"
 ARCHIVE_PATH="${CLASSICMAC_ARCHIVE_PATH:-$BUILD_DIR/ClassicMac-iPad-$BUILD_NUMBER.xcarchive}"
 EXPORT_DIR="${CLASSICMAC_EXPORT_DIR:-$BUILD_DIR/export-$BUILD_NUMBER}"
 KEY_DIR="$(mktemp -d "${TMPDIR:-/tmp}/classicmac-asc.XXXXXX")"
 KEY_PATH="$KEY_DIR/AuthKey.p8"
-CREDENTIALS_PATH="$KEY_DIR/credentials.json"
+EXPORT_OPTIONS_PLIST="$KEY_DIR/ExportOptions.plist"
+
+: "${TEAM_ID:?Set APPLE_TEAM_ID to your Apple Developer Team ID.}"
+: "${KEY_ID:?Set ASC_KEY_ID to your App Store Connect API Key ID.}"
+: "${ISSUER_ID:?Set ASC_ISSUER_ID to your App Store Connect API Issuer ID.}"
+: "${KEY_FILE:?Set ASC_KEY_FILE to the path of your AuthKey_*.p8 private key.}"
+
+if [[ ! -f "$KEY_FILE" ]]; then
+    echo "App Store Connect private key file not found: $KEY_FILE" >&2
+    exit 1
+fi
 
 cleanup() {
-    rm -f "$KEY_PATH" "$CREDENTIALS_PATH"
+    rm -f "$KEY_PATH" "$EXPORT_OPTIONS_PLIST"
     rmdir "$KEY_DIR" 2>/dev/null || true
 }
 trap cleanup EXIT
 chmod 700 "$KEY_DIR"
 
-curl --fail --silent --show-error \
-    --request POST \
-    --header 'Content-Type: application/json' \
-    --data '{"service":"app-store-connect","project":"ClassicMac-iPad"}' \
-    http://127.0.0.1:8472/api/keys/provision \
-    --output "$CREDENTIALS_PATH"
-chmod 600 "$CREDENTIALS_PATH"
-
-KEY_ID="$(jq -er '.entry.secrets.APP_STORE_CONNECT_KEY_ID' "$CREDENTIALS_PATH")"
-ISSUER_ID="$(jq -er '.entry.secrets.APP_STORE_CONNECT_ISSUER_ID' "$CREDENTIALS_PATH")"
-jq -er '.entry.secrets.APP_STORE_CONNECT_PRIVATE_KEY' "$CREDENTIALS_PATH" >"$KEY_PATH"
+cp "$KEY_FILE" "$KEY_PATH"
 chmod 600 "$KEY_PATH"
+
+cp "$ROOT_DIR/ios/ExportOptions.plist" "$EXPORT_OPTIONS_PLIST"
+/usr/libexec/PlistBuddy -c "Set :teamID $TEAM_ID" "$EXPORT_OPTIONS_PLIST"
 
 CLASSICMAC_SIGNING=automatic \
 CLASSICMAC_TEAM_ID="$TEAM_ID" \
@@ -53,7 +59,7 @@ mkdir -p "$EXPORT_DIR"
 PATH=/usr/bin:/bin:/usr/sbin:/sbin xcodebuild -exportArchive \
     -archivePath "$ARCHIVE_PATH" \
     -exportPath "$EXPORT_DIR" \
-    -exportOptionsPlist "$ROOT_DIR/ios/ExportOptions.plist" \
+    -exportOptionsPlist "$EXPORT_OPTIONS_PLIST" \
     -allowProvisioningUpdates \
     -authenticationKeyPath "$KEY_PATH" \
     -authenticationKeyID "$KEY_ID" \

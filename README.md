@@ -6,8 +6,8 @@
 
 <p align="center">
   <strong>The classic Mac OS era on macOS, Windows and Linux.</strong><br>
-  A self-contained desktop app that emulates a Motorola 68040 Quadra 800 and a PowerPC Power Mac G4<br>
-  on a custom build of QEMU, with the Apple Platinum appearance.
+  A self-contained desktop app that emulates a Motorola 68040 Quadra 800, PowerPC Power Mac G4<br>
+  (Mac OS 8/9 and Mac OS X Tiger), and experimental Power Mac 7500 (Copland on macOS) with the Apple Platinum appearance.
 </p>
 
 <p align="center">
@@ -91,7 +91,7 @@ See the [4.6.4 validation report](docs/4.6.4-validation.md).
 - **Sharp oversized displays.** Scroll a large guest at whole-pixel zoom;
   choose Fit Window explicitly for fractional scaling. Guest full screen hides
   host controls, and narrow action bars wrap.
-- **Whole-pixel interface zoom.** The Platinum interface snaps to1×,2× and
+- **Whole-pixel interface zoom.** The Platinum interface snaps to 1×, 2× and
   larger whole zoom levels so title-bar stripes, text and bevels stay even at
   fractional Windows display scales.
 - **ATI and Quadra change their actual resolution.** Resizing the window now
@@ -311,9 +311,10 @@ on a host OpenGL 4.1 thread (Apple's OpenGL over Metal). Mac OS 9's stock
 Apple M5 Max the Quake III Arena demo runs at about 150 frames per second.
 
 - Mac OS starts at 640 × 480 and switches to the size you chose (640 × 480
-  up to 1920 × 1440) during startup through RetroBoot Display (in the
-  Library's Macs) or ClassicMac Display (on the Tools disk). The size stays
-  fixed while the Mac runs; colors are 256, Thousands or Millions.
+  up to 1920 × 1440, widths aligned to eight pixels) during startup through
+  RetroBoot Display (in the Library's Macs) or ClassicMac Display (on the Tools
+  disk), then follows host window resizes through the firmware PCI display
+  service and ATI driver; colors are 256, Thousands or Millions.
 - A Mac without ATI's software still starts on the card, at 640 × 480 with
   no 3D. Installer and CD starts always use the Standard card.
 - The Standard card remains the default: any size, live window resizing and
@@ -325,14 +326,16 @@ available in Git history and older releases.
 
 ## What it is
 
-ClassicMac wraps a custom QEMU build in a native SwiftUI app and covers the entire classic Mac OS era with two machines:
+ClassicMac wraps custom QEMU builds (and DingusPPC for Copland on macOS) in a native Platinum app covering the classic Mac OS era and PowerPC Mac OS X Tiger across four machine profiles:
 
-| Machine | CPU | Runs | Highlights |
+| Machine | CPU / Engine | Runs | Highlights |
 | --- | --- | --- | --- |
-| **Macintosh Quadra 800** | Motorola 68040 | System 7.1 – Mac OS 8.1 | Enhanced paravirtualized framebuffer (`nubus-qfb`), writable removable floppy images, any resolution up to 3840x2160, all QuickDraw depths incl. Thousands |
-| **Power Mac G4** | PowerPC (`mac99`) | Mac OS 8.5 – 9.2.2 | Boots through OpenBIOS firmware, screamer (AWACS) sound, browser-native display, custom `qemu_vga.ndrv` |
+| **Macintosh Quadra 800** | Motorola 68040 (QEMU 11) | System 7.1 – Mac OS 8.1 | Enhanced paravirtualized framebuffer (`nubus-qfb`), writable removable floppy images, any resolution up to 3840×2160, all QuickDraw depths incl. Thousands |
+| **Power Mac G4** | PowerPC `mac99` (QEMU 11) | Mac OS 8.5 – 9.2.2 | OpenBIOS firmware, screamer (AWACS) sound, live resizing `qemu_vga.ndrv`, emulated ATI Radeon 3D acceleration |
+| **Power Mac G4 — Mac OS X** | PowerPC `mac99` (QEMU 10) | Mac OS X 10.4 Tiger | Dedicated OS X engine, persistent Core99 flash startup memory, native USB input, widescreen standard VGA |
+| **Power Mac 7500** *(macOS only, experimental)* | PowerPC 601 (DingusPPC) | Copland D11E4 | Dedicated experimental engine for Apple's unfinished Mac OS 8 rewrite |
 
-Everything is bundled into a single `ClassicMac.app`: the two QEMU system emulators, firmware, guest video drivers, folder-sharing drivers, and a guest-additions Tools CD. No Homebrew, nothing to hunt down, nothing to install inside the guest.
+Everything is bundled into a single self-contained download (`ClassicMac.app` on macOS, portable EXE on Windows, AppImage on Linux): the QEMU system emulators, firmware, guest video drivers, folder-sharing drivers (macOS/Linux), and a guest-additions Tools CD. No Homebrew or separate dependencies to hunt down, and nothing required inside the guest.
 
 You bring your own Mac OS installation media: every classic Mac OS version is available in the [WinWorld operating system library](https://winworldpc.com/library/operating-systems), and ClassicMac imports the disc image with a couple of clicks. Mac OS 8.5, 8.6, 9.2.1, and the [Mac OS 9.2.2 Universal Install CD](https://macintoshgarden.org/apps/mac-os-922-universal) all boot reliably on the Power Mac — see the note in Getting started.
 
@@ -350,10 +353,10 @@ ClassicMac exists because of years of brilliant work by other engineers. The pat
 
 ## Features
 
-- **Native window or optional browser viewing.** Each machine opens in its own native window by default, with resize, full-screen, input, and removable-media controls. Turn on **View in browser (VNC)** per machine when a private loopback browser display is more convenient; Fit, Actual Size, Full Screen, modifier-key, and game-mouse controls stay close at hand there.
-- **Enhanced video on the Quadra** (`-M q800,fb=qemu`): arbitrary resolutions up to 3840x2160, every QuickDraw depth including Thousands (16-bit), gamma correction, and multiple monitors — far beyond what stock QEMU's macfb can do.
+- **Native window or optional browser viewing.** Each machine opens in its own native Platinum window by default, with resize, full-screen, input, and removable-media controls. On macOS, turn on **Show the Mac in a web browser** under **Get Info → Display** when a private loopback browser display is more convenient; Fit, Actual Size, Full Screen, modifier-key, and game-mouse controls stay close at hand there.
+- **Enhanced video on the Quadra** (`-M q800,fb=none -device nubus-qfb`): arbitrary resolutions up to 3840x2160, every QuickDraw depth including Thousands (16-bit), gamma correction, and multiple monitors — far beyond what stock QEMU's macfb can do.
 - **Zero guest setup on the Power Mac.** It boots through OpenBIOS firmware, and a custom `qemu_vga.ndrv` is handed to Mac OS over fw_cfg at boot, so live resizing and millions of colors work with nothing installed in the guest.
-- **Host folder sharing on both machines.** Pick a folder and it mounts on the emulated desktop as a read/write disk (classicvirtio + virtio-9p). Resource forks and type/creator codes round-trip via `.rdump`/`.idump` sidecars.
+- **Host folder sharing on classic Macs (macOS and Linux).** Pick a folder on a Quadra 800 or classic Power Mac G4 and it mounts on the emulated desktop as a read/write disk (classicvirtio + virtio-9p). Resource forks and type/creator codes round-trip via `.rdump`/`.idump` sidecars. (Windows QEMU, OS X, and Copland do not provide 9p sharing.)
 - **Writable floppy images on the Quadra.** Attach a raw `.img`, `.dsk`, `.ima`, or `.raw` image in Media settings before startup and it appears as a writable classic Mac disk.
 - **Clean, working sound.** The Quadra's Apple Sound Chip is patched to feed silence when idle (no more idle buzz), and the Power Mac gets the screamer (AWACS) device with a screamer-aware OpenBIOS.
 - **Self-contained `.classic` machine documents.** Each VM is a single Finder package holding its config, disk, and PRAM. Keep it anywhere, double-click to boot, move it between Macs.
@@ -424,12 +427,15 @@ machines keep their current disk sizes.
 
 New machines are created as `.classic` documents (default `~/Documents/ClassicMac/`). Double-click one in Finder to boot it.
 
-Requirements: an Apple Silicon Mac (M1 or later) running macOS 15 or newer.
+Requirements:
+- **macOS:** Apple Silicon Mac (M1 or later) running macOS 15 or newer.
+- **Windows:** Windows 11 x64 (single portable EXE, unsigned).
+- **Linux:** x64 desktop with glibc 2.39+ (Ubuntu 24.04+ / Debian 13+) on X11 or Wayland (single AppImage).
 
 ## Display & sound notes
 
 - The resolution you pick is the *boot* resolution and the depth is the *deepest available* mode; classic Mac OS chooses the active depth at startup (a fresh system comes up in B&W until you pick Thousands/Millions once in Monitors — it's remembered per machine).
-- Machines use the native window by default. The per-machine **View in browser** toggle is available under **Settings → Display** and takes effect on the next start.
+- Machines use ClassicMac's native Platinum guest window by default on every platform. On macOS, the optional **Show the Mac in a web browser** toggle is under **Get Info → Display** and takes effect on the next start.
 - The browser's **Fit** mode prefers the largest whole-number scale that fits the tab and uses sharp nearest-neighbor edges when it must shrink the image. Choose **Actual Size** for one guest pixel per browser pixel, and use the page's **Fullscreen** button to enter or leave browser fullscreen.
 - The browser toolbar provides sticky Command, Option, and Control modifiers plus a dedicated Escape button, which makes host-reserved key combinations practical. Games that ask for relative mouse movement reveal a **Capture game mouse** control; press Escape to leave pointer lock.
 - Power Mac widths snap down to a multiple of 8 (a VGA hardware constraint).
@@ -492,41 +498,54 @@ The guest-side binaries are committed, so a normal build needs no cross toolchai
 
 ```
 ClassicMac/
-  app/                      # the ClassicMac app and PlatinumKit (SwiftPM package)
+  VERSION                   # canonical release version shared by app, CMake and packagers
+  app/                      # macOS SwiftUI app and PlatinumKit (SwiftPM package)
+  native/                   # cross-platform C++17/Qt desktop app and Windows/Linux packagers
+  desktop/                  # Windows/Linux QEMU build & runtime staging scripts and shared UI assets
   display/                  # -display classicmac: QEMU hands its screen to the app
-  platinum/                 # MIT Platinum fonts, icons and asset generators
-  ati/                      # emulated ATI Radeon R100: QEMU, macOS GL and OpenBIOS patches
-  browser/                  # branded loopback-only noVNC display client
-  Resources/                # app icon, machine icon, bundled firmware
+  platinum/                 # MIT Platinum fonts, icons, Mac OS 9 icon provenance and generators
+  ati/                      # emulated ATI Radeon R100: QEMU, macOS/Windows/Linux GL and OpenBIOS patches
+  browser/                  # branded loopback-only noVNC display client (macOS optional browser mode)
+  Resources/                # app icon, machine icon, Iconfactory artwork, Quadra ROM
   qfb/                      # nubus-qfb enhanced framebuffer device + 68k driver
     driver/                 #   68k card firmware + driver source (Retro68)
   ppcvid/                   # PPC live-resize: VGA host-resize + packed-depth patches
     driver/                 #   qemu_vga.ndrv source (QemuMacDrivers fork, Retro68)
-  classicvirtio/            # removable floppy + Power Mac startup-driver patches
-  powermac/                 # QEMU and OpenBIOS Mac OS 8 compatibility patches
+  classicvirtio/            # removable floppy + Power Mac startup-driver + share cache patches
+  powermac/                 # QEMU and OpenBIOS Mac OS 8/9 compatibility & boot fast-path patches
   virtio/                   # QEMU removable VirtIO block device patch
-  screamer/                 # screamer (AWACS) PPC audio device + OpenBIOS
-  shared/                   # classicvirtio card firmware + ndrvloader + PRAM seed
+  screamer/                 # screamer (AWACS) PPC audio device + OpenBIOS + timing patches
+  osx/                      # dedicated QEMU 10.0.13 engine, firmware and tests for PowerPC Mac OS X
+  copland/                  # DingusPPC patches, silent audio backend and tests (macOS-only Copland)
+  cpu/                      # PowerPC CPU/TCG fast-path patches (MMU contexts, FPU, branch cache)
+  startup/                  # startup race fixes (Cuda shift interrupt, IDE SRST/PIO status drain, ATAPI)
+  timers/                   # coherent VIA timers and Timer 2 calibration hold patches
+  usb/                      # OHCI idle-frame batching and HID idle patches
+  input/                    # relative game-mouse routing patch and resize/input tests
+  monitor/                  # HMP/QMP media control bridge patch
+  shared/                   # classicvirtio card firmware (declrom) + ndrvloader + PRAM seed
   cocoaui/                  # Cocoa display patches: menus, input helpers, media names
   audio/                    # CoreAudio backend patch
   ide/                      # PPC MacIO IDE/DBDMA timing fix + tracepoints
-  guestcd/                  # Tools CD manifest + HFS copy tooling
-  scripts/                  # build-qemu, bundle-qemu, build-guest-cd, make-dmg, notarize...
+  guestcd/                  # Tools CD manifest + HFS copy tooling + ClassicMac Display guest extension
+  ios/                      # iPad build patch, ExportOptions and TestFlight documentation
+  docs/                     # architecture notes, validation reports, release evidence and operations
+  scripts/                  # build-qemu, bundle-qemu, build-guest-cd, make-dmg, notarize, verify-release...
 ```
 
 > Mac OS installation media is **not** committed; download the version you want from the [WinWorld operating system library](https://winworldpc.com/library/operating-systems) (Mac OS 8.5, 8.6, 9.2.1, and the [9.2.2 Universal Install CD](https://macintoshgarden.org/apps/mac-os-922-universal) are supported) and import it through the app.
 
 ## How the interesting parts work
 
-- **Optional browser display** — when enabled for a machine, its run gets an HTTP server and QEMU VNC WebSocket bound only to `127.0.0.1`. The bundled noVNC client renders the framebuffer, sends keyboard and pointer input, scales it to the tab, reconnects across Power Mac restarts, and understands QEMU's relative-pointer extension for games. Otherwise QEMU uses ClassicMac's native Cocoa window.
+- **Optional browser display (macOS)** — when enabled for a machine, its run gets a loopback HTTP server and authenticated `/websockify` proxy bound only to `127.0.0.1`, bridged to QEMU's private Unix-domain VNC socket. The bundled noVNC client renders the framebuffer, sends keyboard and pointer input, scales it to the tab, reconnects across Power Mac restarts, and understands QEMU's relative-pointer extension for games. By default on macOS, Windows, and Linux, machines open directly in ClassicMac's Platinum guest window.
 - **Quadra video** — `nubus-qfb`, a paravirtualized NuBus framebuffer (ported from [SolraBizna/qemu](https://github.com/SolraBizna/qemu) onto QEMU 11.0.2) with 68k card firmware and a driver built with Retro68.
 - **Power Mac video** — QEMU's std VGA gains packed low-color and optimized framebuffer paths. The bundled `qemu_vga.ndrv` supplies the full classic Mac display-mode set without a guest installation.
 - **ATI Radeon 3D** — `ati-vga,model=r100` (from RetroBoot) emulates the card Mac OS 9's ATI drivers expect, down to its command processor and 3D engine. 3D draws run on a separate thread through Apple's OpenGL 4.1 (loaded at run time, so QEMU never links OpenGL); finished frames return to the card's VRAM for display. OpenBIOS names the card `ATY,Rage6p` and programs its boot mode, and the emulated monitor's EDID offers exactly the screen size you chose.
 - **Platinum interface** — `PlatinumKit` draws every control from measured Mac OS 8.1 pixel tables with a one-Mac-pixel-per-point painter, uses bitmap fonts compiled to pixel-square TrueType, and hosts SwiftUI content in borderless windows with their own pinstriped frames, WindowShade and modal dialog handling.
-- **Restart and installer handoff** — both models exit and relaunch cleanly at a reset boundary. This works around QEMU's broken in-place `mac99` reset and gives ClassicMac a safe point to recognize a newly blessed hard disk before the next boot.
+- **Restart and installer handoff** — classic Quadra and Power Mac models exit and relaunch cleanly at a reset boundary. This works around QEMU's broken in-place `mac99` reset and gives ClassicMac a safe point to recognize a newly blessed hard disk before the next boot.
 - **Sound** — the ASC is patched to output silence when idle (`qfb/asc-silence.patch`); the Power Mac uses Mark Cave-Ayland's screamer device with a screamer-aware OpenBIOS build.
 - **Power Mac storage** — MacIO IDE/DBDMA holds the final DMA descriptor for 1 ms before publishing completion. Real hardware cannot finish in the same scheduling window in which the driver starts an operation; without this small latency, cached host I/O can beat Mac OS 9's synchronous-wait setup and lose its wakeup, freezing Installer mid-copy. Focused MacIO/DBDMA tracepoints remain available for regression runs.
 - **Mac OS 9 hard-disk startup** — hard-disk boots use a startup-only accounted instruction clock, zero-delay cached IDE completion, and PowerPC TCG fast paths so Mac OS 9's hardware and timebase polling does not sleep on the host. QEMU recognizes Finder's menu bar directly in guest VRAM—even headless and at arbitrary supported resolutions—then atomically returns the virtual clock and 25 MHz PowerPC timebase to real time before applications run. A 15-second app fallback covers unusual themes; installer-CD boots retain normal timing and the 1 ms IDE race safeguard. Six 512 MB cold boots of the 1920×1080 OS 9.2.2 test machine reached the automatic handoff in 9.92–10.22 seconds, including a reboot after verified clean shutdown, versus roughly 18.5 seconds on the former real-time-only path; exact results vary with host load and guest configuration.
 - **Power Mac Mac OS 8 startup** — the machine uses a CUDA/G3 profile with an original-iMac OpenBIOS identity and classic Mac NVRAM/RTAS services. During CD startup, a read-only Virtio mirror lets the Mac OS 8.5/8.6 ROM read the selected disc before its IDE driver is active; the ordinary IDE CD stays present for Installer and Finder.
 - **Quadra floppy storage** — a removable `virtio-blk-device` rides on the existing classicvirtio NuBus transport. A small extension to the 68k block driver adds writes, flushes, media-change events, and a host/guest eject handshake so Finder owns the unmount before QEMU removes the raw image.
-- **Emulation speed** — both machines run on QEMU's TCG JIT; an Apple Silicon Mac runs them comfortably faster than the original hardware.
+- **Emulation speed** — all QEMU-backed machines run on QEMU's TCG JIT; an Apple Silicon Mac (and modern x64 Windows/Linux hosts) runs them comfortably faster than the original hardware.

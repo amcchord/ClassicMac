@@ -22,8 +22,8 @@ QEMU emulator as a whole is licensed under the GNU General Public License,
 version 2. Individual source and firmware files may carry compatible licenses,
 as described by QEMU's `LICENSE` file and their source headers.
 
-The exact corresponding source is reproducible from the ClassicMac 4.2.0
-source at <https://github.com/amcchord/ClassicMac/tree/v4.2.0>. The repository's
+The exact corresponding source is reproducible from the ClassicMac 4.7.0
+source at <https://github.com/amcchord/ClassicMac/tree/v4.7.0>. The repository's
 `scripts/build-qemu.sh` retrieves the pinned upstream QEMU 11.0.2 source and
 applies every ClassicMac modification stored in the repository.
 
@@ -37,20 +37,29 @@ Upstream QEMU source: <https://gitlab.com/qemu-project/qemu/-/tree/v11.0.2>
 ## Bundled libraries
 
 The self-contained QEMU helper applications also bundle these dynamically
-linked libraries:
+linked libraries on macOS (as applicable to the configured build):
 
 - pixman — MIT
 - libpng — libpng-2.0
-- GLib — LGPL-2.1-or-later
+- GLib (`libglib`, `libgobject`, `libgmodule`, `libgio`, `libgthread`) — LGPL-2.1-or-later
 - Zstandard — BSD-3-Clause or GPL-2.0-only, plus BSD-2-Clause and MIT portions
 - libslirp — BSD-3-Clause
-- libusb — LGPL-2.1-or-later
+- libusb — LGPL-2.1-or-later (when USB passthrough is enabled)
 - GNU libintl/gettext runtime — LGPL-2.1-or-later and GPL-3.0-or-later portions
 - PCRE2 — BSD-3-Clause
+- Device Tree Compiler (`dtc` / `libfdt`, when dynamically linked) — GPL-2.0-or-later OR BSD-2-Clause
 
 Their license texts are copied from the exact Homebrew installations used to
-produce the release. Source code is available from each project's upstream
-site and through Homebrew's corresponding formula source archives.
+produce the release (and recorded in each helper's `release-libraries.json`).
+Source code is available from each project's upstream site and through
+Homebrew's corresponding formula source archives.
+
+## classicvirtio
+
+Guest Virtio drivers for shared folders (`shared/declrom`, `shared/ndrvloader`)
+and Quadra removable floppy disks build from `elliotnunn/classicvirtio`
+(`fc401b4c731027cb4068f3415def7fe79f6659da`, MIT) with ClassicMac and RetroBoot
+patches under `classicvirtio/`.
 
 ## noVNC
 
@@ -81,9 +90,10 @@ Source: <https://github.com/mist64/dingusppc/tree/8dcac6fb160adfd8860c2252fba321
 Research and working reference: <https://www.pagetable.com/300>
 
 The helper statically links SDL2 2.32.10 (zlib license) and Capstone (BSD license,
-with LLVM-derived portions under the included LLVM license). Cubeb's ISC license
-is also included for the pinned build dependencies. Full notices are bundled
-under `Contents/Resources/Licenses`. The corresponding DingusPPC, SDL2 and pinned
+with LLVM-derived portions under the included LLVM license), and uses CLI11
+(BSD-3-Clause) for command-line parsing. Cubeb's ISC license is also included
+for the pinned build dependencies. Full notices are bundled under
+`Contents/Resources/Licenses`. The corresponding DingusPPC, SDL2 and pinned
 submodule sources are supplied in the Copland source archive beside the release;
 ClassicMac's own source and build patches are in the release's tagged repository.
 Apple's guest software and ROM are separate from these open-source components.
@@ -149,6 +159,19 @@ GPL-2.0-or-later. The synthetic cursor test is adapted from that revision's
 `research/gfx/tests/qtest_radeon_cursor.py`; provenance, hashes and scope are
 in `docs/retroboot-2.0.2-cursor-import.json` and `ati/README.md`.
 
+### RetroBoot 3.0.0 parity import
+
+Additional engine, guest-driver, and catalog parity changes are ported from
+RetroBoot `37664e17` (`v3.0.0`, <https://github.com/amcchord/RetroBoot/tree/v3.0.0>):
+Power Mac IDE PIO status drain (`macio-ide.pio-status-drain`) and ATAPI zero-byte
+abort IRQ (`startup/`), OHCI idle-frame batching and HID idle handling (`usb/`),
+Quadra QFB snapshot-mode consistency and slow-host Timer 2 hold (`qfb/`), and
+classicvirtio shared-folder date and directory-cache patches (`classicvirtio/`),
+plus GNU sparse 1.0 tar archive reading (`app/Sources/CMachineArchive/sparse_tar.c`)
+for the shared public RetroBoot download catalog. QEMU modifications remain
+GPL-2.0-or-later, and provenance and test verification are recorded in
+`docs/retroboot-3.0.0-parity.md`.
+
 ## Original Mac OS icons
 
 The CD, floppy, folder, clipboard, display, alert and other system artwork
@@ -172,6 +195,17 @@ OpenSSL is dynamically linked under Apache-2.0; upstream source and license:
 https://www.openssl.org/source/ and https://www.openssl.org/source/license.html .
 Its legacy DES operation is used only for the loopback RFB password challenge;
 HTTPS uses the platform Qt TLS backend with normal certificate verification.
+
+zlib is dynamically linked under the zlib License (<https://zlib.net/zlib_license.html>).
+On Windows, per-package MSYS2 dependency license notices (covering Qt 6,
+OpenSSL, zlib, GCC runtime / winpthreads, GLib, pixman, libpng, Zstandard,
+libslirp, GNU libintl/gettext, PCRE2, ICU, HarfBuzz, FreeType, Graphite2,
+Brotli, bzip2, libiconv, libjpeg-turbo, libffi, dtc, double-conversion, md4c,
+libb2, libgcrypt/libgpg-error, GnuTLS/Nettle/GMP/libtasn1/p11-kit/libunistring/libidn2,
+cURL/libssh2/libpsl/nghttp2/nghttp3/ngtcp2, and any other bundled DLLs) are
+staged in `Licenses/MSYS2` and `runtime/Licenses/MSYS2-runtime`. On Linux,
+distribution copyright notices for all bundled shared libraries are staged in
+`Licenses/` and `runtime/Licenses/`.
 
 The native desktop packages contain no Electron or Chromium runtime. The
 optional browser display in the macOS edition retains its existing noVNC

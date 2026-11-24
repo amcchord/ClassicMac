@@ -69,13 +69,14 @@ rm -f "$ZIP"
 ditto -c -k --keepParent "$APP" "$ZIP"
 
 log "Submitting to Apple notary service (this can take a few minutes)"
-SUBMIT_OUTPUT="$(xcrun notarytool submit "$ZIP" "${NOTARY_AUTH[@]}" --wait 2>&1 | tee /dev/stderr)"
+SUBMIT_STATUS=0
+SUBMIT_OUTPUT="$(xcrun notarytool submit "$ZIP" "${NOTARY_AUTH[@]}" --wait 2>&1 | tee /dev/stderr)" || SUBMIT_STATUS=$?
 
 SUBMISSION_ID="$(printf '%s\n' "$SUBMIT_OUTPUT" | awk '/^  id:/{print $2; exit}')"
 STATUS="$(printf '%s\n' "$SUBMIT_OUTPUT" | awk '/^  status:/{print $2}' | tail -1)"
 
-if [ "$STATUS" != "Accepted" ]; then
-  log "Notarization failed (status: ${STATUS:-unknown}). Fetching log:"
+if [ "$STATUS" != "Accepted" ] || [ "$SUBMIT_STATUS" -ne 0 ]; then
+  log "Notarization failed (status: ${STATUS:-unknown}, exit: $SUBMIT_STATUS). Fetching log:"
   if [ -n "$SUBMISSION_ID" ]; then
     xcrun notarytool log "$SUBMISSION_ID" "${NOTARY_AUTH[@]}" || true
   fi

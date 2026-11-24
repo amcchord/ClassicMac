@@ -23,20 +23,26 @@ unsigned archive by default:
 ./scripts/build-ipad.sh
 ```
 
+GitHub Actions workflow artifacts expire after 90 days. If the pinned `gh run download` sysroot artifact has expired, pass `SYSROOT_URL` (and optionally `SYSROOT_SHA256`) pointing to a preserved `sysroot.tgz` archive before running `./scripts/build-ipad.sh`.
+
 Build products stay under the gitignored `build/ipad` directory. Override the
 version or build number with `CLASSICMAC_MARKETING_VERSION` and
 `CLASSICMAC_BUILD_NUMBER`.
 
 ## TestFlight
 
-After the `com.classicmac.emulator` app record exists in App Store Connect, the
-upload helper retrieves the tracked Team API key from the localhost AustinLand
-vault, writes it only to a mode-600 temporary file, signs the archive, exports
-and validates the IPA, and uploads it:
+After the `com.classicmac.emulator` app record exists in App Store Connect,
+supply your Apple Developer Team ID and App Store Connect API key credentials
+via environment variables (`APPLE_TEAM_ID`, `ASC_KEY_ID`, `ASC_ISSUER_ID`, and
+`ASC_KEY_FILE`) to sign the archive, export and validate the IPA, and upload it:
 
 ```bash
+APPLE_TEAM_ID=YOUR_TEAM_ID \
+ASC_KEY_ID=YOUR_KEY_ID \
+ASC_ISSUER_ID=YOUR_ISSUER_ID \
+ASC_KEY_FILE=/path/to/AuthKey_YOUR_KEY_ID.p8 \
 ./scripts/upload-ipad-testflight.sh
 ```
 
-The private key is removed by the script's exit trap and is never stored in
-the repository or build directory.
+The temporary mode-600 key copy is removed by the script's exit trap, and
+credentials are never stored in the repository or build directory.

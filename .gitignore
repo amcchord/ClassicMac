@@ -33,6 +33,7 @@ DerivedData/
 # Local Python/test harness artifacts
 __pycache__/
 tools/os9-install-harness/shots/
+/gxmetal/
 
 # Contained parallel checkouts and local integration artifacts
 worktrees/

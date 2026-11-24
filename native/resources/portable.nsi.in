@@ -4,21 +4,19 @@ Name "ClassicMac"
 OutFile "@OUTPUT@"
 RequestExecutionLevel user
 SilentInstall silent
-# Supply a valid silent-launch directory; payload files are unpacked only
-# into $PLUGINSDIR, without installing into the host filesystem.
+# Supply a valid silent-launch directory; normal runs cache into $LOCALAPPDATA
+# (falling back to $PLUGINSDIR) and never install system-wide.
 InstallDir "$TEMP"
-SetCompressor /SOLID lzma
-VIProductVersion "4.7.0.0"
+SetCompressor zlib
+VIProductVersion "@VERSION@.0"
 VIAddVersionKey /LANG=1033 "ProductName" "ClassicMac"
 VIAddVersionKey /LANG=1033 "FileDescription" "ClassicMac native portable application"
-VIAddVersionKey /LANG=1033 "FileVersion" "4.7.0"
+VIAddVersionKey /LANG=1033 "FileVersion" "@VERSION@"
 VIAddVersionKey /LANG=1033 "LegalCopyright" "Austin McChord"
 Icon "@ICON@"
 Section
-  InitPluginsDir
-  SetOutPath "$PLUGINSDIR\ClassicMac"
-  File /r "@APP@"
   ${GetParameters} $R0
+  StrCpy $R7 "0"
   # Parse our one extraction option without FileFunc's option-separator rule,
   # which treats unquoted hyphens inside directory names as new options.
   StrCpy $R3 $R0
@@ -31,25 +29,61 @@ Section
   StrCpy $R3 $R3 $R4 1
 checkoption:
   StrCpy $R4 $R3 10
-  StrCmp $R4 "--extract=" 0 run
+  StrCmp $R4 "--extract=" 0 use_cache
   StrCpy $R1 $R3 "" 10
   StrCpy $R4 $R1 1
-  StrCmp $R4 '"' 0 extract
+  StrCmp $R4 '"' 0 prepare_extract
   StrCpy $R4 $R1 1 -1
   StrCmp $R4 '"' 0 failed
   StrLen $R4 $R1
   IntOp $R4 $R4 - 2
   StrCpy $R1 $R1 $R4 1
-extract:
+prepare_extract:
   StrCmp $R1 "" failed
+  StrCpy $R7 "1"
+  StrCpy $R5 "$R1"
   ClearErrors
-  CreateDirectory "$R1"
-  CopyFiles /SILENT "$PLUGINSDIR\ClassicMac\*.*" "$R1"
+  CreateDirectory "$R5"
   IfErrors failed
-  Goto done
-run:
+  Goto do_extract
+use_cache:
+  StrCmp $LOCALAPPDATA "" use_temp
+  StrCpy $R5 "$LOCALAPPDATA\ClassicMac\app-@VERSION@-@CACHE_TAG@"
+  IfFileExists "$R5\.ready-@CACHE_TAG@" check_cached_exe unpack_cache
+check_cached_exe:
+  IfFileExists "$R5\classicmac.exe" run_app unpack_cache
+unpack_cache:
   ClearErrors
-  ExecWait '"$PLUGINSDIR\ClassicMac\classicmac.exe" $R0' $R2
+  CreateDirectory "$LOCALAPPDATA\ClassicMac"
+  RMDir /r "$R5"
+  CreateDirectory "$R5"
+  IfErrors use_temp
+  Goto do_extract
+use_temp:
+  ClearErrors
+  InitPluginsDir
+  IfErrors failed
+  StrCpy $R5 "$PLUGINSDIR\ClassicMac"
+do_extract:
+  ClearErrors
+  SetOutPath "$R5"
+  File /r "@APP@"
+  IfErrors extract_error
+  StrCmp $R7 "1" done
+  StrCmp $R5 "$PLUGINSDIR\ClassicMac" run_app
+  ClearErrors
+  FileOpen $R6 "$R5\.ready-@CACHE_TAG@" w
+  IfErrors run_app
+  FileWrite $R6 "@CACHE_TAG@"
+  FileClose $R6
+  Goto run_app
+extract_error:
+  StrCmp $R7 "1" failed
+  StrCmp $R5 "$PLUGINSDIR\ClassicMac" failed
+  Goto use_temp
+run_app:
+  ClearErrors
+  ExecWait '"$R5\classicmac.exe" $R0' $R2
   IfErrors failed
   SetErrorLevel $R2
   Goto done

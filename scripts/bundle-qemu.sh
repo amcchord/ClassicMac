@@ -19,6 +19,7 @@
 #   SIGN_IDENTITY                    signing identity, "-" for ad-hoc
 
 set -euo pipefail
+export COPYFILE_DISABLE=1
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 APP_SRC_DIR="$ROOT_DIR/app"
@@ -43,8 +44,11 @@ BUNDLE_STAGE_DIR=""
 BUNDLE_PREVIOUS_APP=""
 BUNDLE_LOCK_HELD=0
 
-APP_VERSION="${APP_VERSION:-4.7.0}"
-APP_BUILD_VERSION="${APP_BUILD_VERSION:-4.7.0}"
+[ -f "$ROOT_DIR/VERSION" ] || { printf '\nERROR: VERSION file not found.\n' >&2; exit 1; }
+DEFAULT_VERSION="$(tr -d '[:space:]' < "$ROOT_DIR/VERSION")"
+[ -n "$DEFAULT_VERSION" ] || { printf '\nERROR: VERSION file is empty.\n' >&2; exit 1; }
+APP_VERSION="${APP_VERSION:-$DEFAULT_VERSION}"
+APP_BUILD_VERSION="${APP_BUILD_VERSION:-$DEFAULT_VERSION}"
 BUNDLE_ID="com.classicmac.emulator"
 
 log() { printf '\n==> %s\n' "$*"; }
@@ -184,7 +188,7 @@ mkdir -p "$RES_DIR/qemu-osx"
 for file in openbios-ppc-osx macosx-flash-seed.img qemu_vga.ndrv; do
   cp "$OSX_FIRMWARE/$file" "$RES_DIR/qemu-osx/"
 done
-cp -R "$VENDOR_DIR/qemu-osx/pc-bios/keymaps" "$RES_DIR/qemu-osx/keymaps"
+ditto --norsrc "$VENDOR_DIR/qemu-osx/pc-bios/keymaps" "$RES_DIR/qemu-osx/keymaps"
 
 mkdir -p "$COPLAND_APP/Contents/MacOS" "$COPLAND_APP/Contents/Resources" "$COPLAND_APP/Contents/Frameworks"
 cp "$COPLAND_BIN" "$COPLAND_APP/Contents/MacOS/dingusppc"
@@ -263,12 +267,12 @@ for fw in "${PCBIOS_FILES[@]}"; do
     cp "$QEMU_PCBIOS_DIR/$fw" "$PCBIOS_DEST/"
   fi
 done
-cp -R "$QEMU_PCBIOS_DIR/keymaps" "$PCBIOS_DEST/keymaps"
+ditto --norsrc "$QEMU_PCBIOS_DIR/keymaps" "$PCBIOS_DEST/keymaps"
 cp "$DECLROM_SRC" "$RES_DIR/declrom"
 cp "$NDRVLOADER_SRC" "$RES_DIR/ndrvloader"
 cp "$PRAMSEED_SRC" "$RES_DIR/pram-seed.img"
-cp -R "$BROWSER_SRC" "$RES_DIR/Browser"
-cp -R "$ROOT_DIR/Resources/Iconfactory" "$RES_DIR/Iconfactory"
+ditto --norsrc "$BROWSER_SRC" "$RES_DIR/Browser"
+ditto --norsrc "$ROOT_DIR/Resources/Iconfactory" "$RES_DIR/Iconfactory"
 
 # Third-party notices and license texts for QEMU, its firmware, and every
 # Homebrew library copied into the self-contained helper apps below.
@@ -304,9 +308,16 @@ copy_brew_license libpng LICENSE libpng.txt
 copy_brew_license zstd LICENSE zstd.txt
 copy_brew_license libslirp LICENSE libslirp.txt
 copy_brew_license libslirp COPYRIGHT libslirp-COPYRIGHT.txt
-copy_brew_license libusb COPYING libusb.txt
+if brew --prefix libusb >/dev/null 2>&1; then
+  copy_brew_license libusb COPYING libusb.txt
+fi
 copy_brew_license gettext COPYING gettext.txt
-copy_brew_license pcre2 COPYING pcre2.txt
+copy_brew_license glib LGPL-2.1-or-later.txt glib.txt
+if [ -f "$(brew --prefix pcre2)/LICENCE.md" ]; then
+  copy_brew_license pcre2 LICENCE.md pcre2.txt
+else
+  copy_brew_license pcre2 COPYING pcre2.txt
+fi
 
 # Guest additions CD (StuffIt Expander, USB Overdrive, Disk Copy, ...).
 # Built by scripts/build-guest-cd.sh; optional so a plain QEMU rebuild
@@ -500,6 +511,59 @@ for helper in "$QUADRA_APP" "$PPC_APP" "$OSX_APP"; do
   mv "$helper/Contents/Frameworks/release-libraries.json" \
     "$helper/Contents/Resources/release-libraries.json"
 done
+
+log "Verifying license notices for all bundled Frameworks dylibs"
+python3 - "$APP" "$LICENSES_DIR" <<'PYEOF'
+import json
+from pathlib import Path
+import shutil
+import subprocess
+import sys
+
+app = Path(sys.argv[1])
+licenses_dir = Path(sys.argv[2])
+
+def has_notice(formula: str) -> bool:
+    stem = formula.split('@', 1)[0].lower()
+    for path in licenses_dir.iterdir():
+        if path.is_file() and path.stat().st_size > 0:
+            name = path.name.lower()
+            if name.startswith(stem + '.') or name.startswith(stem + '-') or name == stem:
+                return True
+    return False
+
+for helper in sorted((app / "Contents/Helpers").glob("*.app")):
+    frameworks = helper / "Contents/Frameworks"
+    dylibs = sorted(frameworks.glob("*.dylib"))
+    if not dylibs:
+        continue
+    manifest_path = helper / "Contents/Resources/release-libraries.json"
+    if not manifest_path.is_file():
+        sys.exit(f"Missing release-libraries.json in {helper.name}")
+    manifest = json.loads(manifest_path.read_text())
+    by_name = {entry["name"]: entry["formula"] for entry in manifest.get("libraries", [])}
+    for dylib in dylibs:
+        formula = by_name.get(dylib.name)
+        if not formula:
+            sys.exit(f"Unrecorded Frameworks dylib {dylib.name} in {helper.name}")
+        if not has_notice(formula):
+            prefix = Path(subprocess.check_output(["brew", "--prefix", formula], text=True).strip())
+            copied = False
+            for candidate in sorted(prefix.iterdir()):
+                if candidate.is_file() and any(tok in candidate.name.upper() for tok in ("LICENCE", "LICENSE", "COPYING", "COPYRIGHT")):
+                    shutil.copyfile(candidate, licenses_dir / f"{formula}-{candidate.name}.txt")
+                    copied = True
+            if not copied:
+                sbom = prefix / "sbom.spdx.json"
+                if sbom.is_file():
+                    shutil.copyfile(sbom, licenses_dir / f"{formula}-sbom.spdx.json")
+                    copied = True
+            if not copied or not has_notice(formula):
+                sys.exit(f"Missing license notice in Contents/Resources/Licenses for {dylib.name} ({formula})")
+print("All Frameworks dylibs have matching license notices.")
+PYEOF
+
+find "$APP" -name '._*' -delete
 
 # ---------------------------------------------------------------------------
 # 5. Code signing. Sign inner items first, then outward.

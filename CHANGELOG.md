@@ -1,5 +1,33 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Port RetroBoot 3.0.0 parity updates: public RetroBoot download catalog
+  (`System 7.5.5`, `Mac OS 9.2.1`, and `Mac OS X 10.4.11` editions) and GNU
+  sparse 1.0 archive extraction (`CMachineArchive` / `sparse_tar.c`).
+- Port RetroBoot 3.0.0 engine and guest-driver optimizations:
+  `macio-ide.pio-status-drain`, ATAPI zero-byte abort IRQ, OHCI idle-frame
+  batching (`pci-ohci.idle-frames`) and HID idle handling, QFB snapshot-mode
+  consistency and slow-host Timer 2 hold, and classicvirtio folder-date and
+  directory-cache patches (`shared/declrom`, `shared/ndrvloader`).
+- Centralize release version in `VERSION` across CMake, macOS/Windows/Linux
+  packagers, NSIS installer metadata, and CI workflows.
+
+### Fixed
+
+- Harden macOS, Windows, and Linux packaging and release verification: isolate
+  Linux AppImage `DT_RUNPATH` and expand host-library exclusions; replace solid
+  LZMA NSIS packing with fast `zlib` + `$LOCALAPPDATA` cached extraction, trim
+  MSYS2 licenses to actually bundled DLLs, and deduplicate common DLLs; copy
+  `shared/declrom` in `finish_runtime()`, strip AppleDouble metadata in macOS
+  packaging, check all four helper bundles and `ClassicMac` `minos` in
+  `verify-release.sh`, and preserve `notarytool` log output on failure.
+- Harden browser VNC WebSocket authentication (`/websockify`), runtime socket
+  directory permissions, QFB/Screamer/OHCI/Radeon/OS X engine fixes, native and
+  PlatinumKit UI/input/accessibility/scaling behavior, and CI/doc hygiene.
+
 ## 4.7.0 — PowerPC Mac OS X Tiger (2026-11-17)
 
 - Add a Power Mac G4 for OS X on macOS, Windows and Linux.
@@ -7,6 +35,13 @@
   native USB input and widescreen standard VGA driver.
 - Install from your PowerPC Mac OS X installation disc. Shut down and restart
   through the guest’s Apple menu.
+
+## 4.6.4 — Radeon cursor and Mac startup (2026-11-15)
+
+- Import RetroBoot 2.0.2's Radeon cursor composition and clipping fix across
+  macOS, Windows, and Linux engines, verified with synthetic cursor pixel tests.
+- Separate tablet and Sungem network PCI slots/interrupts in the Mac launcher
+  when ATI graphics and Tools are enabled.
 
 ## 4.6.3 — Windows and Linux desktop usability (2026-11-15)
 
@@ -24,6 +59,38 @@
   errors and guest shutdown safely across open dialogs.
 - Add isolated UI regression flows, narrow-window checks, real download and
   guest validation, and before/after screenshots.
+
+## 4.6.2 — RetroBoot 2.0.1 and live ATI/Quadra resize (2026-11-14)
+
+- Import RetroBoot 2.0.1 CPU, VGA, Quadra, and Screamer timing fixes, including
+  relative Power Mac VBL and Quadra reset improvements.
+- Enable live guest desktop resizing on ATI Power Macs (640×480–1920×1440 via a
+  firmware PCI display service) and Enhanced Video Quadras (with bounded
+  gray-screen fill across widths and depths).
+- Snap the native Platinum interface to whole-pixel physical zoom (`1×`/`2×`),
+  respect work-area resize bounds, and hold the ADB shutdown chord longer for
+  busy guests.
+- Separate conflicting Windows ATI tablet/network interrupts when Tools is
+  enabled.
+
+## 4.6.1 — Windows DPI and live display reliability (2026-10-24)
+
+- Track real Windows Per-Monitor V2 DPI scales (`100%`–`200%`), handle live
+  DPI changes, and keep windows and dialogs within constrained work areas.
+- Fix repeated live resizing on Standard Power Macs by invalidating prior
+  dynamic modes in `qemu_vga.ndrv`, and fix physical-pixel clipping and
+  fractional-origin rounding in the native guest viewport.
+- Add persisted per-VM guest scale selection (`Sharp Pixels`, `1×`, `2×`,
+  `Fit Window`) and remove the timed Return race from classic ADB shutdown.
+
+## 4.6.0 — Native Windows and Linux desktops (2026-10-24)
+
+- Replace Electron with the compiled C++17/Qt Widgets native desktop frontend
+  on Windows and Linux, packaged as a single portable Windows EXE and Linux
+  AppImage with embedded QEMU engines and runtime.
+- Match 84 independent Mac control/window/font pixel comparisons at 1×/2× and
+  672 glyph/advance checks, with sparse NTFS disks on Windows.
+- Add System 7.5.5, Mac OS 8.1, and Mac OS 8.6 base editions to the Library.
 
 ## 4.5.0 — Portable Platinum desktop (2026-10-23)
 
@@ -66,6 +133,29 @@
   avoiding a failed first boot or restart when another process claims a port.
 - Newer Deluxe/SuperDeluxe catalog revisions retain ATI Radeon graphics
   without displaying an older edition's software descriptions.
+
+## 4.2.0 — Original Mac OS 9 icons and Platinum VM windows (2026-10-19)
+
+- Replace drawn icons with original Mac OS 9 Icon Services 16/32-pixel color
+  and alpha artwork with full provenance manifests.
+- Expand Platinum reference verification to active/inactive/WindowShade document
+  frames, held title boxes, resize corners, and toolbar buttons at 1× and 2×.
+
+## 4.1.1 — Quake III mouse capture, Radeon idle state and Screamer timing (2026-10-19)
+
+- Route Power Mac USB mouse input for InputSprocket games with host pointer
+  capture and release shortcuts while keeping Finder tablet input seamless.
+- Initialize Radeon `WAIT_UNTIL` idle-clean state to prevent 150 ms `glFinish`
+  stalls during Quake III intro playback, and pace Screamer DMA and queued
+  codec volume updates.
+
+## 4.1.0 — Windows and Linux desktop editions (2026-10-18)
+
+- Introduce cross-platform Windows and Linux x64 desktop editions with native
+  QEMU runtimes, Library downloads, Paste Text, authenticated local display,
+  and Linux `virtio-9p` host folder sharing.
+- Add reference-tested Platinum control artwork, system font metrics, and
+  updated desktop documentation.
 
 ## 4.0.0 — 2026-10-18
 
@@ -151,7 +241,7 @@
   G4 creation, branded app metadata and icons, and only the required m68k and
   PowerPC emulator frameworks.
 - Added reproducible iPad archive and TestFlight upload scripts. The upload
-  flow retrieves the App Store Connect Team API key from AustinLand into a
+  flow retrieves the configured App Store Connect Team API key into a
   protected temporary file, signs and validates the IPA, then uploads it.
 
 ### Changed
