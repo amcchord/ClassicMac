@@ -29,7 +29,7 @@
           "minimumAppVersion": "4.0.0",
           "archiveURL": "https://example.invalid/qualification-only.tar.gz",
           "archiveBytes": 2048,
-          "installedBytes": 1048576,
+          "installedBytes": 1049088,
           "diskCapacityBytes": 1048576,
           "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
         },
@@ -42,7 +42,7 @@
           "minimumAppVersion": "4.0.0",
           "archiveURL": "https://example.invalid/qualification-only.tar.gz",
           "archiveBytes": 2048,
-          "installedBytes": 1048576,
+          "installedBytes": 1049088,
           "diskCapacityBytes": 1048576,
           "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
         },
@@ -55,7 +55,7 @@
           "minimumAppVersion": "4.0.0",
           "archiveURL": "https://example.invalid/qualification-only.tar.gz",
           "archiveBytes": 2048,
-          "installedBytes": 1048576,
+          "installedBytes": 1049088,
           "diskCapacityBytes": 1048576,
           "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
         },
@@ -68,7 +68,7 @@
           "minimumAppVersion": "4.0.0",
           "archiveURL": "https://example.invalid/qualification-only.tar.gz",
           "archiveBytes": 2048,
-          "installedBytes": 1048576,
+          "installedBytes": 1049088,
           "diskCapacityBytes": 1048576,
           "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
         },
@@ -81,7 +81,7 @@
           "minimumAppVersion": "4.0.0",
           "archiveURL": "https://example.invalid/qualification-only.tar.gz",
           "archiveBytes": 2048,
-          "installedBytes": 1048576,
+          "installedBytes": 1049088,
           "diskCapacityBytes": 1048576,
           "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
         },
@@ -94,7 +94,7 @@
           "minimumAppVersion": "99.0.0",
           "archiveURL": "https://example.invalid/qualification-only.tar.gz",
           "archiveBytes": 2048,
-          "installedBytes": 1048576,
+          "installedBytes": 1049088,
           "diskCapacityBytes": 1048576,
           "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
         },
@@ -107,7 +107,7 @@
           "minimumAppVersion": "4.0.0",
           "archiveURL": "https://example.invalid/qualification-only.tar.gz",
           "archiveBytes": 2048,
-          "installedBytes": 1048576,
+          "installedBytes": 1049088,
           "diskCapacityBytes": 1048576,
           "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
         },
@@ -120,7 +120,7 @@
           "minimumAppVersion": "4.0.0",
           "archiveURL": "https://example.invalid/qualification-only.tar.gz",
           "archiveBytes": 2048,
-          "installedBytes": 1048576,
+          "installedBytes": 1049088,
           "diskCapacityBytes": 1048576,
           "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
         }

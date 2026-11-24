@@ -72,9 +72,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                     },
                     PlatinumAlertButton("Force Stop") {
                         for vm in osxRunning {
-                            // TODO(merge): replace requestStop+confirmStop with manager.forceStop(vm.id)
-                            manager.requestStop(vm.id)
-                            manager.confirmStop()
+                            manager.forceStop(vm.id)
                         }
                         let remainingNonOSX = manager.runningIDs.subtracting(osxRunning.map(\.id))
                         if remainingNonOSX.isEmpty {
