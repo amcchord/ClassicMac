@@ -55,11 +55,23 @@ QString trashName() {
 
 QString validatedDeleteFolder(const Model::Machine &machine,
                               const QList<Model::Machine> &machines) {
-  const QFileInfo info(machine.folder);
+  const QString cleaned = QDir::cleanPath(machine.folder);
+  const QFileInfo info(cleaned);
   const QString folder = info.canonicalFilePath();
+  const QString parentCanon = QFileInfo(info.path()).canonicalFilePath();
+  const QString expected =
+      parentCanon.isEmpty()
+          ? QString()
+          : QDir::cleanPath(parentCanon + "/" + info.fileName());
+#ifdef Q_OS_WIN
+  const Qt::CaseSensitivity pathCase = Qt::CaseInsensitive;
+#else
+  const Qt::CaseSensitivity pathCase = Qt::CaseSensitive;
+#endif
   if (folder.isEmpty() || !info.isDir() || info.isSymLink() ||
       !info.fileName().endsWith(".classic", Qt::CaseInsensitive) ||
-      QDir(folder).isRoot() || QDir::cleanPath(info.absoluteFilePath()) != folder)
+      QDir(folder).isRoot() || expected.isEmpty() ||
+      folder.compare(expected, pathCase) != 0)
     Model::fail("To protect your files, only a regular .classic machine folder "
                 "can be deleted here. Use Show Files to inspect this folder, "
                 "or Remove from List to keep its files.");
@@ -71,8 +83,8 @@ QString validatedDeleteFolder(const Model::Machine &machine,
     if (other.id() == machine.id())
       continue;
     const QString otherFolder = QFileInfo(other.folder).canonicalFilePath();
-    if (otherFolder == folder ||
-        otherFolder.startsWith(folder + "/", Qt::CaseInsensitive))
+    if (otherFolder.compare(folder, pathCase) == 0 ||
+        otherFolder.startsWith(folder + "/", pathCase))
       Model::fail("This folder contains another Mac in your list. Move that "
                   "Mac out first, or use Remove from List to keep all files.");
   }
@@ -98,7 +110,21 @@ void App::showMachineActions() {
                           &dialog, "regular", true));
   auto actions = new QVBoxLayout;
   auto showFiles = button("Show Files", [&, machine] {
-    if (!QDesktopServices::openUrl(QUrl::fromLocalFile(machine.folder)))
+    bool opened = false;
+#ifdef Q_OS_LINUX
+    {
+      QProcess p;
+      p.setProgram("xdg-open");
+      p.setArguments({machine.folder});
+      p.setProcessEnvironment(Model::hostEnvironment());
+      opened = p.startDetached();
+    }
+    if (!opened)
+      opened = QDesktopServices::openUrl(QUrl::fromLocalFile(machine.folder));
+#else
+    opened = QDesktopServices::openUrl(QUrl::fromLocalFile(machine.folder));
+#endif
+    if (!opened)
       Model::fail("The folder could not be opened. Copy the path above "
                   "and open it in your file manager.");
   }, &dialog);
@@ -233,7 +259,11 @@ void App::showPowerActions(Engine *engine) {
       existing->activateWindow();
       return;
     }
-  PDialog dialog("Mac Power", {570, 355}, this);
+  auto *owner = guests.value(target->machine.id());
+  QWidget *parent = (owner && owner->isVisible() && owner->isActiveWindow())
+                        ? static_cast<QWidget *>(owner)
+                        : static_cast<QWidget *>(this);
+  PDialog dialog("Mac Power", {570, 355}, parent);
   dialog.setObjectName("machinePowerDialog");
   dialog.setProperty("machineId", target->machine.id());
   auto layout = dialogLayout(&dialog);

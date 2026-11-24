@@ -6,7 +6,8 @@ class Engine : public QObject {
 public:
   Model::Machine machine;
   VNC vnc;
-  bool running = false, paused = false, audioUnavailable = false;
+  bool running = false, paused = false, audioUnavailable = false,
+       silentAudioFallback = false;
   QString log;
   int port = 0;
   explicit Engine(Model::Machine, QObject *parent = nullptr);
@@ -14,6 +15,7 @@ public:
   qint64 processId() const { return process.processId(); }
   bool stoppingRequested() const { return stopping; }
   bool forcedStopRequested() const { return forced; }
+  static bool hasBlessedSystemFolder(const QString &diskPath);
   void start();
   QJsonValue command(QString name, QJsonObject args = {});
   QJsonValue hmp(const QString &);
@@ -38,5 +40,6 @@ private:
   int sequence = 0;
   QString reason;
   QByteArray password;
+  QTimer bootHandoffTimer;
   void read();
 };

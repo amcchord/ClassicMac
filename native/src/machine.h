@@ -27,6 +27,11 @@ QString uniqueFolder(const QString &parent, const QString &name);
 Machine createMachine(QString name, QString family, int size,
                       const QString &parent, const QString &cd = {});
 QString binary(const QString &name);
+bool supportsHostSharing();
+QString sanitizedName(const QString &raw);
+QProcessEnvironment hostEnvironment();
+QStringList qemuArguments(const Machine &m, int vncPort,
+                          const QString &audioOverride = {});
 QStringList argumentsFor(const Machine &, int port, bool silent = false);
 bool supportedVersion(const QString &);
 bool makeSparse(QFile &);
