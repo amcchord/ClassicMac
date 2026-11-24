@@ -10,6 +10,9 @@ public struct PlatinumTextField: View {
     let onCommit: (() -> Void)?
     @State private var editing = false
     @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.platinumWindow) private var platinumWindow
+
+    private var windowActive: Bool { (platinumWindow?.isActive ?? true) || PlatinumDebug.forceActive }
 
     public init(_ placeholder: String = "", text: Binding<String>, width: CGFloat? = nil,
                 alignment: TextAlignment = .leading, onCommit: (() -> Void)? = nil) {
@@ -30,13 +33,16 @@ public struct PlatinumTextField: View {
                 PixelCanvas { p, r in Chrome.field(p, r.inset(1), disabled: !isEnabled) }
             }
             .overlay {
-                if editing {
+                if editing && isEnabled && windowActive {
                     PixelCanvas { p, r in Chrome.focusRing(p, around: r.inset(2)) }
                         .padding(-1)
                         .allowsHitTesting(false)
                 }
             }
             .padding(1)
+            .onChange(of: isEnabled) { _, enabled in
+                if !enabled { editing = false }
+            }
     }
 
     @ViewBuilder
@@ -68,6 +74,7 @@ struct PlatinumNSTextField: NSViewRepresentable {
         var onFocus: (() -> Void)?
 
         override func becomeFirstResponder() -> Bool {
+            guard isEnabled else { return false }
             let became = super.becomeFirstResponder()
             if became {
                 if let editor = currentEditor() as? NSTextView { Coordinator.platinum(editor) }
@@ -102,6 +109,16 @@ struct PlatinumNSTextField: NSViewRepresentable {
     func updateNSView(_ field: NSTextField, context: Context) {
         context.coordinator.parent = self
         if field.stringValue != text { field.stringValue = text }
+        if !enabled {
+            if field.currentEditor() != nil || field.window?.firstResponder === field {
+                if field.window?.makeFirstResponder(nil) == false {
+                    field.abortEditing()
+                }
+            }
+            if editing {
+                DispatchQueue.main.async { editing = false }
+            }
+        }
         field.isEnabled = enabled
         field.textColor = enabled ? .black : NSColor(Platinum.disabledText.color)
         switch alignment {

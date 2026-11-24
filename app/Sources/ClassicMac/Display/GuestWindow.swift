@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import SwiftUI
 import PlatinumKit
 
@@ -6,15 +7,18 @@ import PlatinumKit
 /// close (shut down), zoom and WindowShade boxes, the guest screen, and a
 /// toolbar of common commands along the bottom.
 @MainActor
-final class GuestWindows {
+final class GuestWindows: ObservableObject {
     static let shared = GuestWindows()
 
     static let toolbarHeight: CGFloat = 30
 
+    @Published private(set) var scaleModes: [UUID: GuestDisplayScale] = [:]
+
     private final class Entry {
         let session: GuestDisplaySession
         var window: PlatinumWindow?
-        var fullScreen: NSWindow?
+        var fullScreen: FullScreenWindow?
+        var fullScreenContainer: GuestScreenContainerView?
         var started = Date()
         var lastRequestedSize: CGSize?
         var resizeWork: DispatchWorkItem?
@@ -95,10 +99,38 @@ final class GuestWindows {
     func machineStopped(_ id: UUID) {
         guard let entry = entries.removeValue(forKey: id) else { return }
         for observer in entry.observers { NotificationCenter.default.removeObserver(observer) }
+        entry.fullScreen?.onDidExitFullScreen = nil
         entry.fullScreen?.close()
         entry.window?.shouldClose = nil
         entry.window?.close()
         entry.session.stop()
+    }
+
+    // MARK: Scale mode
+
+    private static func scaleDefaultsKey(for id: UUID) -> String {
+        "ClassicMacGuestScale.\(id.uuidString)"
+    }
+
+    func scaleMode(for id: UUID) -> GuestDisplayScale {
+        if let cached = scaleModes[id] { return cached }
+        if let raw = UserDefaults.standard.string(forKey: Self.scaleDefaultsKey(for: id)),
+           let saved = GuestDisplayScale(rawValue: raw) {
+            return saved
+        }
+        return followsWindow(id) ? .sharp : .fit
+    }
+
+    func setScaleMode(_ mode: GuestDisplayScale, for id: UUID) {
+        scaleModes[id] = mode
+        UserDefaults.standard.set(mode.rawValue, forKey: Self.scaleDefaultsKey(for: id))
+        if let container = entries[id]?.fullScreenContainer {
+            container.screenView.scaleMode = mode
+            container.needsLayout = true
+        }
+        if mode == .sharp && followsWindow(id) {
+            windowResized(id)
+        }
     }
 
     /// Match QEMU's frame interval to the display (8 ms on a 120 Hz screen).
@@ -126,52 +158,71 @@ final class GuestWindows {
               let visible = (window.screen ?? NSScreen.main)?.visibleFrame else { return nil }
         let surface = entry.session.state.surfaceSize
         guard surface.width > 0 else { return nil }
-        if followsWindow(id) {
+        let mode = scaleMode(for: id)
+        if followsWindow(id) && mode == .sharp {
             let rect = visible.insetBy(dx: 4, dy: 4)
             return NSRect(x: rect.minX, y: rect.minY, width: rect.width, height: rect.height)
         }
         let maxContent = PlatinumWindow.contentSize(forFrame: visible.size, kind: .document)
-        let factor = max(1, floor(min(maxContent.width / surface.width,
+        let factor: CGFloat
+        switch mode {
+        case .oneX:
+            factor = 1
+        case .twoX:
+            factor = 2
+        case .sharp, .fit:
+            factor = max(1, floor(min(maxContent.width / surface.width,
                                       (maxContent.height - Self.toolbarHeight) / surface.height)))
-        let content = NSSize(width: surface.width * factor, height: surface.height * factor + Self.toolbarHeight)
+        }
+        let content = NSSize(width: min(maxContent.width, surface.width * factor),
+                             height: min(maxContent.height, surface.height * factor + Self.toolbarHeight))
         let size = PlatinumWindow.frameSize(forContent: content, kind: .document)
         return NSRect(x: visible.midX - size.width / 2, y: visible.maxY - size.height, width: size.width, height: size.height)
     }
 
     /// Standard-card Power Macs and enhanced-video Quadras follow the window.
-    private func followsWindow(_ id: UUID) -> Bool {
+    func followsWindow(_ id: UUID) -> Bool {
         guard let config = VMStore.shared.vms.first(where: { $0.id == id }) else { return false }
         switch config.machineFamily {
-        case .powerMacG4, .powerMacOSX: return true
+        case .powerMacG4: return true
         case .quadra800: return config.useEnhancedFramebuffer
-        case .powerMac7500: return false
+        case .powerMacOSX, .powerMac7500: return false
         }
     }
 
+    private func autoResizesGuest(_ id: UUID) -> Bool {
+        followsWindow(id) && scaleMode(for: id) == .sharp
+    }
+
+    private func wantedGuestSize(for id: UUID, viewSize: CGSize) -> CGSize? {
+        guard let config = VMStore.shared.vms.first(where: { $0.id == id }) else { return nil }
+        var width = Int(viewSize.width)
+        if config.machineFamily == .powerMacG4 { width = width / 8 * 8 }
+        var height = Int(viewSize.height)
+        if QEMUManager.effectiveGraphicsCard(for: config) == .atiRadeon {
+            (width, height) = ATIDisplay.windowSize(width: width, height: height)
+        }
+        guard width >= VMConfig.minWidth, height >= VMConfig.minHeight else { return nil }
+        return CGSize(width: width, height: height)
+    }
+
     private func windowResized(_ id: UUID) {
-        guard let entry = entries[id], let window = entry.window, followsWindow(id),
-              !window.state.isCollapsed else { return }
+        guard let entry = entries[id], let window = entry.window, autoResizesGuest(id),
+              entry.fullScreen == nil, !window.state.isCollapsed else { return }
         entry.resizeWork?.cancel()
         let work = DispatchWorkItem { [weak self, weak window] in
-            guard let self, let window, let entry = self.entries[id] else { return }
+            guard let self, let window, let entry = self.entries[id],
+                  entry.fullScreen == nil, self.autoResizesGuest(id) else { return }
             let content = PlatinumWindow.contentSize(forFrame: window.frame.size, kind: .document)
-            let isPowerMac = VMStore.shared.vms.first { $0.id == id }?.machineFamily == .powerMacG4
-            var width = Int(content.width)
-            if isPowerMac { width = width / 8 * 8 }
-            var height = Int(content.height - Self.toolbarHeight)
-            if let config = VMStore.shared.vms.first(where: { $0.id == id }),
-               QEMUManager.effectiveGraphicsCard(for: config) == .atiRadeon {
-                (width, height) = ATIDisplay.windowSize(width: width, height: height)
-            }
-            guard width >= VMConfig.minWidth, height >= VMConfig.minHeight else { return }
-            let size = CGSize(width: width, height: height)
-            guard size != entry.session.state.surfaceSize else { return }
+            guard let size = self.wantedGuestSize(for: id, viewSize: CGSize(width: content.width, height: content.height - Self.toolbarHeight)),
+                  size != entry.session.state.surfaceSize else { return }
             entry.lastRequestedSize = size
             entry.reassertedSizes.removeAll()
-            entry.session.resize(width: width, height: height)
+            entry.session.resize(width: Int(size.width), height: Int(size.height))
         }
         entry.resizeWork = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + (window.inLiveResize ? 0.35 : 0.1), execute: work)
+        let live = window.inLiveResize || window.state.isGrowDragging
+        DispatchQueue.main.asyncAfter(deadline: .now() + (live ? 0.35 : 0.1), execute: work)
     }
 
     /// The guest changed resolution. A screen that follows the window asks
@@ -180,22 +231,21 @@ final class GuestWindows {
     /// that cannot show it is never pestered; a fixed screen, or a size the
     /// guest insists on, gets a window that fits it pixel for pixel.
     func surfaceChanged(_ id: UUID, to size: CGSize) {
-        guard let entry = entries[id], let window = entry.window, size.width > 0, !window.inLiveResize,
+        guard let entry = entries[id], let window = entry.window, entry.fullScreen == nil,
+              size.width > 0, !window.inLiveResize, !window.state.isGrowDragging,
               !window.state.isCollapsed else { return }
         let content = PlatinumWindow.contentSize(forFrame: window.frame.size, kind: .document)
-        var wanted = CGSize(width: content.width, height: content.height - Self.toolbarHeight)
-        if VMStore.shared.vms.first(where: { $0.id == id })?.machineFamily == .powerMacG4 {
-            wanted.width = CGFloat(Int(wanted.width) / 8 * 8)
+        let rawContent = CGSize(width: content.width, height: content.height - Self.toolbarHeight)
+        if let wanted = wantedGuestSize(for: id, viewSize: rawContent) {
+            if size == wanted { return }
+            if autoResizesGuest(id), entry.reassertedSizes[size, default: 0] < 2 {
+                entry.reassertedSizes[size, default: 0] += 1
+                entry.lastRequestedSize = wanted
+                entry.session.resize(width: Int(wanted.width), height: Int(wanted.height))
+                return
+            }
         }
-        if size == wanted { return }
-        if followsWindow(id), entry.reassertedSizes[size, default: 0] < 2,
-           wanted.width >= CGFloat(VMConfig.minWidth), wanted.height >= CGFloat(VMConfig.minHeight) {
-            entry.reassertedSizes[size, default: 0] += 1
-            entry.lastRequestedSize = wanted
-            entry.session.resize(width: Int(wanted.width), height: Int(wanted.height))
-            return
-        }
-        guard size.width > wanted.width || size.height > wanted.height || followsWindow(id) else { return }
+        guard size.width > rawContent.width || size.height > rawContent.height || autoResizesGuest(id) else { return }
         var frame = window.frame
         let newSize = PlatinumWindow.frameSize(forContent: NSSize(width: size.width, height: size.height + Self.toolbarHeight),
                                                kind: .document)
@@ -212,41 +262,188 @@ final class GuestWindows {
     func toggleFullScreen(_ id: UUID) {
         guard let entry = entries[id] else { return }
         if let full = entry.fullScreen {
-            entry.fullScreen = nil
-            full.close()
-            entry.window?.makeKeyAndOrderFront(nil)
+            if full.styleMask.contains(.fullScreen) {
+                full.toggleFullScreen(nil)
+            } else {
+                entry.fullScreen = nil
+                entry.fullScreenContainer = nil
+                full.close()
+                entry.window?.makeKeyAndOrderFront(nil)
+            }
             return
         }
-        let window = FullScreenWindow(contentRect: NSScreen.main?.frame ?? .zero, styleMask: [.titled, .closable],
+        let targetScreen = entry.window?.screen ?? NSScreen.main
+        let window = FullScreenWindow(contentRect: targetScreen?.frame ?? .zero, styleMask: [.titled, .closable],
                                       backing: .buffered, defer: false)
+        if let targetScreen {
+            window.setFrame(targetScreen.frame, display: false)
+        }
         window.isReleasedWhenClosed = false
         window.collectionBehavior = [.fullScreenPrimary]
         window.backgroundColor = .black
         let config = VMStore.shared.vms.first { $0.id == id }
-        let screen = GuestScreenNSView(session: entry.session)
+        let container = GuestScreenContainerView(session: entry.session)
+        container.backgroundColor = .black
+        let screen = container.screenView
+        screen.useBlackBackground = true
+        screen.scaleMode = scaleMode(for: id)
         screen.inputHelpers = config?.classicInputHelpers ?? true
+        screen.isPaused = QEMUManager.shared.isPaused(id)
         screen.onToggleFullScreen = { [weak self] in self?.toggleFullScreen(id) }
-        window.contentView = screen
-        window.onExitFullScreen = { [weak self] in
-            guard self?.entries[id]?.fullScreen === window else { return }
-            self?.entries[id]?.fullScreen = nil
+
+        let host = FullScreenHostView(container: container, session: entry.session)
+        screen.onCaptureChanged = { [weak host] captured in
+            host?.updateBanner(captured: captured)
+        }
+        window.contentView = host
+        window.onFullScreenResize = { [weak self] screenSize in
+            guard let self, let entry = self.entries[id], self.followsWindow(id) else { return }
+            if let wanted = self.wantedGuestSize(for: id, viewSize: screenSize),
+               wanted != entry.session.state.surfaceSize {
+                entry.session.resize(width: Int(wanted.width), height: Int(wanted.height))
+            }
+        }
+        window.onDidExitFullScreen = { [weak self] in
+            guard let self, let entry = self.entries[id], entry.fullScreen === window else { return }
+            entry.fullScreen = nil
+            entry.fullScreenContainer = nil
             window.close()
-            self?.entries[id]?.window?.makeKeyAndOrderFront(nil)
+            entry.window?.makeKeyAndOrderFront(nil)
+            self.windowResized(id)
         }
         entry.fullScreen = window
+        entry.fullScreenContainer = container
         window.makeKeyAndOrderFront(nil)
         window.makeFirstResponder(screen)
         window.toggleFullScreen(nil)
     }
 }
 
-private final class FullScreenWindow: NSWindow {
-    var onExitFullScreen: (() -> Void)?
+private final class FullScreenWindow: NSWindow, NSWindowDelegate {
+    var onDidExitFullScreen: (() -> Void)?
+    var onFullScreenResize: ((CGSize) -> Void)?
+    private var didExit = false
 
-    override func toggleFullScreen(_ sender: Any?) {
-        let wasFull = styleMask.contains(.fullScreen)
-        super.toggleFullScreen(sender)
-        if wasFull { DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { self.onExitFullScreen?() } }
+    override init(contentRect: NSRect, styleMask style: NSWindow.StyleMask,
+                  backing backingStoreType: NSWindow.BackingStoreType, defer flag: Bool) {
+        super.init(contentRect: contentRect, styleMask: style, backing: backingStoreType, defer: flag)
+        delegate = self
+    }
+
+    func windowDidEnterFullScreen(_ notification: Notification) {
+        if let screenSize = (screen ?? NSScreen.main)?.frame.size {
+            onFullScreenResize?(screenSize)
+        }
+    }
+
+    func windowDidResize(_ notification: Notification) {
+        guard styleMask.contains(.fullScreen) else { return }
+        onFullScreenResize?(frame.size)
+    }
+
+    func windowDidExitFullScreen(_ notification: Notification) {
+        finishExit()
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        finishExit()
+    }
+
+    private func finishExit() {
+        guard !didExit else { return }
+        didExit = true
+        onDidExitFullScreen?()
+    }
+}
+
+/// Hosts the full-screen guest screen alongside a non-interactive status pill
+/// showing mouse capture state and the Control-Command-F exit hint.
+@MainActor
+private final class FullScreenHostView: NSView {
+    private let container: GuestScreenContainerView
+    private let session: GuestDisplaySession
+    private let banner = NSTextField(labelWithString: "")
+    private var hideWork: DispatchWorkItem?
+    private var subscriptions: Set<AnyCancellable> = []
+
+    init(container: GuestScreenContainerView, session: GuestDisplaySession) {
+        self.container = container
+        self.session = session
+        super.init(frame: .zero)
+        wantsLayer = true
+        layer?.backgroundColor = NSColor.black.cgColor
+
+        container.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(container)
+
+        banner.font = PlatinumFont.small.nsFont()
+        banner.textColor = .white
+        banner.backgroundColor = NSColor.black.withAlphaComponent(0.75)
+        banner.drawsBackground = true
+        banner.alignment = .center
+        banner.isBezeled = false
+        banner.isEditable = false
+        banner.isSelectable = false
+        banner.wantsLayer = true
+        banner.layer?.cornerRadius = 4
+        banner.layer?.borderWidth = 1
+        banner.layer?.borderColor = NSColor.white.withAlphaComponent(0.3).cgColor
+        banner.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(banner)
+
+        NSLayoutConstraint.activate([
+            container.leadingAnchor.constraint(equalTo: leadingAnchor),
+            container.trailingAnchor.constraint(equalTo: trailingAnchor),
+            container.topAnchor.constraint(equalTo: topAnchor),
+            container.bottomAnchor.constraint(equalTo: bottomAnchor),
+            banner.centerXAnchor.constraint(equalTo: centerXAnchor),
+            banner.topAnchor.constraint(equalTo: topAnchor, constant: 18),
+            banner.widthAnchor.constraint(greaterThanOrEqualToConstant: 240),
+        ])
+
+        QEMUManager.shared.$pausedIDs.sink { [weak self] pausedIDs in
+            guard let self else { return }
+            self.container.screenView.isPaused = pausedIDs.contains(self.session.vmID)
+        }.store(in: &subscriptions)
+        session.state.$pointerRelative.sink { [weak self] _ in
+            guard let self else { return }
+            self.updateBanner(captured: self.container.screenView.isMouseCaptured)
+        }.store(in: &subscriptions)
+        updateBanner(captured: false, showExitHint: true)
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    deinit {
+        hideWork?.cancel()
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        let hit = super.hitTest(point)
+        return hit === banner ? container.screenView : hit
+    }
+
+    func updateBanner(captured: Bool, showExitHint: Bool = false) {
+        hideWork?.cancel()
+        if captured {
+            banner.stringValue = "  The mouse is captured. Press Control-Option to release it. (Control-Command-F exits full screen)  "
+            banner.isHidden = false
+            return
+        }
+        if session.state.pointerRelative {
+            banner.stringValue = "  Click the screen to capture the mouse. Press Control-Command-F to exit full screen.  "
+            banner.isHidden = false
+        } else if showExitHint {
+            banner.stringValue = "  Press Control-Command-F to exit full screen.  "
+            banner.isHidden = false
+            let work = DispatchWorkItem { [weak self] in
+                self?.banner.isHidden = true
+            }
+            hideWork = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3.0, execute: work)
+        } else {
+            banner.isHidden = true
+        }
     }
 }
 
@@ -258,23 +455,34 @@ struct GuestWindowContent: View {
     @ObservedObject private var state: GuestDisplayState
     @ObservedObject private var manager = QEMUManager.shared
     @ObservedObject private var store = VMStore.shared
+    @ObservedObject private var windows = GuestWindows.shared
     @State private var captured = false
-    @State private var curtainStart = Date()
+    @State private var curtainStart: Date
 
     init(vmID: UUID, session: GuestDisplaySession, started: Date) {
         self.vmID = vmID
         self.session = session
         self.started = started
         _state = ObservedObject(wrappedValue: MainActor.assumeIsolated { session.state })
+        _curtainStart = State(initialValue: started)
     }
 
     private var config: VMConfig? { store.vms.first { $0.id == vmID } }
     private var paused: Bool { manager.isPaused(vmID) }
+    private var scaleBinding: Binding<GuestDisplayScale> {
+        Binding(
+            get: { windows.scaleMode(for: vmID) },
+            set: { windows.setScaleMode($0, for: vmID) }
+        )
+    }
 
     var body: some View {
         VStack(spacing: 0) {
             ZStack {
-                GuestScreen(session: session, inputHelpers: config?.classicInputHelpers ?? true,
+                GuestScreen(session: session,
+                            inputHelpers: config?.classicInputHelpers ?? true,
+                            scaleMode: windows.scaleMode(for: vmID),
+                            isPaused: paused,
                             onToggleFullScreen: { GuestWindows.shared.toggleFullScreen(vmID) },
                             onCaptureChanged: { captured = $0 })
                 if !state.revealed {
@@ -311,10 +519,16 @@ struct GuestWindowContent: View {
 
     private func toolbarButtons(compact: Bool) -> some View {
         HStack(spacing: 6) {
-            PlatinumBevelButton(compact ? nil : "Shut Down…", icon: "power") { manager.requestStop(vmID) }
-                .help("Shut Down…")
-                .accessibilityLabel("Shut Down…")
-            PlatinumBevelButton("Restart") { manager.reboot(vmID) }
+            if config?.machineFamily == .powerMacOSX {
+                PlatinumBevelButton(compact ? nil : "Power…", icon: "power") { manager.requestStop(vmID) }
+                    .help("Power…")
+                    .accessibilityLabel("Power…")
+            } else {
+                PlatinumBevelButton(compact ? nil : "Shut Down…", icon: "power") { manager.requestStop(vmID) }
+                    .help("Shut Down…")
+                    .accessibilityLabel("Shut Down…")
+                PlatinumBevelButton("Restart") { manager.reboot(vmID) }
+            }
             PlatinumBevelButton(paused ? "Resume" : "Pause") {
                 if paused { manager.resume(vmID) } else { manager.pause(vmID) }
             }
@@ -335,6 +549,10 @@ struct GuestWindowContent: View {
                     .truncationMode(.middle)
             }
             Spacer(minLength: 6)
+            PlatinumPopUp(selection: scaleBinding,
+                          options: GuestDisplayScale.allCases.map { ($0, $0.label) },
+                          width: compact ? 88 : 102)
+                .help("Screen Scale")
             PlatinumBevelButton(compact ? nil : "Full Screen", icon: "display") { GuestWindows.shared.toggleFullScreen(vmID) }
                 .padding(.trailing, 14)
                 .help("Full Screen")

@@ -34,6 +34,10 @@ final class GuestDisplaySession: @unchecked Sendable {
     let family: MachineFamily
     @MainActor let state = GuestDisplayState()
 
+    private static let sRGBColorSpace = CGColorSpace(name: CGColorSpace.sRGB)!
+    static let maxSurfaceDimension = 16_384
+    static let maxSurfaceStride = 65_536
+
     private let queue = DispatchQueue(label: "com.classicmac.display.io", qos: .userInteractive)
     private var listenFD: Int32 = -1
     private var connectionFD: Int32 = -1
@@ -42,9 +46,21 @@ final class GuestDisplaySession: @unchecked Sendable {
     private var inbox: [UInt8] = []
     private var receivedFDs: [Int32] = []
     private var revealDeadline: DispatchWorkItem?
+    private var _refreshInterval: UInt32 = 16
     /// Milliseconds between frames QEMU sends: the display's refresh rate.
-    var refreshInterval: UInt32 = 16 {
-        didSet { if refreshInterval != oldValue { send(.refreshRate, [refreshInterval]) } }
+    var refreshInterval: UInt32 {
+        get {
+            frameLock.lock()
+            defer { frameLock.unlock() }
+            return _refreshInterval
+        }
+        set {
+            frameLock.lock()
+            let changed = newValue != _refreshInterval
+            _refreshInterval = newValue
+            frameLock.unlock()
+            if changed { send(.refreshRate, [newValue]) }
+        }
     }
 
     // The shared framebuffer, guarded by frameLock.
@@ -113,14 +129,20 @@ final class GuestDisplaySession: @unchecked Sendable {
         readSource = source
     }
 
-    private func dropConnection() {
+    func dropConnection() {
         readSource?.cancel()
         readSource = nil
         if connectionFD >= 0 { cds_close(connectionFD) }
         connectionFD = -1
         for fd in receivedFDs { cds_close(fd) }
         receivedFDs.removeAll()
-        Task { @MainActor [state] in state.connected = false }
+        Task { @MainActor [state] in
+            state.connected = false
+            state.pointerRelative = false
+            state.cursorVisible = true
+            state.cursorImage = nil
+            state.cursorHotSpot = .zero
+        }
     }
 
     // MARK: Receiving
@@ -154,18 +176,32 @@ final class GuestDisplaySession: @unchecked Sendable {
         if offset > 0 { inbox.removeFirst(offset) }
     }
 
-    private func handle(type: UInt32, payload: ArraySlice<UInt8>) {
+    static func isValidSurfaceGeometry(width w: Int, height h: Int, stride s: Int, byteSize: UInt64) -> Bool {
+        guard w > 0, h > 0,
+              w <= maxSurfaceDimension, h <= maxSurfaceDimension,
+              s >= w * 4, s <= maxSurfaceStride else { return false }
+        let (requiredBytes, overflow) = s.multipliedReportingOverflow(by: h)
+        guard !overflow, byteSize >= UInt64(requiredBytes), Int(exactly: byteSize) != nil else { return false }
+        return true
+    }
+
+    func handle(type: UInt32, payload: ArraySlice<UInt8>) {
         let p = Array(payload)
         switch DisplayMessage(rawValue: type) {
         case .hello:
             frameLock.lock()
             revealed = false
+            let interval = _refreshInterval
             frameLock.unlock()
             scheduleRevealDeadline()
-            send(.refreshRate, [refreshInterval])
+            send(.refreshRate, [interval])
             Task { @MainActor [state] in
                 state.connected = true
                 state.revealed = false
+                state.pointerRelative = false
+                state.cursorVisible = true
+                state.cursorImage = nil
+                state.cursorHotSpot = .zero
                 state.bootCount += 1
             }
         case .surface:
@@ -173,8 +209,10 @@ final class GuestDisplaySession: @unchecked Sendable {
             let fd = receivedFDs.removeFirst()
             defer { cds_close(fd) }
             let w = Int(read32(p, 0)), h = Int(read32(p, 4)), s = Int(read32(p, 8))
-            let size = Int(read64(p, 16))
-            guard w > 0, h > 0, s >= w * 4, size >= s * h, let map = cds_map(fd, size) else { return }
+            let rawSize = read64(p, 16)
+            guard Self.isValidSurfaceGeometry(width: w, height: h, stride: s, byteSize: rawSize),
+                  let size = Int(exactly: rawSize),
+                  let map = cds_map(fd, size) else { return }
             frameLock.lock()
             cds_unmap(mapping, mappingSize)
             mapping = map
@@ -220,7 +258,7 @@ final class GuestDisplaySession: @unchecked Sendable {
     private static func cursorImage(_ bytes: [UInt8], width: Int, height: Int) -> CGImage? {
         guard let provider = CGDataProvider(data: Data(bytes) as CFData) else { return nil }
         return CGImage(width: width, height: height, bitsPerComponent: 8, bitsPerPixel: 32,
-                       bytesPerRow: width * 4, space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                       bytesPerRow: width * 4, space: sRGBColorSpace,
                        bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.first.rawValue |
                                                 CGBitmapInfo.byteOrder32Little.rawValue),
                        provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent)
@@ -278,7 +316,7 @@ final class GuestDisplaySession: @unchecked Sendable {
         let data = Data(bytes: base, count: stride * height)
         guard let provider = CGDataProvider(data: data as CFData) else { return nil }
         return CGImage(width: width, height: height, bitsPerComponent: 8, bitsPerPixel: 32,
-                       bytesPerRow: stride, space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                       bytesPerRow: stride, space: Self.sRGBColorSpace,
                        bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.noneSkipFirst.rawValue |
                                                 CGBitmapInfo.byteOrder32Little.rawValue),
                        provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent)

@@ -22,6 +22,7 @@ struct SettingsDialog: View {
     }()
     @State private var widthText: String
     @State private var heightText: String
+    @State private var errorMessage: String?
     @ObservedObject private var manager = QEMUManager.shared
 
     init(original: VMConfig, handle: DialogHandle) {
@@ -69,6 +70,13 @@ struct SettingsDialog: View {
                     PlatinumIcon("lock", size: 16)
                     Text("Shut down this Mac to change its settings.").platinumText(.small)
                 }
+            } else if let errorMessage {
+                HStack(alignment: .top, spacing: 8) {
+                    PlatinumIcon("stop", size: 16)
+                    Text(errorMessage).platinumText(.small)
+                        .foregroundStyle(Platinum.errorText.color)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
             HStack(spacing: Platinum.buttonGap) {
                 Spacer()
@@ -83,13 +91,24 @@ struct SettingsDialog: View {
         .padding(12)
         .frame(width: Self.size.width, height: Self.size.height)
         .background(Platinum.face.color)
+        .onAppear { coerceDepth() }
+        .onChange(of: config.name) { _, _ in errorMessage = nil }
     }
 
     private func save() {
+        do {
+            config.name = try MachineTemplateInstaller.normalizedName(config.name)
+            errorMessage = nil
+        } catch {
+            errorMessage = error.localizedDescription
+            NSSound.beep()
+            return
+        }
         if config.customResolution && config.graphicsCard == .standard {
             config.width = VMConfig.clampedWidth(Int(widthText) ?? config.width)
             config.height = VMConfig.clampedHeight(Int(heightText) ?? config.height)
         }
+        coerceDepth()
         if config != original {
             if !VMStore.shared.save(config) { return }
         }
@@ -197,6 +216,12 @@ struct SettingsDialog: View {
                                       width: 130)
                     }
                 }
+                if config.machineFamily == .quadra800 {
+                    GridRow {
+                        Color.clear.frame(width: 1, height: 1)
+                        PlatinumCheckbox("Enhanced Quadra video (arbitrary resolutions)", isOn: enhancedFramebuffer)
+                    }
+                }
                 GridRow {
                     Color.clear.frame(width: 1, height: 1)
                     PlatinumCheckbox("Show the Mac in a web browser", isOn: $config.useBrowserDisplay)
@@ -208,7 +233,7 @@ struct SettingsDialog: View {
     private var cardExplanation: String {
         switch config.graphicsCard {
         case .standard:
-            return "Any screen size, following the window as you resize it, and every color depth from Black & White to Millions."
+            return "Any screen size, following the window as you resize it, with Thousands or Millions of colors."
         case .atiRadeon:
             return "An emulated Radeon that uses Mac OS 9's own ATI drivers, so 3D games are drawn by this computer's GPU. Needs ATI's software in Mac OS, as in the Library's Deluxe Macs; without it the Mac starts at 640 × 480. Resizing the window changes the Mac’s resolution, up to 1920 × 1440. CD starts use the Standard card."
         }
@@ -225,11 +250,40 @@ struct SettingsDialog: View {
                     config.height = size.height
                     config.customResolution = false
                 }
+                coerceDepth()
+            }
+        )
+    }
+
+    private var enhancedFramebuffer: Binding<Bool> {
+        Binding(
+            get: { config.useEnhancedFramebuffer },
+            set: { enabled in
+                config.useEnhancedFramebuffer = enabled
+                if !enabled {
+                    config.customResolution = false
+                    let standardSizes = Self.builtInQuadraSizes
+                    let closest = standardSizes.min { lhs, rhs in
+                        abs(lhs.width - config.width) + abs(lhs.height - config.height) <
+                        abs(rhs.width - config.width) + abs(rhs.height - config.height)
+                    } ?? standardSizes[0]
+                    config.width = closest.width
+                    config.height = closest.height
+                    widthText = String(closest.width)
+                    heightText = String(closest.height)
+                }
+                coerceDepth()
             }
         )
     }
 
     private enum SizeChoice: Hashable { case preset(ResolutionPreset), custom }
+
+    private static let builtInQuadraSizes: [ResolutionPreset] = [
+        ResolutionPreset(width: 640, height: 480),
+        ResolutionPreset(width: 800, height: 600),
+        ResolutionPreset(width: 1152, height: 870),
+    ]
 
     private var sizeOptions: [(SizeChoice, String)] {
         if config.graphicsCard == .atiRadeon {
@@ -243,13 +297,33 @@ struct SettingsDialog: View {
             if !presets.contains(current) { presets.append(current) }
             return presets.sorted { ($0.width, $0.height) < ($1.width, $1.height) }.map { (.preset($0), $0.label) }
         }
-        return ResolutionPreset.all.map { (SizeChoice.preset($0), $0.label) } + [(.custom, "Custom…")]
+        if config.machineFamily == .quadra800 && !config.useEnhancedFramebuffer {
+            var presets = Self.builtInQuadraSizes
+            let current = ResolutionPreset(width: config.width, height: config.height)
+            if !presets.contains(current) {
+                presets.append(current)
+                presets.sort { ($0.width, $0.height) < ($1.width, $1.height) }
+            }
+            return presets.map { (.preset($0), $0.label) }
+        }
+        var presets = ResolutionPreset.all
+        if !config.customResolution {
+            let current = ResolutionPreset(width: config.width, height: config.height)
+            if !presets.contains(current) {
+                presets.append(current)
+                presets.sort { ($0.width, $0.height) < ($1.width, $1.height) }
+            }
+        }
+        return presets.map { (SizeChoice.preset($0), $0.label) } + [(.custom, "Custom…")]
     }
 
     private var sizeControl: some View {
         let selection = Binding<SizeChoice>(
             get: {
-                if config.graphicsCard == .standard && config.customResolution { return .custom }
+                if config.graphicsCard == .standard && config.customResolution &&
+                    !(config.machineFamily == .quadra800 && !config.useEnhancedFramebuffer) {
+                    return .custom
+                }
                 return .preset(ResolutionPreset(width: config.width, height: config.height))
             },
             set: { choice in
@@ -263,6 +337,7 @@ struct SettingsDialog: View {
                 case .custom:
                     config.customResolution = true
                 }
+                coerceDepth()
             }
         )
         return PlatinumPopUp(selection: selection, options: sizeOptions, width: 150)
@@ -274,12 +349,23 @@ struct SettingsDialog: View {
         return [.greys256]
     }
 
+    private func coerceDepth() {
+        let allowed = depthChoices
+        guard let fallback = allowed.first else { return }
+        if !allowed.contains(where: { $0.rawValue == config.depth }) {
+            config.depth = fallback.rawValue
+        }
+    }
+
     // MARK: Sharing
 
     @ViewBuilder
     private var sharingPane: some View {
         if !config.machineFamily.supportsSharedFolder {
-            Text("Shared folders are unavailable for Copland.").platinumText(.body)
+            let message = config.machineFamily == .powerMacOSX
+                ? "Shared folders are unavailable for Mac OS X."
+                : "Shared folders are unavailable for Copland."
+            Text(message).platinumText(.body)
         } else {
             VStack(alignment: .leading, spacing: 10) {
                 Text("Share a folder from this computer. It appears on the classic Mac's desktop as a disk.")

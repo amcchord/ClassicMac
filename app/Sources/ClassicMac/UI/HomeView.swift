@@ -13,17 +13,47 @@ extension MachineFamily {
     }
 }
 
+@MainActor
+private enum TemplateOSCache {
+    private static var entries: [String: (id: UUID, osVersion: String?)] = [:]
+
+    static func osVersion(for vm: VMConfig) -> String? {
+        let key = vm.folder.standardizedFileURL.path
+        if let cached = entries[key], cached.id == vm.id {
+            return cached.osVersion
+        }
+        let version = VMTemplateMetadata.load(from: vm.folder)?.osVersion
+        entries[key] = (vm.id, version)
+        return version
+    }
+
+    static func osLabel(for version: String, family: MachineFamily) -> String {
+        let trimmed = version.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return family.osSupportLabel }
+        guard trimmed.first?.isNumber == true else { return trimmed }
+        if family == .powerMacOSX || trimmed.hasPrefix("10.") { return "Mac OS X \(trimmed)" }
+        if trimmed.hasPrefix("7.") { return "System \(trimmed)" }
+        return "Mac OS \(trimmed)"
+    }
+}
+
 /// The main window: the Macs on this computer and the selected Mac.
 struct HomeView: View {
     @ObservedObject private var store = VMStore.shared
     @ObservedObject private var manager = QEMUManager.shared
     @State private var settingUp = VMStore.shared.vms.isEmpty
+    @State private var dismissSetupOnShowMain = false
 
     var body: some View {
         Group {
             if settingUp || store.vms.isEmpty {
-                FirstMacSetupView { settingUp = false }
-                    .onAppear { settingUp = true }
+                FirstMacSetupView {
+                    dismissSetupOnShowMain = false
+                    settingUp = false
+                }
+                .onAppear {
+                    if store.vms.isEmpty { settingUp = true }
+                }
             } else {
                 HStack(alignment: .top, spacing: 14) {
                     machineColumn
@@ -40,7 +70,32 @@ struct HomeView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(Platinum.face.color)
         .onAppear(perform: selectFirstIfNeeded)
-        .onChange(of: store.vms.map(\.id)) { _, _ in selectFirstIfNeeded() }
+        .onChange(of: store.vms.map(\.id)) { oldIDs, newIDs in
+            selectFirstIfNeeded()
+            if settingUp && newIDs.count > oldIDs.count && !newIDs.isEmpty {
+                if WindowManager.shared.libraryWindowRef?.isVisible == true ||
+                    NSApp.keyWindow !== WindowManager.shared.mainWindow {
+                    dismissSetupOnShowMain = true
+                }
+            }
+            if newIDs.isEmpty {
+                dismissSetupOnShowMain = false
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { note in
+            guard let window = note.object as? PlatinumWindow,
+                  window === WindowManager.shared.mainWindow else { return }
+            if dismissSetupOnShowMain && !store.vms.isEmpty {
+                dismissSetupOnShowMain = false
+                settingUp = false
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: WindowManager.didShowMainNotification)) { _ in
+            if dismissSetupOnShowMain && !store.vms.isEmpty {
+                dismissSetupOnShowMain = false
+                settingUp = false
+            }
+        }
     }
 
     private func selectFirstIfNeeded() {
@@ -54,8 +109,36 @@ struct HomeView: View {
             Text("Macs on this computer:").platinumText(.emphasis)
             PlatinumList(store.vms, selection: $store.selectedID, rowHeight: 40,
                          onDoubleClick: { vm in startOrShow(vm) }) { vm, _ in
-                MachineRow(vm: vm, running: manager.isRunning(vm.id), paused: manager.isPaused(vm.id),
+                let isRunning = manager.isRunning(vm.id)
+                let isPaused = manager.isPaused(vm.id)
+                MachineRow(vm: vm, running: isRunning, paused: isPaused,
                            halted: manager.coplandHaltedIDs.contains(vm.id))
+                    .contextMenu {
+                        Button(isRunning ? (isPaused ? "Resume and Show Mac" : "Show Mac") : "Start Up") {
+                            store.selectedID = vm.id
+                            startOrShow(vm)
+                        }
+                        .disabled(!isRunning && !AppPaths.qemuIsAvailable(for: vm.machineFamily))
+                        Divider()
+                        Button("Get Info…") {
+                            store.selectedID = vm.id
+                            WindowManager.shared.presentSettings(for: vm.id)
+                        }
+                        Button("Media…") {
+                            store.selectedID = vm.id
+                            MediaController.shared.present(for: vm.id)
+                        }
+                        .disabled(vm.machineFamily == .powerMac7500)
+                        Button("Show in Finder") {
+                            NSWorkspace.shared.activateFileViewerSelecting([vm.folder])
+                        }
+                        Divider()
+                        Button("Remove Mac…") {
+                            store.selectedID = vm.id
+                            WindowManager.shared.confirmRemove(vm)
+                        }
+                        .disabled(isRunning)
+                    }
             }
             HStack(spacing: 10) {
                 PlatinumButton("New Mac…") { WindowManager.shared.presentNewMac() }
@@ -112,8 +195,8 @@ struct MachineRow: View {
         if halted { return "Stopped at an assertion" }
         if paused { return "Paused" }
         if running { return "Running now" }
-        if let os = VMTemplateMetadata.load(from: vm.folder)?.osVersion {
-            let label = os.first?.isNumber == true ? "Mac OS \(os)" : os
+        if let os = TemplateOSCache.osVersion(for: vm) {
+            let label = TemplateOSCache.osLabel(for: os, family: vm.machineFamily)
             return "\(label) · \(vm.machineFamily.label)"
         }
         return vm.machineFamily.label
@@ -145,7 +228,7 @@ struct MachinePanel: View {
     private var paused: Bool { manager.isPaused(vm.id) }
     private var halted: Bool { manager.coplandHaltedIDs.contains(vm.id) }
     private var copland: Bool { vm.machineFamily == .powerMac7500 }
-    private var templateOS: String? { VMTemplateMetadata.load(from: vm.folder)?.osVersion }
+    private var templateOS: String? { TemplateOSCache.osVersion(for: vm) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -222,7 +305,7 @@ struct MachinePanel: View {
     }
 
     private var osText: String {
-        if let os = templateOS { return os.first?.isNumber == true ? "Mac OS \(os)" : os }
+        if let os = templateOS { return TemplateOSCache.osLabel(for: os, family: vm.machineFamily) }
         return vm.machineFamily.osSupportLabel
     }
 
@@ -342,6 +425,7 @@ struct MachinePanel: View {
                     .disabled(!AppPaths.qemuIsAvailable(for: vm.machineFamily))
             }
         }
+        .padding(.trailing, 16)
     }
 }
 
@@ -374,12 +458,12 @@ struct ScreenPreview: View {
     }
 
     var body: some View {
-        PlatinumWell(fill: image == nil ? Platinum.desktop : Platinum.black) {
+        PlatinumWell(fill: image == nil ? Platinum.desktop : Platinum.black, preserveFillWhenDisabled: true) {
             ZStack {
                 if let image {
                     Image(nsImage: image)
                         .resizable()
-                        .interpolation(.high)
+                        .interpolation(.none)
                         .aspectRatio(contentMode: .fit)
                         .opacity(paused ? 0.55 : 1)
                 } else {

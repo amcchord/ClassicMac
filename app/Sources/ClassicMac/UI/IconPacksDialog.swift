@@ -5,7 +5,7 @@ import PlatinumKit
 
 /// Credits the included artwork and allows additional local collections.
 struct IconPacksDialog: View {
-    static let size = NSSize(width: 500, height: 330)
+    static let size = NSSize(width: 600, height: 330)
 
     let handle: DialogHandle
     @ObservedObject private var packs = IconPacks.shared
@@ -47,6 +47,7 @@ struct IconPacksDialog: View {
             Spacer(minLength: 0)
             HStack(spacing: Platinum.buttonGap) {
                 PlatinumButton("Visit The Iconfactory") { NSWorkspace.shared.open(IconPacks.website) }
+                PlatinumButton("Show Licenses…", action: showLicenses)
                 if !packs.collections.isEmpty {
                     PlatinumButton("Remove Added") { packs.removeAll() }
                 }
@@ -59,6 +60,29 @@ struct IconPacksDialog: View {
         .padding(12)
         .frame(width: Self.size.width, height: Self.size.height)
         .background(Platinum.face.color)
+    }
+
+    static func licensesDirectoryURL() -> URL? {
+        let fm = FileManager.default
+        let candidates: [URL?] = [
+            AppPaths.resourcesDir.appendingPathComponent("Iconfactory", isDirectory: true),
+            ProcessInfo.processInfo.environment["CLASSICMAC_REPO"].map {
+                URL(fileURLWithPath: $0).appendingPathComponent("Resources/Iconfactory", isDirectory: true)
+            },
+            URL(fileURLWithPath: fm.currentDirectoryPath).deletingLastPathComponent().appendingPathComponent("Resources/Iconfactory", isDirectory: true),
+            URL(fileURLWithPath: fm.currentDirectoryPath).appendingPathComponent("Resources/Iconfactory", isDirectory: true),
+        ]
+        return candidates.compactMap { $0 }.first { fm.fileExists(atPath: $0.path) }
+    }
+
+    private func showLicenses() {
+        guard let dir = Self.licensesDirectoryURL() else {
+            WindowManager.shared.alert(.note, "The Iconfactory folder isn\u{2019}t included in this build.",
+                                       informative: "Icon licenses and readmes live in Resources/Iconfactory in the ClassicMac repository.",
+                                       buttons: [PlatinumAlertButton("OK", role: .default)])
+            return
+        }
+        NSWorkspace.shared.activateFileViewerSelecting([dir])
     }
 
     private func chooseCollections() {

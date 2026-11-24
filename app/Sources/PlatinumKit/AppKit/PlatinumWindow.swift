@@ -106,7 +106,7 @@ open class PlatinumWindow: NSWindow {
     // MARK: Close
 
     open override func performClose(_ sender: Any?) {
-        guard modalChild == nil else { NSSound.beep(); return }
+        guard boxes.close, modalChild == nil else { NSSound.beep(); return }
         if let shouldClose, !shouldClose() { return }
         close()
     }
@@ -138,7 +138,7 @@ open class PlatinumWindow: NSWindow {
     open override func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
         switch menuItem.action {
         case #selector(performClose(_:)):
-            return boxes.close || kind != .document
+            return boxes.close
         case #selector(performZoom(_:)):
             return boxes.zoom
         case #selector(performMiniaturize(_:)):

@@ -2,8 +2,25 @@ import AppKit
 import Combine
 import SwiftUI
 
-/// The guest's screen: the shared framebuffer drawn at whole-number scales
-/// with sharp pixels, plus keyboard and pointer input for the Mac.
+/// How the guest screen scales inside its host viewport.
+enum GuestDisplayScale: String, CaseIterable, Hashable {
+    case sharp
+    case oneX
+    case twoX
+    case fit
+
+    var label: String {
+        switch self {
+        case .sharp: return "Sharp Pixels"
+        case .oneX: return "1×"
+        case .twoX: return "2×"
+        case .fit: return "Fit Window"
+        }
+    }
+}
+
+/// The guest's screen: the shared framebuffer drawn at whole-number or fitted
+/// scales, plus keyboard and pointer input for the Mac.
 ///
 /// - Keyboard: every key, including Command combinations, goes to the Mac
 ///   while its screen has focus (Control-Command-F toggles full screen).
@@ -15,24 +32,57 @@ import SwiftUI
 final class GuestScreenNSView: NSView {
     let session: GuestDisplaySession
     var inputHelpers = true
+    var scaleMode: GuestDisplayScale = .sharp {
+        didSet {
+            if scaleMode != oldValue {
+                needsLayout = true
+                (enclosingScrollView as? GuestScreenContainerView)?.needsLayout = true
+            }
+        }
+    }
+    var useBlackBackground = false {
+        didSet {
+            layer?.backgroundColor = (useBlackBackground ? NSColor.black : Self.checkerboard).cgColor
+        }
+    }
+    var isPaused = false {
+        didSet {
+            if isPaused && !oldValue {
+                releaseCapture()
+                releaseHeldInputs()
+            }
+        }
+    }
     var onToggleFullScreen: (() -> Void)?
     var onCaptureChanged: ((Bool) -> Void)?
 
     private let imageLayer = CALayer()
-    private var displayLinkRef: CADisplayLink?
+    private nonisolated(unsafe) var displayLinkRef: CADisplayLink?
     private var subscriptions: Set<AnyCancellable> = []
     private var imageRect = CGRect.zero
     private var scale: CGFloat = 1
     private var surfaceSize = CGSize.zero
     private var heldModifiers: Set<UInt16> = []
-    private var captured = false
+    private nonisolated(unsafe) var captured = false
     private var motion = RelativePointerMotion()
     private var scrollRemainder: CGFloat = 0
+    private var button0Down = false
+    private var button1Down = false
+    private var button2Down = false
     private var rightButtonAsControl = false
     private var relative = false
     private var guestCursor: NSCursor?
     private var cursorVisible = true
-    private static let checkerboard: NSColor = {
+
+    // Exposed internally for tests and container layout.
+    var currentSurfaceSize: CGSize { surfaceSize }
+    var currentScale: CGFloat { scale }
+    var currentImageRect: CGRect { imageRect }
+    var currentGuestCursor: NSCursor? { guestCursor }
+    var hasActiveMouseButtons: Bool { button0Down || button1Down || button2Down || rightButtonAsControl }
+    var isMouseCaptured: Bool { captured }
+
+    static let checkerboard: NSColor = {
         let image = NSImage(size: NSSize(width: 2, height: 2), flipped: false) { _ in
             NSColor.white.setFill()
             NSRect(x: 0, y: 0, width: 2, height: 2).fill()
@@ -63,6 +113,15 @@ final class GuestScreenNSView: NSView {
 
     required init?(coder: NSCoder) { fatalError() }
 
+    deinit {
+        displayLinkRef?.invalidate()
+        NotificationCenter.default.removeObserver(self)
+        if captured {
+            CGAssociateMouseAndMouseCursorPosition(1)
+            NSCursor.unhide()
+        }
+    }
+
     override var isFlipped: Bool { true }
     override var acceptsFirstResponder: Bool { true }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
@@ -73,9 +132,11 @@ final class GuestScreenNSView: NSView {
     private func bindState() {
         let state = session.state
         state.$surfaceSize.sink { [weak self] size in
-            self?.surfaceSize = size
-            self?.needsLayout = true
-            self?.window?.invalidateCursorRects(for: self!)
+            guard let self else { return }
+            self.surfaceSize = size
+            self.needsLayout = true
+            (self.enclosingScrollView as? GuestScreenContainerView)?.needsLayout = true
+            self.window?.invalidateCursorRects(for: self)
         }.store(in: &subscriptions)
         state.$pointerRelative.sink { [weak self] relative in
             self?.relative = relative
@@ -95,7 +156,12 @@ final class GuestScreenNSView: NSView {
         super.viewDidMoveToWindow()
         displayLinkRef?.invalidate()
         displayLinkRef = nil
-        guard window != nil else { return }
+        NotificationCenter.default.removeObserver(self)
+        guard let window else {
+            releaseCapture()
+            releaseHeldInputs()
+            return
+        }
         let link = displayLink(target: self, selector: #selector(tick))
         link.add(to: .main, forMode: .common)
         displayLinkRef = link
@@ -132,23 +198,44 @@ final class GuestScreenNSView: NSView {
 
     @objc private func windowResigned() {
         releaseCapture()
-        releaseHeldKeys()
+        releaseHeldInputs()
     }
 
     // MARK: Layout
 
+    static func scaleFactor(mode: GuestDisplayScale, surface: CGSize, viewport: CGSize) -> CGFloat {
+        guard surface.width > 0, surface.height > 0,
+              viewport.width > 0, viewport.height > 0 else { return 1 }
+        let fit = min(viewport.width / surface.width, viewport.height / surface.height)
+        switch mode {
+        case .sharp: return fit >= 1 ? floor(fit) : 1
+        case .oneX: return 1
+        case .twoX: return 2
+        case .fit: return fit
+        }
+    }
+
+    func resolvedScale(forViewport viewport: CGSize) -> CGFloat {
+        Self.scaleFactor(mode: scaleMode, surface: surfaceSize, viewport: viewport)
+    }
+
+    func scaledSurfaceSize(forScale scale: CGFloat) -> CGSize {
+        guard surfaceSize.width > 0, surfaceSize.height > 0 else { return .zero }
+        return CGSize(width: (surfaceSize.width * scale).rounded(),
+                      height: (surfaceSize.height * scale).rounded())
+    }
+
     override func layout() {
         super.layout()
         guard surfaceSize.width > 0, surfaceSize.height > 0 else {
+            imageRect = .zero
             imageLayer.frame = bounds
             return
         }
-        let fit = min(bounds.width / surfaceSize.width, bounds.height / surfaceSize.height)
-        // Whole-number scales keep every Mac pixel square and sharp; only a
-        // screen too large for the window is reduced smoothly.
-        scale = fit >= 1 ? floor(fit) : fit
-        imageLayer.magnificationFilter = .nearest
-        let size = CGSize(width: (surfaceSize.width * scale).rounded(), height: (surfaceSize.height * scale).rounded())
+        let viewport = enclosingScrollView?.contentView.bounds.size ?? bounds.size
+        scale = resolvedScale(forViewport: viewport)
+        imageLayer.magnificationFilter = (scaleMode == .fit && scale != floor(scale)) ? .linear : .nearest
+        let size = scaledSurfaceSize(forScale: scale)
         imageRect = CGRect(x: ((bounds.width - size.width) / 2).rounded(.down),
                            y: ((bounds.height - size.height) / 2).rounded(.down),
                            width: size.width, height: size.height)
@@ -165,22 +252,25 @@ final class GuestScreenNSView: NSView {
 
     // MARK: Cursor
 
-    private func updateGuestCursor(_ image: CGImage?, hotSpot: CGPoint) {
+    func updateGuestCursor(_ image: CGImage?, hotSpot: CGPoint) {
         guard let image else {
             guestCursor = nil
             window?.invalidateCursorRects(for: self)
             return
         }
-        // Scale the cursor with the screen, pixel for pixel.
-        let factor = max(1, scale)
-        let size = NSSize(width: CGFloat(image.width) * factor, height: CGFloat(image.height) * factor)
+        // Scale the cursor with the screen, pixel for pixel (including < 1x fit).
+        let factor = scale > 0 ? scale : 1
+        let size = NSSize(width: max(1, (CGFloat(image.width) * factor).rounded()),
+                          height: max(1, (CGFloat(image.height) * factor).rounded()))
         let nsImage = NSImage(size: size, flipped: false) { rect in
             guard let ctx = NSGraphicsContext.current?.cgContext else { return false }
-            ctx.interpolationQuality = .none
+            ctx.interpolationQuality = factor < 1 ? .high : .none
             ctx.draw(image, in: rect)
             return true
         }
-        guestCursor = NSCursor(image: nsImage, hotSpot: NSPoint(x: hotSpot.x * factor, y: hotSpot.y * factor))
+        let hx = min(max(0, hotSpot.x * factor), size.width)
+        let hy = min(max(0, hotSpot.y * factor), size.height)
+        guestCursor = NSCursor(image: nsImage, hotSpot: NSPoint(x: hx, y: hy))
         window?.invalidateCursorRects(for: self)
     }
 
@@ -193,12 +283,16 @@ final class GuestScreenNSView: NSView {
 
     // MARK: Pointer
 
-    private func guestPoint(_ event: NSEvent) -> (Int, Int)? {
-        let p = convert(event.locationInWindow, from: nil)
-        guard scale > 0, surfaceSize.width > 0 else { return nil }
+    func guestPoint(forViewPoint p: CGPoint) -> (Int, Int)? {
+        guard scale > 0, surfaceSize.width > 0, surfaceSize.height > 0,
+              imageRect.contains(p) else { return nil }
         let x = Int(((p.x - imageRect.minX) / scale).rounded(.down))
         let y = Int(((p.y - imageRect.minY) / scale).rounded(.down))
         return (min(max(x, 0), Int(surfaceSize.width) - 1), min(max(y, 0), Int(surfaceSize.height) - 1))
+    }
+
+    private func guestPoint(_ event: NSEvent) -> (Int, Int)? {
+        guestPoint(forViewPoint: convert(event.locationInWindow, from: nil))
     }
 
     override func updateTrackingAreas() {
@@ -209,6 +303,7 @@ final class GuestScreenNSView: NSView {
     }
 
     private func move(_ event: NSEvent) {
+        guard !isPaused else { return }
         if captured {
             let delta = motion.take(dx: event.deltaX, dy: event.deltaY, scale: scale)
             session.pointerDelta(dx: delta.x, dy: delta.y)
@@ -224,42 +319,73 @@ final class GuestScreenNSView: NSView {
 
     override func mouseDown(with event: NSEvent) {
         window?.makeFirstResponder(self)
+        guard !isPaused else { return }
         if relative && !captured {
+            guard guestPoint(event) != nil else { return }
             capture()
             return
         }
-        move(event)
+        if !captured {
+            guard let (x, y) = guestPoint(event) else { return }
+            session.pointer(x: x, y: y)
+        }
+        button0Down = true
         session.button(0, down: true)
     }
 
-    override func mouseUp(with event: NSEvent) { session.button(0, down: false) }
+    override func mouseUp(with event: NSEvent) {
+        guard button0Down else { return }
+        button0Down = false
+        session.button(0, down: false)
+    }
 
     override func rightMouseDown(with event: NSEvent) {
         window?.makeFirstResponder(self)
-        move(event)
+        guard !isPaused else { return }
+        if !captured {
+            guard let (x, y) = guestPoint(event) else { return }
+            session.pointer(x: x, y: y)
+        }
         if inputHelpers && !relative {
             rightButtonAsControl = true
             session.key(GuestKeymap.ctrl, down: true)
             session.button(0, down: true)
         } else {
+            button2Down = true
             session.button(2, down: true)
         }
     }
 
     override func rightMouseUp(with event: NSEvent) {
         if rightButtonAsControl {
+            rightButtonAsControl = false
             session.button(0, down: false)
             session.key(GuestKeymap.ctrl, down: false)
-            rightButtonAsControl = false
-        } else {
+        } else if button2Down {
+            button2Down = false
             session.button(2, down: false)
         }
     }
 
-    override func otherMouseDown(with event: NSEvent) { session.button(1, down: true) }
-    override func otherMouseUp(with event: NSEvent) { session.button(1, down: false) }
+    override func otherMouseDown(with event: NSEvent) {
+        window?.makeFirstResponder(self)
+        guard !isPaused else { return }
+        if !captured {
+            guard guestPoint(event) != nil else { return }
+        }
+        button1Down = true
+        session.button(1, down: true)
+    }
+
+    override func otherMouseUp(with event: NSEvent) {
+        guard button1Down else { return }
+        button1Down = false
+        session.button(1, down: false)
+    }
 
     override func scrollWheel(with event: NSEvent) {
+        guard !isPaused else { return }
+        if !captured, guestPoint(event) == nil { return }
         let lineHeight: CGFloat = event.hasPreciseScrollingDeltas ? 12 : 1
         scrollRemainder += event.scrollingDeltaY / lineHeight
         while abs(scrollRemainder) >= 1 {
@@ -279,7 +405,7 @@ final class GuestScreenNSView: NSView {
     // MARK: Capture (games)
 
     private func capture() {
-        guard !captured else { return }
+        guard !captured, !isPaused else { return }
         captured = true
         motion = RelativePointerMotion()
         NSCursor.hide()
@@ -304,16 +430,18 @@ final class GuestScreenNSView: NSView {
     ]
 
     override func keyDown(with event: NSEvent) {
-        if event.modifierFlags.contains([.control, .command]) && event.charactersIgnoringModifiers == "f" {
+        if !event.isARepeat,
+           event.modifierFlags.contains([.control, .command]),
+           event.keyCode == 0x03 { // kVK_ANSI_F
             onToggleFullScreen?()
             return
         }
-        guard !event.isARepeat, let code = GuestKeymap.qcodes[event.keyCode] else { return }
+        guard !isPaused, !event.isARepeat, let code = GuestKeymap.qcodes[event.keyCode] else { return }
         session.key(code, down: true)
     }
 
     override func keyUp(with event: NSEvent) {
-        guard let code = GuestKeymap.qcodes[event.keyCode] else { return }
+        guard !isPaused, let code = GuestKeymap.qcodes[event.keyCode] else { return }
         session.key(code, down: false)
     }
 
@@ -325,6 +453,7 @@ final class GuestScreenNSView: NSView {
     }
 
     override func flagsChanged(with event: NSEvent) {
+        guard !isPaused else { return }
         let code = event.keyCode
         if code == 57 {
             // Caps Lock is a locking key on Apple keyboards: down while engaged.
@@ -347,7 +476,24 @@ final class GuestScreenNSView: NSView {
         }
     }
 
-    private func releaseHeldKeys() {
+    private func releaseHeldInputs() {
+        if button0Down {
+            button0Down = false
+            session.button(0, down: false)
+        }
+        if button1Down {
+            button1Down = false
+            session.button(1, down: false)
+        }
+        if button2Down {
+            button2Down = false
+            session.button(2, down: false)
+        }
+        if rightButtonAsControl {
+            rightButtonAsControl = false
+            session.button(0, down: false)
+            session.key(GuestKeymap.ctrl, down: false)
+        }
         heldModifiers.removeAll()
         session.releaseAll()
     }
@@ -355,8 +501,84 @@ final class GuestScreenNSView: NSView {
     override func becomeFirstResponder() -> Bool { true }
 
     override func resignFirstResponder() -> Bool {
-        releaseHeldKeys()
+        releaseHeldInputs()
         return true
+    }
+
+    // Test hooks
+    func setTestGeometry(surfaceSize: CGSize, imageRect: CGRect, scale: CGFloat) {
+        self.surfaceSize = surfaceSize
+        self.imageRect = imageRect
+        self.scale = scale
+    }
+
+    func setTestButtonState(button0: Bool = false, rightAsControl: Bool = false) {
+        self.button0Down = button0
+        self.rightButtonAsControl = rightAsControl
+    }
+}
+
+/// Hosts `GuestScreenNSView` inside an `NSScrollView` so oversized sharp/1×/2×
+/// surfaces scroll smoothly instead of clipping or shrinking.
+final class GuestScreenContainerView: NSScrollView {
+    let screenView: GuestScreenNSView
+
+    init(session: GuestDisplaySession) {
+        self.screenView = GuestScreenNSView(session: session)
+        super.init(frame: .zero)
+        drawsBackground = true
+        backgroundColor = GuestScreenNSView.checkerboard
+        borderType = .noBorder
+        hasVerticalScroller = false
+        hasHorizontalScroller = false
+        autohidesScrollers = true
+        documentView = screenView
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func layout() {
+        updateScrollbarsAndDocumentFrame()
+        super.layout()
+    }
+
+    func updateScrollbarsAndDocumentFrame() {
+        let surface = screenView.currentSurfaceSize
+        let available = bounds.size
+        guard surface.width > 0, surface.height > 0, available.width > 0, available.height > 0 else {
+            hasHorizontalScroller = false
+            hasVerticalScroller = false
+            screenView.frame = NSRect(origin: .zero, size: available)
+            return
+        }
+        let scale = screenView.resolvedScale(forViewport: available)
+        let scaled = screenView.scaledSurfaceSize(forScale: scale)
+        let needH = screenView.scaleMode != .fit && scaled.width > available.width + 0.5
+        let needV = screenView.scaleMode != .fit && scaled.height > available.height + 0.5
+        if hasHorizontalScroller != needH { hasHorizontalScroller = needH }
+        if hasVerticalScroller != needV { hasVerticalScroller = needV }
+        super.layout()
+        let clipSize = contentView.bounds.size
+        if screenView.scaleMode != .fit {
+            let scale2 = screenView.resolvedScale(forViewport: clipSize)
+            let scaled2 = screenView.scaledSurfaceSize(forScale: scale2)
+            let needH2 = scaled2.width > clipSize.width + 0.5
+            let needV2 = scaled2.height > clipSize.height + 0.5
+            if hasHorizontalScroller != needH2 || hasVerticalScroller != needV2 {
+                hasHorizontalScroller = needH2
+                hasVerticalScroller = needV2
+                super.layout()
+            }
+        }
+        let finalClip = contentView.bounds.size
+        let finalScale = screenView.resolvedScale(forViewport: finalClip)
+        let finalScaled = screenView.scaledSurfaceSize(forScale: finalScale)
+        let docSize = NSSize(width: max(finalClip.width, finalScaled.width),
+                             height: max(finalClip.height, finalScaled.height))
+        if screenView.frame.size != docSize {
+            screenView.frame = NSRect(origin: .zero, size: docSize)
+        }
+        screenView.needsLayout = true
     }
 }
 
@@ -364,21 +586,30 @@ final class GuestScreenNSView: NSView {
 struct GuestScreen: NSViewRepresentable {
     let session: GuestDisplaySession
     let inputHelpers: Bool
+    let scaleMode: GuestDisplayScale
+    let isPaused: Bool
     let onToggleFullScreen: () -> Void
     let onCaptureChanged: (Bool) -> Void
 
-    func makeNSView(context: Context) -> GuestScreenNSView {
-        let view = GuestScreenNSView(session: session)
+    func makeNSView(context: Context) -> GuestScreenContainerView {
+        let container = GuestScreenContainerView(session: session)
+        let view = container.screenView
         view.inputHelpers = inputHelpers
+        view.scaleMode = scaleMode
+        view.isPaused = isPaused
         view.onToggleFullScreen = onToggleFullScreen
         view.onCaptureChanged = onCaptureChanged
-        DispatchQueue.main.async { view.window?.makeFirstResponder(view) }
-        return view
+        DispatchQueue.main.async { container.window?.makeFirstResponder(view) }
+        return container
     }
 
-    func updateNSView(_ view: GuestScreenNSView, context: Context) {
+    func updateNSView(_ container: GuestScreenContainerView, context: Context) {
+        let view = container.screenView
         view.inputHelpers = inputHelpers
+        view.scaleMode = scaleMode
+        view.isPaused = isPaused
         view.onToggleFullScreen = onToggleFullScreen
         view.onCaptureChanged = onCaptureChanged
+        container.needsLayout = true
     }
 }

@@ -147,11 +147,14 @@ public struct PlatinumProgressBar: View {
 /// draws list boxes and picture frames.
 public struct PlatinumWell<Content: View>: View {
     let fill: RGB?
+    let preserveFillWhenDisabled: Bool
     let content: Content
     @Environment(\.isEnabled) private var isEnabled
 
-    public init(fill: RGB? = Platinum.white, @ViewBuilder content: () -> Content) {
+    public init(fill: RGB? = Platinum.white, preserveFillWhenDisabled: Bool = false,
+                @ViewBuilder content: () -> Content) {
         self.fill = fill
+        self.preserveFillWhenDisabled = preserveFillWhenDisabled
         self.content = content()
     }
 
@@ -160,7 +163,7 @@ public struct PlatinumWell<Content: View>: View {
             .padding(2)
             .background {
                 PixelCanvas { p, r in
-                    Chrome.sunken(p, r.inset(1), fill: fill.map { isEnabled ? $0 : Platinum.grayF7 })
+                    Chrome.sunken(p, r.inset(1), fill: fill.map { (isEnabled || preserveFillWhenDisabled) ? $0 : Platinum.grayF7 })
                 }
             }
     }

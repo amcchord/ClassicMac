@@ -64,6 +64,8 @@ public struct PlatinumButton<Label: View>: View {
     private let action: () -> Void
     private let label: Label
     @State private var flashing = false
+    @State private var flashWork: DispatchWorkItem?
+    @State private var isMounted = false
     @Environment(\.isEnabled) private var isEnabled
 
     public init(role: Role = .normal, minWidth: CGFloat = Platinum.buttonMinWidth,
@@ -91,15 +93,36 @@ public struct PlatinumButton<Label: View>: View {
                     EmptyView()
                 }
             }
+            .onAppear { isMounted = true }
+            .onDisappear { cancelFlash() }
+            .onChange(of: isEnabled) { _, enabled in
+                if !enabled { cancelFlash() }
+            }
+    }
+
+    private func cancelFlash() {
+        isMounted = false
+        flashWork?.cancel()
+        flashWork = nil
+        flashing = false
     }
 
     private func flash() {
-        guard isEnabled, !flashing else { return }
+        guard isEnabled, !flashing, isMounted else { return }
         flashing = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.13) {
+        flashWork?.cancel()
+        var work: DispatchWorkItem!
+        work = DispatchWorkItem {
+            guard !work.isCancelled, isMounted, isEnabled else {
+                flashing = false
+                return
+            }
+            flashWork = nil
             flashing = false
             action()
         }
+        flashWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.13, execute: work)
     }
 }
 
