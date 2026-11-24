@@ -11,17 +11,21 @@ final class MachineDownloadModel: ObservableObject {
     @Published private(set) var completedBytes: Int64 = 0
     @Published private(set) var totalBytes: Int64 = 0
     @Published private(set) var errorMessage: String?
+    @Published private(set) var partialCatalogWarning: String?
     @Published private(set) var isCancelling = false
 
     private let catalogURLs: [URL]
     private let cacheDirectory: URL
+    private let transferConfiguration: URLSessionConfiguration
     private var operation: Task<Void, Never>?
     private var cancellation = MachineDownloadCancellation()
     private var operationID = UUID()
 
-    init(catalogURL: URL? = nil, cacheDirectory: URL? = nil) {
-        self.catalogURLs = catalogURL.map { [$0] } ?? [MachineCatalog.defaultURL, MachineCatalog.retroBootURL]
+    init(catalogURL: URL? = nil, catalogURLs: [URL]? = nil, cacheDirectory: URL? = nil,
+         transferConfiguration: URLSessionConfiguration = .ephemeral) {
+        self.catalogURLs = catalogURLs ?? catalogURL.map { [$0] } ?? [MachineCatalog.defaultURL, MachineCatalog.retroBootURL]
         self.cacheDirectory = cacheDirectory ?? AppPaths.supportDir.appendingPathComponent("Downloads", isDirectory: true)
+        self.transferConfiguration = transferConfiguration
     }
 
     var isBusy: Bool {
@@ -47,22 +51,28 @@ final class MachineDownloadModel: ObservableObject {
         guard !isBusy else { return }
         phase = .loadingCatalog
         errorMessage = nil
+        partialCatalogWarning = nil
         operation = Task {
             do {
                 try prepareCache()
                 var results: [MachineCatalog] = []
                 var firstError: Error?
+                var failureCount = 0
                 for url in catalogURLs {
                     do {
                         results.append(try await fetchCatalog(url))
                     } catch is CancellationError {
                         throw CancellationError()
                     } catch {
+                        failureCount += 1
                         if firstError == nil { firstError = error }
                     }
                 }
                 try Task.checkCancellation()
                 if results.isEmpty, let firstError { throw firstError }
+                if failureCount > 0 {
+                    partialCatalogWarning = "Some catalog editions could not be loaded. Refresh to try again."
+                }
                 var ids = Set<String>()
                 machines = results.flatMap(\.machines).filter { ids.insert($0.id).inserted }
             } catch is CancellationError {
@@ -80,14 +90,41 @@ final class MachineDownloadModel: ObservableObject {
         defer { try? FileManager.default.removeItem(at: file) }
         let transfer = MachineDownloadTransfer(
             source: url, destination: file, expectedBytes: nil,
-            maximumBytes: MachineCatalog.maximumCatalogBytes
+            maximumBytes: MachineCatalog.maximumCatalogBytes,
+            configuration: transferConfiguration
         )
         _ = try await transfer.run()
         return try MachineCatalog.decode(Data(contentsOf: file))
     }
 
+    private func savedArchiveBytes(_ machine: DownloadableMachine) -> Int64 {
+        let url = partialURL(machine)
+        guard let values = try? url.resourceValues(forKeys: [.fileSizeKey, .isRegularFileKey, .isSymbolicLinkKey]),
+              values.isRegularFile == true, values.isSymbolicLink != true,
+              let size = values.fileSize else {
+            return 0
+        }
+        return Int64(size)
+    }
+
     func hasPartialDownload(_ machine: DownloadableMachine) -> Bool {
-        FileManager.default.fileExists(atPath: partialURL(machine).path)
+        let saved = savedArchiveBytes(machine)
+        return saved > 0 && saved < machine.archiveBytes
+    }
+
+    func hasCompletedCache(_ machine: DownloadableMachine) -> Bool {
+        let saved = savedArchiveBytes(machine)
+        return machine.archiveBytes > 0 && saved == machine.archiveBytes
+    }
+
+    func totalRequiredFreeBytes(for machine: DownloadableMachine, saveFolder: URL, supportsSparse: Bool) -> Int64 {
+        let saved = savedArchiveBytes(machine)
+        let remaining = saved <= machine.archiveBytes ? machine.archiveBytes - saved : machine.archiveBytes
+        let storage = MachineTemplateStoragePlan(machine: machine, supportsSparseFiles: supportsSparse)
+        let cacheVolume = Self.volumeURL(for: cacheDirectory)
+        let targetVolume = Self.volumeURL(for: saveFolder)
+        let sameVolume = cacheVolume != nil && cacheVolume == targetVolume
+        return storage.requiredBytes + MachineTemplateInstaller.spaceReserve + (sameVolume ? remaining : 0)
     }
 
     func discardDownload(_ machine: DownloadableMachine) {
@@ -97,7 +134,8 @@ final class MachineDownloadModel: ObservableObject {
             try prepareCache()
             let lease = try MachineDownloadLease(directory: cacheDirectory, digest: machine.sha256)
             defer { withExtendedLifetime(lease) {} }
-            if hasPartialDownload(machine) { try FileManager.default.removeItem(at: partialURL(machine)) }
+            let file = partialURL(machine)
+            if FileManager.default.fileExists(atPath: file.path) { try FileManager.default.removeItem(at: file) }
             errorMessage = nil
             phase = .idle
             completedBytes = 0
@@ -124,16 +162,16 @@ final class MachineDownloadModel: ObservableObject {
                 let lease = try MachineDownloadLease(directory: cacheDirectory, digest: machine.sha256)
                 defer { withExtendedLifetime(lease) {} }
                 let file = partialURL(machine)
-                let savedBytes = Int64((try? file.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
-                let remaining = max(0, machine.archiveBytes - savedBytes)
+                let savedBytes = savedArchiveBytes(machine)
+                let remaining = savedBytes <= machine.archiveBytes ? machine.archiveBytes - savedBytes : machine.archiveBytes
                 // The cache and machine may share a volume. Checking the
                 // combined requirement in that case prevents starting a large
                 // download that leaves no room for extraction.
-                let cacheVolume = try cacheDirectory.resourceValues(forKeys: [.volumeURLKey]).volume
-                let targetVolume = try directory.resourceValues(forKeys: [.volumeURLKey]).volume
+                let cacheVolume = Self.volumeURL(for: cacheDirectory)
+                let targetVolume = Self.volumeURL(for: directory)
                 let storage = MachineTemplateInstaller.storagePlan(for: machine, at: directory)
                 let cacheNeeded = remaining + MachineTemplateInstaller.spaceReserve +
-                    (cacheVolume == targetVolume ? storage.requiredBytes : 0)
+                    (cacheVolume != nil && cacheVolume == targetVolume ? storage.requiredBytes : 0)
                 try MachineTemplateInstaller.checkSpace(at: cacheDirectory, requiredBytes: cacheNeeded)
                 try MachineTemplateInstaller.checkSpace(at: directory,
                     requiredBytes: storage.requiredBytes + MachineTemplateInstaller.spaceReserve)
@@ -142,6 +180,7 @@ final class MachineDownloadModel: ObservableObject {
                     let transfer = MachineDownloadTransfer(
                         source: machine.archiveURL, destination: file,
                         expectedBytes: machine.archiveBytes, maximumBytes: machine.archiveBytes,
+                        configuration: transferConfiguration,
                         progress: { reporter.report($0) }
                     )
                     _ = try await transfer.run()
@@ -180,13 +219,29 @@ final class MachineDownloadModel: ObservableObject {
                 try? FileManager.default.removeItem(at: file)
                 onInstall(destination)
             } catch is CancellationError {
-                phase = .paused
+                if phase == .downloading, savedArchiveBytes(machine) > 0 {
+                    phase = .paused
+                } else {
+                    phase = .idle
+                }
             } catch {
                 errorMessage = error.localizedDescription
                 phase = .idle
             }
             isCancelling = false
             operation = nil
+        }
+    }
+
+    private static func volumeURL(for url: URL) -> URL? {
+        var current = url.standardizedFileURL
+        while true {
+            if let volume = try? current.resourceValues(forKeys: [.volumeURLKey]).volume {
+                return volume
+            }
+            let parent = current.deletingLastPathComponent()
+            if parent.path == current.path { return nil }
+            current = parent
         }
     }
 

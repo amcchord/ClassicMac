@@ -632,6 +632,264 @@ final class MachineDownloadTests: XCTestCase {
         XCTAssertFalse(try String(contentsOf: destination.appendingPathComponent("config.json"), encoding: .utf8).contains("/Users/source"))
     }
 
+    func testInstallPreservesSourceATIGraphicsCardAndNormalizesNames() throws {
+        let original = VMConfig(name: "Template", machineFamily: .powerMacG4, graphicsCard: .atiRadeon)
+        let config = try JSONEncoder().encode(original)
+        let archive = try makeArchive([Entry("config.json", data: config), Entry("disk.img", data: Data(repeating: 0, count: 512))])
+        let machine = fixtureMachine(bytes: try Data(contentsOf: archive), installedBytes: Int64(config.count + 512))
+        let installed = try MachineTemplateInstaller.installVerifiedArchive(archive, machine: machine, name: "  ATI Mac\n", in: directory)
+        let fresh = try JSONDecoder().decode(VMConfig.self, from: Data(contentsOf: installed.appendingPathComponent("config.json")))
+        XCTAssertEqual(fresh.name, "ATI Mac")
+        XCTAssertEqual(fresh.graphicsCard, .atiRadeon)
+        XCTAssertEqual(try MachineTemplateInstaller.normalizedName("\n My Mac \n"), "My Mac")
+        XCTAssertThrowsError(try MachineTemplateInstaller.normalizedName(".hidden"))
+        XCTAssertThrowsError(try MachineTemplateInstaller.normalizedName("..."))
+        XCTAssertThrowsError(try MachineTemplateInstaller.normalizedName("\n\t\n"))
+    }
+
+    func testSparseExtractionPunchesHolesBeforeTightBudgetCheck() throws {
+        try XCTSkipUnless(MachineTemplateInstaller.supportsSparseFiles(at: directory), "Sparse filesystem required")
+        let config = Data("{}".utf8)
+        // 512 extents of 4096 bytes separated by 4096-byte holes (2 MiB nonzero, 4 MiB spanned).
+        var sparseBody = Data()
+        var mapLines = ["512"]
+        var offset = 0
+        for _ in 0..<512 {
+            mapLines.append("\(offset)")
+            mapLines.append("4096")
+            offset += 8192
+            sparseBody.append(Data(repeating: 0x55, count: 4096))
+        }
+        let mapText = mapLines.joined(separator: "\n") + "\n"
+        var map = Data(mapText.utf8)
+        let paddedMapLen = ((map.count + 511) / 512) * 512
+        map.append(Data(repeating: 0, count: paddedMapLen - map.count))
+        let realSize = 8 * 1_048_576
+        let values = ["GNU.sparse.major=1", "GNU.sparse.minor=0",
+                      "GNU.sparse.name=disk.img", "GNU.sparse.realsize=\(realSize)"]
+        let pax = Data(values.map { "\($0.utf8.count + 4) \($0)\n" }.joined().utf8)
+        let archive = try makeArchive([
+            Entry("config.json", data: config),
+            Entry("PaxHeaders/disk.img", data: pax, type: 120),
+            Entry("GNUSparseFile/disk.img", data: map + sparseBody),
+        ])
+        let staging = directory.appendingPathComponent("tight-sparse")
+        try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: false)
+        // Budget covers 1 MiB config charge + 2 MiB sparse extents (smaller than the 4 MiB spanned if unpunched).
+        let budget: Int64 = 3 * 1_048_576
+        try MachineTemplateInstaller.extract(
+            archive, into: staging,
+            expectedBytes: Int64(config.count + realSize),
+            expectedDiskBytes: Int64(realSize),
+            maximumStorageBytes: budget
+        )
+        let disk = staging.appendingPathComponent("disk.img")
+        let attrs = try disk.resourceValues(forKeys: [.fileSizeKey, .fileAllocatedSizeKey])
+        XCTAssertEqual(attrs.fileSize, realSize)
+        XCTAssertLessThanOrEqual(try XCTUnwrap(attrs.fileAllocatedSize), 2 * 1_048_576 + 65_536)
+    }
+
+    func testLibraryFamilyMatchingATIRetentionAndTitles() throws {
+        let mega = DownloadableMachine(
+            id: "os922-mega-deluxe-v4", name: "Mac OS 9.2.2 Mega Deluxe v4",
+            summary: "All 111 games and creative activities.", osVersion: "9.2.2",
+            minimumAppVersion: "3.0.0", archiveURL: source, archiveBytes: 1_000,
+            installedBytes: 2_000, sha256: String(repeating: "a", count: 64)
+        )
+        let megaEntry = LibraryEntry(machine: mega, edition: LibraryEdition.edition(for: mega.id))
+        XCTAssertEqual(megaEntry.edition?.familyName, "os922-mega-deluxe")
+        XCTAssertEqual(megaEntry.title, "Mac OS 9.2.2 Mega Deluxe")
+        XCTAssertEqual(megaEntry.versionLabel, "v4")
+        XCTAssertEqual(megaEntry.graphicsCard, .atiRadeon)
+
+        let full922 = DownloadableMachine(
+            id: "os922-full-v5", name: "Mac OS 9.2.2 (v5)", summary: "Full Mac OS 9.2.2.",
+            osVersion: "9.2.2", minimumAppVersion: "3.0.0", archiveURL: source,
+            archiveBytes: 1_000, installedBytes: 2_000, sha256: String(repeating: "b", count: 64)
+        )
+        let full922Entry = LibraryEntry(machine: full922, edition: nil)
+        XCTAssertEqual(full922Entry.graphicsCard, .atiRadeon)
+        XCTAssertNil(full922Entry.versionLabel)
+
+        // Non-PowerMacG4 families never receive ATI Radeon.
+        let quadraMega = DownloadableMachine(
+            id: "os922-mega-deluxe-v4", name: "Quadra", summary: "Test",
+            osVersion: "8.1", minimumAppVersion: "3.0.0", archiveURL: source,
+            archiveBytes: 1_000, installedBytes: 2_000, sha256: String(repeating: "c", count: 64),
+            machineFamily: .quadra800
+        )
+        XCTAssertEqual(LibraryEntry(machine: quadraMega, edition: LibraryEdition.edition(for: quadraMega.id)).graphicsCard, .standard)
+
+        // Double version suppression (case-insensitive, word boundary).
+        let deluxeV9Raw = DownloadableMachine(
+            id: "os922-deluxe-v9", name: "Mac OS 9.2.2 Deluxe V9", summary: "Summary",
+            osVersion: "9.2.2", minimumAppVersion: "3.0.0", archiveURL: source,
+            archiveBytes: 1_000, installedBytes: 2_000, sha256: String(repeating: "d", count: 64)
+        )
+        XCTAssertNil(LibraryEntry(machine: deluxeV9Raw, edition: nil).versionLabel)
+        let osX10 = DownloadableMachine(
+            id: "mac-os-x-v1", name: "Mac OS X v10", summary: "Summary",
+            osVersion: "10.4.11", minimumAppVersion: "3.0.0", archiveURL: source,
+            archiveBytes: 1_000, installedBytes: 2_000, sha256: String(repeating: "e", count: 64),
+            machineFamily: .powerMacOSX
+        )
+        XCTAssertEqual(LibraryEntry(machine: osX10, edition: nil).versionLabel, "v1")
+
+        // Duplicate title disambiguation across both merged catalogs.
+        let expectedTitles: [(String, MachineFamily, String, String)] = [
+            ("system-7.5.5-base-v1", .quadra800, "System 7.5.5", "System 7.5.5 (Clean)"),
+            ("mac-os-7.5.5-v1", .quadra800, "Mac OS 7.5.5", "System 7.5.5 (RetroBoot)"),
+            ("mac-os-8.1-base-v1", .quadra800, "Mac OS 8.1", "Mac OS 8.1 (Clean)"),
+            ("mac-os-8.1-v1", .quadra800, "Mac OS 8.1", "Mac OS 8.1 (Full)"),
+            ("mac-os-9.2.1-ati-32gb-v4", .powerMacG4, "Mac OS 9.2.1", "Mac OS 9.2.1 (Clean)"),
+            ("os921-full-v4", .powerMacG4, "Mac OS 9.2.1 (v4)", "Mac OS 9.2.1 (Full)"),
+        ]
+        for (id, family, rawName, expectedTitle) in expectedTitles {
+            let m = DownloadableMachine(
+                id: id, name: rawName, summary: "Summary", osVersion: "9.2.1",
+                minimumAppVersion: "3.0.0", archiveURL: source,
+                archiveBytes: 1_000, installedBytes: 2_000, sha256: String(repeating: "f", count: 64),
+                machineFamily: family
+            )
+            let entry = LibraryEntry(machine: m, edition: LibraryEdition.edition(for: m.id))
+            XCTAssertEqual(entry.title, expectedTitle)
+        }
+    }
+
+    func testRetroBootSummaryCleaningAndDefaultRanking() {
+        let sys755 = "Mac OS 7.5.5 (System 7.5.3 from the user's CD with Apple's 7.5.5 update) on an emulated Quadra 800 (68040, 128 MB): Easy Install on a 2 GB disk. Includes the Quadra 800 ROM this Mac needs (Apple's; kept private). Needs RetroBoot 1.7.0 or later. RetroBoot lab build."
+        let cleaned755 = LibraryEntry.cleanSummary(sys755)
+        XCTAssertFalse(cleaned755.contains("from the user's CD"))
+        XCTAssertFalse(cleaned755.contains("Quadra 800 ROM"))
+        XCTAssertFalse(cleaned755.contains("RetroBoot 1.7.0"))
+        XCTAssertFalse(cleaned755.contains("RetroBoot lab build"))
+        XCTAssertTrue(cleaned755.contains("System 7.5.3 with Apple's 7.5.5 update"))
+
+        let tigerDeluxe = "Includes the original PowerPC Quake III Arena, period games, iLife ’06, customization utilities and screensavers. Select 2048 MB of Mac OS X memory and the ATI Radeon for the Deluxe setup. Requires RetroBoot 2.0.2 on an x86 PC with Mac OS X support."
+        let cleanedTiger = LibraryEntry.cleanSummary(tigerDeluxe)
+        XCTAssertFalse(cleanedTiger.contains("2048 MB"))
+        XCTAssertFalse(cleanedTiger.contains("x86 PC"))
+        XCTAssertTrue(cleanedTiger.contains("Runs on ClassicMac's standard Mac OS X display; 1024 MB RAM recommended."))
+
+        let catalog = [
+            DownloadableMachine(id: "copland-d11e4-activities-v3", name: "Copland", summary: "S", osVersion: "Copland D11E4", minimumAppVersion: "3.2.1", archiveURL: source, archiveBytes: 1, installedBytes: 512, sha256: String(repeating: "1", count: 64), machineFamily: .powerMac7500),
+            DownloadableMachine(id: "system-7.5.5-base-v1", name: "System 7.5.5", summary: "S", osVersion: "System 7.5.5", minimumAppVersion: "4.6.0", archiveURL: source, archiveBytes: 1, installedBytes: 512, sha256: String(repeating: "2", count: 64), machineFamily: .quadra800),
+            DownloadableMachine(id: "mac-os-8.1-base-v1", name: "Mac OS 8.1", summary: "S", osVersion: "Mac OS 8.1", minimumAppVersion: "4.6.0", archiveURL: source, archiveBytes: 1, installedBytes: 512, sha256: String(repeating: "3", count: 64), machineFamily: .quadra800),
+            DownloadableMachine(id: "mac-os-x-10-4-11-tiger-deluxe-v1", name: "Tiger Deluxe", summary: "S", osVersion: "10.4.11", minimumAppVersion: "3.0.0", archiveURL: source, archiveBytes: 1, installedBytes: 512, sha256: String(repeating: "4", count: 64), machineFamily: .powerMacOSX),
+            DownloadableMachine(id: "os922-mega-deluxe-v4", name: "Mega Deluxe", summary: "S", osVersion: "9.2.2", minimumAppVersion: "3.0.0", archiveURL: source, archiveBytes: 1, installedBytes: 512, sha256: String(repeating: "5", count: 64), machineFamily: .powerMacG4),
+        ]
+        let ranked = LibraryEntry.entries(from: catalog, includeOlder: false)
+        XCTAssertEqual(ranked.map(\.id), [
+            "os922-mega-deluxe-v4",
+            "mac-os-x-10-4-11-tiger-deluxe-v1",
+            "mac-os-8.1-base-v1",
+            "system-7.5.5-base-v1",
+            "copland-d11e4-activities-v3",
+        ])
+        XCTAssertEqual(ranked.map(\.category), [.macOS9, .macOSX, .macOS8, .system7, .copland])
+        XCTAssertFalse(LibraryEntry.hasOlderVersions(in: catalog))
+        XCTAssertTrue(ranked[0].matches(query: "Mega", category: .macOS9))
+        XCTAssertFalse(ranked[0].matches(query: "Mega", category: .macOSX))
+    }
+
+    @MainActor
+    func testDownloadModelFreeSpaceCacheAndPartialCatalogWarning() async throws {
+        let cache = directory.appendingPathComponent("cache", isDirectory: true)
+        let save = directory.appendingPathComponent("save", isDirectory: true)
+        try FileManager.default.createDirectory(at: save, withIntermediateDirectories: true)
+
+        let digest = String(repeating: "a", count: 64)
+        let requiredStorage: Int64 = 12_509_511_680
+        let tiger = DownloadableMachine(
+            id: "mac-os-x-10-4-11-tiger-deluxe-v1", name: "Tiger Deluxe",
+            summary: "Tiger", osVersion: "10.4.11", minimumAppVersion: "3.0.0",
+            archiveURL: source, archiveBytes: 8_419_440_145,
+            installedBytes: 34_359_755_072, sha256: digest,
+            diskCapacityBytes: 34_359_738_368, requiredStorageBytes: requiredStorage,
+            machineFamily: .powerMacOSX
+        )
+
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [MachineDownloadURLProtocol.self]
+        let primaryURL = URL(string: "https://downloads.example.test/catalog1.json")!
+        let secondaryURL = URL(string: "https://downloads.example.test/catalog2.json")!
+        let encodedCatalog = try JSONEncoder().encode(MachineCatalog(schemaVersion: 1, machines: [tiger]))
+        MachineDownloadURLProtocol.handler = { request, client, loader in
+            if request.url == primaryURL {
+                client.urlProtocol(loader, didReceive: HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: "HTTP/1.1",
+                    headerFields: ["Content-Length": "\(encodedCatalog.count)"])!, cacheStoragePolicy: .notAllowed)
+                client.urlProtocol(loader, didLoad: encodedCatalog)
+                client.urlProtocolDidFinishLoading(loader)
+            } else {
+                client.urlProtocol(loader, didReceive: HTTPURLResponse(url: request.url!, statusCode: 503, httpVersion: "HTTP/1.1",
+                    headerFields: ["Content-Length": "0"])!, cacheStoragePolicy: .notAllowed)
+                client.urlProtocolDidFinishLoading(loader)
+            }
+        }
+
+        let model = MachineDownloadModel(catalogURLs: [primaryURL, secondaryURL], cacheDirectory: cache, transferConfiguration: config)
+        model.loadCatalog()
+        while model.isBusy { try await Task.sleep(nanoseconds: 20_000_000) }
+        XCTAssertEqual(model.machines, [tiger])
+        XCTAssertNotNil(model.partialCatalogWarning)
+        XCTAssertNil(model.errorMessage)
+
+        // Same-volume free-space calculation includes remaining archiveBytes + spaceReserve + requiredStorageBytes.
+        let requiredFull = model.totalRequiredFreeBytes(for: tiger, saveFolder: save, supportsSparse: true)
+        XCTAssertEqual(requiredFull, requiredStorage + MachineTemplateInstaller.spaceReserve + 8_419_440_145)
+
+        let partFile = cache.appendingPathComponent(digest + ".tar.gz.part")
+        try Data(repeating: 0, count: 1_000).write(to: partFile)
+        XCTAssertTrue(model.hasPartialDownload(tiger))
+        XCTAssertFalse(model.hasCompletedCache(tiger))
+        XCTAssertEqual(model.totalRequiredFreeBytes(for: tiger, saveFolder: save, supportsSparse: true),
+                       requiredStorage + MachineTemplateInstaller.spaceReserve + 8_419_440_145 - 1_000)
+
+        // Exact completed archive check (tested with a small machine fixture).
+        let small = fixtureMachine(bytes: Data(repeating: 1, count: 64), installedBytes: 1_048_576,
+                                   diskCapacityBytes: 524_288, requiredStorageBytes: 1_048_576)
+        let smallPart = cache.appendingPathComponent(small.sha256 + ".tar.gz.part")
+        try Data(repeating: 1, count: 64).write(to: smallPart)
+        XCTAssertFalse(model.hasPartialDownload(small))
+        XCTAssertTrue(model.hasCompletedCache(small))
+        XCTAssertEqual(model.totalRequiredFreeBytes(for: small, saveFolder: save, supportsSparse: true),
+                       1_048_576 + MachineTemplateInstaller.spaceReserve)
+
+        // Cancel behavior: cancelling with 0 bytes transitions to .idle; with > 0 bytes transitions to .paused.
+        let emptyArchiveMachine = fixtureMachine(bytes: Data(repeating: 2, count: 4096), installedBytes: 1_048_576)
+        let zeroStarted = expectation(description: "0-byte transfer started")
+        MachineDownloadURLProtocol.handler = { request, client, loader in
+            client.urlProtocol(loader, didReceive: HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: "HTTP/1.1",
+                headerFields: ["Content-Length": "4096"])!, cacheStoragePolicy: .notAllowed)
+            zeroStarted.fulfill()
+        }
+        model.install(emptyArchiveMachine, name: "Zero Cancel", directory: save) { _ in XCTFail("Should not install") }
+        await fulfillment(of: [zeroStarted], timeout: 2)
+        model.cancel()
+        while model.isBusy { try await Task.sleep(nanoseconds: 20_000_000) }
+        XCTAssertEqual(model.phase, .idle)
+        XCTAssertEqual(model.activityLabel, "")
+
+        let partialStarted = expectation(description: "Partial transfer wrote bytes")
+        MachineDownloadURLProtocol.handler = { request, client, loader in
+            client.urlProtocol(loader, didReceive: HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: "HTTP/1.1",
+                headerFields: ["Content-Length": "4096"])!, cacheStoragePolicy: .notAllowed)
+            client.urlProtocol(loader, didLoad: Data(repeating: 7, count: 1024))
+            partialStarted.fulfill()
+        }
+        model.install(emptyArchiveMachine, name: "Paused Cancel", directory: save) { _ in XCTFail("Should not install") }
+        await fulfillment(of: [partialStarted], timeout: 2)
+        try await Task.sleep(nanoseconds: 50_000_000)
+        model.cancel()
+        while model.isBusy { try await Task.sleep(nanoseconds: 20_000_000) }
+        XCTAssertEqual(model.phase, .paused)
+        XCTAssertEqual(model.activityLabel, "Paused. Your download is saved.")
+        XCTAssertTrue(model.hasPartialDownload(emptyArchiveMachine))
+
+        XCTAssertEqual(DownloadProgressView.speed(12_500_000), "12.5 MB/s")
+        XCTAssertEqual(DownloadProgressView.remaining(30), "Less than a minute remaining")
+    }
+
     private func fixtureMachine(bytes: Data, installedBytes: Int64 = 1024,
                                 diskCapacityBytes: Int64? = nil, requiredStorageBytes: Int64? = nil) -> DownloadableMachine {
         DownloadableMachine(id: "mac-os-9-v1", name: "Mac OS 9", summary: "A ready-to-run Mac.",

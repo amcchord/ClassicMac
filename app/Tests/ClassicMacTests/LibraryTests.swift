@@ -2,8 +2,9 @@ import XCTest
 @testable import ClassicMac
 
 final class LibraryTests: XCTestCase {
-    private func machine(_ id: String, family: MachineFamily = .powerMacG4, name: String? = nil) -> DownloadableMachine {
-        DownloadableMachine(id: id, name: name ?? id, summary: "Summary of \(id)", osVersion: "9.2.2",
+    private func machine(_ id: String, family: MachineFamily = .powerMacG4, name: String? = nil,
+                         osVersion: String = "9.2.2", summary: String? = nil) -> DownloadableMachine {
+        DownloadableMachine(id: id, name: name ?? id, summary: summary ?? "Summary of \(id)", osVersion: osVersion,
                             minimumAppVersion: "3.0.0",
                             archiveURL: URL(string: "https://example.com/\(id).tar.gz")!,
                             archiveBytes: 1_000, installedBytes: 2_000, sha256: String(repeating: "a", count: 64),
@@ -51,12 +52,14 @@ final class LibraryTests: XCTestCase {
         XCTAssertEqual(games.flatMap(\.items).count, 54)
     }
 
-    func testNewCatalogRevisionsKeepPreparedGraphicsWithoutStaleDescriptions() {
-        for id in ["os922-deluxe-v9", "os922-superdeluxe-v5", "mac-os-9.2.1-ati-32gb-v5"] {
+    func testNewCatalogRevisionsMatchByFamilyAndKeepLiveCatalogDescriptions() {
+        for id in ["os922-deluxe-v9", "os922-superdeluxe-v6", "mac-os-9.2.1-ati-32gb-v5"] {
             let entry = LibraryEntry(machine: machine(id), edition: LibraryEdition.edition(for: id))
-            XCTAssertNil(entry.edition)
+            XCTAssertNotNil(entry.edition)
             XCTAssertEqual(entry.description, "Summary of \(id)")
             XCTAssertEqual(entry.graphicsCard, .atiRadeon)
         }
+        let clean921 = LibraryEdition.edition(for: "mac-os-9.2.1-ati-32gb-v4")!
+        XCTAssertTrue(clean921.notes.contains { $0.contains("1920 × 1440") && $0.contains("live window resizing") })
     }
 }

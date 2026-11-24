@@ -1,5 +1,30 @@
 import Foundation
 
+/// OS category used to group and filter machines in the Library.
+enum LibraryOSCategory: String, CaseIterable, Identifiable, Hashable {
+    case all = "All Systems"
+    case system7 = "System 7"
+    case macOS8 = "Mac OS 8"
+    case macOS9 = "Mac OS 9"
+    case macOSX = "Mac OS X"
+    case copland = "Copland"
+
+    var id: String { rawValue }
+    var label: String { rawValue }
+
+    /// Clean default ranking order: OS 9, OS X, OS 8, System 7, Copland.
+    var sortOrder: Int {
+        switch self {
+        case .macOS9: return 0
+        case .macOSX: return 1
+        case .macOS8: return 2
+        case .system7: return 3
+        case .copland: return 4
+        case .all: return 5
+        }
+    }
+}
+
 /// What the Mac OS Library knows about a catalog entry beyond the catalog
 /// itself: a friendlier title, what is inside, how to get the most from it,
 /// and which graphics card it is prepared for. Catalog entries without an
@@ -8,7 +33,11 @@ import Foundation
 /// The Deluxe and SuperDeluxe contents come from RetroBoot's edition manifests
 /// (apps/manifests/superdeluxe-v2.json, docs/guide/deluxe-image.md).
 struct LibraryEdition {
-    let catalogID: String
+    let familyName: String
+    /// Latest revision for which the static `tagline` and `description` apply;
+    /// newer catalog revisions fall back to the catalog's own cleaned summary
+    /// while preserving curated `contents` and `notes`.
+    let baselineVersion: Int
     let title: String
     let osLabel: String
     let tagline: String
@@ -18,15 +47,18 @@ struct LibraryEdition {
     /// The card a fresh download starts with. ATI-ready Macs carry ATI's own
     /// Radeon 3D software and RetroBoot Display.
     let graphicsCard: GraphicsCard
-    let icon: String
     /// Lower sorts first.
     let order: Int
 
-    static func edition(for id: String) -> LibraryEdition? { all.first { $0.catalogID == id } }
+    static func edition(for id: String) -> LibraryEdition? {
+        let name = LibraryEntry.family(for: id).name
+        return all.first { $0.familyName == name }
+    }
 
     static let all: [LibraryEdition] = [
         LibraryEdition(
-            catalogID: "os922-superdeluxe-v2",
+            familyName: "os922-superdeluxe",
+            baselineVersion: 2,
             title: "Mac OS 9.2.2 SuperDeluxe",
             osLabel: "Mac OS 9.2.2",
             tagline: "54 classic games, ClarisWorks and Home Page",
@@ -56,11 +88,31 @@ struct LibraryEdition {
                 "Original shareware and demo limits remain.",
             ],
             graphicsCard: .atiRadeon,
-            icon: "library",
             order: 0
         ),
         LibraryEdition(
-            catalogID: "os922-deluxe-v6",
+            familyName: "os922-mega-deluxe",
+            baselineVersion: 4,
+            title: "Mac OS 9.2.2 Mega Deluxe",
+            osLabel: "Mac OS 9.2.2",
+            tagline: "111 classic games and creative activities",
+            description: "The largest Classic Mac collection: 111 games and creative activities in Launcher and ACTION GoMac, expanding SuperDeluxe with 21 additional games and educational titles. Ready for the ATI Radeon card, so 3D games run accelerated.",
+            contents: [
+                ("Games & Activities", ["111 classic games and creative activities in Launcher and ACTION GoMac",
+                                        "21 additional games and educational titles beyond SuperDeluxe"]),
+                ("Utilities & 3D", ["Launcher", "ACTION GoMac and Menus", "ATI Radeon 3D drivers"]),
+            ],
+            notes: [
+                "Games and creative activities launch from Launcher and Start → Games in the ACTION GoMac bar.",
+                "Uses the emulated ATI Radeon for accelerated RAVE and OpenGL 3D games, with live window resizing up to 1920 × 1440.",
+                "Original shareware and demo limits remain.",
+            ],
+            graphicsCard: .atiRadeon,
+            order: 1
+        ),
+        LibraryEdition(
+            familyName: "os922-deluxe",
+            baselineVersion: 6,
             title: "Mac OS 9.2.2 Deluxe",
             osLabel: "Mac OS 9.2.2",
             tagline: "16 classic games, After Dark, music and benchmarks",
@@ -81,12 +133,12 @@ struct LibraryEdition {
                 "Original shareware and demo limits remain.",
             ],
             graphicsCard: .atiRadeon,
-            icon: "library",
-            order: 1
+            order: 2
         ),
         LibraryEdition(
-            catalogID: "mac-os-9.2.1-ati-32gb-v4",
-            title: "Mac OS 9.2.1",
+            familyName: "mac-os-9.2.1-ati-32gb",
+            baselineVersion: 4,
+            title: "Mac OS 9.2.1 (Clean)",
             osLabel: "Mac OS 9.2.1",
             tagline: "A clean Mac OS 9 to make your own",
             description: "A fresh Mac OS 9.2.1 with Apple’s ATI graphics software and a 32 GB disk that grows on your computer only as you add files. Start here to install your own software.",
@@ -95,14 +147,14 @@ struct LibraryEdition {
             ],
             notes: [
                 "Uses the emulated ATI Radeon with Apple’s own Mac OS drivers for accelerated RAVE and OpenGL games.",
-                "Choose the Standard graphics card for live window resizing or Black & White, 4 and 16 colors.",
+                "ATI Radeon supports live window resizing up to 1920 × 1440. Choose the Standard graphics card for larger resolutions or Black & White, 4 and 16 colors.",
             ],
             graphicsCard: .atiRadeon,
-            icon: "library",
-            order: 2
+            order: 3
         ),
         LibraryEdition(
-            catalogID: "copland-d11e4-activities-v3",
+            familyName: "copland-d11e4-activities",
+            baselineVersion: 3,
             title: "Copland D11E4",
             osLabel: "Copland D11E4",
             tagline: "Apple's unfinished Mac OS 8 rewrite",
@@ -116,8 +168,7 @@ struct LibraryEdition {
                 "Sound, networking, shared folders and removable media are unavailable.",
             ],
             graphicsCard: .standard,
-            icon: "powermac_7500",
-            order: 3
+            order: 50
         ),
     ]
 }
@@ -132,7 +183,47 @@ struct LibraryEntry: Identifiable, Hashable {
     static func == (lhs: Self, rhs: Self) -> Bool { lhs.machine == rhs.machine }
     func hash(into hasher: inout Hasher) { hasher.combine(machine) }
 
-    var title: String { edition?.title ?? machine.name }
+    private static let disambiguatedTitles: [String: String] = [
+        "system-7.5.5-base": "System 7.5.5 (Clean)",
+        "mac-os-7.5.5": "System 7.5.5 (RetroBoot)",
+        "mac-os-8.1-base": "Mac OS 8.1 (Clean)",
+        "mac-os-8.1": "Mac OS 8.1 (Full)",
+        "mac-os-9.2.1-ati-32gb": "Mac OS 9.2.1 (Clean)",
+        "os921-full": "Mac OS 9.2.1 (Full)",
+    ]
+
+    private static let atiFamilies: Set<String> = [
+        "os922-deluxe",
+        "os922-superdeluxe",
+        "os922-mega-deluxe",
+        "os922-full",
+        "mac-os-9.2.1-ati-32gb",
+    ]
+
+    private static let knownFamilyOrder: [String: Int] = [
+        "os922-superdeluxe": 0,
+        "os922-mega-deluxe": 1,
+        "os922-deluxe": 2,
+        "mac-os-9.2.1-ati-32gb": 3,
+        "os922-full": 10,
+        "os921-full": 11,
+        "mac-os-x-10-4-11-tiger-deluxe": 20,
+        "mac-os-x-10-4-11-tiger-period": 21,
+        "mac-os-x-10-3-9-panther-period": 22,
+        "mac-os-x-10-2-8-jaguar-period": 23,
+        "mac-os-8.6-base": 30,
+        "mac-os-8-1-deluxe": 31,
+        "mac-os-8.1": 32,
+        "mac-os-8.1-base": 33,
+        "mac-os-7-5-5-deluxe": 40,
+        "mac-os-7.5.5": 41,
+        "system-7.5.5-base": 42,
+        "copland-d11e4-activities": 50,
+    ]
+
+    var title: String {
+        Self.disambiguatedTitles[family.name] ?? edition?.title ?? machine.name
+    }
 
     var osLabel: String {
         if let edition { return edition.osLabel }
@@ -143,20 +234,46 @@ struct LibraryEntry: Identifiable, Hashable {
         return "Mac OS \(version)"
     }
 
-    var tagline: String { edition?.tagline ?? machine.summary }
-    var description: String { edition?.description ?? machine.summary }
-    var icon: String { edition?.icon ?? "library" }
+    var category: LibraryOSCategory {
+        if machine.family == .powerMac7500 || osLabel.localizedCaseInsensitiveContains("Copland") {
+            return .copland
+        }
+        if machine.family == .powerMacOSX || osLabel.hasPrefix("Mac OS X") {
+            return .macOSX
+        }
+        if osLabel.hasPrefix("System 7") || machine.osVersion.hasPrefix("7.") {
+            return .system7
+        }
+        if osLabel.hasPrefix("Mac OS 8") || machine.osVersion.hasPrefix("8.") {
+            return .macOS8
+        }
+        return .macOS9
+    }
+
+    private var usesEditionCopy: Bool {
+        guard let edition else { return false }
+        return family.version <= edition.baselineVersion
+    }
+
+    var tagline: String {
+        if usesEditionCopy, let edition { return edition.tagline }
+        return Self.cleanSummary(machine.summary)
+    }
+
+    var description: String {
+        if usesEditionCopy, let edition { return edition.description }
+        return Self.cleanSummary(machine.summary)
+    }
+
     var graphicsCard: GraphicsCard {
         guard machine.family == .powerMacG4 else { return .standard }
-        // New catalog revisions keep their edition's prepared hardware even
-        // when this app has no revision-specific contents description yet.
-        return edition?.graphicsCard ?? (["os922-deluxe", "os922-superdeluxe", "mac-os-9.2.1-ati-32gb"].contains(family.name) ? .atiRadeon : .standard)
+        if let edition { return edition.graphicsCard }
+        return Self.atiFamilies.contains(family.name) ? .atiRadeon : .standard
     }
 
     /// "os922-deluxe-v6" → ("os922-deluxe", 6). Entries without a version
     /// suffix are their own family.
-    var family: (name: String, version: Int) {
-        let id = machine.id
+    static func family(for id: String) -> (name: String, version: Int) {
         if let range = id.range(of: "-v", options: .backwards),
            let version = Int(id[range.upperBound...]) {
             return (String(id[..<range.lowerBound]), version)
@@ -164,9 +281,68 @@ struct LibraryEntry: Identifiable, Hashable {
         return (id, 0)
     }
 
+    var family: (name: String, version: Int) {
+        Self.family(for: machine.id)
+    }
+
     var versionLabel: String? {
         let version = family.version
-        return version > 0 ? "v\(version)" : nil
+        guard version > 0 else { return nil }
+        let pattern = "\\bv\(version)\\b"
+        if title.range(of: pattern, options: [.regularExpression, .caseInsensitive]) != nil {
+            return nil
+        }
+        return "v\(version)"
+    }
+
+    func matches(query: String, category filter: LibraryOSCategory) -> Bool {
+        guard filter == .all || category == filter else { return false }
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return true }
+        var haystack = [title, osLabel, machine.family.label, tagline, description]
+        if let edition {
+            haystack.append(contentsOf: edition.contents.map(\.category))
+            haystack.append(contentsOf: edition.contents.flatMap(\.items))
+        }
+        return haystack.contains { $0.localizedCaseInsensitiveContains(trimmed) }
+    }
+
+    static func cleanSummary(_ summary: String) -> String {
+        var text = summary.replacingOccurrences(
+            of: "Select 2048 MB of Mac OS X memory and the ATI Radeon for the Deluxe setup.",
+            with: "Runs on ClassicMac's standard Mac OS X display; 1024 MB RAM recommended."
+        )
+        let stripPatterns = [
+            "\\s*from the user['’]s CD",
+            "\\s*Includes the Quadra 800 ROM this Mac needs \\(Apple['’]s; kept private\\)\\.",
+            "\\s*(?:Needs|Requires) RetroBoot (?:\\d+(?:\\.\\d+)*|[^.\\n])*\\.(?=\\s|$)",
+            "\\s*RetroBoot lab build\\.",
+        ]
+        for pattern in stripPatterns {
+            text = text.replacingOccurrences(of: pattern, with: "", options: [.regularExpression, .caseInsensitive])
+        }
+        text = text.replacingOccurrences(of: "[ \\t]{2,}", with: " ", options: .regularExpression)
+        text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return text.isEmpty ? summary.trimmingCharacters(in: .whitespacesAndNewlines) : text
+    }
+
+    static func hasOlderVersions(in machines: [DownloadableMachine]) -> Bool {
+        let all = machines.map { family(for: $0.id) }
+        var newest: [String: Int] = [:]
+        for item in all {
+            newest[item.name] = max(newest[item.name] ?? 0, item.version)
+        }
+        return all.contains { newest[$0.name] != $0.version }
+    }
+
+    private var defaultRank: (Int, Int, String) {
+        if let known = Self.knownFamilyOrder[family.name] {
+            return (known, 0, title)
+        }
+        if let edition {
+            return (edition.order, 0, title)
+        }
+        return (100, category.sortOrder, title)
     }
 
     /// The catalog in Library order, with older versions of a family last
@@ -179,9 +355,11 @@ struct LibraryEntry: Identifiable, Hashable {
         }
         let current = all.filter { newest[$0.family.name] == $0.family.version }
         let older = all.filter { newest[$0.family.name] != $0.family.version }
-        func rank(_ e: LibraryEntry) -> Int { e.edition?.order ?? 100 }
-        let sortedCurrent = current.sorted { (rank($0), $0.title) < (rank($1), $1.title) }
+        let sortedCurrent = current.sorted { $0.defaultRank < $1.defaultRank }
         guard includeOlder else { return sortedCurrent }
-        return sortedCurrent + older.sorted { (rank($0), $0.title, -$0.family.version) < (rank($1), $1.title, -$1.family.version) }
+        return sortedCurrent + older.sorted {
+            ($0.defaultRank.0, $0.defaultRank.1, $0.title, -$0.family.version) <
+                ($1.defaultRank.0, $1.defaultRank.1, $1.title, -$1.family.version)
+        }
     }
 }
