@@ -1,9 +1,5 @@
 name: Linux desktop
 on:
-  push:
-    branches: [main, 'codex/*']
-  pull_request:
-    branches: [main]
   workflow_dispatch:
     inputs:
       test_tiger:

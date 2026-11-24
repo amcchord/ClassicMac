@@ -16,21 +16,44 @@ import tempfile
 import cmdclient
 
 
-def check(qemu, width, height, fb="mac"):
+def find_bios_dir(qemu, explicit=None):
+    candidates = []
+    if explicit:
+        candidates.append(Path(explicit))
+    exe = Path(qemu).resolve()
+    if len(exe.parents) > 1:
+        candidates.extend([
+            exe.parents[1] / "qemu/pc-bios",
+            exe.parents[1] / "pc-bios",
+        ])
+    if len(exe.parents) > 2:
+        candidates.append(exe.parents[2] / "Resources/qemu/pc-bios")
+    candidates.append(Path(__file__).resolve().parents[2] / "qfb")
+    for candidate in candidates:
+        if (candidate / "mac_qfb.rom").is_file():
+            return str(candidate)
+    return None
+
+
+def check(qemu, width, height, fb="mac", bios_dir=None):
     with tempfile.TemporaryDirectory(prefix="cmq-") as folder:
         root = Path(folder)
         display = cmdclient.DisplayClient(str(root / "d"))
         qmp = qt = stream = None
         machine = "q800,audiodev=audio0" if fb == "mac" else f"q800,fb={fb},audiodev=audio0"
+        argv = [
+            qemu, "-M", machine, "-m", "128", "-g", f"{width}x{height}x8",
+            "-accel", "qtest", "-S", "-qtest", f"unix:{root}/t,server=on,wait=off",
+            "-qtest-log", os.devnull, "-qmp", f"unix:{root}/q,server=on,wait=off",
+            "-display", f"classicmac,socket={root}/d", "-nic", "none",
+            "-audiodev", "none,id=audio0",
+            "-monitor", "none", "-serial", "none",
+        ]
+        resolved_bios = find_bios_dir(qemu, bios_dir)
+        if resolved_bios:
+            argv.extend(["-L", resolved_bios])
         with (root / "qemu.log").open("wb") as log:
-            process = subprocess.Popen([
-                qemu, "-M", machine, "-m", "128", "-g", f"{width}x{height}x8",
-                "-accel", "qtest", "-S", "-qtest", f"unix:{root}/t,server=on,wait=off",
-                "-qtest-log", os.devnull, "-qmp", f"unix:{root}/q,server=on,wait=off",
-                "-display", f"classicmac,socket={root}/d", "-nic", "none",
-                "-audiodev", "none,id=audio0",
-                "-monitor", "none", "-serial", "none",
-            ], stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT)
+            process = subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT)
             try:
                 display.accept(10)
                 qmp = cmdclient.QMP(str(root / "q"))
@@ -102,7 +125,8 @@ def check(qemu, width, height, fb="mac"):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
+    if len(sys.argv) not in (2, 3):
         sys.exit(__doc__)
+    bios_dir = sys.argv[2] if len(sys.argv) == 3 else None
     for width, height, fb in ((640, 480, "mac"), (800, 600, "mac"), (640, 480, "qemu")):
-        check(os.path.abspath(sys.argv[1]), width, height, fb=fb)
+        check(os.path.abspath(sys.argv[1]), width, height, fb=fb, bios_dir=bios_dir)
