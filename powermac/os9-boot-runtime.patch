@@ -453,7 +453,7 @@ index a09a6df93fd..f4b1ba09fdd 100644
      gen_helper_load_tbu(cpu_gpr[gprn], tcg_env);
  }
  
-@@ -3668,6 +3678,48 @@ static void gen_lookup_and_goto_ptr(DisasContext *ctx)
+@@ -3668,6 +3678,49 @@ static void gen_lookup_and_goto_ptr(DisasContext *ctx)
      }
  }
  
@@ -461,7 +461,7 @@ index a09a6df93fd..f4b1ba09fdd 100644
 +{
 +    TCGv_i64 next_pc = tcg_temp_new_i64();
 +
-+    if (ctx->base.tb->flags & CF_NO_GOTO_PTR) {
++    if (tb_cflags(ctx->base.tb) & CF_NO_GOTO_PTR) {
 +        pmu_count_insns(ctx);
 +    }
 +    tcg_gen_extu_tl_i64(next_pc, cpu_nip);
@@ -476,6 +476,7 @@ index a09a6df93fd..f4b1ba09fdd 100644
 +    TCGv cached = tcg_temp_new();
 +    TCGv page_delta = tcg_temp_new();
 +
++    (void)target;
 +    if (unlikely(ctx->singlestep_enabled) ||
 +        (ctx->base.tb->cflags & CF_NO_GOTO_TB)) {
 +        gen_lookup_and_goto_ptr(ctx);
@@ -485,11 +486,11 @@ index a09a6df93fd..f4b1ba09fdd 100644
 +    ctx->base.tb->indirect_jmp_mask |= 1u;
 +    tcg_gen_ld_tl(cached,
 +                  tcg_constant_ptr(&ctx->base.tb->indirect_pc[0]), 0);
-+    tcg_gen_brcondi_tl(TCG_COND_EQ, cached, 0, chain);
-+    tcg_gen_xori_tl(page_delta, target, ctx->cia);
++    tcg_gen_xori_tl(page_delta, cpu_nip, ctx->cia);
 +    tcg_gen_andi_tl(page_delta, page_delta, TARGET_PAGE_MASK);
 +    tcg_gen_brcondi_tl(TCG_COND_NE, page_delta, 0, miss);
-+    tcg_gen_brcond_tl(TCG_COND_NE, target, cached, miss);
++    tcg_gen_brcondi_tl(TCG_COND_EQ, cached, 0, chain);
++    tcg_gen_brcond_tl(TCG_COND_NE, cpu_nip, cached, miss);
 +
 +    gen_set_label(chain);
 +    tcg_gen_goto_tb(0);

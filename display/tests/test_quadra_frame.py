@@ -16,14 +16,15 @@ import tempfile
 import cmdclient
 
 
-def check(qemu, width, height):
+def check(qemu, width, height, fb="mac"):
     with tempfile.TemporaryDirectory(prefix="cmq-") as folder:
         root = Path(folder)
         display = cmdclient.DisplayClient(str(root / "d"))
         qmp = qt = stream = None
+        machine = "q800,audiodev=audio0" if fb == "mac" else f"q800,fb={fb},audiodev=audio0"
         with (root / "qemu.log").open("wb") as log:
             process = subprocess.Popen([
-                qemu, "-M", "q800,audiodev=audio0", "-m", "128", "-g", f"{width}x{height}x8",
+                qemu, "-M", machine, "-m", "128", "-g", f"{width}x{height}x8",
                 "-accel", "qtest", "-S", "-qtest", f"unix:{root}/t,server=on,wait=off",
                 "-qtest-log", os.devnull, "-qmp", f"unix:{root}/q,server=on,wait=off",
                 "-display", f"classicmac,socket={root}/d", "-nic", "none",
@@ -38,16 +39,21 @@ def check(qemu, width, height):
                 qt.settimeout(10)
                 stream = qt.makefile("rwb", buffering=0)
 
-                def write(address, value):
-                    stream.write(f"writeb {address:#x} {value:#x}\n".encode())
+                def write(kind, address, value):
+                    stream.write(f"write{kind} {address:#x} {value:#x}\n".encode())
                     reply = stream.readline().strip()
                     assert reply == b"OK", reply
 
                 def capture(rgb):
-                    # VRAM is zero after reset: change entry zero in the DAFB CLUT.
-                    write(0xf9800200, 0)
-                    for component in rgb:
-                        write(0xf9800210, component)
+                    # VRAM is zero after reset: change entry zero in the card CLUT.
+                    if fb == "mac":
+                        write("b", 0xf9800200, 0)
+                        for component in rgb:
+                            write("b", 0xf9800210, component)
+                    else:
+                        # nubus-qfb claims the first free slot (0xc -> 0xfc000000).
+                        write("l", 0xfc00001c, 0)
+                        write("l", 0xfc000020, (rgb[0] << 16) | (rgb[1] << 8) | rgb[2])
                     qmp.cmd("screendump", filename=str(root / "screen.ppm"))
                     data = (root / "screen.ppm").read_bytes()
                     header = f"P6\n{width} {height}\n255\n".encode()
@@ -61,7 +67,7 @@ def check(qemu, width, height):
                             cmdclient.xrgb_to_rgb(display.frame, width, height, s["stride"]) == expected
 
                     assert display.wait_for(matches, 5), \
-                        f"{width}x{height}: shared display differs from the real QMP framebuffer ({rgb})"
+                        f"{width}x{height} ({fb}): shared display differs from the real QMP framebuffer ({rgb})"
                     assert display.frame_matches_shared(), "DAMAGE left stale pixels in the client"
 
                 capture((231, 73, 149))
@@ -71,7 +77,8 @@ def check(qemu, width, height):
                 capture((61, 92, 203))
                 qmp.cmd("system_reset")
                 capture((204, 119, 37))
-                print(f"    OK  Quadra {width}x{height}: palette changes, reconnect, reset; "
+                label = "Quadra" if fb == "mac" else f"Quadra ({fb})"
+                print(f"    OK  {label} {width}x{height}: palette changes, reconnect, reset; "
                       f"{width * height * 4:,} exact RGB pixels")
             except Exception:
                 log.flush()
@@ -97,5 +104,5 @@ def check(qemu, width, height):
 if __name__ == "__main__":
     if len(sys.argv) != 2:
         sys.exit(__doc__)
-    for size in ((640, 480), (800, 600)):
-        check(os.path.abspath(sys.argv[1]), *size)
+    for width, height, fb in ((640, 480, "mac"), (800, 600, "mac"), (640, 480, "qemu")):
+        check(os.path.abspath(sys.argv[1]), width, height, fb=fb)

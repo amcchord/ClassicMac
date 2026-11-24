@@ -23,6 +23,30 @@ static void *cm_gl_symbol(const char *name)
     return (void *)p;
 }
 
+static bool cm_renderer_has_ci(const char *haystack, const char *needle)
+{
+    size_t nlen;
+    if (!haystack || !needle || !*needle) {
+        return false;
+    }
+    nlen = strlen(needle);
+    for (; *haystack; haystack++) {
+        size_t i = 0;
+        while (i < nlen && haystack[i]) {
+            char a = haystack[i];
+            char b = needle[i];
+            if (a >= 'A' && a <= 'Z') a += 'a' - 'A';
+            if (b >= 'A' && b <= 'Z') b += 'a' - 'A';
+            if (a != b) break;
+            i++;
+        }
+        if (i == nlen) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void ati_gl_close(void)
 {
     if (cm_wgl.MakeCurrent) cm_wgl.MakeCurrent(NULL, NULL);
@@ -102,8 +126,19 @@ bool ati_gl_open(ATIGL *gl, char *info, size_t infolen)
 #undef ATI_GL_LOAD
     version = (const char *)gl->GetString(GL_VERSION);
     renderer = (const char *)gl->GetString(GL_RENDERER);
-    if (!version || version[0] < '4' || version[0] > '9') goto fail;
-    snprintf(info, infolen, "WGL; GL %s; %s", version, renderer ? renderer : "unknown renderer");
+    if (!version || atoi((const char *)version) < 4) {
+        snprintf(info, infolen, "OpenGL 4.1+ required (got %s)",
+                 version ? version : "none");
+        goto fail;
+    }
+    if (!renderer || cm_renderer_has_ci(renderer, "GDI Generic") ||
+        cm_renderer_has_ci(renderer, "Microsoft Basic Render Driver") ||
+        cm_renderer_has_ci(renderer, "WARP")) {
+        snprintf(info, infolen, "software OpenGL renderer rejected (%s)",
+                 renderer ? renderer : "unknown renderer");
+        goto fail;
+    }
+    snprintf(info, infolen, "WGL; GL %s; %s", version, renderer);
     return true;
 fail:
     if (legacy) { cm_wgl.MakeCurrent(NULL, NULL); cm_wgl.DeleteContext(legacy); }

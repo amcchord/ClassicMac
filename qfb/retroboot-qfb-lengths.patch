@@ -25,7 +25,12 @@ index c71c91d4fe..28b58e3e6d 100644
  /* QuickDraw gets very cranky if your rowbytes is >= 16382 */
  #define QFB_MAX_WIDTH       3840
  #define QFB_MAX_HEIGHT      2160
-@@ -698,7 +702,63 @@ static void qfb_patch_sresource(QfbState *ms, uint8_t *ptr, uint32_t offset, uin
+@@ -694,9 +698,68 @@ static void qfb_patch_sresource(QfbState *ms, uint8_t *ptr, uint32_t offset, uin
+     }
+ 
++    if (ms->width == 0 || ms->height == 0) {
++        return;
++    }
      qfb_patch_vpblock(ms, ptr, (offset + qfb_ptr_read_u32(ptr + offset)) & 0xFFFFFF, size, &depth);
  
      if(depth != 0)

@@ -345,7 +345,8 @@ static void qfb_update_display(void *opaque)
         return;
     }
 
-    if (s->width != surface_width(surface) ||
+    if (surface_is_placeholder(surface) ||
+        s->width != surface_width(surface) ||
         s->height != surface_height(surface)) {
         qemu_console_resize(s->con, s->width, s->height);
         qfb_invalidate_display(s);
@@ -392,7 +393,7 @@ static void qfb_reset(QfbState *s)
 
     timer_del(s->vbl_timer);
     s->regs[QFB_IRQ >> 2] = 0;
-    s->regs[QFB_IRQ_VBL >> 2] = 0;
+    s->regs[QFB_IRQ_MASK >> 2] = 0;
     qemu_irq_lower(s->irq);
     s->palette_current = 0;
     s->gamma_current = 0;
@@ -461,10 +462,16 @@ static void qfb_ctrl_write(void *opaque,
         qfb_reset(s);
         break;
     case QFB_MODE_WIDTH:
+        if (val == 0) {
+            val = 1;
+        }
         s->width = (val > QFB_MAX_WIDTH ? QFB_MAX_WIDTH : val);
         qfb_update_mode(s);
         break;
     case QFB_MODE_HEIGHT:
+        if (val == 0) {
+            val = 1;
+        }
         s->height = (val > QFB_MAX_HEIGHT ? QFB_MAX_HEIGHT : val);
         qfb_update_mode(s);
         break;

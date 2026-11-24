@@ -62,8 +62,8 @@ diff --git a/hw/display/ati.c b/hw/display/ati.c
 +        return;
 +    }
 +    if (ati_is_radeon(s) && (s->cursor_mode == 2 || s->cursor_mode == 3)) {
-+        unsigned xorigin = (s->regs.cur_hv_offs >> 16) & 63;
-+        unsigned yorigin = s->regs.cur_hv_offs & 63;
++        unsigned xorigin = (s->cursor_hv_offs >> 16) & 63;
++        unsigned yorigin = s->cursor_hv_offs & 63;
 +        unsigned row = scr_y - vga->hw_cursor_y;
 +        uint64_t source = (uint64_t)s->cursor_offset + row * 256;
 +

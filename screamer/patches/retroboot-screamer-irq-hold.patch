@@ -56,7 +56,15 @@ diff --git a/hw/audio/screamer.c b/hw/audio/screamer.c
      if (io) {
          s->dma_pending = NULL;
          io->dma_end(io);
-@@ -714,6 +753,7 @@ static const Property screamer_properties[] = {
+@@ -514,6 +553,7 @@ static void screamer_reset(DeviceState *dev)
+     s->dma_ns = 0;
+     s->host_t0_ns = 0;
+     s->host_frames = 0;
++    s->holding = false;
+     if (s->dma_pending) {
+         timer_del(s->dma_timer);
+         s->dma_pending = NULL;
+@@ -714,6 +754,7 @@ static const Property screamer_properties[] = {
      DEFINE_PROP_UINT32("resync-ms", ScreamerState, resync_ms, 200),
      DEFINE_PROP_UINT32("host-lead-ms", ScreamerState, host_lead_ms, 40),
      DEFINE_PROP_UINT32("host-lead-max-ms", ScreamerState, host_lead_max_ms, 120),

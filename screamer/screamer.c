@@ -197,18 +197,37 @@ static void screamerspk_callback(void *opaque, int avail)
 
 static void screamer_update_settings(ScreamerState *s)
 {
-    struct audsettings as = { s->rate, 2, AUDIO_FORMAT_S16,
-        s->regs[BYTE_SWAP_REG] ? false : true };
+    static SWVoiceOut *opened_voice;
+    static uint32_t opened_rate;
+    static bool opened_big_endian;
+    bool big_endian = s->regs[BYTE_SWAP_REG] ? false : true;
+    struct audsettings as = { s->rate, 2, AUDIO_FORMAT_S16, big_endian };
 
     if (!s->audio_be) {
+        return;
+    }
+
+    if (s->voice && opened_voice == s->voice &&
+        opened_rate == s->rate && opened_big_endian == big_endian) {
+        if (!s->vol_pending) {
+            screamer_update_volume(s);
+        }
         return;
     }
 
     s->voice = audio_be_open_out(s->audio_be, s->voice, s_spk, s,
                                  screamerspk_callback, &as);
     if (!s->voice) {
+        opened_voice = NULL;
         qemu_log_mask(LOG_GUEST_ERROR, "screamer: could not open voice\n");
         return;
+    }
+
+    opened_voice = s->voice;
+    opened_rate = s->rate;
+    opened_big_endian = big_endian;
+    if (!s->vol_pending) {
+        screamer_update_volume(s);
     }
 
     audio_be_set_active_out(s->audio_be, s->voice, true);
@@ -237,6 +256,7 @@ static void screamer_reset(DeviceState *dev)
 
     memset(s->regs, 0, sizeof(s->regs));
     memset(s->codec_ctrl_regs, 0, sizeof(s->codec_ctrl_regs));
+    s->io.len = 0;
 
     s->rate = 44100;
     s->bpos = 0;
@@ -332,7 +352,7 @@ static uint64_t screamer_read(void *opaque, hwaddr addr, unsigned size)
     case CODEC_STAT_REG:
         if (s->codec_ctrl_regs[7] & 1) {
             /* Read back mode */
-            val = s->codec_ctrl_regs[(s->codec_ctrl_regs[7] >> 1) & 0xe];
+            val = s->codec_ctrl_regs[(s->codec_ctrl_regs[7] >> 1) & 0x7];
         } else {
             /* Return status register */
             val = s->regs[addr] & ~0xff00;
@@ -380,9 +400,16 @@ static void screamer_write(void *opaque, hwaddr addr,
         break;
     case CODEC_STAT_REG:
     case CLIP_CNT_REG:
-    case BYTE_SWAP_REG:
         s->regs[addr] = val & 0xffffffff;
         break;
+    case BYTE_SWAP_REG: {
+        uint32_t old_swap = s->regs[addr];
+        s->regs[addr] = val & 0xffffffff;
+        if ((old_swap != 0) != (s->regs[addr] != 0)) {
+            screamer_update_settings(s);
+        }
+        break;
+    }
     default:
         qemu_log_mask(LOG_UNIMP,
                   "screamer: Unimplemented register write "

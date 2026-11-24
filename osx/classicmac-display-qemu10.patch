@@ -1,0 +1,1600 @@
+diff --git a/meson.build b/meson.build
+index 62f61da..d622904 100644
+--- a/meson.build
++++ b/meson.build
+@@ -2592,6 +2592,8 @@ config_host_data.set('CONFIG_X11', x11.found())
+ config_host_data.set('CONFIG_DBUS_DISPLAY', dbus_display)
+ config_host_data.set('CONFIG_RETROBOOT_DISPLAY',
+                      host_os == 'linux' and pixman.found())
++config_host_data.set('CONFIG_CLASSICMAC_DISPLAY',
++                     host_os in ['darwin', 'linux'] and pixman.found())
+ config_host_data.set('CONFIG_CFI', get_option('cfi'))
+ config_host_data.set('CONFIG_SELINUX', selinux.found())
+ config_host_data.set('CONFIG_XEN_BACKEND', xen.found())
+diff --git a/qapi/ui.json b/qapi/ui.json
+index 4532168..24eb41f 100644
+--- a/qapi/ui.json
++++ b/qapi/ui.json
+@@ -1509,6 +1509,10 @@
+ #     shared memory over a local socket and accept its input.
+ #     (Since 11.0)
+ #
++# @classicmac: Hand the framebuffer and the hardware cursor to the
++#     ClassicMac app through shared memory over a local socket and
++#     accept its input.  (Since 11.0)
++#
+ # Since: 2.12
+ ##
+ { 'enum'    : 'DisplayType',
+@@ -1522,7 +1526,8 @@
+     { 'name': 'cocoa', 'if': 'CONFIG_COCOA' },
+     { 'name': 'spice-app', 'if': 'CONFIG_SPICE' },
+     { 'name': 'dbus', 'if': 'CONFIG_DBUS_DISPLAY' },
+-    { 'name': 'retroboot', 'if': 'CONFIG_RETROBOOT_DISPLAY' }
++    { 'name': 'retroboot', 'if': 'CONFIG_RETROBOOT_DISPLAY' },
++    { 'name': 'classicmac', 'if': 'CONFIG_CLASSICMAC_DISPLAY' }
+   ]
+ }
+ 
+@@ -1546,6 +1551,26 @@
+   'data'    : { 'socket' : 'str', '*idle-refresh' : 'uint32' },
+   'if'      : 'CONFIG_RETROBOOT_DISPLAY' }
+ 
++##
++# @DisplayClassicMac:
++#
++# ClassicMac app display options.
++#
++# @socket: Path of the app's AF_UNIX SOCK_STREAM socket.  QEMU
++#     connects as a client and retries every 100 ms until the app
++#     listens, without blocking the guest.
++#
++# @idle-refresh: Refresh interval in milliseconds once the guest has
++#     drawn nothing and the app has sent no input for one second
++#     (default 100).  Any drawing or input restores the app's rate.
++#     0 always refreshes at the app's rate.
++#
++# Since: 11.0
++##
++{ 'struct'  : 'DisplayClassicMac',
++  'data'    : { 'socket' : 'str', '*idle-refresh' : 'uint32' },
++  'if'      : 'CONFIG_CLASSICMAC_DISPLAY' }
++
+ ##
+ # @DisplayOptions:
+ #
+@@ -1582,7 +1607,9 @@
+       'dbus': { 'type': 'DisplayDBus', 'if': 'CONFIG_DBUS_DISPLAY' },
+       'sdl': { 'type': 'DisplaySDL', 'if': 'CONFIG_SDL' },
+       'retroboot': { 'type': 'DisplayRetroBoot',
+-                     'if': 'CONFIG_RETROBOOT_DISPLAY' }
++                     'if': 'CONFIG_RETROBOOT_DISPLAY' },
++      'classicmac': { 'type': 'DisplayClassicMac',
++                      'if': 'CONFIG_CLASSICMAC_DISPLAY' }
+   }
+ }
+ 
+diff --git a/ui/classicmac-display.c b/ui/classicmac-display.c
+new file mode 100644
+index 0000000..d8adcf8
+--- /dev/null
++++ b/ui/classicmac-display.c
+@@ -0,0 +1,1504 @@
++/*
++ * ClassicMac display backend
++ *
++ * Hands the guest framebuffer and the guest's hardware cursor to the
++ * ClassicMac app through shared memory, and injects the app's keyboard and
++ * pointer input.  QEMU is the client of the app's AF_UNIX SOCK_STREAM socket
++ * (-display classicmac,socket=PATH[,idle-refresh=MS]).  The protocol is
++ * described in ClassicMac's display/README.md; all integers are host-endian
++ * and every message is a { u32 type; u32 len; } header followed by len
++ * payload bytes.
++ *
++ * QEMU never blocks on the app: connection attempts are retried from a
++ * timer, every send is non-blocking and goes through an output queue that
++ * is flushed when the socket is writable.  While a damage message is still
++ * queued, newer damage is coalesced into the next one; if the queue grows
++ * beyond CMD_QUEUE_LIMIT, queued damage messages are dropped and one
++ * full-surface damage is sent once the queue has drained.  A message is
++ * never split across a dropped boundary.  The shared buffer always holds the
++ * latest copied frame.
++ *
++ * Ported from RetroBoot's display backend (ui/retroboot.c, from RetroBoot
++ * emulator/patches/retroboot-display.patch, retroboot-display-idle-refresh
++ * .patch and retroboot-relative-pointer.patch at RetroBoot commit 1860881),
++ * which uses a SOCK_SEQPACKET socket and a sealed memfd on Linux.  ClassicMac
++ * changes: a byte stream with an output queue (macOS has no
++ * SOCK_SEQPACKET), a POSIX shared memory object on macOS, CURSOR and MOUSE
++ * messages for the hardware cursor, and damage reduced to the tiles whose
++ * pixels actually changed (std-VGA's untracked shared scanout reports the
++ * whole frame on every refresh).
++ *
++ * Copyright (c) 2026 RetroBoot contributors
++ * Copyright (c) 2026 ClassicMac contributors
++ *
++ * SPDX-License-Identifier: GPL-2.0-or-later
++ */
++
++#include "qemu/osdep.h"
++#include <sys/mman.h>
++#include <sys/socket.h>
++#include <sys/un.h>
++
++#include "qapi/error.h"
++#include "qemu/cutils.h"
++#include "qemu/error-report.h"
++#include "qemu/main-loop.h"
++#include "qemu/memfd.h"
++#include "qemu/sockets.h"
++#include "qemu/timer.h"
++#include "qom/object.h"
++#include "ui/console.h"
++#include "ui/input.h"
++#include "ui/kbd-state.h"
++#ifdef CONFIG_TCG
++#include "system/cpu-timers.h"
++#endif
++
++#define CMD_PROTOCOL_VERSION        1
++#define CMD_MAX_DAMAGE_RECTS        64
++#define CMD_CONNECT_RETRY_MS        100
++#define CMD_REFRESH_CONNECTED_MS    16
++#define CMD_REFRESH_DISCONNECTED_MS 500
++#define CMD_REFRESH_MIN_MS          4
++#define CMD_REFRESH_MAX_MS          1000
++#define CMD_REFRESH_IDLE_MS         100     /* default idle-refresh */
++#define CMD_IDLE_AFTER_MS           1000
++#define CMD_RECV_BUFFER             4096
++#define CMD_RECV_BUDGET             64
++#define CMD_MAX_APP_PAYLOAD         256
++#define CMD_RESIZE_MIN              64
++#define CMD_RESIZE_MAX              16384
++#define CMD_QUEUE_LIMIT             (4 * 1024 * 1024)
++#define CMD_MAX_IOV                 64
++/* Damage granularity: changed pixels are reported per 64 x 16 tile. */
++#define CMD_TILE_W                  64
++#define CMD_TILE_H                  16
++/* fourcc_code('X', 'R', '2', '4'), as in drm_fourcc.h */
++#define CMD_DRM_FORMAT_XRGB8888     0x34325258u
++
++#ifdef MSG_NOSIGNAL
++#define CMD_SEND_FLAGS              (MSG_DONTWAIT | MSG_NOSIGNAL)
++#else
++#define CMD_SEND_FLAGS              MSG_DONTWAIT
++#endif
++
++enum {
++    /* QEMU -> app */
++    CMD_MSG_HELLO = 1,
++    CMD_MSG_SURFACE = 2,
++    CMD_MSG_DAMAGE = 3,
++    CMD_MSG_GUEST_EVENT = 4,
++    CMD_MSG_CURSOR = 5,
++    CMD_MSG_MOUSE = 6,
++    /* app -> QEMU */
++    CMD_MSG_KEY = 16,
++    CMD_MSG_POINTER_ABS = 17,
++    CMD_MSG_BUTTON = 18,
++    CMD_MSG_RESIZE = 19,
++    CMD_MSG_RELEASE_ALL = 20,
++    CMD_MSG_REFRESH_RATE = 21,
++    CMD_MSG_POINTER_REL = 22,
++};
++
++typedef struct CMDHeader {
++    uint32_t type;
++    uint32_t len;
++} CMDHeader;
++
++typedef struct CMDHello {
++    uint32_t version;
++    uint32_t qemu_pid;
++    char session[40];
++} CMDHello;
++
++typedef struct CMDSurface {
++    uint32_t width;
++    uint32_t height;
++    uint32_t stride;
++    uint32_t drm_format;
++    uint64_t size;
++} CMDSurface;
++
++typedef struct CMDRect {
++    int32_t x, y, w, h;
++} CMDRect;
++
++typedef struct CMDDamage {
++    uint32_t seq;
++    uint32_t count;
++    CMDRect rects[CMD_MAX_DAMAGE_RECTS];
++} CMDDamage;
++
++typedef struct CMDCursor {
++    int32_t hot_x;
++    int32_t hot_y;
++    uint32_t width;
++    uint32_t height;
++    /* followed by width * height u32 pixels, as QEMUCursor stores them */
++} CMDCursor;
++
++typedef struct CMDMouse {
++    int32_t x;
++    int32_t y;
++    uint32_t visible;
++} CMDMouse;
++
++typedef struct CMDPair {
++    uint32_t a;
++    uint32_t b;
++} CMDPair;
++
++QEMU_BUILD_BUG_ON(sizeof(CMDHeader) != 8);
++QEMU_BUILD_BUG_ON(sizeof(CMDHello) != 48);
++QEMU_BUILD_BUG_ON(sizeof(CMDSurface) != 24);
++QEMU_BUILD_BUG_ON(sizeof(CMDRect) != 16);
++QEMU_BUILD_BUG_ON(sizeof(CMDCursor) != 16);
++QEMU_BUILD_BUG_ON(sizeof(CMDMouse) != 12);
++QEMU_BUILD_BUG_ON(sizeof(CMDPair) != 8);
++
++/* App button numbers 0..4, in protocol order. */
++static const InputButton cmd_buttons[] = {
++    INPUT_BUTTON_LEFT,
++    INPUT_BUTTON_MIDDLE,
++    INPUT_BUTTON_RIGHT,
++    INPUT_BUTTON_WHEEL_UP,
++    INPUT_BUTTON_WHEEL_DOWN,
++};
++
++/* One queued message: header and payload, plus a descriptor to pass. */
++typedef struct CMDOut {
++    uint32_t type;
++    int fd;             /* passed with the message's first byte, or -1 */
++    size_t len;         /* header + payload */
++    size_t sent;
++    uint8_t data[];
++} CMDOut;
++
++typedef struct ClassicMacDisplay {
++    DisplayChangeListener dcl;
++    Notifier mouse_mode_notifier;
++    char *socket_path;
++    int fd;
++    QEMUTimer *connect_timer;
++    bool waiting_logged;
++    uint32_t interval_ms;
++    int64_t start_ms;
++
++    /* Output queue (CMDOut), bytes not yet written. */
++    GQueue out;
++    size_t out_bytes;
++    bool write_armed;
++
++    /* Input framing. */
++    uint8_t in[CMD_RECV_BUFFER];
++    size_t in_len;
++
++    /* Current console surface (owned by the console layer). */
++    DisplaySurface *surface;
++
++    /* Shared XRGB8888 buffer handed to the app. */
++    int mem_fd;
++    void *mem;
++    size_t mem_size;
++    uint32_t mem_width;
++    uint32_t mem_height;
++    uint32_t mem_stride;
++    pixman_image_t *mem_image;
++    /* Staging copy for surfaces that are not XRGB8888 already. */
++    uint8_t *stage;
++    pixman_image_t *stage_image;
++
++    /* Damage reported by the device, not yet compared and copied. */
++    pixman_region32_t damage;
++    /* Copied into the shared buffer, not yet announced. */
++    pixman_region32_t unsent;
++    bool surface_pending;
++    bool full_damage_pending;
++    uint32_t damage_seq;
++
++    /* Hardware cursor position (dpy_mouse_set). */
++    bool mouse_known;
++    int mouse_x;
++    int mouse_y;
++    bool mouse_on;
++
++    QKbdState *kbd;
++    uint32_t buttons_down;
++
++    bool icount_at_start;
++    bool handoff_seen;
++    bool handoff_event_pending;
++    int64_t handoff_uptime_ms;
++    int64_t handoff_virtual_ms;
++
++    uint64_t connections;
++    uint64_t damage_sent;
++    uint64_t damage_coalesced;
++    uint64_t damage_dropped;
++
++    /* Idle refresh: nothing drawn and no input for CMD_IDLE_AFTER_MS */
++    uint32_t idle_refresh_ms;   /* 0: off */
++    bool drew;                  /* this refresh published new pixels */
++    bool idle;
++    int64_t active_ms;          /* last drawing or input */
++} ClassicMacDisplay;
++
++static void cmd_disconnect(ClassicMacDisplay *cmd, const char *reason);
++static void cmd_read(void *opaque);
++static void cmd_write(void *opaque);
++
++static int64_t cmd_uptime_ms(ClassicMacDisplay *cmd)
++{
++    return qemu_clock_get_ms(QEMU_CLOCK_REALTIME) - cmd->start_ms;
++}
++
++/* Output queue ----------------------------------------------------------- */
++
++static void cmd_out_free(CMDOut *m)
++{
++    if (m->fd >= 0) {
++        close(m->fd);
++    }
++    g_free(m);
++}
++
++static void cmd_out_clear(ClassicMacDisplay *cmd)
++{
++    CMDOut *m;
++
++    while ((m = g_queue_pop_head(&cmd->out))) {
++        cmd_out_free(m);
++    }
++    cmd->out_bytes = 0;
++}
++
++/* Is a message of @type queued that has not started to go out? */
++static bool cmd_out_has_unsent(ClassicMacDisplay *cmd, uint32_t type)
++{
++    GList *l;
++
++    for (l = cmd->out.head; l; l = l->next) {
++        CMDOut *m = l->data;
++
++        if (m->type == type && m->sent == 0) {
++            return true;
++        }
++    }
++    return false;
++}
++
++/* Drop the queued messages of @type that have not started to go out. */
++static unsigned cmd_out_drop(ClassicMacDisplay *cmd, uint32_t type)
++{
++    GList *l, *next;
++    unsigned dropped = 0;
++
++    for (l = cmd->out.head; l; l = next) {
++        CMDOut *m = l->data;
++
++        next = l->next;
++        if (m->type == type && m->sent == 0) {
++            cmd->out_bytes -= m->len;
++            g_queue_delete_link(&cmd->out, l);
++            cmd_out_free(m);
++            dropped++;
++        }
++    }
++    return dropped;
++}
++
++static void cmd_arm_write(ClassicMacDisplay *cmd)
++{
++    bool want = cmd->fd >= 0 && !g_queue_is_empty(&cmd->out);
++
++    if (cmd->fd >= 0 && want != cmd->write_armed) {
++        qemu_set_fd_handler(cmd->fd, cmd_read, want ? cmd_write : NULL, cmd);
++        cmd->write_armed = want;
++    }
++}
++
++/*
++ * Write as much of the queue as the socket takes.  Messages without a
++ * descriptor are gathered into one sendmsg(); a message with a descriptor
++ * always starts its own sendmsg(), so SCM_RIGHTS travels with the first byte
++ * of that message.  Returns false when the connection is gone
++ * (cmd_disconnect() has already run).
++ */
++static bool cmd_out_flush(ClassicMacDisplay *cmd)
++{
++    while (cmd->fd >= 0 && !g_queue_is_empty(&cmd->out)) {
++        struct iovec iov[CMD_MAX_IOV];
++        union {
++            struct cmsghdr align;
++            char buf[CMSG_SPACE(sizeof(int))];
++        } control;
++        struct msghdr msg = { .msg_iov = iov };
++        GList *l;
++        int n = 0;
++        ssize_t ret;
++        size_t done;
++
++        for (l = cmd->out.head; l && n < CMD_MAX_IOV; l = l->next) {
++            CMDOut *m = l->data;
++
++            if (m->fd >= 0) {
++                struct cmsghdr *cmsg;
++
++                if (n > 0) {
++                    break;
++                }
++                memset(&control, 0, sizeof(control));
++                msg.msg_control = control.buf;
++                msg.msg_controllen = sizeof(control.buf);
++                cmsg = CMSG_FIRSTHDR(&msg);
++                cmsg->cmsg_level = SOL_SOCKET;
++                cmsg->cmsg_type = SCM_RIGHTS;
++                cmsg->cmsg_len = CMSG_LEN(sizeof(int));
++                memcpy(CMSG_DATA(cmsg), &m->fd, sizeof(int));
++            }
++            iov[n].iov_base = m->data + m->sent;
++            iov[n].iov_len = m->len - m->sent;
++            n++;
++        }
++        msg.msg_iovlen = n;
++
++        do {
++            ret = sendmsg(cmd->fd, &msg, CMD_SEND_FLAGS);
++        } while (ret < 0 && errno == EINTR);
++        if (ret < 0) {
++            if (errno == EAGAIN || errno == EWOULDBLOCK || errno == ENOBUFS) {
++                break;
++            }
++            cmd_disconnect(cmd, strerror(errno));
++            return false;
++        }
++
++        done = ret;
++        cmd->out_bytes -= done;
++        while (done > 0) {
++            CMDOut *m = g_queue_peek_head(&cmd->out);
++            size_t left = m->len - m->sent;
++
++            if (m->fd >= 0) {
++                /* it went out with this sendmsg() */
++                close(m->fd);
++                m->fd = -1;
++            }
++            if (done < left) {
++                m->sent += done;
++                break;
++            }
++            done -= left;
++            g_queue_pop_head(&cmd->out);
++            cmd_out_free(m);
++        }
++    }
++    cmd_arm_write(cmd);
++    return cmd->fd >= 0;
++}
++
++/*
++ * Queue one message and try to write it.  @pass_fd, if not -1, is
++ * duplicated and passed with the message.  Returns false when the
++ * connection is gone.
++ */
++static bool cmd_send(ClassicMacDisplay *cmd, uint32_t type,
++                     const void *payload, size_t len, int pass_fd)
++{
++    CMDHeader hdr = { .type = type, .len = len };
++    CMDOut *m;
++
++    if (cmd->fd < 0) {
++        return false;
++    }
++    m = g_malloc(sizeof(*m) + sizeof(hdr) + len);
++    m->type = type;
++    m->fd = -1;
++    m->len = sizeof(hdr) + len;
++    m->sent = 0;
++    memcpy(m->data, &hdr, sizeof(hdr));
++    if (len) {
++        memcpy(m->data + sizeof(hdr), payload, len);
++    }
++    if (pass_fd >= 0) {
++        m->fd = qemu_dup(pass_fd);
++        if (m->fd < 0) {
++            g_free(m);
++            cmd_disconnect(cmd, strerror(errno));
++            return false;
++        }
++    }
++    g_queue_push_tail(&cmd->out, m);
++    cmd->out_bytes += m->len;
++
++    if (cmd->out_bytes > CMD_QUEUE_LIMIT) {
++        unsigned dropped = cmd_out_drop(cmd, CMD_MSG_DAMAGE);
++
++        if (dropped) {
++            /* repaint everything once the app has caught up */
++            cmd->full_damage_pending = true;
++            cmd->damage_dropped += dropped;
++        }
++    }
++    return cmd_out_flush(cmd);
++}
++
++static void cmd_write(void *opaque)
++{
++    cmd_out_flush(opaque);
++}
++
++/* Guest events ----------------------------------------------------------- */
++
++static void cmd_send_event(ClassicMacDisplay *cmd, const char *json)
++{
++    cmd_send(cmd, CMD_MSG_GUEST_EVENT, json, strlen(json), -1);
++}
++
++static const char *cmd_clock_name(void)
++{
++#ifdef CONFIG_TCG
++    if (icount_enabled()) {
++        return "icount";
++    }
++#endif
++    return "real-time";
++}
++
++/* Also advertises relative-message support; an older app ignores it. */
++static void cmd_send_pointer_mode(ClassicMacDisplay *cmd)
++{
++    if (cmd->fd >= 0) {
++        cmd_send_event(cmd, qemu_input_is_absolute(cmd->dcl.con) ?
++                       "{\"event\":\"pointer-mode\",\"relative\":false}" :
++                       "{\"event\":\"pointer-mode\",\"relative\":true}");
++    }
++}
++
++static void cmd_mouse_mode_changed(Notifier *notify, void *data)
++{
++    ClassicMacDisplay *cmd = container_of(notify, ClassicMacDisplay,
++                                          mouse_mode_notifier);
++
++    cmd_send_pointer_mode(cmd);
++}
++
++static void cmd_send_clock_event(ClassicMacDisplay *cmd)
++{
++    g_autofree char *json = NULL;
++
++    if (cmd->handoff_seen) {
++        json = g_strdup_printf("{\"event\":\"clock\",\"clock\":\"%s\","
++                               "\"handoff_uptime_ms\":%" PRId64 "}",
++                               cmd_clock_name(), cmd->handoff_uptime_ms);
++    } else {
++        json = g_strdup_printf("{\"event\":\"clock\",\"clock\":\"%s\"}",
++                               cmd_clock_name());
++    }
++    cmd_send_event(cmd, json);
++}
++
++/* Watch for ClassicMac's instruction-count to real-time clock handoff. */
++static void cmd_check_clock(ClassicMacDisplay *cmd)
++{
++#ifdef CONFIG_TCG
++    if (icount_enabled()) {
++        cmd->icount_at_start = true;
++    } else if (cmd->icount_at_start && !cmd->handoff_seen) {
++        cmd->handoff_seen = true;
++        cmd->handoff_event_pending = true;
++        cmd->handoff_uptime_ms = cmd_uptime_ms(cmd);
++        cmd->handoff_virtual_ms = qemu_clock_get_ms(QEMU_CLOCK_VIRTUAL);
++        info_report("classicmac-display: guest clock handed off to real "
++                    "time after %" PRId64 " ms (virtual clock %" PRId64
++                    " ms)", cmd->handoff_uptime_ms, cmd->handoff_virtual_ms);
++    }
++#endif
++    if (cmd->handoff_event_pending && cmd->fd >= 0) {
++        g_autofree char *json = g_strdup_printf(
++            "{\"event\":\"boot-handoff\",\"clock\":\"real-time\","
++            "\"uptime_ms\":%" PRId64 ",\"virtual_ms\":%" PRId64 "}",
++            cmd->handoff_uptime_ms, cmd->handoff_virtual_ms);
++
++        cmd->handoff_event_pending = false;
++        cmd_send_event(cmd, json);
++    }
++}
++
++/* Hardware cursor -------------------------------------------------------- */
++
++static void cmd_send_cursor(ClassicMacDisplay *cmd, QEMUCursor *c)
++{
++    g_autofree uint8_t *buf = NULL;
++    CMDCursor hdr;
++    size_t pixels;
++
++    if (cmd->fd < 0 || !c) {
++        return;
++    }
++    pixels = (size_t)c->width * c->height;
++    hdr = (CMDCursor) {
++        .hot_x = c->hot_x,
++        .hot_y = c->hot_y,
++        .width = c->width,
++        .height = c->height,
++    };
++    buf = g_malloc(sizeof(hdr) + pixels * sizeof(uint32_t));
++    memcpy(buf, &hdr, sizeof(hdr));
++    memcpy(buf + sizeof(hdr), c->data, pixels * sizeof(uint32_t));
++    /* only the newest image matters */
++    cmd_out_drop(cmd, CMD_MSG_CURSOR);
++    cmd_send(cmd, CMD_MSG_CURSOR, buf, sizeof(hdr) + pixels * sizeof(uint32_t),
++             -1);
++}
++
++static void cmd_send_mouse(ClassicMacDisplay *cmd)
++{
++    CMDMouse msg;
++
++    if (cmd->fd < 0 || !cmd->mouse_known) {
++        return;
++    }
++    msg = (CMDMouse) {
++        .x = cmd->mouse_x,
++        .y = cmd->mouse_y,
++        .visible = cmd->mouse_on,
++    };
++    /* only the newest position matters */
++    cmd_out_drop(cmd, CMD_MSG_MOUSE);
++    cmd_send(cmd, CMD_MSG_MOUSE, &msg, sizeof(msg), -1);
++}
++
++/* Refresh interval ------------------------------------------------------- */
++
++static void cmd_set_interval(ClassicMacDisplay *cmd)
++{
++    uint32_t ms = cmd->interval_ms;
++
++    if (cmd->idle) {
++        ms = MAX(ms, cmd->idle_refresh_ms);
++    }
++    update_displaychangelistener(&cmd->dcl,
++                                 cmd->fd >= 0 ? ms :
++                                 CMD_REFRESH_DISCONNECTED_MS);
++}
++
++/*
++ * Drawing or app input: back to the app's rate.  Lowering the interval
++ * re-arms the console timer from the last refresh, so the first frame after
++ * input is not delayed by the idle interval.
++ */
++static void cmd_active(ClassicMacDisplay *cmd)
++{
++    cmd->active_ms = qemu_clock_get_ms(QEMU_CLOCK_REALTIME);
++    if (cmd->idle) {
++        cmd->idle = false;
++        cmd_set_interval(cmd);
++    }
++}
++
++/* Shared buffer ---------------------------------------------------------- */
++
++static void cmd_buffer_free(ClassicMacDisplay *cmd)
++{
++    if (cmd->mem_image) {
++        pixman_image_unref(cmd->mem_image);
++        cmd->mem_image = NULL;
++    }
++    if (cmd->stage_image) {
++        pixman_image_unref(cmd->stage_image);
++        cmd->stage_image = NULL;
++    }
++    g_free(cmd->stage);
++    cmd->stage = NULL;
++    if (cmd->mem) {
++        munmap(cmd->mem, cmd->mem_size);
++        cmd->mem = NULL;
++    }
++    if (cmd->mem_fd >= 0) {
++        close(cmd->mem_fd);
++        cmd->mem_fd = -1;
++    }
++    cmd->mem_size = 0;
++    cmd->mem_width = 0;
++    cmd->mem_height = 0;
++    cmd->mem_stride = 0;
++}
++
++/*
++ * An anonymous shared memory object of @size bytes: a sealed memfd on
++ * Linux; on macOS a POSIX shared memory object unlinked at once, or an
++ * unlinked temporary file if that fails.
++ */
++static int cmd_shm_create(size_t size)
++{
++    g_autofree char *path = NULL;
++    int fd = -1;
++    int i;
++
++#ifdef CONFIG_LINUX
++    fd = qemu_memfd_create("classicmac-display", size, false, 0,
++                           F_SEAL_GROW | F_SEAL_SHRINK | F_SEAL_SEAL, NULL);
++    if (fd >= 0) {
++        return fd;
++    }
++#endif
++    for (i = 0; i < 8; i++) {
++        char name[32];
++
++        snprintf(name, sizeof(name), "/classicmac.%d.%08x",
++                 (int)getpid(), g_random_int());
++        fd = shm_open(name, O_RDWR | O_CREAT | O_EXCL, 0600);
++        if (fd >= 0) {
++            shm_unlink(name);
++            break;
++        }
++        if (errno != EEXIST) {
++            break;
++        }
++    }
++    if (fd >= 0) {
++        qemu_set_cloexec(fd);
++        if (ftruncate(fd, size) == 0) {
++            return fd;
++        }
++        close(fd);
++    }
++
++    path = g_build_filename(g_get_tmp_dir(), "classicmac-display.XXXXXX",
++                            NULL);
++    fd = g_mkstemp_full(path, O_RDWR | O_CLOEXEC, 0600);
++    if (fd < 0) {
++        return -1;
++    }
++    unlink(path);
++    if (ftruncate(fd, size) != 0) {
++        close(fd);
++        return -1;
++    }
++    return fd;
++}
++
++/*
++ * Make the shared buffer match the current surface geometry.  A fresh
++ * shared memory object is created for every geometry change; the app learns
++ * about it through SURFACE.
++ */
++static bool cmd_buffer_ensure(ClassicMacDisplay *cmd)
++{
++    uint32_t width, height, stride;
++    size_t size;
++    void *mem;
++    int fd;
++
++    if (!cmd->surface) {
++        return false;
++    }
++    width = surface_width(cmd->surface);
++    height = surface_height(cmd->surface);
++    if (!width || !height) {
++        return false;
++    }
++    if (cmd->mem && cmd->mem_width == width && cmd->mem_height == height) {
++        return true;
++    }
++
++    stride = width * 4;
++    size = ROUND_UP((size_t)stride * height, qemu_real_host_page_size());
++    fd = cmd_shm_create(size);
++    if (fd < 0) {
++        error_report("classicmac-display: cannot create a %zu byte shared "
++                     "buffer: %s", size, strerror(errno));
++        return false;
++    }
++    mem = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
++    if (mem == MAP_FAILED) {
++        error_report("classicmac-display: mmap: %s", strerror(errno));
++        close(fd);
++        return false;
++    }
++
++    cmd_buffer_free(cmd);
++    cmd->mem = mem;
++    cmd->mem_fd = fd;
++    cmd->mem_size = size;
++    cmd->mem_width = width;
++    cmd->mem_height = height;
++    cmd->mem_stride = stride;
++    cmd->mem_image = pixman_image_create_bits(PIXMAN_x8r8g8b8, width, height,
++                                              mem, stride);
++    cmd->stage = g_malloc((size_t)stride * height);
++    cmd->stage_image = pixman_image_create_bits(PIXMAN_x8r8g8b8, width,
++                                                height,
++                                                (uint32_t *)cmd->stage,
++                                                stride);
++    return true;
++}
++
++static void cmd_copy_full(ClassicMacDisplay *cmd)
++{
++    if (surface_is_placeholder(cmd->surface)) {
++        /* QEMU's "display not active" notice is never shown to the user. */
++        memset(cmd->mem, 0, cmd->mem_size);
++        return;
++    }
++    pixman_image_composite32(PIXMAN_OP_SRC, cmd->surface->image, NULL,
++                             cmd->mem_image, 0, 0, 0, 0, 0, 0,
++                             cmd->mem_width, cmd->mem_height);
++}
++
++/*
++ * Compare @box of @src (XRGB8888, @src_stride bytes per row, same geometry
++ * as the shared buffer) with the shared buffer tile by tile, copy the tiles
++ * that differ and add them to @changed.
++ */
++static void cmd_publish_box(ClassicMacDisplay *cmd, const uint8_t *src,
++                            size_t src_stride, const pixman_box32_t *box,
++                            pixman_region32_t *changed)
++{
++    uint8_t *mem = cmd->mem;
++    size_t stride = cmd->mem_stride;
++    int x, y, x2, y2, r;
++
++    for (y = box->y1; y < box->y2; y = y2) {
++        int run = -1;   /* first x of a run of changed tiles */
++
++        y2 = MIN(QEMU_ALIGN_DOWN(y, CMD_TILE_H) + CMD_TILE_H, box->y2);
++        for (x = box->x1; x < box->x2; x = x2) {
++            size_t bytes;
++            bool differs = false;
++
++            x2 = MIN(QEMU_ALIGN_DOWN(x, CMD_TILE_W) + CMD_TILE_W, box->x2);
++            bytes = (size_t)(x2 - x) * 4;
++            for (r = y; r < y2; r++) {
++                const uint8_t *s = src + r * src_stride + (size_t)x * 4;
++                uint8_t *d = mem + r * stride + (size_t)x * 4;
++
++                if (differs) {
++                    memcpy(d, s, bytes);
++                } else if (memcmp(d, s, bytes)) {
++                    differs = true;
++                    memcpy(d, s, bytes);
++                }
++            }
++            if (differs) {
++                if (run < 0) {
++                    run = x;
++                }
++            } else if (run >= 0) {
++                pixman_region32_union_rect(changed, changed, run, y,
++                                           x - run, y2 - y);
++                run = -1;
++            }
++        }
++        if (run >= 0) {
++            pixman_region32_union_rect(changed, changed, run, y,
++                                       box->x2 - run, y2 - y);
++        }
++    }
++}
++
++/* Copy the changed pixels of @region into the shared buffer. */
++static void cmd_publish(ClassicMacDisplay *cmd, pixman_region32_t *region,
++                        pixman_region32_t *changed)
++{
++    pixman_format_code_t format = surface_format(cmd->surface);
++    const pixman_box32_t *boxes;
++    const uint8_t *src;
++    size_t src_stride;
++    int count, i;
++
++    boxes = pixman_region32_rectangles(region, &count);
++    if (format == PIXMAN_x8r8g8b8 || format == PIXMAN_a8r8g8b8) {
++        /* already the shared format: compare with the surface itself */
++        src = surface_data(cmd->surface);
++        src_stride = surface_stride(cmd->surface);
++    } else {
++        for (i = 0; i < count; i++) {
++            pixman_image_composite32(PIXMAN_OP_SRC, cmd->surface->image,
++                                     NULL, cmd->stage_image,
++                                     boxes[i].x1, boxes[i].y1, 0, 0,
++                                     boxes[i].x1, boxes[i].y1,
++                                     boxes[i].x2 - boxes[i].x1,
++                                     boxes[i].y2 - boxes[i].y1);
++        }
++        src = cmd->stage;
++        src_stride = cmd->mem_stride;
++    }
++    for (i = 0; i < count; i++) {
++        cmd_publish_box(cmd, src, src_stride, &boxes[i], changed);
++    }
++}
++
++/* Frame delivery --------------------------------------------------------- */
++
++static bool cmd_send_damage(ClassicMacDisplay *cmd,
++                            const pixman_box32_t *boxes, int count)
++{
++    CMDDamage msg;
++    int i;
++
++    msg.seq = ++cmd->damage_seq;
++    msg.count = count;
++    for (i = 0; i < count; i++) {
++        msg.rects[i].x = boxes[i].x1;
++        msg.rects[i].y = boxes[i].y1;
++        msg.rects[i].w = boxes[i].x2 - boxes[i].x1;
++        msg.rects[i].h = boxes[i].y2 - boxes[i].y1;
++    }
++    cmd->damage_sent++;
++    return cmd_send(cmd, CMD_MSG_DAMAGE, &msg,
++                    offsetof(CMDDamage, rects) + count * sizeof(CMDRect), -1);
++}
++
++static bool cmd_send_full_damage(ClassicMacDisplay *cmd)
++{
++    pixman_box32_t full = {
++        .x1 = 0, .y1 = 0, .x2 = cmd->mem_width, .y2 = cmd->mem_height,
++    };
++
++    return cmd_send_damage(cmd, &full, 1);
++}
++
++static void cmd_flush(ClassicMacDisplay *cmd)
++{
++    const pixman_box32_t *boxes;
++    int count;
++
++    if (cmd->fd < 0 || !cmd->surface) {
++        return;
++    }
++    /* a send that failed with ENOBUFS has no writable event to retry it */
++    if (!cmd_out_flush(cmd)) {
++        return;
++    }
++
++    if (cmd->surface_pending) {
++        CMDSurface msg;
++
++        if (!cmd_buffer_ensure(cmd)) {
++            return;
++        }
++        cmd_copy_full(cmd);
++        pixman_region32_clear(&cmd->damage);
++        pixman_region32_clear(&cmd->unsent);
++        /* queued damage described the previous buffer */
++        cmd_out_drop(cmd, CMD_MSG_DAMAGE);
++        cmd->surface_pending = false;
++        cmd->full_damage_pending = false;
++        cmd->drew = true;
++        msg = (CMDSurface) {
++            .width = cmd->mem_width,
++            .height = cmd->mem_height,
++            .stride = cmd->mem_stride,
++            .drm_format = CMD_DRM_FORMAT_XRGB8888,
++            .size = cmd->mem_size,
++        };
++        if (cmd_send(cmd, CMD_MSG_SURFACE, &msg, sizeof(msg), cmd->mem_fd)) {
++            cmd_send_full_damage(cmd);
++        }
++        return;
++    }
++
++    if (!cmd->mem) {
++        return;
++    }
++
++    if (cmd->full_damage_pending) {
++        /* damage was dropped: repaint everything once the queue drained */
++        if (!g_queue_is_empty(&cmd->out)) {
++            return;
++        }
++        cmd_copy_full(cmd);
++        pixman_region32_clear(&cmd->damage);
++        pixman_region32_clear(&cmd->unsent);
++        cmd->full_damage_pending = false;
++        cmd->drew = true;
++        cmd_send_full_damage(cmd);
++        return;
++    }
++
++    pixman_region32_intersect_rect(&cmd->damage, &cmd->damage, 0, 0,
++                                   cmd->mem_width, cmd->mem_height);
++    if (pixman_region32_not_empty(&cmd->damage)) {
++        if (!surface_is_placeholder(cmd->surface)) {
++            pixman_region32_t changed;
++
++            pixman_region32_init(&changed);
++            cmd_publish(cmd, &cmd->damage, &changed);
++            if (pixman_region32_not_empty(&changed)) {
++                pixman_region32_union(&cmd->unsent, &cmd->unsent, &changed);
++                cmd->drew = true;
++            }
++            pixman_region32_fini(&changed);
++        }
++        pixman_region32_clear(&cmd->damage);
++    }
++
++    if (!pixman_region32_not_empty(&cmd->unsent)) {
++        return;
++    }
++    if (cmd_out_has_unsent(cmd, CMD_MSG_DAMAGE)) {
++        /* the app is behind: announce this with the next damage */
++        cmd->damage_coalesced++;
++        return;
++    }
++    boxes = pixman_region32_rectangles(&cmd->unsent, &count);
++    if (count > CMD_MAX_DAMAGE_RECTS) {
++        boxes = pixman_region32_extents(&cmd->unsent);
++        count = 1;
++    }
++    cmd_send_damage(cmd, boxes, count);
++    pixman_region32_clear(&cmd->unsent);
++}
++
++/* Input ------------------------------------------------------------------ */
++
++static void cmd_release_all(ClassicMacDisplay *cmd)
++{
++    QemuConsole *con = cmd->dcl.con;
++    unsigned i;
++
++    qkbd_state_lift_all_keys(cmd->kbd);
++    if (cmd->buttons_down) {
++        for (i = 0; i < ARRAY_SIZE(cmd_buttons); i++) {
++            if (cmd->buttons_down & (1u << i)) {
++                qemu_input_queue_btn(con, cmd_buttons[i], false);
++            }
++        }
++        cmd->buttons_down = 0;
++        qemu_input_event_sync();
++    }
++}
++
++/*
++ * Map a surface pixel to the centre of its span on the absolute axis.  The
++ * classic Mac tablet driver computes value * extent / 0x8000, so the centre
++ * lands back on the same pixel for every surface size.
++ */
++static int cmd_abs_value(uint32_t pos, uint32_t extent)
++{
++    int64_t value = ((int64_t)pos * 2 + 1) * (INPUT_EVENT_ABS_MAX + 1) /
++                    (2 * (int64_t)extent);
++
++    return MIN(value, INPUT_EVENT_ABS_MAX);
++}
++
++static void cmd_pointer_abs(ClassicMacDisplay *cmd, uint32_t x, uint32_t y)
++{
++    QemuConsole *con = cmd->dcl.con;
++    uint32_t width, height;
++
++    if (!cmd->surface) {
++        return;
++    }
++    width = surface_width(cmd->surface);
++    height = surface_height(cmd->surface);
++    if (!width || !height) {
++        return;
++    }
++    x = MIN(x, width - 1);
++    y = MIN(y, height - 1);
++    qemu_input_queue_abs(con, INPUT_AXIS_X, cmd_abs_value(x, width),
++                         INPUT_EVENT_ABS_MIN, INPUT_EVENT_ABS_MAX);
++    qemu_input_queue_abs(con, INPUT_AXIS_Y, cmd_abs_value(y, height),
++                         INPUT_EVENT_ABS_MIN, INPUT_EVENT_ABS_MAX);
++    qemu_input_event_sync();
++}
++
++/* Signed deltas have no desktop-edge clamp. USB/ADB devices consume them. */
++static void cmd_pointer_rel(ClassicMacDisplay *cmd, int32_t dx, int32_t dy)
++{
++    qemu_input_queue_rel(cmd->dcl.con, INPUT_AXIS_X,
++                         CLAMP(dx, -32767, 32767));
++    qemu_input_queue_rel(cmd->dcl.con, INPUT_AXIS_Y,
++                         CLAMP(dy, -32767, 32767));
++    qemu_input_event_sync();
++}
++
++static void cmd_button(ClassicMacDisplay *cmd, uint32_t button, bool down)
++{
++    uint32_t bit;
++
++    if (button >= ARRAY_SIZE(cmd_buttons)) {
++        return;
++    }
++    bit = 1u << button;
++    if (!down && !(cmd->buttons_down & bit)) {
++        return; /* never send a release for a button we did not press */
++    }
++    if (down) {
++        cmd->buttons_down |= bit;
++    } else {
++        cmd->buttons_down &= ~bit;
++    }
++    qemu_input_queue_btn(cmd->dcl.con, cmd_buttons[button], down);
++    qemu_input_event_sync();
++}
++
++static void cmd_key(ClassicMacDisplay *cmd, uint32_t qcode, bool down)
++{
++    if (qcode == Q_KEY_CODE_UNMAPPED || qcode >= Q_KEY_CODE__MAX) {
++        return;
++    }
++    qkbd_state_key_event(cmd->kbd, qcode, down);
++}
++
++/*
++ * The console layer and ClassicMac's VGA host-resize latch both ignore a
++ * request equal to the previous one, so asking again for a size the guest
++ * has since left would be lost.  Re-arm the latch through the VGA device's
++ * "host-resize-request" property: two synchronous writes under the BQL bump
++ * the request serial twice and leave the wanted size latched.  The guest
++ * driver debounces the serial, so it only ever acts on the final size.
++ */
++static bool cmd_resize_nudge(ClassicMacDisplay *cmd, uint32_t width,
++                             uint32_t height)
++{
++    Object *dev = object_property_get_link(OBJECT(cmd->dcl.con), "device",
++                                           NULL);
++    g_autofree char *detour = NULL;
++    g_autofree char *wanted = NULL;
++    Error *err = NULL;
++
++    if (!dev || !object_property_find(dev, "host-resize-request")) {
++        return false;
++    }
++    detour = g_strdup_printf("%" PRIu32 "x%" PRIu32, width, height + 1);
++    wanted = g_strdup_printf("%" PRIu32 "x%" PRIu32, width, height);
++    if (!object_property_set_str(dev, "host-resize-request", detour, &err) ||
++        !object_property_set_str(dev, "host-resize-request", wanted, &err)) {
++        warn_report_err(err);
++        return false;
++    }
++    return true;
++}
++
++static void cmd_resize(ClassicMacDisplay *cmd, uint32_t width,
++                       uint32_t height)
++{
++    QemuConsole *con = cmd->dcl.con;
++    g_autofree char *json = NULL;
++    const char *method = "unsupported";
++
++    if (width < CMD_RESIZE_MIN || height < CMD_RESIZE_MIN ||
++        width > CMD_RESIZE_MAX || height > CMD_RESIZE_MAX) {
++        warn_report("classicmac-display: ignoring resize to %" PRIu32 "x%"
++                    PRIu32, width, height);
++        return;
++    }
++    if (dpy_ui_info_supported(con)) {
++        QemuUIInfo info = *dpy_get_ui_info(con);
++
++        if (info.width != width || info.height != height) {
++            info.width = width;
++            info.height = height;
++            dpy_set_ui_info(con, &info, false);
++            method = "ui-info";
++        } else if (cmd->surface &&
++                   (surface_width(cmd->surface) != width ||
++                    surface_height(cmd->surface) != height) &&
++                   cmd_resize_nudge(cmd, width, height)) {
++            method = "re-request";
++        } else {
++            method = "unchanged";
++        }
++    }
++    json = g_strdup_printf("{\"event\":\"resize-request\",\"width\":%" PRIu32
++                           ",\"height\":%" PRIu32 ",\"method\":\"%s\"}",
++                           width, height, method);
++    cmd_send_event(cmd, json);
++}
++
++static void cmd_handle_message(ClassicMacDisplay *cmd, uint32_t type,
++                               const uint8_t *payload, uint32_t len)
++{
++    CMDPair pair = { 0, 0 };
++    size_t need = 0;
++
++    switch (type) {
++    case CMD_MSG_KEY:
++    case CMD_MSG_POINTER_ABS:
++    case CMD_MSG_BUTTON:
++    case CMD_MSG_RESIZE:
++    case CMD_MSG_POINTER_REL:
++        need = sizeof(pair);
++        break;
++    case CMD_MSG_REFRESH_RATE:
++        need = sizeof(uint32_t);
++        break;
++    default:
++        break;
++    }
++    if (len < need) {
++        warn_report_once("classicmac-display: ignoring truncated app message "
++                         "type %" PRIu32, type);
++        return;
++    }
++    memcpy(&pair, payload, need);
++
++    if (type != CMD_MSG_REFRESH_RATE) {
++        cmd_active(cmd);
++    }
++    switch (type) {
++    case CMD_MSG_KEY:
++        cmd_key(cmd, pair.a, pair.b != 0);
++        break;
++    case CMD_MSG_POINTER_ABS:
++        cmd_pointer_abs(cmd, pair.a, pair.b);
++        break;
++    case CMD_MSG_BUTTON:
++        cmd_button(cmd, pair.a, pair.b != 0);
++        break;
++    case CMD_MSG_RESIZE:
++        cmd_resize(cmd, pair.a, pair.b);
++        break;
++    case CMD_MSG_RELEASE_ALL:
++        cmd_release_all(cmd);
++        break;
++    case CMD_MSG_REFRESH_RATE:
++        cmd->interval_ms = MIN(MAX(pair.a, CMD_REFRESH_MIN_MS),
++                               CMD_REFRESH_MAX_MS);
++        cmd_set_interval(cmd);
++        break;
++    case CMD_MSG_POINTER_REL:
++        cmd_pointer_rel(cmd, (int32_t)pair.a, (int32_t)pair.b);
++        break;
++    default:
++        warn_report_once("classicmac-display: ignoring unknown app message "
++                         "type %" PRIu32, type);
++        break;
++    }
++}
++
++static void cmd_read(void *opaque)
++{
++    ClassicMacDisplay *cmd = opaque;
++    int budget = CMD_RECV_BUDGET;
++
++    while (cmd->fd >= 0 && budget-- > 0) {
++        size_t off = 0;
++        ssize_t n;
++
++        n = recv(cmd->fd, cmd->in + cmd->in_len,
++                 sizeof(cmd->in) - cmd->in_len, MSG_DONTWAIT);
++        if (n < 0) {
++            if (errno == EINTR) {
++                continue;
++            }
++            if (errno != EAGAIN && errno != EWOULDBLOCK) {
++                cmd_disconnect(cmd, strerror(errno));
++            }
++            return;
++        }
++        if (n == 0) {
++            cmd_disconnect(cmd, "end of stream");
++            return;
++        }
++        cmd->in_len += n;
++
++        while (cmd->in_len - off >= sizeof(CMDHeader)) {
++            CMDHeader hdr;
++
++            memcpy(&hdr, cmd->in + off, sizeof(hdr));
++            if (hdr.len > CMD_MAX_APP_PAYLOAD) {
++                cmd_disconnect(cmd, "oversized app message");
++                return;
++            }
++            if (cmd->in_len - off < sizeof(hdr) + hdr.len) {
++                break;
++            }
++            cmd_handle_message(cmd, hdr.type, cmd->in + off + sizeof(hdr),
++                               hdr.len);
++            if (cmd->fd < 0) {
++                return;     /* a reply failed and dropped the connection */
++            }
++            off += sizeof(hdr) + hdr.len;
++        }
++        memmove(cmd->in, cmd->in + off, cmd->in_len - off);
++        cmd->in_len -= off;
++    }
++}
++
++/* Connection ------------------------------------------------------------- */
++
++static void cmd_connected(ClassicMacDisplay *cmd)
++{
++    CMDHello hello = {
++        .version = CMD_PROTOCOL_VERSION,
++        .qemu_pid = getpid(),
++    };
++    const char *session = g_getenv("CLASSICMAC_SESSION");
++
++    if (session) {
++        pstrcpy(hello.session, sizeof(hello.session), session);
++    }
++    cmd->interval_ms = CMD_REFRESH_CONNECTED_MS;
++    cmd->surface_pending = true;
++    cmd->full_damage_pending = false;
++    pixman_region32_clear(&cmd->damage);
++    pixman_region32_clear(&cmd->unsent);
++    if (!cmd_send(cmd, CMD_MSG_HELLO, &hello, sizeof(hello), -1)) {
++        return;
++    }
++    cmd_set_interval(cmd);
++    /* Bring the console surface up to date, then publish the whole frame. */
++    graphic_hw_update(cmd->dcl.con);
++    cmd_flush(cmd);
++    if (cmd->fd < 0) {
++        return;
++    }
++    cmd_send_clock_event(cmd);
++    /* Already reported through the clock event's handoff field. */
++    cmd->handoff_event_pending = false;
++    cmd_send_pointer_mode(cmd);
++    cmd_send_cursor(cmd, qemu_console_get_cursor(cmd->dcl.con));
++    cmd_send_mouse(cmd);
++}
++
++static void cmd_try_connect(void *opaque)
++{
++    ClassicMacDisplay *cmd = opaque;
++    struct sockaddr_un addr = { .sun_family = AF_UNIX };
++    int nonblock_err;
++    int fd;
++
++    if (cmd->fd >= 0) {
++        return;
++    }
++    fd = qemu_socket(AF_UNIX, SOCK_STREAM, 0);
++    if (fd < 0) {
++        error_report("classicmac-display: socket: %s", strerror(errno));
++        goto retry;
++    }
++    pstrcpy(addr.sun_path, sizeof(addr.sun_path), cmd->socket_path);
++    /* AF_UNIX connect() completes or fails at once; it never waits */
++    if (connect(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
++        if (!cmd->waiting_logged) {
++            info_report("classicmac-display: waiting for the app at %s (%s)",
++                        cmd->socket_path, strerror(errno));
++            cmd->waiting_logged = true;
++        }
++        close(fd);
++        goto retry;
++    }
++    nonblock_err = qemu_socket_try_set_nonblock(fd);
++    if (nonblock_err < 0) {
++        error_report("classicmac-display: nonblock: %s",
++                     strerror(-nonblock_err));
++        close(fd);
++        goto retry;
++    }
++#ifdef SO_NOSIGPIPE
++    {
++        int one = 1;
++
++        setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &one, sizeof(one));
++    }
++#endif
++    /*
++     * The socket keeps its default buffer (8 KB on macOS): a backlog beyond
++     * that stays in our queue, where damage is coalesced, rather than
++     * piling up stale messages in the kernel for the app to wade through.
++     */
++
++    cmd->fd = fd;
++    cmd->in_len = 0;
++    cmd->write_armed = false;
++    cmd->waiting_logged = false;
++    cmd->connections++;
++    qemu_set_fd_handler(fd, cmd_read, NULL, cmd);
++    info_report("classicmac-display: connected to the app at %s (connection "
++                "%" PRIu64 ")", cmd->socket_path, cmd->connections);
++    cmd_connected(cmd);
++    return;
++
++retry:
++    timer_mod(cmd->connect_timer,
++              qemu_clock_get_ms(QEMU_CLOCK_REALTIME) + CMD_CONNECT_RETRY_MS);
++}
++
++static void cmd_disconnect(ClassicMacDisplay *cmd, const char *reason)
++{
++    if (cmd->fd < 0) {
++        return;
++    }
++    qemu_set_fd_handler(cmd->fd, NULL, NULL, NULL);
++    close(cmd->fd);
++    cmd->fd = -1;
++    cmd->write_armed = false;
++    cmd->in_len = 0;
++    cmd_out_clear(cmd);
++    info_report("classicmac-display: app disconnected (%s); damage sent %"
++                PRIu64 ", coalesced %" PRIu64 ", dropped %" PRIu64
++                "; reconnecting", reason, cmd->damage_sent,
++                cmd->damage_coalesced, cmd->damage_dropped);
++    /* An app that vanished cannot release what it pressed. */
++    cmd_release_all(cmd);
++    pixman_region32_clear(&cmd->damage);
++    pixman_region32_clear(&cmd->unsent);
++    cmd->surface_pending = true;
++    cmd->full_damage_pending = false;
++    cmd->idle = false;
++    cmd_set_interval(cmd);
++    timer_mod(cmd->connect_timer,
++              qemu_clock_get_ms(QEMU_CLOCK_REALTIME) + CMD_CONNECT_RETRY_MS);
++}
++
++/* DisplayChangeListener -------------------------------------------------- */
++
++static void cmd_refresh(DisplayChangeListener *dcl)
++{
++    ClassicMacDisplay *cmd = container_of(dcl, ClassicMacDisplay, dcl);
++
++    graphic_hw_update(dcl->con);
++    cmd_check_clock(cmd);
++    cmd->drew = false;
++    cmd_flush(cmd);
++    if (cmd->drew || cmd->fd < 0) {
++        cmd_active(cmd);
++    } else if (!cmd->idle && cmd->idle_refresh_ms > cmd->interval_ms &&
++               qemu_clock_get_ms(QEMU_CLOCK_REALTIME) - cmd->active_ms >=
++               CMD_IDLE_AFTER_MS) {
++        /* an idle guest: scan the framebuffer less often */
++        cmd->idle = true;
++        cmd_set_interval(cmd);
++    }
++}
++
++static void cmd_gfx_update(DisplayChangeListener *dcl,
++                           int x, int y, int w, int h)
++{
++    ClassicMacDisplay *cmd = container_of(dcl, ClassicMacDisplay, dcl);
++
++    if (cmd->fd < 0 || cmd->surface_pending) {
++        return;
++    }
++    pixman_region32_union_rect(&cmd->damage, &cmd->damage, x, y, w, h);
++}
++
++static void cmd_gfx_switch(DisplayChangeListener *dcl,
++                           DisplaySurface *new_surface)
++{
++    ClassicMacDisplay *cmd = container_of(dcl, ClassicMacDisplay, dcl);
++
++    cmd->surface = new_surface;
++    pixman_region32_clear(&cmd->damage);
++    if (!new_surface) {
++        return;
++    }
++    if (cmd->mem && cmd->mem_width == surface_width(new_surface) &&
++        cmd->mem_height == surface_height(new_surface) &&
++        !cmd->surface_pending && !surface_is_placeholder(new_surface)) {
++        /*
++         * Same geometry (page flip, depth change): compare the whole frame;
++         * only what differs is announced.
++         */
++        pixman_region32_union_rect(&cmd->damage, &cmd->damage, 0, 0,
++                                   cmd->mem_width, cmd->mem_height);
++        return;
++    }
++    /*
++     * The device draws into a new surface after switching, so publish it
++     * from the next refresh rather than from here.
++     */
++    cmd->surface_pending = true;
++}
++
++static bool cmd_check_format(DisplayChangeListener *dcl,
++                             pixman_format_code_t format)
++{
++    /* Every console format is converted to XRGB8888 with pixman. */
++    return true;
++}
++
++static void cmd_mouse_set(DisplayChangeListener *dcl, int x, int y, bool on)
++{
++    ClassicMacDisplay *cmd = container_of(dcl, ClassicMacDisplay, dcl);
++
++    cmd->mouse_known = true;
++    cmd->mouse_x = x;
++    cmd->mouse_y = y;
++    cmd->mouse_on = on;
++    cmd_send_mouse(cmd);
++}
++
++static void cmd_cursor_define(DisplayChangeListener *dcl, QEMUCursor *cursor)
++{
++    ClassicMacDisplay *cmd = container_of(dcl, ClassicMacDisplay, dcl);
++
++    cmd_send_cursor(cmd, cursor);
++}
++
++static const DisplayChangeListenerOps cmd_dcl_ops = {
++    .dpy_name             = "classicmac",
++    .dpy_refresh          = cmd_refresh,
++    .dpy_gfx_update       = cmd_gfx_update,
++    .dpy_gfx_switch       = cmd_gfx_switch,
++    .dpy_gfx_check_format = cmd_check_format,
++    .dpy_mouse_set        = cmd_mouse_set,
++    .dpy_cursor_define    = cmd_cursor_define,
++};
++
++static void cmd_display_init(DisplayState *ds, DisplayOptions *opts)
++{
++    ClassicMacDisplay *cmd;
++    const char *path = opts->u.classicmac.socket;
++    QemuConsole *con;
++
++    if (!path || !*path) {
++        error_report("-display classicmac requires socket=PATH");
++        exit(1);
++    }
++    if (strlen(path) >= sizeof(((struct sockaddr_un *)NULL)->sun_path)) {
++        error_report("classicmac-display: socket path is too long: %s", path);
++        exit(1);
++    }
++    con = qemu_console_lookup_default();
++    if (!con || !qemu_console_is_graphic(con)) {
++        error_report("classicmac-display: no graphical console to present");
++        exit(1);
++    }
++
++    cmd = g_new0(ClassicMacDisplay, 1);
++    cmd->fd = -1;
++    cmd->mem_fd = -1;
++    g_queue_init(&cmd->out);
++    cmd->socket_path = g_strdup(path);
++    cmd->interval_ms = CMD_REFRESH_CONNECTED_MS;
++    cmd->start_ms = qemu_clock_get_ms(QEMU_CLOCK_REALTIME);
++    cmd->active_ms = cmd->start_ms;
++    cmd->idle_refresh_ms = opts->u.classicmac.has_idle_refresh ?
++        MIN(opts->u.classicmac.idle_refresh, CMD_REFRESH_MAX_MS) :
++        CMD_REFRESH_IDLE_MS;
++    pixman_region32_init(&cmd->damage);
++    pixman_region32_init(&cmd->unsent);
++#ifdef CONFIG_TCG
++    cmd->icount_at_start = icount_enabled();
++#endif
++    cmd->kbd = qkbd_state_init(con);
++    cmd->dcl.ops = &cmd_dcl_ops;
++    cmd->dcl.con = con;
++    register_displaychangelistener(&cmd->dcl);
++    cmd->mouse_mode_notifier.notify = cmd_mouse_mode_changed;
++    qemu_add_mouse_mode_change_notifier(&cmd->mouse_mode_notifier);
++    cmd_set_interval(cmd);
++
++    cmd->connect_timer = timer_new_ms(QEMU_CLOCK_REALTIME, cmd_try_connect,
++                                      cmd);
++    cmd_try_connect(cmd);
++}
++
++static QemuDisplay qemu_display_classicmac = {
++    .type = DISPLAY_TYPE_CLASSICMAC,
++    .init = cmd_display_init,
++    /* No text consoles: default serial/parallel/monitor go nowhere. */
++    .vc   = "null",
++};
++
++static void register_classicmac_display(void)
++{
++    qemu_display_register(&qemu_display_classicmac);
++}
++
++type_init(register_classicmac_display);
+diff --git a/ui/meson.build b/ui/meson.build
+index 417abab..f782e5b 100644
+--- a/ui/meson.build
++++ b/ui/meson.build
+@@ -30,6 +30,9 @@ if host_os == 'linux'
+   system_ss.add(files('input-linux.c', 'udmabuf.c'))
+   system_ss.add(when: pixman, if_true: files('retroboot.c'))
+ endif
++if host_os in ['darwin', 'linux']
++  system_ss.add(when: pixman, if_true: files('classicmac-display.c'))
++endif
+ system_ss.add(when: cocoa, if_true: files('cocoa.m'))
+ 
+ vnc_ss = ss.source_set()

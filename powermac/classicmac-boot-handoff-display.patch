@@ -8,18 +8,27 @@
  #include "trace.h"
  
  //#define DEBUG_VGA_MEM
-@@ -1890,6 +1891,173 @@
+@@ -1890,6 +1891,185 @@
  #define GMODE_TEXT     0
  #define GMODE_GRAPH    1
  #define GMODE_BLANK 2
 +
 +static void vga_classicmac_boot_handoff(VGACommonState *s);
 +
++void vga_classicmac_boot_handoff_stop(VGACommonState *s)
++{
++    if (s->classicmac_boot_handoff_timer) {
++        timer_free(s->classicmac_boot_handoff_timer);
++        s->classicmac_boot_handoff_timer = NULL;
++    }
++}
++
 +static void vga_classicmac_boot_handoff_refresh(void *opaque)
 +{
 +    VGACommonState *s = opaque;
 +
 +    if (!s->classicmac_boot_handoff || !icount_enabled()) {
++        vga_classicmac_boot_handoff_stop(s);
 +        return;
 +    }
 +
@@ -33,6 +42,8 @@
 +    if (s->classicmac_boot_handoff && icount_enabled()) {
 +        timer_mod(s->classicmac_boot_handoff_timer,
 +                  qemu_clock_get_ms(QEMU_CLOCK_REALTIME) + 50);
++    } else {
++        vga_classicmac_boot_handoff_stop(s);
 +    }
 +}
 +
@@ -49,7 +60,7 @@
 +    s->classicmac_boot_handoff_timer = timer_new_ms(
 +        QEMU_CLOCK_REALTIME, vga_classicmac_boot_handoff_refresh, s);
 +    timer_mod(s->classicmac_boot_handoff_timer,
-+              now / SCALE_MS + 7 * 1000);
++              now / SCALE_MS + 2 * 1000);
 +}
 +
 +static void vga_classicmac_boot_handoff(VGACommonState *s)
@@ -69,7 +80,7 @@
 +    /*
 +     * Firmware, the Happy Mac, and resolution transitions can briefly leave
 +     * stale black/white scanout fragments that resemble menu-bar text.  The
-+     * measured OS 9 Finder path cannot appear during its first seven real
++     * measured OS 9 Finder path cannot appear during its first two real
 +     * seconds, so do not inspect those transitional surfaces.  This is only a
 +     * false-positive guard: the actual handoff still requires the Finder
 +     * pixels below and is not tied to a fixed completion time.
@@ -77,7 +88,7 @@
 +    now = qemu_clock_get_ns(QEMU_CLOCK_REALTIME);
 +    if (s->classicmac_boot_handoff_started_ns <= 0 ||
 +        now - s->classicmac_boot_handoff_started_ns <
-+            7 * NANOSECONDS_PER_SECOND) {
++            2 * NANOSECONDS_PER_SECOND) {
 +        return;
 +    }
 +
@@ -176,13 +187,14 @@
 +    if (dark >= dark_required && bright >= bright_required) {
 +        /* One request is enough; reset/reboot creates a fresh VGA device. */
 +        s->classicmac_boot_handoff = false;
++        vga_classicmac_boot_handoff_stop(s);
 +        icount_request_runtime_disable();
 +    }
 +}
  
  static void vga_update_display(void *opaque)
  {
-@@ -1924,6 +2092,9 @@
+@@ -1924,6 +2103,9 @@
          default:
              vga_draw_blank(s, full_update);
              break;
@@ -211,6 +223,27 @@
      DEFINE_PROP_BOOL("hardware-cursor", PCIVGAState, hardware_cursor, false),
      DEFINE_EDID_PROPERTIES(PCIVGAState, edid_info),
  };
+@@ -608,12 +611,20 @@
+     },
+ };
+ 
++static void pci_std_vga_exit(PCIDevice *dev)
++{
++    PCIVGAState *d = PCI_VGA(dev);
++
++    vga_classicmac_boot_handoff_stop(&d->vga);
++}
++
+ static void vga_class_init(ObjectClass *klass, const void *data)
+ {
+     DeviceClass *dc = DEVICE_CLASS(klass);
+     PCIDeviceClass *k = PCI_DEVICE_CLASS(klass);
+ 
+     k->realize = pci_std_vga_realize;
++    k->exit = pci_std_vga_exit;
+     k->romfile = "vgabios-stdvga.bin";
+     k->class_id = PCI_CLASS_DISPLAY_VGA;
+     device_class_set_props(dc, vga_pci_properties);
 --- a/hw/display/vga_int.h
 +++ b/hw/display/vga_int.h
 @@ -26,6 +26,7 @@
@@ -231,11 +264,12 @@
      bool dirty_log_enabled;
      bool global_vmstate;
      /* hardware mouse cursor support */
-@@ -168,6 +172,8 @@
+@@ -168,6 +172,9 @@
      uint8_t is_vbe_vmstate;
  } VGACommonState;
  
 +void vga_classicmac_boot_handoff_start(VGACommonState *s);
++void vga_classicmac_boot_handoff_stop(VGACommonState *s);
 +
  static inline int c6_to_8(int v)
  {

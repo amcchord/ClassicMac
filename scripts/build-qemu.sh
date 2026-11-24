@@ -612,8 +612,44 @@ fi
 # rounds differently from the separate operations the PowerPC FPU fast paths
 # and the ATI vertex decoder are written for.
 QEMU_CFLAGS="-O3 -ffp-contract=off"
+CONFIGURE_ARGS=(
+  --python="$PYTHON_BIN"
+  --target-list=m68k-softmmu,ppc-softmmu
+  --enable-cocoa
+  --enable-slirp
+  --enable-tcg
+  --audio-drv-list=coreaudio
+  --disable-werror
+  --disable-docs
+  --disable-gtk
+  --disable-sdl
+  --enable-vnc
+  --disable-curses
+  --disable-guest-agent
+  --disable-debug-info
+  --enable-lto
+  --extra-cflags="$QEMU_CFLAGS"
+  --extra-cxxflags="$QEMU_CFLAGS"
+  --extra-objcflags="$QEMU_CFLAGS"
+)
+if [ "$(uname -s)" = "Darwin" ]; then
+  CONFIGURE_ARGS+=(
+    --disable-capstone
+    --disable-gnutls
+    --disable-nettle
+    --disable-gcrypt
+    --disable-libssh
+    --disable-libusb
+    --disable-curl
+    --disable-bzip2
+    --disable-lzo
+    --disable-snappy
+    --disable-vnc-sasl
+    --disable-vnc-jpeg
+  )
+fi
 CONFIGURE_STAMP="$BUILD_DIR/classicmac-configure.stamp"
-CONFIGURE_ID="cflags=$QEMU_CFLAGS"
+CONFIGURE_ID="target=$MACOSX_DEPLOYMENT_TARGET;tag=$QEMU_TAG;flags=${CONFIGURE_ARGS[*]}"
 if [ -f "$BUILD_DIR/build.ninja" ] && [ -z "${FORCE_CONFIGURE:-}" ] && \
    [ "$(cat "$CONFIGURE_STAMP" 2>/dev/null || true)" = "$CONFIGURE_ID" ]; then
   log "Already configured (set FORCE_CONFIGURE=1 to reconfigure)"
@@ -623,25 +659,7 @@ else
   mkdir -p "$BUILD_DIR"
   (
     cd "$BUILD_DIR"
-    ../configure \
-      --python="$PYTHON_BIN" \
-      --target-list=m68k-softmmu,ppc-softmmu \
-      --enable-cocoa \
-      --enable-slirp \
-      --enable-tcg \
-      --audio-drv-list=coreaudio \
-      --disable-werror \
-      --disable-docs \
-      --disable-gtk \
-      --disable-sdl \
-      --enable-vnc \
-      --disable-curses \
-      --disable-guest-agent \
-      --disable-debug-info \
-      --enable-lto \
-      --extra-cflags="$QEMU_CFLAGS" \
-      --extra-cxxflags="$QEMU_CFLAGS" \
-      --extra-objcflags="$QEMU_CFLAGS"
+    ../configure "${CONFIGURE_ARGS[@]}"
   )
   "$BUILD_DIR/pyvenv/bin/meson" configure "$BUILD_DIR" \
     -Doptimization=3 -Db_lto_mode=thin

@@ -77,7 +77,7 @@ void SoundServer::shutdown()
 }
 
 static void poll_sound(uint8_t *sound_buffer, int sound_buffer_size, DmaOutChannel *dma_ch) {
-    if (!dma_ch->is_out_active()) {
+    if (!dma_ch || !dma_ch->is_out_active()) {
         return;
     }
 
@@ -103,6 +103,11 @@ static void poll_sound(uint8_t *sound_buffer, int sound_buffer_size, DmaOutChann
 
 int SoundServer::open_out_stream(uint32_t sample_rate, DmaOutChannel *dma_ch)
 {
+    if (impl->status == SND_SERVER_STREAM_STARTED ||
+        impl->status == SND_SERVER_STREAM_OPENED) {
+        close_out_stream();
+    }
+
     uint32_t sample_size = 16;
     uint32_t channels = 2;
 
@@ -122,6 +127,7 @@ int SoundServer::open_out_stream(uint32_t sample_rate, DmaOutChannel *dma_ch)
 int SoundServer::start_out_stream()
 {
     if (impl->status == SND_SERVER_STREAM_STARTED) return 0;
+    if (impl->status != SND_SERVER_STREAM_OPENED || !impl->poll_cb) return -1;
     impl->poll_timer = TimerManager::get_instance()->add_cyclic_timer(MSECS_TO_NSECS(1), impl->poll_cb);
     impl->status = SND_SERVER_STREAM_STARTED;
 
@@ -130,9 +136,12 @@ int SoundServer::start_out_stream()
 
 void SoundServer::close_out_stream()
 {
-    if (impl->status == SND_SERVER_STREAM_STARTED) {
+    if (impl->status == SND_SERVER_STREAM_STARTED && impl->poll_timer) {
         TimerManager::get_instance()->cancel_timer(impl->poll_timer);
+        impl->poll_timer = 0;
     }
+    impl->poll_cb = nullptr;
+    impl->sound_buffer.reset();
     impl->status = SND_SERVER_STARTED;
 
 }

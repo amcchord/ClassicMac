@@ -873,7 +873,7 @@ index 00000000..f0556ca0
 +    case CODEC_STAT_REG:
 +        if (s->codec_ctrl_regs[7] & 1) {
 +            /* Read back mode */
-+            val = s->codec_ctrl_regs[(s->codec_ctrl_regs[7] >> 1) & 0xe];
++            val = s->codec_ctrl_regs[(s->codec_ctrl_regs[7] >> 1) & 0x7];
 +        } else {
 +            /* Return status register */
 +            val = s->regs[addr] & ~0xff00;

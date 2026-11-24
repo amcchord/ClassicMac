@@ -52,18 +52,22 @@ diff --git a/hw/usb/hcd-ohci.c b/hw/usb/hcd-ohci.c
  }
  /* Set a timer for EOF and generate a SOF event */
  static void ohci_sof(OHCIState *ohci)
-@@ -1218,10 +1246,35 @@ static void ohci_process_lists(OHCIState *ohci)
+@@ -1218,10 +1246,72 @@ static void ohci_process_lists(OHCIState *ohci)
      }
  }
  
++#define OHCI_CATCH_UP_MAX_FRAMES 32
++
 +static void ohci_frame_boundary_one(OHCIState *ohci);
 +
-+/* Run every frame that has ended (several of them while frames are batched) */
++/* Run every frame that has ended (bounded per call so BQL never stalls) */
 +static void ohci_frame_catch_up(OHCIState *ohci)
 +{
 +    int64_t now = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
++    int count = 0;
 +
-+    while (timer_pending(ohci->eof_timer) &&
++    while (count < OHCI_CATCH_UP_MAX_FRAMES &&
++           timer_pending(ohci->eof_timer) &&
 +           ohci->sof_time + usb_frame_time <= now) {
 +        int64_t sof = ohci->sof_time;
 +
@@ -71,6 +75,39 @@ diff --git a/hw/usb/hcd-ohci.c b/hw/usb/hcd-ohci.c
 +        if (ohci->sof_time == sof) {
 +            break;      /* unrecoverable error: no further frames */
 +        }
++        count++;
++    }
++
++    if (timer_pending(ohci->eof_timer) &&
++        ohci->sof_time + usb_frame_time <= now) {
++        if (ohci_frames_idle(ohci)) {
++            int64_t skip = (now - ohci->sof_time) / usb_frame_time;
++            if (skip > 0) {
++                uint32_t prev_fn = ohci->frame_number;
++                uint32_t next_fn =
++                    (uint32_t)(((uint64_t)ohci->frame_number + (uint64_t)skip) &
++                               0xffff);
++                struct ohci_hcca hcca;
++
++                ohci->sof_time += skip * usb_frame_time;
++                ohci->frame_number = next_fn;
++                if (((prev_fn ^ next_fn) & 0x8000) || skip >= 0x8000) {
++                    ohci_set_interrupt(ohci, OHCI_INTR_FNO);
++                }
++                if (ohci_read_hcca(ohci, ohci->hcca, &hcca)) {
++                    trace_usb_ohci_hcca_read_error(ohci->hcca);
++                    ohci_die(ohci);
++                    return;
++                }
++                hcca.frame = cpu_to_le16(ohci->frame_number);
++                hcca.pad = 0;
++                if (ohci_put_hcca(ohci, ohci->hcca, &hcca)) {
++                    ohci_die(ohci);
++                    return;
++                }
++            }
++        }
++        ohci_eof_timer(ohci);
 +    }
 +}
 +
@@ -88,7 +125,7 @@ diff --git a/hw/usb/hcd-ohci.c b/hw/usb/hcd-ohci.c
      struct ohci_hcca hcca;
  
      if (ohci_read_hcca(ohci, ohci->hcca, &hcca)) {
-@@ -1527,6 +1580,7 @@ static uint64_t ohci_mem_read(void *opaque,
+@@ -1527,6 +1591,7 @@ static uint64_t ohci_mem_read(void *opaque,
      OHCIState *ohci = opaque;
      uint32_t retval;
  
@@ -96,7 +133,7 @@ diff --git a/hw/usb/hcd-ohci.c b/hw/usb/hcd-ohci.c
      /* Only aligned reads are allowed on OHCI */
      if (addr & 3) {
          trace_usb_ohci_mem_read_unaligned(addr);
-@@ -1649,6 +1703,9 @@ static uint64_t ohci_mem_read(void *opaque,
+@@ -1649,6 +1714,9 @@ static uint64_t ohci_mem_read(void *opaque,
      return retval;
  }
  
@@ -124,7 +161,7 @@ diff --git a/hw/usb/hcd-ohci.c b/hw/usb/hcd-ohci.c
      /* Only aligned reads are allowed on OHCI */
      if (addr & 3) {
          trace_usb_ohci_mem_write_unaligned(addr);
-@@ -1815,6 +1883,9 @@ static void ohci_attach(USBPort *port1)
+@@ -1815,6 +1894,9 @@ static void ohci_attach(USBPort *port1)
      if (old_state != port->ctrl) {
          ohci_set_interrupt(s, OHCI_INTR_RHSC);
      }

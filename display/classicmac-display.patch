@@ -1465,7 +1465,7 @@ index 0000000..4cc136b
 +    }
 +    if (cmd->mem && cmd->mem_width == surface_width(new_surface) &&
 +        cmd->mem_height == surface_height(new_surface) &&
-+        !cmd->surface_pending) {
++        !cmd->surface_pending && !surface_is_placeholder(new_surface)) {
 +        /*
 +         * Same geometry (page flip, depth change): compare the whole frame;
 +         * only what differs is announced.
