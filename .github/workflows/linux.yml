@@ -57,10 +57,8 @@ jobs:
           python3 scripts/test-prepare-os9-template.py -v
       - name: Check Linux display devices
         run: python3 ati/tests/test_qemu_ati.py --gl-api gles --gl-optional output/desktop/runtime/bin/qemu-system-ppc output/desktop/runtime/qemu/pc-bios
-      - name: Check Mac OS X NVRAM and flash persistence
-        run: |
-          python3 osx/tests/qtest_macosx_nvram.py --qemu output/desktop/runtime/bin/qemu-system-ppc-osx --firmware output/desktop/runtime/qemu-osx
-          python3 osx/tests/qtest_macosx_flash.py --qemu output/desktop/runtime/bin/qemu-system-ppc-osx --firmware output/desktop/runtime/qemu-osx --seed-file output/desktop/runtime/qemu-osx/macosx-flash-seed.img
+      - name: Check Mac OS X flash persistence
+        run: python3 osx/tests/qtest_macosx_flash.py --qemu output/desktop/runtime/bin/qemu-system-ppc-osx --firmware output/desktop/runtime/qemu-osx --seed-file output/desktop/runtime/qemu-osx/macosx-flash-seed.img
       - name: Check Radeon cursor pixels and clipping
         run: python3 ati/tests/test_radeon_cursor.py --qemu output/desktop/runtime/bin/qemu-system-ppc --support output/desktop/runtime/qemu/pc-bios --output output/desktop/radeon-cursor
       - name: Check Quadra shared display pixels

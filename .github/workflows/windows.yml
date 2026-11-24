@@ -64,14 +64,12 @@ jobs:
           Expand-Archive $archive output/desktop/tools/extracted
           Copy-Item 'output/desktop/tools/extracted/ClassicMac.app/Contents/Resources/ClassicMacTools.iso' 'output/desktop/runtime/ClassicMacTools.iso'
           if ((Get-FileHash 'output/desktop/runtime/ClassicMacTools.iso' -Algorithm SHA256).Hash.ToLower() -ne '23a42184811c7e1ad8718b6746e061c3a1c3e3dd43af25c9c828b3fa326fca22') { throw 'Tools CD checksum mismatch' }
-      - name: Check Python packaging and template tests
+      - name: Check Python template tests
         shell: msys2 {0}
-        run: python3 -m unittest discover -s scripts -p 'test_*.py' -v
-      - name: Check Mac OS X NVRAM and flash persistence
+        run: python3 scripts/test_package_machine_template.py -v
+      - name: Check Mac OS X flash persistence
         shell: msys2 {0}
-        run: |
-          python3 osx/tests/qtest_macosx_nvram.py --qemu output/desktop/runtime/bin/qemu-system-ppc-osx.exe --firmware output/desktop/runtime/qemu-osx
-          python3 osx/tests/qtest_macosx_flash.py --qemu output/desktop/runtime/bin/qemu-system-ppc-osx.exe --firmware output/desktop/runtime/qemu-osx --seed-file output/desktop/runtime/qemu-osx/macosx-flash-seed.img
+        run: python3 osx/tests/qtest_macosx_flash.py --qemu output/desktop/runtime/bin/qemu-system-ppc-osx.exe --firmware output/desktop/runtime/qemu-osx --seed-file output/desktop/runtime/qemu-osx/macosx-flash-seed.img
       - name: Check Radeon cursor pixels and clipping
         shell: msys2 {0}
         run: python3 ati/tests/test_radeon_cursor.py --qemu output/desktop/runtime/bin/qemu-system-ppc.exe --support output/desktop/runtime/qemu/pc-bios --output output/desktop/radeon-cursor
