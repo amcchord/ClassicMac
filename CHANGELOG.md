@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 4.8.0 — RetroBoot 3.0 Parity & Quality Pass (2026-11-24)
 
 ### Added
 

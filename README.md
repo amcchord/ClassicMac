@@ -29,17 +29,33 @@
   <img src="docs/screenshots/powermacg4-macos92.png" width="410" alt="Mac OS 9.2 on the emulated Power Mac G4">
 </p>
 
-## Download ClassicMac 4.7.0
+## Download ClassicMac 4.8.0
 
 | System | Download | Requirements |
 | --- | --- | --- |
-| Windows | [Portable EXE](https://github.com/amcchord/ClassicMac/releases/download/v4.7.0/ClassicMac-4.7.0-windows-x64.exe) | Windows 11 x64; unsigned. |
-| macOS | [DMG](https://github.com/amcchord/ClassicMac/releases/download/v4.7.0/ClassicMac-4.7.0.dmg) · [ZIP](https://github.com/amcchord/ClassicMac/releases/download/v4.7.0/ClassicMac-4.7.0.zip) | Apple Silicon, macOS 15+; signed and notarized. |
-| Linux | [AppImage](https://github.com/amcchord/ClassicMac/releases/download/v4.7.0/ClassicMac-4.7.0-linux-x64.AppImage) | x64, glibc 2.39+ and a desktop. |
+| Windows | [Portable EXE](https://github.com/amcchord/ClassicMac/releases/download/v4.8.0/ClassicMac-4.8.0-windows-x64.exe) | Windows 11 x64; unsigned. |
+| macOS | [DMG](https://github.com/amcchord/ClassicMac/releases/download/v4.8.0/ClassicMac-4.8.0.dmg) · [ZIP](https://github.com/amcchord/ClassicMac/releases/download/v4.8.0/ClassicMac-4.8.0.zip) | Apple Silicon, macOS 15+; signed and notarized. |
+| Linux | [AppImage](https://github.com/amcchord/ClassicMac/releases/download/v4.8.0/ClassicMac-4.8.0-linux-x64.AppImage) | x64, glibc 2.39+ and a desktop. |
 
-[Release notes, checksums and engine sources](https://github.com/amcchord/ClassicMac/releases/tag/v4.7.0).
+[Release notes, checksums and engine sources](https://github.com/amcchord/ClassicMac/releases/tag/v4.8.0).
 Windows runs directly. Drag the Mac app to Applications. On Linux, mark the
 AppImage executable; use `--appimage-extract-and-run` if FUSE is unavailable.
+
+## New in ClassicMac 4.8.0
+
+- **RetroBoot 3.0.0 parity and GNU sparse downloads.** Adds RetroBoot public
+  library editions (`System 7.5.5`, `Mac OS 9.2.1`, `Mac OS X 10.4.11`),
+  GNU sparse 1.0 extraction (`CMachineArchive`), and engine/driver updates
+  (`macio-ide.pio-status-drain`, `pci-ohci.idle-frames`, QFB snapshot
+  consistency, Screamer DMA/reset fixes, and `classicvirtio` folder dates and
+  directory cache).
+- **Library search and clearer edition metadata.** Search and filter editions,
+  pick custom save destinations with upfront sparse storage validation, and see
+  accurate category breakdowns across macOS, Windows, and Linux.
+- **UI, display, and reliability polish.** Hardens browser display WebSocket
+  authentication and private runtime sockets, adds Mac quit force-stop for OS X
+  guests, tightens modal blocking and accessibility across Platinum UI, and
+  improves audio fallback and Linux/Windows runtime isolation.
 
 ## New in ClassicMac 4.7.0
 
@@ -468,7 +484,7 @@ Requirements:
 
 # 5. Verify the exact signed/stapled artifact, including versions, Gatekeeper,
 #    the bundled Tools CD and both Power Mac display cards
-./scripts/verify-release.sh dist/ClassicMac.dmg 4.7.0 4.7.0
+./scripts/verify-release.sh dist/ClassicMac.dmg 4.8.0 4.8.0
 ```
 
 All scripts are idempotent and safe to re-run. Building needs the Xcode command line tools and [Homebrew](https://brew.sh).
