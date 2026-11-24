@@ -135,6 +135,29 @@ final class IconPacks: ObservableObject {
         try? await run("/usr/bin/hdiutil", ["detach", "-quiet", "-force", mount.path])
     }
 
+    /// Validates and builds the destination URL inside `directory` for an
+    /// imported icon collection, rejecting traversal or empty names.
+    nonisolated static func collectionDestination(named name: String, in directory: URL) throws -> URL {
+        var safe = name
+            .replacingOccurrences(of: "/", with: "-")
+            .replacingOccurrences(of: ":", with: "-")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        while let first = safe.first, first == "." || first.isWhitespace || first.isNewline {
+            safe.removeFirst()
+        }
+        safe = safe.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !safe.isEmpty, safe != ".", safe != "..",
+              !safe.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains) else {
+            throw IconPackError("The icon collection name is not valid.")
+        }
+        let base = directory.standardizedFileURL
+        let destination = base.appendingPathComponent(safe, isDirectory: true).standardizedFileURL
+        guard destination.deletingLastPathComponent().standardizedFileURL.path == base.path else {
+            throw IconPackError("The icon collection name is not valid.")
+        }
+        return destination
+    }
+
     /// Copies a collection with ditto, which keeps the classic resource forks
     /// that hold the icons, along with the license and Read Me.
     private static func copyCollection(from source: URL, named name: String) async throws {
@@ -142,8 +165,7 @@ final class IconPacks: ObservableObject {
         guard collectionHasIcons(source) else {
             throw IconPackError("\u{201C}\(name)\u{201D} doesn\u{2019}t contain classic Mac icons from The Iconfactory.")
         }
-        let safe = name.replacingOccurrences(of: "/", with: "-").trimmingCharacters(in: .whitespaces)
-        let destination = directory.appendingPathComponent(safe.isEmpty ? "Icons" : safe, isDirectory: true)
+        let destination = try collectionDestination(named: name, in: directory)
         if fm.fileExists(atPath: destination.path) { try fm.removeItem(at: destination) }
         try await run("/usr/bin/ditto", ["--rsrc", "--extattr", source.path, destination.path])
         for junk in [".DS_Store", ".fseventsd", ".Trashes", ".Spotlight-V100"] {

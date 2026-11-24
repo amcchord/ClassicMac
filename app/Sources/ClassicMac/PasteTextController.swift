@@ -194,7 +194,7 @@ private struct PlatinumTextEditor: NSViewRepresentable {
     func makeNSView(context: Context) -> NSScrollView {
         let scroll = NSTextView.scrollableTextView()
         scroll.drawsBackground = false
-        scroll.hasVerticalScroller = false
+        scroll.hasVerticalScroller = true
         scroll.borderType = .noBorder
         guard let view = scroll.documentView as? NSTextView else { return scroll }
         view.font = PlatinumFont.regular.nsFont()

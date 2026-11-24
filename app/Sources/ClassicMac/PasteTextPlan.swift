@@ -64,9 +64,32 @@ struct PasteTextPlan: Equatable {
                 return ["alt-\(accent)", "shift-\(bases[index])"]
             }
         }
-        return ["ç": "alt-c", "Ç": "alt-shift-c", "å": "alt-a", "Å": "alt-shift-a",
-                "ø": "alt-o", "Ø": "alt-shift-o", "ß": "alt-s"][character].map { [$0] }
+        return Self.specialKeys[character].map { [$0] }
     }
+
+    private static let specialKeys: [Character: String] = [
+        "ç": "alt-c", "Ç": "alt-shift-c",
+        "å": "alt-a", "Å": "alt-shift-a",
+        "ø": "alt-o", "Ø": "alt-shift-o",
+        "ß": "alt-s",
+        "\u{201C}": "alt-bracket_left",
+        "\u{201D}": "alt-shift-bracket_left",
+        "\u{2018}": "alt-bracket_right",
+        "\u{2019}": "alt-shift-bracket_right",
+        "\u{2014}": "alt-shift-minus",
+        "\u{2013}": "alt-minus",
+        "\u{2026}": "alt-semicolon",
+        "\u{2022}": "alt-8",
+        "\u{00A9}": "alt-g",
+        "\u{2122}": "alt-2",
+        "\u{00AE}": "alt-r",
+        "\u{00B0}": "alt-shift-8",
+        "\u{00B1}": "alt-shift-equal",
+        "\u{00A3}": "alt-3",
+        "\u{00A5}": "alt-y",
+        "\u{00A2}": "alt-4",
+        "\u{00A0}": "alt-spc",
+    ]
 
     private static let ascii: [Character: String] = {
         var keys: [Character: String] = [:]

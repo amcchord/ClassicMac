@@ -40,11 +40,22 @@ final class PasteTextTests: XCTestCase {
         let rawData = try XCTUnwrap(TISGetInputSourceProperty(inputSource, kTISPropertyUnicodeKeyLayoutData))
         let data = Unmanaged<CFData>.fromOpaque(rawData).takeUnretainedValue()
         let layout = UnsafeRawPointer(CFDataGetBytePtr(data)).assumingMemoryBound(to: UCKeyboardLayout.self)
-        let codes: [String: UInt16] = ["a": UInt16(kVK_ANSI_A), "e": UInt16(kVK_ANSI_E),
-            "i": UInt16(kVK_ANSI_I), "o": UInt16(kVK_ANSI_O), "u": UInt16(kVK_ANSI_U),
-            "y": UInt16(kVK_ANSI_Y), "n": UInt16(kVK_ANSI_N), "c": UInt16(kVK_ANSI_C),
-            "s": UInt16(kVK_ANSI_S), "grave_accent": UInt16(kVK_ANSI_Grave)]
-        for scalar in 128...0x2ff {
+        let codes: [String: UInt16] = [
+            "a": UInt16(kVK_ANSI_A), "e": UInt16(kVK_ANSI_E),
+            "g": UInt16(kVK_ANSI_G), "i": UInt16(kVK_ANSI_I),
+            "o": UInt16(kVK_ANSI_O), "r": UInt16(kVK_ANSI_R),
+            "u": UInt16(kVK_ANSI_U), "y": UInt16(kVK_ANSI_Y),
+            "n": UInt16(kVK_ANSI_N), "c": UInt16(kVK_ANSI_C),
+            "s": UInt16(kVK_ANSI_S), "2": UInt16(kVK_ANSI_2),
+            "3": UInt16(kVK_ANSI_3), "4": UInt16(kVK_ANSI_4),
+            "8": UInt16(kVK_ANSI_8), "minus": UInt16(kVK_ANSI_Minus),
+            "equal": UInt16(kVK_ANSI_Equal), "bracket_left": UInt16(kVK_ANSI_LeftBracket),
+            "bracket_right": UInt16(kVK_ANSI_RightBracket), "semicolon": UInt16(kVK_ANSI_Semicolon),
+            "grave_accent": UInt16(kVK_ANSI_Grave), "spc": UInt16(kVK_Space)
+        ]
+        var scalars = Array(128...0x2ff)
+        scalars += [0x2013, 0x2014, 0x2018, 0x2019, 0x201C, 0x201D, 0x2022, 0x2026, 0x2122]
+        for scalar in scalars {
             let character = String(UnicodeScalar(scalar)!)
             guard let plan = try? PasteTextPlan(character) else { continue }
             var deadKey: UInt32 = 0
@@ -73,8 +84,23 @@ final class PasteTextTests: XCTestCase {
         }
     }
 
+    func testCommonMacRomanPunctuationChordsAreSupported() throws {
+        let sample = "“”‘’—–…•©™®°±£¥¢\u{00A0}"
+        let plan = try PasteTextPlan(sample)
+        XCTAssertEqual(plan.characters, [
+            ["alt-bracket_left"], ["alt-shift-bracket_left"],
+            ["alt-bracket_right"], ["alt-shift-bracket_right"],
+            ["alt-shift-minus"], ["alt-minus"],
+            ["alt-semicolon"], ["alt-8"],
+            ["alt-g"], ["alt-2"], ["alt-r"],
+            ["alt-shift-8"], ["alt-shift-equal"],
+            ["alt-3"], ["alt-y"], ["alt-4"],
+            ["alt-spc"],
+        ])
+    }
+
     func testUnsupportedUnicodeAndControlCharactersRejectEntirePaste() {
-        for text in ["hello😀", "汉字", "\u{1b}", "\u{0}", "\u{7f}", "smart “quote”"] {
+        for text in ["hello😀", "汉字", "\u{1b}", "\u{0}", "\u{7f}", "arrow →", "euro €"] {
             XCTAssertThrowsError(try PasteTextPlan(text)) { error in
                 guard case PasteTextPlan.ValidationError.unsupported = error else { return XCTFail("Wrong error: \(error)") }
             }

@@ -1,5 +1,6 @@
 import XCTest
 import Darwin
+import CDisplaySocket
 @testable import ClassicMac
 
 @MainActor
@@ -200,20 +201,16 @@ final class QEMURunnerArgumentTests: XCTestCase {
     }
 
     func testBothMachinesCanOptIntoLoopbackBrowserVNCDisplay() {
-        let port: UInt16 = 61_234
         let powerMac = config(useBrowserDisplay: true)
         let quadra = config(family: .quadra800, useBrowserDisplay: true)
 
         for vm in [powerMac, quadra] {
-            let arguments = QEMUManager.buildArguments(
-                for: vm,
-                browserWebSocketPort: port
-            )
+            let arguments = QEMUManager.buildArguments(for: vm)
             let display = try! XCTUnwrap(optionValues("-display", in: arguments).first)
 
             XCTAssertFalse(display.contains("cocoa"))
-            XCTAssertTrue(display.hasPrefix("vnc=unix:/tmp/ClassicMac/"))
-            XCTAssertTrue(display.contains("websocket=127.0.0.1:\(port)"))
+            XCTAssertFalse(display.contains("websocket="))
+            XCTAssertTrue(display.hasPrefix("vnc=unix:\(AppPaths.runtimeSocketDir.path)/"))
             XCTAssertTrue(display.hasSuffix("share=force-shared"))
         }
     }
@@ -763,5 +760,294 @@ final class QEMURunnerArgumentTests: XCTestCase {
             optionValues("-device", in: arguments)
                 .contains("virtio-tablet-pci")
         )
+    }
+
+    func testQemuEscapeDoublesCommasAcrossAllFamiliesAndPaths() throws {
+        XCTAssertEqual(QEMUManager.qemuEscape("/tmp/A, B/disk.img"), "/tmp/A,, B/disk.img")
+
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ClassicMac,Repo-\(UUID().uuidString)", isDirectory: true)
+        let dist = root.appendingPathComponent("dist", isDirectory: true)
+        let shared = root.appendingPathComponent("shared", isDirectory: true)
+        try FileManager.default.createDirectory(at: dist, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: shared, withIntermediateDirectories: true)
+        try Data().write(to: dist.appendingPathComponent("ClassicMacTools.iso"))
+        try Data().write(to: shared.appendingPathComponent("ndrvloader"))
+        try Data().write(to: shared.appendingPathComponent("declrom"))
+        let prevRepo = ProcessInfo.processInfo.environment["CLASSICMAC_REPO"]
+        setenv("CLASSICMAC_REPO", root.path, 1)
+        defer {
+            if let prevRepo { setenv("CLASSICMAC_REPO", prevRepo, 1) }
+            else { unsetenv("CLASSICMAC_REPO") }
+            try? FileManager.default.removeItem(at: root)
+        }
+
+        let bundle = root.appendingPathComponent("My, Mac.classic", isDirectory: true)
+        let shareDir = root.appendingPathComponent("Share, Folder", isDirectory: true)
+
+        var powerMac = VMConfig(
+            name: "Mac, Nine",
+            machineFamily: .powerMacG4,
+            cdImagePath: "/tmp/OS, 9.iso",
+            bootFromCD: false,
+            toolsCDInserted: true,
+            sharedFolderPath: shareDir.path,
+            bundleURL: bundle
+        )
+        let pmArgs = QEMUManager.buildArguments(for: powerMac)
+        XCTAssertEqual(optionValues("-name", in: pmArgs), ["Mac,, Nine"])
+        XCTAssertTrue(optionValues("-drive", in: pmArgs).contains { $0.contains("ClassicMac,,Repo-") && $0.contains("My,, Mac.classic/disk.img") })
+        XCTAssertTrue(optionValues("-blockdev", in: pmArgs).contains { $0.contains("ClassicMac,,Repo-") && $0.contains("ClassicMacTools.iso") })
+        XCTAssertTrue(optionValues("-device", in: pmArgs).contains { $0.contains("ClassicMac,,Repo-") && $0.contains("ndrvloader") })
+        XCTAssertTrue(optionValues("-fsdev", in: pmArgs).contains { $0.contains("Share,, Folder") })
+
+        powerMac.machineFamily = .quadra800
+        var quadra = VMConfig(
+            name: "Quadra, 800",
+            machineFamily: .quadra800,
+            cdImagePath: "/tmp/OS, 8.iso",
+            bootFromCD: false,
+            floppyImagePath: "/tmp/Floppy, Disk.img",
+            toolsCDInserted: true,
+            sharedFolderPath: shareDir.path,
+            bundleURL: bundle
+        )
+        let qArgs = QEMUManager.buildArguments(for: quadra)
+        XCTAssertEqual(optionValues("-name", in: qArgs), ["Quadra,, 800"])
+        XCTAssertTrue(optionValues("-drive", in: qArgs).contains { $0.contains("My,, Mac.classic/pram.img") })
+        XCTAssertTrue(optionValues("-drive", in: qArgs).contains { $0.contains("My,, Mac.classic/disk.img") })
+        XCTAssertTrue(optionValues("-drive", in: qArgs).contains { $0.contains("/tmp/OS,, 8.iso") })
+        XCTAssertTrue(optionValues("-drive", in: qArgs).contains { $0.contains("/tmp/Floppy,, Disk.img") })
+        XCTAssertTrue(optionValues("-drive", in: qArgs).contains { $0.contains("ClassicMac,,Repo-") && $0.contains("ClassicMacTools.iso") })
+        XCTAssertTrue(optionValues("-device", in: qArgs).contains { $0.contains("ClassicMac,,Repo-") && $0.contains("declrom") })
+        XCTAssertTrue(optionValues("-fsdev", in: qArgs).contains { $0.contains("Share,, Folder") })
+
+        quadra.name = "Tiger, Mac"
+        let osx = VMConfig(
+            name: "Tiger, Mac",
+            machineFamily: .powerMacOSX,
+            cdImagePath: "/tmp/Tiger, Disc.iso",
+            bundleURL: bundle
+        )
+        let osxArgs = QEMUManager.buildArguments(for: osx)
+        XCTAssertEqual(optionValues("-name", in: osxArgs), ["Tiger,, Mac"])
+        XCTAssertTrue(optionValues("-drive", in: osxArgs).contains { $0.contains("My,, Mac.classic/nvram.img") })
+        XCTAssertTrue(optionValues("-drive", in: osxArgs).contains { $0.contains("My,, Mac.classic/disk.img") })
+        XCTAssertTrue(optionValues("-drive", in: osxArgs).contains { $0.contains("/tmp/Tiger,, Disc.iso") })
+    }
+
+    func testOSXCoreAudioUsesBufferedOutputWhenSoundEnabled() {
+        let soundOn = VMConfig(name: "Tiger", machineFamily: .powerMacOSX, sound: true)
+        let soundOff = VMConfig(name: "Tiger", machineFamily: .powerMacOSX, sound: false)
+        XCTAssertEqual(
+            optionValues("-audiodev", in: QEMUManager.buildArguments(for: soundOn)),
+            ["coreaudio,id=snd0,out.buffer-length=50000"]
+        )
+        XCTAssertEqual(
+            optionValues("-audiodev", in: QEMUManager.buildArguments(for: soundOff)),
+            ["none,id=snd0"]
+        )
+    }
+
+    func testOSXClassicMacDisplayProbeAndFallback() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("probe-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let supported = dir.appendingPathComponent("qemu-supported")
+        try "#!/bin/sh\necho 'Available display backend types:'\necho 'none'\necho 'cocoa'\necho 'classicmac'\n"
+            .write(to: supported, atomically: true, encoding: .utf8)
+        chmod(supported.path, 0o755)
+        XCTAssertTrue(AppPaths.probeClassicMacDisplay(binary: supported))
+
+        let unsupported = dir.appendingPathComponent("qemu-unsupported")
+        try "#!/bin/sh\necho 'Available display backend types:'\necho 'none'\necho 'cocoa'\n"
+            .write(to: unsupported, atomically: true, encoding: .utf8)
+        chmod(unsupported.path, 0o755)
+        XCTAssertFalse(AppPaths.probeClassicMacDisplay(binary: unsupported))
+    }
+
+    func testRuntimeSocketDirRejectsSymlinksAndFitsSunPath() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("sock-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let target = root.appendingPathComponent("real", isDirectory: true)
+        try FileManager.default.createDirectory(at: target, withIntermediateDirectories: true)
+        let linkURL = root.appendingPathComponent("link", isDirectory: false)
+        XCTAssertEqual(Darwin.symlink(target.path, linkURL.path), 0)
+
+        let fallback = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+            .appendingPathComponent("cm-test-\(getuid())", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: fallback) }
+
+        let chosen = AppPaths.verifiedRuntimeSocketDir(primary: linkURL, fallback: fallback)
+        XCTAssertNotEqual(chosen.path, linkURL.path)
+        let longestSocket = chosen.appendingPathComponent("\(UUID().uuidString).qmp.sock").path
+        XCTAssertLessThan(longestSocket.utf8.count, 104)
+    }
+
+    func testHMPClientPerSocketLockDoesNotBlockOtherVMs() async throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("hmp-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let slowPath = dir.appendingPathComponent("slow.sock").path
+        let fastPath = dir.appendingPathComponent("fast.sock").path
+
+        func listenUnix(_ path: String) -> Int32 {
+            let fd = socket(AF_UNIX, SOCK_STREAM, 0)
+            var addr = sockaddr_un()
+            addr.sun_family = sa_family_t(AF_UNIX)
+            let maxLen = MemoryLayout.size(ofValue: addr.sun_path) - 1
+            withUnsafeMutablePointer(to: &addr.sun_path) {
+                $0.withMemoryRebound(to: CChar.self, capacity: maxLen + 1) { dest in
+                    _ = path.withCString { src in strncpy(dest, src, maxLen) }
+                }
+            }
+            _ = withUnsafePointer(to: &addr) {
+                $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                    Darwin.bind(fd, $0, socklen_t(MemoryLayout<sockaddr_un>.size))
+                }
+            }
+            listen(fd, 2)
+            return fd
+        }
+
+        let slowFD = listenUnix(slowPath)
+        let fastFD = listenUnix(fastPath)
+        defer { close(slowFD); close(fastFD) }
+
+        // Slow VM accepts connection and stalls (never sends prompt).
+        let slowServer = Task.detached {
+            let client = accept(slowFD, nil, nil)
+            if client >= 0 {
+                try? await Task.sleep(nanoseconds: 1_200_000_000)
+                close(client)
+            }
+        }
+        // Fast VM immediately sends prompt, reads command, sends prompt.
+        let fastServer = Task.detached {
+            let client = accept(fastFD, nil, nil)
+            if client >= 0 {
+                let prompt = Data("(qemu) ".utf8)
+                _ = prompt.withUnsafeBytes { write(client, $0.baseAddress, prompt.count) }
+                var buf = [UInt8](repeating: 0, count: 256)
+                _ = recv(client, &buf, buf.count, 0)
+                let reply = Data("ok\r\n(qemu) ".utf8)
+                _ = reply.withUnsafeBytes { write(client, $0.baseAddress, reply.count) }
+                close(client)
+            }
+        }
+
+        let slowCall = Task.detached {
+            HMPClient.command("info status", socketPath: slowPath)
+        }
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        let startedFast = ProcessInfo.processInfo.systemUptime
+        let fastReply = await Task.detached {
+            HMPClient.command("info status", socketPath: fastPath)
+        }.value
+        let elapsedFast = ProcessInfo.processInfo.systemUptime - startedFast
+
+        XCTAssertNotNil(fastReply)
+        XCTAssertLessThan(elapsedFast, 0.8, "Hung VM socket must not serialize unrelated VMs")
+        _ = await slowCall.value
+        await slowServer.value
+        await fastServer.value
+    }
+
+    func testBootClockHandoffCancelsWithoutWaiting() {
+        let handoff = BootClockHandoff(socketPath: "/tmp/nonexistent-\(UUID().uuidString).sock")
+        let started = ProcessInfo.processInfo.systemUptime
+        handoff.start(delay: 15.0)
+        handoff.cancel()
+        XCTAssertLessThan(ProcessInfo.processInfo.systemUptime - started, 0.1)
+    }
+
+    func testForceStopSuppressesCrashErrorAndUncaughtSignalReportsSignalInLog() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("qemu-proc-\(UUID().uuidString)", isDirectory: true)
+        let osxFirmware = root.appendingPathComponent("osx/firmware", isDirectory: true)
+        let osxBinDir = root.appendingPathComponent("vendor/qemu-osx/build", isDirectory: true)
+        let bundle = root.appendingPathComponent("SignalTest.classic", isDirectory: true)
+        try FileManager.default.createDirectory(at: osxFirmware, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: osxBinDir, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: bundle, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        try Data().write(to: osxFirmware.appendingPathComponent("openbios-ppc-osx"))
+        try Data(repeating: 0, count: 16_384).write(to: osxFirmware.appendingPathComponent("macosx-flash-seed.img"))
+        try Data().write(to: osxFirmware.appendingPathComponent("qemu_vga.ndrv"))
+
+        let fakeQemu = osxBinDir.appendingPathComponent("qemu-system-ppc")
+        let prevRepo = ProcessInfo.processInfo.environment["CLASSICMAC_REPO"]
+        let prevUseWindow = UserDefaults.standard.object(forKey: "ClassicMacUseQEMUWindow")
+        UserDefaults.standard.set(true, forKey: "ClassicMacUseQEMUWindow")
+        setenv("CLASSICMAC_REPO", root.path, 1)
+        defer {
+            if let prevRepo { setenv("CLASSICMAC_REPO", prevRepo, 1) }
+            else { unsetenv("CLASSICMAC_REPO") }
+            if let prevUseWindow { UserDefaults.standard.set(prevUseWindow, forKey: "ClassicMacUseQEMUWindow") }
+            else { UserDefaults.standard.removeObject(forKey: "ClassicMacUseQEMUWindow") }
+        }
+
+        let vm = VMConfig(name: "Signal Test", machineFamily: .powerMacOSX, bundleURL: bundle)
+        try Data(repeating: 0, count: 1024).write(to: vm.diskImageURL)
+
+        // 1. Intentional forceStop sends SIGTERM (and escalates to SIGKILL if needed) without surfacing lastError.
+        try "#!/bin/sh\nif [ \"$1\" = \"-display\" ] && [ \"$2\" = \"help\" ]; then echo 'cocoa'; exit 0; fi\nsleep 30\n"
+            .write(to: fakeQemu, atomically: true, encoding: .utf8)
+        chmod(fakeQemu.path, 0o755)
+
+        let manager = QEMUManager()
+        manager.start(vm)
+        XCTAssertTrue(manager.isRunning(vm.id))
+        manager.forceStop(vm.id)
+        for _ in 0..<40 where manager.isRunning(vm.id) {
+            try await Task.sleep(nanoseconds: 50_000_000)
+        }
+        XCTAssertFalse(manager.isRunning(vm.id))
+        XCTAssertNil(manager.lastError)
+
+        // 2. Unexpected uncaught signal reports lastError and writes signal details to AppLog.
+        try "#!/bin/sh\nif [ \"$1\" = \"-display\" ] && [ \"$2\" = \"help\" ]; then echo 'cocoa'; exit 0; fi\nkill -ABRT $$\n"
+            .write(to: fakeQemu, atomically: true, encoding: .utf8)
+        chmod(fakeQemu.path, 0o755)
+
+        manager.start(vm)
+        for _ in 0..<40 where manager.isRunning(vm.id) {
+            try await Task.sleep(nanoseconds: 50_000_000)
+        }
+        try await Task.sleep(nanoseconds: 100_000_000)
+        XCTAssertFalse(manager.isRunning(vm.id))
+        let error = try XCTUnwrap(manager.lastError)
+        let logURL = try XCTUnwrap(error.logURL)
+        defer { try? FileManager.default.removeItem(at: logURL) }
+        let logText = try String(contentsOf: logURL, encoding: .utf8)
+        XCTAssertTrue(logText.contains("signal \(SIGABRT)"), "Unexpected log text: \(logText)")
+    }
+
+    func testCDisplaySocketCreatesOwnerOnlySocket() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cds-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let sockPath = dir.appendingPathComponent("d.sock").path
+        let fd = cds_listen(sockPath)
+        XCTAssertGreaterThanOrEqual(fd, 0)
+        defer {
+            cds_close(fd)
+            unlink(sockPath)
+        }
+
+        var st = stat()
+        XCTAssertEqual(lstat(sockPath, &st), 0)
+        XCTAssertEqual(st.st_mode & 0o777, 0o600)
     }
 }

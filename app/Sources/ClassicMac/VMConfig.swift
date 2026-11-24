@@ -367,6 +367,15 @@ struct VMConfig: Codable, Identifiable, Hashable {
         min(max(value, minHeight), maxHeight)
     }
 
+    static func formattedOSLabel(_ rawVersion: String, family: MachineFamily) -> String {
+        let v = rawVersion.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard v.first?.isNumber == true else { return rawVersion }
+        if family == .powerMacOSX || v.hasPrefix("10.") { return "Mac OS X \(v)" }
+        if v.hasPrefix("7.") { return "System \(v)" }
+        if v.hasPrefix("8.") || v.hasPrefix("9.") { return "Mac OS \(v)" }
+        return rawVersion
+    }
+
     static let importingTemplate = CodingUserInfoKey(rawValue: "classicmac.importingTemplate")!
 
     // Tolerant decoding so VMs created by older builds keep loading.
@@ -463,6 +472,11 @@ struct VMConfig: Codable, Identifiable, Hashable {
             height = preset.height
         }
 
+        // Windows and Linux .classic configs store 32 for Millions of colors;
+        // map it to macOS's raw value (24) so bundles stay at Millions.
+        if depth == 32 {
+            depth = ColorDepth.millions.rawValue
+        }
         let validDepths = Set(ColorDepth.allCases.map(\.rawValue))
         if !validDepths.contains(depth) {
             depth = ColorDepth.thousands.rawValue
