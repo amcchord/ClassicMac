@@ -1,7 +1,9 @@
 name: Linux desktop
 on:
   push:
-    branches: [codex/windows-app, codex/linux-release]
+    branches: [main, 'codex/*']
+  pull_request:
+    branches: [main]
   workflow_dispatch:
     inputs:
       test_tiger:
@@ -38,7 +40,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release download v4.6.1 -p ClassicMac-4.6.1.zip -D output/desktop/tools
+          gh release download v4.6.1 --repo amcchord/ClassicMac -p ClassicMac-4.6.1.zip -D output/desktop/tools
           echo '6a29d2b05bb51eedae12ab02ab048ca98ce77fc5c8dc5d3b6ff16ce0a0f29350  output/desktop/tools/ClassicMac-4.6.1.zip' | sha256sum -c
           unzip -p output/desktop/tools/ClassicMac-4.6.1.zip ClassicMac.app/Contents/Resources/ClassicMacTools.iso > output/desktop/runtime/ClassicMacTools.iso
           echo '23a42184811c7e1ad8718b6746e061c3a1c3e3dd43af25c9c828b3fa326fca22  output/desktop/runtime/ClassicMacTools.iso' | sha256sum -c
@@ -49,10 +51,16 @@ jobs:
             output/desktop/runtime
             output/desktop/ClassicMac-Linux-QEMU-source.tar.gz
           key: ${{ steps.engine.outputs.cache-primary-key }}
+      - name: Check Python packaging and template tests
+        run: |
+          python3 -m unittest discover -s scripts -p 'test_*.py' -v
+          python3 scripts/test-prepare-os9-template.py -v
       - name: Check Linux display devices
         run: python3 ati/tests/test_qemu_ati.py --gl-api gles --gl-optional output/desktop/runtime/bin/qemu-system-ppc output/desktop/runtime/qemu/pc-bios
-      - name: Check Mac OS X flash persistence
-        run: python3 osx/tests/qtest_macosx_flash.py --qemu output/desktop/runtime/bin/qemu-system-ppc-osx --firmware output/desktop/runtime/qemu-osx --seed-file output/desktop/runtime/qemu-osx/macosx-flash-seed.img
+      - name: Check Mac OS X NVRAM and flash persistence
+        run: |
+          python3 osx/tests/qtest_macosx_nvram.py --qemu output/desktop/runtime/bin/qemu-system-ppc-osx --firmware output/desktop/runtime/qemu-osx
+          python3 osx/tests/qtest_macosx_flash.py --qemu output/desktop/runtime/bin/qemu-system-ppc-osx --firmware output/desktop/runtime/qemu-osx --seed-file output/desktop/runtime/qemu-osx/macosx-flash-seed.img
       - name: Check Radeon cursor pixels and clipping
         run: python3 ati/tests/test_radeon_cursor.py --qemu output/desktop/runtime/bin/qemu-system-ppc --support output/desktop/runtime/qemu/pc-bios --output output/desktop/radeon-cursor
       - name: Check Quadra shared display pixels
@@ -72,8 +80,9 @@ jobs:
           sudo apt-get install -y p7zip-full
           python3 osx/tests/fetch_tiger_fixture.py output/osx-qa/Tiger.classic \
             --qemu-img output/desktop/runtime/bin/qemu-img
+          VERSION="$(tr -d '[:space:]' < VERSION)"
           QT_QPA_PLATFORM=offscreen APPIMAGE_EXTRACT_AND_RUN=1 \
-            output/desktop/packages/ClassicMac-4.7.0-linux-x64.AppImage --qualify-osx output/osx-qa/Tiger.classic
+            "output/desktop/packages/ClassicMac-${VERSION}-linux-x64.AppImage" --qualify-osx output/osx-qa/Tiger.classic
       - uses: actions/upload-artifact@v4
         with:
           name: ClassicMac-Linux-app

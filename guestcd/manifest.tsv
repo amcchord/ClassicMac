@@ -1,5 +1,5 @@
 # ClassicMac Tools CD manifest (tab-separated)
-# columns: dest name on CD <TAB> handling (macbinary|expand) <TAB> md5 <TAB> url
+# columns: dest name on CD <TAB> handling (macbinary|expand) <TAB> checksum (md5 or sha256:<hex>) <TAB> url [<TAB> sha256]
 # macbinary: decode the download as MacBinary straight onto the CD
 # expand:    unpack the archive on the host (unar) and copy the ready-to-run
 #            files onto the CD with forks/type/creator intact
@@ -10,5 +10,5 @@ DropStuff 5.5 Installer	expand	f2ec7d51542b5891473be841b552e9fb	https://old.mac.
 USB Overdrive 1.4	expand	14f279de3c9b4d8b77da2b937e6ecfcc	https://old.mac.gdn/apps/USB_Overdrive_1.4.sit
 Disk Copy 6.3.3.smi	expand	0d0918ecf08cdd2dbfd943c486283023	https://old.mac.gdn/apps/Disk-Copy-633-smi.sit
 Virtual CD-DVD Utility	expand	a84a05d7f4329a25fab61a30afce10e4	https://old.mac.gdn/apps/virtual-cd-dvd-ute-10d3.sit
-Transmit 1.6 PPC	expand	649bb19392adcfb03c771cd2e99dea46	http://download.panic.com/transmit/Transmit%201/transmit_1.6_ppc.sit.bin
-Transmit 1.6 68k	expand	178bcdb616e8d72b221cddffed6c0d6d	http://download.panic.com/transmit/Transmit%201/transmit_1.6_68k.sit.bin
+Transmit 1.6 PPC	expand	649bb19392adcfb03c771cd2e99dea46	https://download.panic.com/transmit/Transmit%201/transmit_1.6_ppc.sit.bin
+Transmit 1.6 68k	expand	178bcdb616e8d72b221cddffed6c0d6d	https://download.panic.com/transmit/Transmit%201/transmit_1.6_68k.sit.bin

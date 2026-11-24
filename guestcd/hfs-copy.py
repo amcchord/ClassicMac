@@ -27,6 +27,16 @@ import unicodedata
 MAC_EPOCH_OFFSET = 2082844800  # 1904-01-01 -> 1970-01-01 in seconds
 
 libc = ctypes.CDLL(ctypes.util.find_library("c"), use_errno=True)
+if hasattr(libc, "getxattr"):
+    libc.getxattr.argtypes = [
+        ctypes.c_char_p,
+        ctypes.c_char_p,
+        ctypes.c_void_p,
+        ctypes.c_size_t,
+        ctypes.c_uint32,
+        ctypes.c_int,
+    ]
+    libc.getxattr.restype = ctypes.c_ssize_t
 
 
 def finder_info(path):
@@ -141,4 +151,5 @@ def main():
     copy_node(src, dest)
 
 
-main()
+if __name__ == "__main__":
+    main()
