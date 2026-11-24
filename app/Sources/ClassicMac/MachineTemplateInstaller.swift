@@ -86,7 +86,7 @@ enum MachineTemplateInstaller {
 
     static func normalizedName(_ name: String) throws -> String {
         let value = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !value.isEmpty, value.count <= 100,
+        guard !value.isEmpty, value.count <= 100, !value.hasPrefix("."),
               !value.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains) else {
             throw MachineDownloadError.invalidName
         }
@@ -157,7 +157,8 @@ enum MachineTemplateInstaller {
             customResolution: source.customResolution, useBrowserDisplay: false,
             bootFromCD: false, toolsCDInserted: source.toolsCDInserted,
             networking: source.networking, sound: source.sound,
-            useG4CPU: source.useG4CPU, useVirtioDisk: source.useVirtioDisk, tabletInput: source.tabletInput,
+            useG4CPU: source.useG4CPU, useVirtioDisk: source.useVirtioDisk,
+            graphicsCard: source.graphicsCard, tabletInput: source.tabletInput,
             classicInputHelpers: source.classicInputHelpers
         )
         let encoder = JSONEncoder()
@@ -374,7 +375,15 @@ enum MachineTemplateInstaller {
         }
         try output.truncate(atOffset: UInt64(size))
         let diskExtents = UnsafeBufferPointer(start: extents, count: count)
-        for extent in diskExtents {
+        let fd = output.fileDescriptor
+        var blockSize: Int64 = 0
+        if maximumStorageBytes != nil {
+            var volume = statfs()
+            guard fstatfs(fd, &volume) == 0, volume.f_bsize > 0 else { throw invalidArchive() }
+            blockSize = Int64(volume.f_bsize)
+        }
+        var punchedThroughIndex = 0
+        for (index, extent) in diskExtents.enumerated() {
             if cancelled() { throw CancellationError() }
             try output.seek(toOffset: UInt64(extent.offset))
             var remaining = extent.length
@@ -383,27 +392,55 @@ enum MachineTemplateInstaller {
                 let data = try readExactly(Int(min(sparseChunkBytes, remaining)), from: input)
                 try output.write(contentsOf: data)
                 remaining -= Int64(data.count)
-                if let maximumStorageBytes, try allocatedBytes(output.fileDescriptor) > maximumStorageBytes {
-                    throw storageBudgetExceeded()
+                let cursor = extent.offset + extent.length - remaining
+                if let maximumStorageBytes, try allocatedBytes(fd) > maximumStorageBytes {
+                    // APFS can speculatively preallocate or bridge gaps across
+                    // neighboring writes; punch unused holes before enforcing budget.
+                    let start = max(0, punchedThroughIndex - 1)
+                    try punchSparseGaps(fd, extents: diskExtents, fromIndex: start,
+                                        throughExtent: index, writtenCursor: cursor,
+                                        totalSize: size, blockSize: blockSize, cancelled: cancelled)
+                    punchedThroughIndex = index
+                    if try allocatedBytes(fd) > maximumStorageBytes && start > 0 {
+                        try punchSparseGaps(fd, extents: diskExtents, fromIndex: 0,
+                                            throughExtent: index, writtenCursor: cursor,
+                                            totalSize: size, blockSize: blockSize, cancelled: cancelled)
+                    }
+                    if try allocatedBytes(fd) > maximumStorageBytes {
+                        throw storageBudgetExceeded()
+                    }
                 }
-                progress(extent.offset + extent.length - remaining)
+                progress(cursor)
             }
         }
-        if maximumStorageBytes != nil {
+        if let maximumStorageBytes {
             // APFS can allocate gaps between neighboring writes. Release
             // full filesystem blocks after all extents have been written.
-            var volume = statfs()
-            let fd = output.fileDescriptor
-            guard fstatfs(fd, &volume) == 0, volume.f_bsize > 0 else { throw invalidArchive() }
-            let blockSize = Int64(volume.f_bsize)
-            var end: Int64 = 0
-            for extent in diskExtents {
-                if cancelled() { throw CancellationError() }
-                try punchHole(fd, from: end, to: extent.offset, blockSize: blockSize)
-                end = extent.offset + extent.length
+            try punchSparseGaps(fd, extents: diskExtents, fromIndex: 0,
+                                throughExtent: diskExtents.count, writtenCursor: size,
+                                totalSize: size, blockSize: blockSize, cancelled: cancelled)
+            if try allocatedBytes(fd) > maximumStorageBytes {
+                throw storageBudgetExceeded()
             }
-            try punchHole(fd, from: end, to: size, blockSize: blockSize)
         }
+    }
+
+    private static func punchSparseGaps(_ fd: Int32, extents: UnsafeBufferPointer<CMSparseExtent>,
+                                        fromIndex: Int, throughExtent: Int, writtenCursor: Int64,
+                                        totalSize: Int64, blockSize: Int64, cancelled: () -> Bool) throws {
+        var end: Int64 = fromIndex > 0 ? extents[fromIndex - 1].offset + extents[fromIndex - 1].length : 0
+        for i in fromIndex..<min(throughExtent, extents.count) {
+            if cancelled() { throw CancellationError() }
+            let extent = extents[i]
+            try punchHole(fd, from: end, to: extent.offset, blockSize: blockSize)
+            end = extent.offset + extent.length
+        }
+        if throughExtent < extents.count {
+            let current = extents[throughExtent]
+            try punchHole(fd, from: end, to: current.offset, blockSize: blockSize)
+            end = writtenCursor
+        }
+        try punchHole(fd, from: end, to: totalSize, blockSize: blockSize)
     }
 
     private static func punchHole(_ fd: Int32, from start: Int64, to end: Int64, blockSize: Int64) throws {

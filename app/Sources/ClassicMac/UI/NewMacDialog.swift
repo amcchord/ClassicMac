@@ -7,8 +7,13 @@ import PlatinumKit
 struct NewMacDialog: View {
     static let size = NSSize(width: 500, height: 372)
 
+    private final class CloseGuard: ObservableObject {
+        var canClose = true
+    }
+
     let handle: DialogHandle
     @ObservedObject private var store = VMStore.shared
+    @StateObject private var closeGuard = CloseGuard()
     @State private var family: MachineFamily = .powerMacG4
     @State private var name = MachineFamily.powerMacG4.defaultName
     @State private var ramMB = MachineFamily.powerMacG4.defaultRAMMB
@@ -18,6 +23,10 @@ struct NewMacDialog: View {
     @State private var saveFolder = AppPaths.defaultLibraryDir
     @State private var working = false
     @State private var errorMessage: String?
+
+    private var validName: Bool {
+        (try? MachineTemplateInstaller.normalizedName(name)) != nil
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -97,15 +106,25 @@ struct NewMacDialog: View {
             }
             HStack(spacing: Platinum.buttonGap) {
                 Spacer()
-                PlatinumButton("Cancel", role: .cancel) { handle.close() }
-                    .disabled(working)
+                PlatinumButton("Cancel", role: .cancel) {
+                    guard !working else { return }
+                    handle.close()
+                }
+                .disabled(working)
                 PlatinumButton("Create", role: .default, action: create)
-                    .disabled(working || name.trimmingCharacters(in: .whitespaces).isEmpty)
+                    .disabled(working || !validName)
             }
         }
         .padding(12)
         .frame(width: Self.size.width, height: Self.size.height)
         .background(Platinum.face.color)
+        .onAppear { [closeGuard] in
+            closeGuard.canClose = !working
+            handle.window?.shouldClose = { [weak closeGuard] in closeGuard?.canClose ?? true }
+        }
+        .onDisappear {
+            handle.window?.shouldClose = nil
+        }
     }
 
     private var familyBinding: Binding<MachineFamily> {
@@ -146,7 +165,13 @@ struct NewMacDialog: View {
 
     private func create() {
         errorMessage = nil
-        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed: String
+        do {
+            trimmed = try MachineTemplateInstaller.normalizedName(name)
+        } catch {
+            errorMessage = error.localizedDescription
+            return
+        }
         let preset = ResolutionPreset.recommended
         let config = VMConfig(
             name: trimmed,
@@ -169,6 +194,7 @@ struct NewMacDialog: View {
             return
         }
         working = true
+        closeGuard.canClose = false
         let destination = VMStore.uniqueFileURL(in: AppPaths.mediaDir, suggestedName: source.lastPathComponent)
         Task {
             let failure: String? = await Task.detached(priority: .userInitiated) {
@@ -176,26 +202,37 @@ struct NewMacDialog: View {
                     try FileManager.default.copyItem(at: source, to: destination)
                     return nil
                 } catch {
+                    try? FileManager.default.removeItem(at: destination)
                     return "The CD image could not be copied. \(error.localizedDescription)"
                 }
             }.value
-            working = false
             if let failure {
+                closeGuard.canClose = true
+                working = false
                 errorMessage = failure
                 return
             }
             var copied = config
             copied.cdImagePath = destination.path
-            finish(copied)
+            finish(copied, copiedMedia: destination)
+            closeGuard.canClose = true
+            working = false
         }
     }
 
-    private func finish(_ config: VMConfig) {
+    private func finish(_ config: VMConfig, copiedMedia: URL? = nil) {
         if let created = store.createVM(config) {
             store.selectedID = created.id
+            closeGuard.canClose = true
+            working = false
             handle.close()
-        } else if errorMessage == nil {
-            errorMessage = "The Mac could not be created."
+        } else {
+            if let copiedMedia {
+                try? FileManager.default.removeItem(at: copiedMedia)
+            }
+            if errorMessage == nil {
+                errorMessage = "The Mac could not be created."
+            }
         }
     }
 }

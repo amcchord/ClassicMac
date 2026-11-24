@@ -32,6 +32,7 @@ struct FirstMacSetupView: View {
     private var selected: LibraryEntry? { entries.first { $0.id == selection } ?? entries.first }
     private var busy: Bool { working || download.isBusy }
     private var validName: Bool { (try? MachineTemplateInstaller.normalizedName(name)) != nil }
+    private var readyFromInstaller: Bool { created?.bootFromCD ?? (source == .installer) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -44,38 +45,42 @@ struct FirstMacSetupView: View {
                 Spacer(minLength: 0)
             }
             PlatinumSeparator()
-            PlatinumScrollView(line: 16) {
-                VStack(alignment: .leading, spacing: 14) {
-                    switch step {
-                    case .welcome: welcome
-                    case .source: sourceChoice
-                    case .prepare:
-                        if source == .download { downloadChoice } else { installerChoice }
-                    case .ready: ready
+            Group {
+                if step == .welcome {
+                    ViewThatFits(in: .vertical) {
+                        stepBody
+                        PlatinumScrollView(line: 16) { stepBody }
                     }
-                    if let message = error ?? download.errorMessage {
-                        Text(message).platinumText(.small)
-                            .foregroundStyle(Platinum.errorText.color)
-                            .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                } else {
+                    PlatinumScrollView(line: 16) {
+                        stepBody
                     }
                 }
-                .padding(4)
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
             PlatinumSeparator()
             footer
         }
         .padding(12)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .onChange(of: selected?.id) { _, _ in
-            if let selected { name = selected.title }
+        .onChange(of: entries.map(\.id)) { _, _ in
+            if selection == nil || !entries.contains(where: { $0.id == selection }) {
+                selection = entries.first?.id
+            }
+        }
+        .onChange(of: selected?.id) { oldID, _ in
+            guard source == .download, let selected else { return }
+            let oldTitle = entries.first(where: { $0.id == oldID })?.title
+            if name == oldTitle || isAutoFilledName(name) {
+                name = selected.title
+            }
         }
         .onChange(of: store.vms.map(\.id)) { _, _ in
             // File > Open and Finder opens can arrive while setup is showing.
             // Creation/download callbacks set their own ready screen first.
             guard created == nil, !busy,
                   let vm = store.vms.first(where: { $0.id == store.selectedID }) else { return }
-            source = .download
+            source = vm.bootFromCD ? .installer : .download
             created = vm
             step = .ready
         }
@@ -88,12 +93,38 @@ struct FirstMacSetupView: View {
         }
     }
 
+    private var stepBody: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            switch step {
+            case .welcome: welcome
+            case .source: sourceChoice
+            case .prepare:
+                if source == .download { downloadChoice } else { installerChoice }
+            case .ready: ready
+            }
+            if let message = error ?? download.errorMessage {
+                Text(message).platinumText(.small)
+                    .foregroundStyle(Platinum.errorText.color)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(4)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func isAutoFilledName(_ value: String) -> Bool {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty { return true }
+        if MachineFamily.allCases.map(\.defaultName).contains(trimmed) { return true }
+        return entries.contains { $0.title == trimmed }
+    }
+
     private var title: String {
         switch step {
         case .welcome: return "Welcome to ClassicMac"
         case .source: return "How would you like to start?"
         case .prepare: return source == .download ? "Choose your first Mac" : "Bring your own Mac OS"
-        case .ready: return source == .installer ? "Your Mac is ready to install" : "Your Mac is ready"
+        case .ready: return readyFromInstaller ? "Your Mac is ready to install" : "Your Mac is ready"
         }
     }
 
@@ -128,7 +159,7 @@ struct FirstMacSetupView: View {
                     VMStore.shared.presentOpenPanel()
                     if let id = VMStore.shared.selectedID,
                        let vm = VMStore.shared.vms.first(where: { $0.id == id }) {
-                        source = .download
+                        source = vm.bootFromCD ? .installer : .download
                         created = vm
                         step = .ready
                     }
@@ -151,17 +182,35 @@ struct FirstMacSetupView: View {
             PlatinumButton("Try Again") { download.loadCatalog() }
         } else {
             Text("Mac OS is already installed. Choose an edition and we’ll do the rest.").platinumText(.body)
+            if let warning = download.partialCatalogWarning {
+                HStack(spacing: 6) {
+                    PlatinumIcon("caution", size: 16)
+                    Text(warning).platinumText(.small).fixedSize(horizontal: false, vertical: true)
+                }
+            }
             PlatinumPopUp(selection: Binding(get: { selected?.id ?? "" }, set: { selection = $0 }),
                           options: entries.map { ($0.id, $0.title) }, width: 360)
                 .disabled(busy)
             if let entry = selected {
                 Text(entry.description).platinumText(.small).fixedSize(horizontal: false, vertical: true)
-                let storage = MachineTemplateStoragePlan(machine: entry.machine, supportsSparseFiles: supportsSparse)
-                Text("\(ByteCountFormatter.string(fromByteCount: entry.machine.archiveBytes, countStyle: .file)) download · needs \(ByteCountFormatter.string(fromByteCount: storage.requiredBytes + MachineTemplateInstaller.spaceReserve, countStyle: .file)) free")
+                let required = download.totalRequiredFreeBytes(
+                    for: entry.machine,
+                    saveFolder: directory,
+                    supportsSparse: supportsSparse
+                )
+                Text("\(ByteCountFormatter.string(fromByteCount: entry.machine.archiveBytes, countStyle: .file)) download · needs \(ByteCountFormatter.string(fromByteCount: required, countStyle: .file)) free")
                     .platinumText(.detail)
             }
             nameAndLocation
-            if download.phase == .paused { Text(download.activityLabel).platinumText(.small) }
+            if let entry = selected {
+                if download.hasCompletedCache(entry.machine) {
+                    Text("Download complete. Choose Create Mac to finish setting up your Mac.")
+                        .platinumText(.small)
+                } else if download.hasPartialDownload(entry.machine) {
+                    Text("Paused. Your download is saved.")
+                        .platinumText(.small)
+                }
+            }
         }
     }
 
@@ -169,9 +218,11 @@ struct FirstMacSetupView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Choose the model for your Mac OS version. Memory, disk and display are set up for you.")
                 .platinumText(.body).fixedSize(horizontal: false, vertical: true)
-            PlatinumPopUp(selection: Binding(get: { family }, set: {
-                family = $0
-                name = $0.defaultName
+            PlatinumPopUp(selection: Binding(get: { family }, set: { newFamily in
+                if isAutoFilledName(name) {
+                    name = newFamily.defaultName
+                }
+                family = newFamily
             }), options: [
                 (MachineFamily.powerMacG4, "Power Mac G4 — Mac OS 8.5 to 9.2.2"),
                 (MachineFamily.powerMacOSX, "Power Mac G4 — Mac OS X"),
@@ -217,11 +268,12 @@ struct FirstMacSetupView: View {
     private var ready: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text(created?.name ?? "Your Mac").platinumText(.emphasis)
-            if source == .installer {
+            if readyFromInstaller {
+                let targetFamily = created?.machineFamily ?? family
                 Text("Start the installer, then follow these steps inside Mac OS:").platinumText(.body)
-                Text(family == .powerMacOSX
+                Text(targetFamily == .powerMacOSX
                      ? "1. In the installer, open Disk Utility and format the blank disk with Apple Partition Map and Mac OS Extended.\n2. Install Mac OS X on that disk.\n3. If the installer opens again, shut down, choose the hard disk as the startup disk in ClassicMac, and start your Mac."
-                     : family == .powerMacG4
+                     : targetFamily == .powerMacG4
                      ? "1. Open Utilities → Drive Setup on the CD and initialize the blank hard disk.\n2. Open Installer. In Options…, turn off Update Apple Hard Disk Drivers, then install Mac OS.\n3. Restart when installation finishes. Your Mac will start from its hard disk."
                      : "1. Use the disk utility on your CD to initialize the blank hard disk.\n2. Run the Mac OS installer and follow its instructions.\n3. Shut down when finished, eject the CD from Media, then start your Mac.")
                     .platinumText(.small).fixedSize(horizontal: false, vertical: true)
@@ -232,6 +284,14 @@ struct FirstMacSetupView: View {
             Text("You can change settings later with Get Info and add software with Media. When you’re done, choose Shut Down inside Mac OS.")
                 .platinumText(.detail).fixedSize(horizontal: false, vertical: true)
         }
+    }
+
+    private var prepareButtonTitle: String {
+        guard source == .download else { return "Create Mac" }
+        guard let machine = selected?.machine else { return "Download Mac" }
+        if download.hasCompletedCache(machine) { return "Create Mac" }
+        if download.hasPartialDownload(machine) { return "Resume Download" }
+        return "Download Mac"
     }
 
     private var footer: some View {
@@ -245,13 +305,13 @@ struct FirstMacSetupView: View {
             Spacer(minLength: 0)
             if step == .ready {
                 PlatinumButton("Later") { onFinish() }
-                PlatinumButton(source == .installer ? "Start Installer" : "Start Mac", role: .default) {
+                PlatinumButton(readyFromInstaller ? "Start Installer" : "Start Mac", role: .default) {
                     guard let created else { return }
                     onFinish()
                     QEMUManager.shared.start(created)
                 }.disabled(created == nil || !AppPaths.qemuIsAvailable(for: created?.machineFamily ?? .powerMacG4))
             } else if step == .prepare {
-                PlatinumButton(source == .download ? (download.phase == .paused ? "Resume Download" : "Download Mac") : "Create Mac", role: .default) {
+                PlatinumButton(prepareButtonTitle, role: .default) {
                     error = nil
                     if source == .download { installDownload() } else { createInstallerMac() }
                 }
@@ -263,7 +323,9 @@ struct FirstMacSetupView: View {
                         step = .source
                     } else {
                         step = .prepare
-                        name = source == .download ? (selected?.title ?? "") : family.defaultName
+                        if isAutoFilledName(name) {
+                            name = source == .download ? (selected?.title ?? "") : family.defaultName
+                        }
                         if source == .download && download.machines.isEmpty { download.loadCatalog() }
                     }
                 }.disabled(step == .welcome && !acknowledged)
@@ -285,14 +347,20 @@ struct FirstMacSetupView: View {
         download.install(entry.machine, name: name, directory: directory) { url in
             let store = VMStore.shared
             store.openBundle(at: url, autostart: false)
-            guard var vm = store.vms.first(where: { $0.folder == url }) else { return }
-            vm.graphicsCard = entry.graphicsCard
-            if vm.graphicsCard == .atiRadeon {
+            guard let id = store.selectedID, var vm = store.vms.first(where: { $0.id == id }) else {
+                error = "Your Mac was downloaded, but it could not be opened."
+                return
+            }
+            if entry.graphicsCard == .atiRadeon && vm.graphicsCard != .atiRadeon && vm.machineFamily == .powerMacG4 {
+                vm.graphicsCard = .atiRadeon
                 let size = ATIDisplay.size(fitting: vm.width, height: vm.height)
                 vm.width = size.width
                 vm.height = size.height
+                guard store.save(vm) else {
+                    error = "Your Mac was downloaded, but its settings could not be saved."
+                    return
+                }
             }
-            guard store.save(vm) else { error = "Your Mac was downloaded, but its settings could not be saved."; return }
             created = vm
             step = .ready
         }
