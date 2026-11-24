@@ -1,5 +1,6 @@
 #include "app.h"
 #include <QtConcurrent>
+#include <memory>
 #include <optional>
 
 using namespace Platinum;
@@ -14,52 +15,63 @@ QString bytesText(qint64 bytes) {
 }
 QString familyName(const QJsonObject &entry) {
   const auto family = entry.value("machineFamily").toString("powerMacG4");
-  return family == "quadra800" ? "Quadra 800"
-       : family == "powerMac7500" ? "Power Mac 7500" : "Power Mac G4";
+  return family == "quadra800"    ? "Quadra 800"
+       : family == "powerMac7500" ? "Power Mac 7500"
+       : family == "powerMacOSX"  ? "Power Mac G4 — Mac OS X"
+                                  : "Power Mac G4";
 }
 QString systemName(const QJsonObject &entry) {
   auto version = entry["osVersion"].toString();
   if (!version.isEmpty() && version[0].isDigit())
-    version.prepend(version.startsWith("10.") ? "Mac OS X " : version.startsWith("7.") ? "System " : "Mac OS ");
+    version.prepend(version.startsWith("10.") ? "Mac OS X "
+                    : version.startsWith("7.") ? "System "
+                                               : "Mac OS ");
   return version;
 }
 QString systemCategory(const QJsonObject &entry) {
   auto version = systemName(entry);
   return version.contains("Copland", Qt::CaseInsensitive) ? "Copland"
-       : version.startsWith("Mac OS X ") ? "Mac OS X"
-       : version.startsWith("System 7") ? "System 7"
-       : version.startsWith("Mac OS 8") ? "Mac OS 8" : "Mac OS 9";
+       : version.startsWith("Mac OS X ")                  ? "Mac OS X"
+       : version.startsWith("System 7")                   ? "System 7"
+       : version.startsWith("Mac OS 8")                   ? "Mac OS 8"
+                                                          : "Mac OS 9";
 }
 bool compatible(const QJsonObject &entry) {
   return entry.value("machineFamily").toString("powerMacG4") != "powerMac7500" &&
-      Model::supportedVersion(entry["minimumAppVersion"].toString());
+         Model::supportedVersion(entry["minimumAppVersion"].toString());
 }
 // The public catalog retains older image revisions for existing installations.
 // Browsing should present one current edition instead of near-identical copies.
 QJsonArray newestEditions(const QJsonArray &rows) {
   QMap<QString, QJsonObject> newest;
   QStringList order;
+  static const QRegularExpression revRe("^(.*)-v(\\d+)$");
   for (auto row : rows) {
     auto entry = row.toObject();
     auto id = entry["id"].toString();
-    auto match = QRegularExpression("^(.*)-v(\\d+)$").match(id);
+    auto match = revRe.match(id);
     auto key = match.hasMatch() ? match.captured(1) : id;
-    if (!newest.contains(key)) order << key;
+    if (!newest.contains(key))
+      order << key;
     const int revision = match.hasMatch() ? match.captured(2).toInt() : 0;
-    const int oldRevision = newest[key]["id"].toString().section("-v", -1).toInt();
-    if (newest[key].isEmpty() || revision > oldRevision) newest[key] = entry;
+    const int oldRevision =
+        newest[key]["id"].toString().section("-v", -1).toInt();
+    if (newest[key].isEmpty() || revision > oldRevision)
+      newest[key] = entry;
   }
   QJsonArray result;
   for (bool available : {true, false})
     for (const auto &key : order)
-      if (compatible(newest[key]) == available) result.append(newest[key]);
+      if (compatible(newest[key]) == available)
+        result.append(newest[key]);
   return result;
 }
 
 class EditionDelegate : public QStyledItemDelegate {
 public:
   using QStyledItemDelegate::QStyledItemDelegate;
-  QSize sizeHint(const QStyleOptionViewItem &, const QModelIndex &) const override {
+  QSize sizeHint(const QStyleOptionViewItem &,
+                 const QModelIndex &) const override {
     return {250, 58};
   }
   void paint(QPainter *painter, const QStyleOptionViewItem &option,
@@ -69,16 +81,21 @@ public:
     Pixels p(option.rect.width(), option.rect.height(),
              selected ? 0xffccccff : 0xffffffff);
     const auto family = entry.value("machineFamily").toString("powerMacG4");
-    const auto icon = family == "quadra800" ? "quadra_800"
-                    : family == "powerMac7500" ? "powermac_7500" : "powermac_g4";
-    QPainter(&p.image).drawImage(7, 11, QImage(":/" + QString(icon) + "-32.png"));
-    text(p, elide(entry["name"].toString(), p.w() - 58), 47, 17);
+    const auto icon = family == "quadra800"    ? "quadra_800"
+                    : family == "powerMac7500" ? "powermac_7500"
+                                               : "powermac_g4";
+    QPainter(&p.image).drawImage(7, 11,
+                                 cachedIcon(":/" + QString(icon) + "-32.png"));
+    const QString title = Library::displayTitle(entry);
+    text(p, elide(title, p.w() - 58), 47, 17);
     text(p, elide(familyName(entry), p.w() - 58, "small"), 47, 33,
          0xff555555, "small");
-    const auto caption = compatible(entry)
-        ? bytesText(qint64(entry["archiveBytes"].toDouble())) + " download"
+    const auto caption =
+        compatible(entry)
+            ? bytesText(qint64(entry["archiveBytes"].toDouble())) + " download"
         : entry.value("machineFamily").toString() == "powerMac7500"
-            ? "macOS only" : "App update required";
+            ? "macOS only"
+            : "App update required";
     text(p, elide(caption, p.w() - 58, "small"), 47, 47, 0xff555555, "small");
     p.line(0, p.h() - 1, p.w(), selected ? 0xffaaaadd : 0xffeeeeee);
     if (selected && option.state & QStyle::State_HasFocus) {
@@ -95,11 +112,12 @@ class LibraryDialog : public PDialog {
 public:
   QBoxLayout *columns = nullptr;
   explicit LibraryDialog(QWidget *parent)
-      : PDialog("Mac OS Library", {790, 620}, parent) {
+      : PDialog("Mac OS Library", {800, 620}, parent) {
     growable = true;
     setMinimumSize(360, 300);
     setObjectName("libraryDialog");
   }
+
 protected:
   void resizeEvent(QResizeEvent *event) override {
     PDialog::resizeEvent(event);
@@ -112,13 +130,15 @@ protected:
 template <class T>
 T libraryTask(QWidget *parent, const QString &title, const QString &name,
               const std::function<T(std::atomic_bool &, Library::Progress)> &job,
-              bool download) {
+              bool download, bool cachedComplete = false) {
   PDialog d(title, {500, download ? 280 : 190}, parent);
   d.setObjectName("libraryProgressDialog");
   auto v = dialogLayout(&d);
   v->addWidget(label(name, &d, "system", true));
-  auto status = label(download ? "Connecting to the Library…" : "Loading editions…",
-                      &d, "regular", true);
+  const QString initialStatus = !download         ? "Loading editions…"
+                                : cachedComplete  ? "Checking your saved download…"
+                                                  : "Connecting to the Library…";
+  auto status = label(initialStatus, &d, "regular", true);
   status->setObjectName("downloadStatus");
   auto bar = new PProgress(&d);
   bar->setValue(-1);
@@ -127,26 +147,40 @@ T libraryTask(QWidget *parent, const QString &title, const QString &name,
   v->addWidget(status);
   v->addWidget(bar);
   v->addWidget(amount);
-  if (download)
-    v->addWidget(label("Pause at any time. Your download is saved and resumes "
-                       "when you choose this edition again.", &d, "small", true));
+  PLabel *hint = nullptr;
+  if (download) {
+    hint = label(
+        cachedComplete
+            ? "Creating your Mac from the saved image. You can cancel at any time."
+            : "Pause at any time. Your download is saved and resumes when you choose this edition again.",
+        &d, "small", true);
+    v->addWidget(hint);
+  }
   v->addStretch();
   std::atomic_bool cancel = false;
   bool finished = false;
-  auto pause = button(download ? "Pause Download" : "Cancel", [&] { cancel = true; }, &d);
+  QString currentPhase = (download && !cachedComplete) ? "Downloading" : "";
+  auto pause = button((download && !cachedComplete) ? "Pause Download" : "Cancel",
+                      [&] { cancel = true; }, &d);
   pause->setObjectName("downloadPause");
   buttonRow(v, {pause});
   auto requestPause = [&] {
     cancel = true;
     pause->setEnabled(false);
-    status->setText(download ? "Saving your progress…" : "Canceling…");
+    status->setText((download && currentPhase == "Downloading")
+                        ? "Saving your progress…"
+                        : "Canceling…");
   };
   QObject::connect(pause, &PButton::clicked, &d, requestPause);
   d.canClose = [&] {
-    if (!finished) requestPause();
+    if (!finished)
+      requestPause();
     return finished;
   };
-  struct Result { std::optional<T> value; QString error; };
+  struct Result {
+    std::optional<T> value;
+    QString error;
+  };
   QFutureWatcher<Result> watcher;
   auto future = QtConcurrent::run([&]() -> Result {
     try {
@@ -165,26 +199,52 @@ T libraryTask(QWidget *parent, const QString &title, const QString &name,
         }
         lastPhase = phase;
         throttle.restart();
-        auto detail = total > 0 ? bytesText(complete) + " of " + bytesText(total) : QString();
+        auto detail = total > 0 ? bytesText(complete) + " of " + bytesText(total)
+                                : QString();
         const double seconds = phaseTime.elapsed() / 1000.0;
         if (phase == "Downloading" && seconds >= 1 && complete > phaseStart) {
           const double speed = (complete - phaseStart) / seconds;
           detail += " · " + bytesText(qint64(speed)) + "/s";
           if (total > complete && speed > 0) {
             const auto left = qint64((total - complete) / speed);
-            detail += left >= 60 ? QString(" · about %1 min left").arg((left + 59) / 60)
-                                 : " · less than a minute left";
+            if (left >= 3600) {
+              const auto hours = (left + 1800) / 3600;
+              detail += QString(" · about %1 hour%2 left")
+                            .arg(hours)
+                            .arg(hours == 1 ? "" : "s");
+            } else if (left >= 60) {
+              detail += QString(" · about %1 min left").arg((left + 59) / 60);
+            } else {
+              detail += " · less than a minute left";
+            }
           }
         }
         const auto phaseText = phase == "Checking download" ? "Checking your download"
-                             : phase == "Installing" ? "Preparing your Mac" : phase;
-        QMetaObject::invokeMethod(&d, [=, &cancel] {
-          if (cancel) return;
-          status->setText(phaseText + (total > 0
-              ? QString("… %1%").arg(complete * 100 / total) : "…"));
-          amount->setText(detail);
-          bar->setValue(total > 0 ? double(complete) / total : -1);
-        }, Qt::QueuedConnection);
+                             : phase == "Installing"        ? "Preparing your Mac"
+                                                            : phase;
+        QMetaObject::invokeMethod(
+            &d,
+            [=, &cancel, &currentPhase] {
+              if (cancel)
+                return;
+              currentPhase = phase;
+              if (download) {
+                const bool downloading = (phase == "Downloading");
+                pause->setText(downloading ? "Pause Download" : "Cancel");
+                if (hint)
+                  hint->setText(
+                      downloading
+                          ? "Pause at any time. Your download is saved and resumes when you choose this edition again."
+                          : "Your downloaded image stays saved if you cancel.");
+              }
+              status->setText(
+                  phaseText +
+                  (total > 0 ? QString("… %1%").arg(complete * 100 / total)
+                             : "…"));
+              amount->setText(detail);
+              bar->setValue(total > 0 ? double(complete) / total : -1);
+            },
+            Qt::QueuedConnection);
       };
       return {job(cancel, progress), {}};
     } catch (const std::exception &e) {
@@ -204,42 +264,60 @@ T libraryTask(QWidget *parent, const QString &title, const QString &name,
     future.waitForFinished();
   }
   const auto result = future.result();
-  if (!result.error.isEmpty()) Model::fail(result.error);
+  if (!result.error.isEmpty())
+    Model::fail(result.error);
   return *result.value;
 }
 } // namespace
 
 QJsonArray App::loadCatalog() {
-  if (!catalogRows.isEmpty()) return catalogRows;
+  if (!catalogRows.isEmpty())
+    return catalogRows;
   auto owner = QApplication::activeWindow();
-  catalogRows = libraryTask<QJsonArray>(owner ? owner : this, "Mac OS Library",
-      "Finding ready-to-run Macs", [](std::atomic_bool &cancel, Library::Progress) {
+  catalogRows = libraryTask<QJsonArray>(
+      owner ? owner : this, "Mac OS Library", "Finding ready-to-run Macs",
+      [](std::atomic_bool &cancel, Library::Progress) {
         return Library::load(cancel);
-      }, false);
+      },
+      false);
   return catalogRows;
 }
 
-Model::Machine App::install(QJsonObject entry, const QString &name) {
-  const auto destination = Model::documents();
+Model::Machine App::install(QJsonObject entry, const QString &name,
+                            const QString &destination) {
+  const auto target = destination.isEmpty() ? Model::documents() : destination;
   auto owner = QApplication::activeWindow();
-  auto machine = libraryTask<Model::Machine>(owner ? owner : this,
-      "Download Mac", name.isEmpty() ? entry["name"].toString() : name,
+  const auto title = name.isEmpty() ? Library::displayTitle(entry) : name;
+  const auto archiveSize = qint64(entry["archiveBytes"].toDouble());
+  const bool cachedComplete =
+      archiveSize > 0 && Library::cachedBytes(entry) == archiveSize;
+  auto machine = libraryTask<Model::Machine>(
+      owner ? owner : this, cachedComplete ? "Create Mac" : "Download Mac", title,
       [=](std::atomic_bool &cancel, Library::Progress progress) {
-        return Library::install(entry, destination, name, cancel, progress);
-      }, true);
+        return Library::install(entry, target, name, cancel, progress);
+      },
+      true, cachedComplete);
   registerMachine(machine);
   return machine;
 }
 
 void App::showLibrary() {
-  const auto destination = Model::documents();
+  for (auto *existing : findChildren<PDialog *>()) {
+    if (existing->objectName() == "libraryDialog" && existing->isVisible()) {
+      existing->raise();
+      existing->activateWindow();
+      return;
+    }
+  }
+  QString saveFolder = Model::documents();
   LibraryDialog d(this);
   auto outer = new QVBoxLayout(d.body);
   outer->setContentsMargins(14, 12, 14, 12);
   outer->setSpacing(10);
   outer->addWidget(label("Mac OS Library", &d));
   outer->addWidget(label("Choose a system to download. "
-                         "Each download creates a separate Mac.", &d, "regular", true));
+                         "Each download creates a separate Mac.",
+                         &d, "regular", true));
   auto searchRow = new QHBoxLayout;
   searchRow->setSpacing(8);
   searchRow->addWidget(label("Search:", &d));
@@ -257,7 +335,8 @@ void App::showLibrary() {
   auto filter = new PCombo(&d);
   filter->setObjectName("libraryFilter");
   filter->setAccessibleName("Filter by Mac OS");
-  filter->addItems({"All systems", "System 7", "Mac OS 8", "Mac OS 9", "Mac OS X", "Copland"});
+  filter->addItems({"All systems", "System 7", "Mac OS 8", "Mac OS 9",
+                    "Mac OS X", "Copland"});
   filterRow->addWidget(filter);
   auto count = label("Loading editions…", &d, "small");
   count->setObjectName("libraryCount");
@@ -266,6 +345,12 @@ void App::showLibrary() {
   refresh->setObjectName("libraryRefresh");
   filterRow->addWidget(refresh);
   outer->addLayout(filterRow);
+
+  auto partialBanner = label("", &d, "small", true);
+  partialBanner->setObjectName("libraryPartialWarning");
+  partialBanner->ink = 0xff880000;
+  partialBanner->hide();
+  outer->addWidget(partialBanner);
 
   d.columns = new QBoxLayout(QBoxLayout::LeftToRight);
   d.columns->setSpacing(14);
@@ -292,8 +377,9 @@ void App::showLibrary() {
   detail->setSpacing(10);
   auto title = label("Choose an edition", content, "system", true);
   title->setObjectName("libraryEditionTitle");
-  auto summary = label("The Library is loading. You can close this window at any time.",
-                       content, "regular", true);
+  auto summary = label(
+      "The Library is loading. You can close this window at any time.",
+      content, "regular", true);
   auto specs = label("", content, "small", true);
   auto availability = label("", content, "small", true);
   availability->setObjectName("libraryAvailability");
@@ -301,14 +387,28 @@ void App::showLibrary() {
   auto name = new PEdit({}, content);
   name->setObjectName("libraryMachineName");
   name->setAccessibleName("Name your new Mac");
+  auto saveRow = new QHBoxLayout;
+  saveRow->setSpacing(8);
+  auto saveCaption = label("Save in:", content, "small");
+  auto saveLocation = label(
+      QFileInfo(saveFolder).fileName().isEmpty()
+          ? QDir::toNativeSeparators(saveFolder)
+          : QFileInfo(saveFolder).fileName(),
+      content, "small");
+  saveLocation->setToolTip(QDir::toNativeSeparators(saveFolder));
+  auto chooseFolder = new PButton("Choose…", content);
+  chooseFolder->setObjectName("librarySaveFolder");
+  saveRow->addWidget(saveCaption);
+  saveRow->addWidget(saveLocation, 1);
+  saveRow->addWidget(chooseFolder);
   auto diskHint = label("", content, "small", true);
-  diskHint->setToolTip(QDir::toNativeSeparators(destination));
   detail->addWidget(title);
   detail->addWidget(summary);
   detail->addWidget(specs);
   detail->addWidget(availability);
   detail->addWidget(nameCaption);
   detail->addWidget(name);
+  detail->addLayout(saveRow);
   detail->addWidget(diskHint);
   detail->addStretch();
   detailArea->setWidget(content);
@@ -318,8 +418,13 @@ void App::showLibrary() {
   feedback->setObjectName("libraryFeedback");
   outer->addWidget(feedback);
   auto footer = new QHBoxLayout;
+  footer->setContentsMargins(0, 0, 16, 0);
   footer->setSpacing(10);
   footer->addWidget(button("Close", [&] { d.done(); }, &d));
+  auto discard = new PButton("Discard Download", &d);
+  discard->setObjectName("libraryDiscard");
+  discard->hide();
+  footer->addWidget(discard);
   footer->addStretch();
   auto showMacs = button("Show My Macs", [&] { d.done(); }, &d);
   showMacs->setObjectName("libraryShowMacs");
@@ -333,52 +438,100 @@ void App::showLibrary() {
 
   auto visibleRows = newestEditions(catalogRows);
   auto selectedEntry = [&]() {
-    return editions->currentItem() ? editions->currentItem()->data(Qt::UserRole).toJsonObject()
-                                   : QJsonObject();
+    return editions->currentItem()
+               ? editions->currentItem()->data(Qt::UserRole).toJsonObject()
+               : QJsonObject();
   };
   QString detailID, readyMachineID, readyEditionID, readyName;
+  qint64 cachedSavedBytes = 0;
+  bool loading = false;
+  auto updateActionButtons = [&] {
+    auto entry = selectedEntry();
+    const bool available = !entry.isEmpty() && compatible(entry);
+    const auto archiveSize = qint64(entry["archiveBytes"].toDouble());
+    const bool isReady = readyEditionID == detailID &&
+                         readyName == name->text().trimmed();
+    download->setEnabled(!loading && available);
+    download->setText(isReady                          ? "Start Mac"
+                      : cachedSavedBytes == archiveSize && archiveSize > 0
+                                                       ? "Create Mac"
+                      : cachedSavedBytes > 0           ? "Resume Download"
+                                                       : "Download Mac");
+    discard->setVisible(available && cachedSavedBytes > 0 && !isReady);
+    discard->setEnabled(!loading && available && cachedSavedBytes > 0);
+    chooseFolder->setEnabled(!loading && available);
+  };
   auto updateDetails = [&] {
     auto entry = selectedEntry();
     const bool exists = !entry.isEmpty();
     const bool available = exists && compatible(entry);
-    download->setEnabled(available);
     name->setVisible(available);
     nameCaption->setVisible(available);
+    saveCaption->setVisible(available);
+    saveLocation->setVisible(available);
+    chooseFolder->setVisible(available);
     specs->setVisible(exists);
     diskHint->setVisible(available);
     availability->setVisible(exists);
     if (!exists) {
       detailID.clear();
+      cachedSavedBytes = 0;
       title->setText("No matching editions");
       summary->setText("Try another search or choose All systems.");
-      download->setText("Download Mac");
+      updateActionButtons();
       return;
     }
-    title->setText(entry["name"].toString());
-    summary->setText(entry["summary"].toString());
-    specs->setText("System: " + systemName(entry) + "\nModel: " + familyName(entry) +
-        "\nDownload: " + bytesText(qint64(entry["archiveBytes"].toDouble())) +
-        "\nVirtual disk: " + bytesText(qint64(entry.value("diskCapacityBytes")
-                                                   .toDouble(entry["installedBytes"].toDouble()))));
-    const auto saved = Library::cachedBytes(entry);
+    const QString display = Library::displayTitle(entry);
+    title->setText(display);
+    summary->setText(Library::cleanSummary(entry));
+    const qint64 requiredFree = Library::requiredDiskBytes(entry, saveFolder);
+    specs->setText("System: " + systemName(entry) +
+                   "\nModel: " + familyName(entry) +
+                   "\nDownload: " + bytesText(qint64(entry["archiveBytes"].toDouble())) +
+                   "\nVirtual disk: " +
+                   bytesText(qint64(entry.value("diskCapacityBytes")
+                                        .toDouble(entry["installedBytes"].toDouble()))) +
+                   "\nFree space needed: " + bytesText(requiredFree));
+    cachedSavedBytes = Library::cachedBytes(entry);
     const auto archiveSize = qint64(entry["archiveBytes"].toDouble());
-    download->setText(saved == archiveSize ? "Create Mac"
-                      : saved ? "Resume Download" : "Download Mac");
-    if (detailID != entry["id"].toString()) name->setText(entry["name"].toString());
+    if (detailID != entry["id"].toString())
+      name->setText(display);
     detailID = entry["id"].toString();
-    if (readyEditionID == detailID && readyName == name->text())
-      download->setText("Start Mac");
-    availability->setText(!available
-        ? entry.value("machineFamily").toString() == "powerMac7500"
-            ? "Copland is available in ClassicMac for macOS. Choose another system for this computer."
-            : "Requires ClassicMac " + entry["minimumAppVersion"].toString() + " or later."
-        : readyEditionID == detailID && readyName == name->text()
+    updateActionButtons();
+    availability->setText(
+        !available
+            ? entry.value("machineFamily").toString() == "powerMac7500"
+                  ? "Copland is available in ClassicMac for macOS. Choose another system for this computer."
+                  : "Requires ClassicMac " + entry["minimumAppVersion"].toString() + " or later."
+        : readyEditionID == detailID && readyName == name->text().trimmed()
             ? "Your Mac is ready to start."
-        : saved == archiveSize ? "Download complete. Create a Mac from the saved image."
-        : saved ? "Saved download: " + bytesText(saved) + ". Resume to continue where you left off."
-                : "Ready to download. No installation CD needed.");
-    diskHint->setText("The virtual disk grows as you add files. Your new Mac is saved in " +
-                      QDir::toNativeSeparators(destination) + ".");
+        : cachedSavedBytes == archiveSize && archiveSize > 0
+            ? "Download complete. Create a Mac from the saved image."
+        : cachedSavedBytes > 0
+            ? "Saved download: " + bytesText(cachedSavedBytes) +
+                  ". Resume to continue where you left off."
+            : "Ready to download. No installation CD needed.");
+    diskHint->setText(
+        "The virtual disk grows as you add files. Your new Mac is saved in " +
+        QDir::toNativeSeparators(saveFolder) + ".");
+  };
+  QObject::connect(chooseFolder, &PButton::clicked, &d, [&] {
+    auto picked = QFileDialog::getExistingDirectory(
+        &d, "Choose where to save this Mac", saveFolder);
+    if (!picked.isEmpty()) {
+      saveFolder = picked;
+      const auto folderName = QFileInfo(saveFolder).fileName();
+      saveLocation->setText(folderName.isEmpty()
+                                ? QDir::toNativeSeparators(saveFolder)
+                                : folderName);
+      saveLocation->setToolTip(QDir::toNativeSeparators(saveFolder));
+      updateDetails();
+    }
+  });
+  auto updatePartialBanner = [&] {
+    const auto warn = Library::partialWarning();
+    partialBanner->setText(warn);
+    partialBanner->setVisible(!warn.isEmpty());
   };
   auto rebuild = [&] {
     auto previous = selectedEntry()["id"].toString();
@@ -388,36 +541,66 @@ void App::showLibrary() {
     const auto query = search->text().trimmed();
     for (auto row : visibleRows) {
       auto entry = row.toObject();
-      const auto haystack = entry["name"].toString() + " " + entry["summary"].toString() +
-                            " " + systemName(entry) + " " + familyName(entry);
+      const auto display = Library::displayTitle(entry);
+      const auto clean = Library::cleanSummary(entry);
+      const auto haystack = display + " " + clean + " " + systemName(entry) +
+                            " " + familyName(entry);
       if ((!query.isEmpty() && !haystack.contains(query, Qt::CaseInsensitive)) ||
-          (filter->currentIndex() > 0 && filter->currentText() != systemCategory(entry)))
+          (filter->currentIndex() > 0 &&
+           filter->currentText() != systemCategory(entry)))
         continue;
-      auto item = new QListWidgetItem(entry["name"].toString(), editions);
+      auto item = new QListWidgetItem(display, editions);
       item->setData(Qt::UserRole, entry);
-      item->setToolTip(entry["name"].toString() + "\n" + familyName(entry) + " · " +
+      item->setToolTip(display + "\n" + familyName(entry) + " · " +
                        bytesText(qint64(entry["archiveBytes"].toDouble())));
-      if (entry["id"].toString() == previous) selectedRow = editions->count() - 1;
+      if (entry["id"].toString() == previous)
+        selectedRow = editions->count() - 1;
     }
     editions->setCurrentRow(editions->count() ? selectedRow : -1);
-    count->setText(QString("%1 of %2 editions").arg(editions->count()).arg(visibleRows.size()));
+    count->setText(QString("%1 of %2 editions")
+                       .arg(editions->count())
+                       .arg(visibleRows.size()));
     clear->setEnabled(!search->text().isEmpty());
     updateDetails();
   };
-  connect(editions, &QListWidget::currentRowChanged, &d, [&](int) { updateDetails(); });
-  connect(search, &QLineEdit::textChanged, &d, [&](const QString &) { rebuild(); });
-  connect(filter, qOverload<int>(&QComboBox::currentIndexChanged), &d, [&](int) { rebuild(); });
+  connect(editions, &QListWidget::currentRowChanged, &d,
+          [&](int) { updateDetails(); });
+  connect(search, &QLineEdit::textChanged, &d,
+          [&](const QString &) { rebuild(); });
+  connect(filter, qOverload<int>(&QComboBox::currentIndexChanged), &d,
+          [&](int) { rebuild(); });
+  connect(discard, &PButton::clicked, &d, [&] {
+    auto entry = selectedEntry();
+    if (entry.isEmpty() || loading)
+      return;
+    if (Library::discardDownload(entry)) {
+      feedback->setText("Saved download discarded.");
+    } else {
+      feedback->setText("Could not discard the saved download.");
+    }
+    updateDetails();
+    editions->viewport()->update();
+  });
   connect(download, &PButton::clicked, &d, [&] {
     auto entry = selectedEntry();
-    if (entry.isEmpty() || !compatible(entry)) return;
+    if (loading || entry.isEmpty() || !compatible(entry))
+      return;
     if (name->text().trimmed().isEmpty()) {
       feedback->setText("Give your new Mac a name before downloading.");
       name->setFocus();
       return;
     }
-    const auto machineName = name->text().trimmed();
+    QString machineName;
     try {
-      if (readyEditionID == entry["id"].toString() && readyName == machineName) {
+      machineName = Model::sanitizedName(name->text());
+    } catch (const std::exception &e) {
+      feedback->setText(QString::fromUtf8(e.what()));
+      name->setFocus();
+      return;
+    }
+    try {
+      if (readyEditionID == entry["id"].toString() &&
+          readyName == machineName) {
         for (int i = 0; i < machines.size(); ++i)
           if (machines[i].id() == readyMachineID) {
             select(i);
@@ -426,11 +609,13 @@ void App::showLibrary() {
             return;
           }
       }
-      const auto machine = install(entry, machineName);
+      const auto machine = install(entry, machineName, saveFolder);
       readyMachineID = machine.id();
       readyEditionID = entry["id"].toString();
       readyName = machine.name();
-      feedback->setText(machine.name() + " is ready. Choose Start Mac to open it, or Show My Macs to return home.");
+      feedback->setText(
+          machine.name() +
+          " is ready. Choose Start Mac to open it, or Show My Macs to return home.");
       showMacs->show();
       updateDetails();
       name->setText(machineName);
@@ -442,66 +627,97 @@ void App::showLibrary() {
   });
   connect(name, &QLineEdit::textChanged, &d, [&] {
     auto entry = selectedEntry();
-    if (entry.isEmpty()) return;
-    const auto saved = Library::cachedBytes(entry);
-    download->setText(readyEditionID == entry["id"].toString() && readyName == name->text().trimmed()
-        ? "Start Mac" : saved == qint64(entry["archiveBytes"].toDouble()) ? "Create Mac"
-        : saved ? "Resume Download" : "Download Mac");
+    if (entry.isEmpty())
+      return;
+    updateActionButtons();
   });
-  struct CatalogResult { QJsonArray rows; QString error; };
-  QFutureWatcher<CatalogResult> watcher;
-  std::atomic_bool cancel = false;
-  bool loading = false;
+
+  struct CatalogResult {
+    QJsonArray rows;
+    QString error;
+  };
+  auto refreshCancel = std::make_shared<std::atomic_bool>(false);
   auto refreshCatalog = [&] {
-    if (loading) return;
+    if (loading)
+      return;
     loading = true;
-    cancel = false;
+    *refreshCancel = false;
     refresh->setEnabled(false);
     refresh->setText("Loading…");
-    feedback->setText("Connecting to the Library… You can keep browsing or close this window.");
-    watcher.setFuture(QtConcurrent::run([&]() -> CatalogResult {
-      try { return {Library::load(cancel), {}}; }
-      catch (const std::exception &e) { return {{}, QString::fromUtf8(e.what())}; }
-      catch (...) { return {{}, "The Library could not be loaded. Please try again."}; }
+    updateActionButtons();
+    feedback->setText(
+        "Connecting to the Library… You can keep browsing or close this window.");
+    auto *watcher = new QFutureWatcher<CatalogResult>(qApp);
+    auto cancelFlag = refreshCancel;
+    connect(watcher, &QFutureWatcher<CatalogResult>::finished, watcher,
+            [watcher, cancelFlag, guard = QPointer<PDialog>(&d), this,
+             &loading, refresh, feedback, title, summary, &visibleRows,
+             &rebuild, &updateActionButtons, &updatePartialBanner] {
+              const auto result = watcher->result();
+              watcher->deleteLater();
+              if (!guard)
+                return;
+              loading = false;
+              refresh->setEnabled(true);
+              refresh->setText("Refresh");
+              if (*cancelFlag) {
+                updateActionButtons();
+                return;
+              }
+              if (!result.error.isEmpty()) {
+                feedback->setText(
+                    "Could not refresh the Library. Check your connection and choose Retry. " +
+                    result.error);
+                refresh->setText("Retry");
+                if (visibleRows.isEmpty()) {
+                  title->setText("The Library is unavailable");
+                  summary->setText(
+                      "Your saved Macs are still available. Try loading the Library again when you are online.");
+                }
+                updateActionButtons();
+                return;
+              }
+              catalogRows = result.rows;
+              visibleRows = newestEditions(catalogRows);
+              updatePartialBanner();
+              rebuild();
+              if (visibleRows.isEmpty()) {
+                title->setText("No editions are available yet");
+                summary->setText(
+                    "Choose Refresh to check the Library again later.");
+              }
+              feedback->setText(
+                  visibleRows.isEmpty()
+                      ? "No editions are available yet. Choose Refresh to check again."
+                      : "Latest editions shown. Downloads can be paused and resumed.");
+            });
+    watcher->setFuture(QtConcurrent::run([cancelFlag]() -> CatalogResult {
+      try {
+        return {Library::load(*cancelFlag), {}};
+      } catch (const std::exception &e) {
+        return {{}, QString::fromUtf8(e.what())};
+      } catch (...) {
+        return {{}, "The Library could not be loaded. Please try again."};
+      }
     }));
   };
-  connect(&watcher, &QFutureWatcher<CatalogResult>::finished, &d, [&] {
-    loading = false;
-    refresh->setEnabled(true);
-    refresh->setText("Refresh");
-    if (cancel) return;
-    auto result = watcher.result();
-    if (!result.error.isEmpty()) {
-      feedback->setText("Could not refresh the Library. Check your connection and choose Retry. " + result.error);
-      refresh->setText("Retry");
-      if (visibleRows.isEmpty()) {
-        title->setText("The Library is unavailable");
-        summary->setText("Your saved Macs are still available. Try loading the Library again when you are online.");
-      }
-      return;
-    }
-    catalogRows = result.rows;
-    visibleRows = newestEditions(catalogRows);
-    rebuild();
-    if (visibleRows.isEmpty()) {
-      title->setText("No editions are available yet");
-      summary->setText("Choose Refresh to check the Library again later.");
-    }
-    feedback->setText(visibleRows.isEmpty() ? "No editions are available yet. Choose Refresh to check again."
-                                          : "Latest editions shown. Downloads can be paused and resumed.");
-  });
   connect(refresh, &PButton::clicked, &d, refreshCatalog);
-  d.canClose = [&] { cancel = true; return true; };
+  d.canClose = [refreshCancel] {
+    *refreshCancel = true;
+    return true;
+  };
+  updatePartialBanner();
   rebuild();
   if (visibleRows.isEmpty()) {
     title->setText("Loading the Library");
-    summary->setText("Finding ready-to-run Macs. This window can be closed while loading.");
+    summary->setText(
+        "Finding ready-to-run Macs. This window can be closed while loading.");
     QTimer::singleShot(0, &d, refreshCatalog);
   } else {
-    feedback->setText("Latest editions shown. Downloads can be paused and resumed.");
+    feedback->setText(
+        "Latest editions shown. Downloads can be paused and resumed.");
   }
   search->setFocus();
   d.exec();
-  cancel = true;
-  if (watcher.isRunning()) watcher.waitForFinished();
+  *refreshCancel = true;
 }

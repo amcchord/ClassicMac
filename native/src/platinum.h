@@ -42,4 +42,5 @@ int textWidth(const QString &, const QString &font = "system");
 QString elide(const QString &, int width, const QString &font = "system");
 void text(Pixels &, const QString &, int x = 0, int baseline = 12,
           QRgb c = 0xff000000, const QString &font = "system");
+QImage cachedIcon(const QString &resourcePath);
 } // namespace Platinum

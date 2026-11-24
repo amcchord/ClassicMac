@@ -1,12 +1,20 @@
 #pragma once
+#include <QAbstractNativeEventFilter>
+#include <QCursor>
+#include <QHash>
 #include <QImage>
-#include <QWidget>
+#include <QPair>
 #include <QScrollBar>
+#include <QWidget>
 #include <QtNetwork>
 class VNC : public QObject {
   Q_OBJECT
 public:
   QImage frame;
+  QImage cursorImage;
+  QPoint cursorHotSpot;
+  bool hasCursor = false;
+  bool extendedKeySupported = false;
   bool relative = false, ready = false;
   bool desktopResizeSupported = false;
   int desktopResizeResult = -1;
@@ -14,18 +22,20 @@ public:
   explicit VNC(QObject *parent = nullptr);
   void open(int port, const QByteArray &password);
   void close();
-  void key(quint32 keysym, bool down);
+  void key(quint32 keysym, bool down, quint32 rfbKeycode = 0);
   void pointer(int x, int y, int mask);
   bool resizeDesktop(QSize);
   static QByteArray authenticate(QByteArray challenge, QByteArray password);
 signals:
   void changed();
+  void cursorChanged();
   void problem(QString);
 
 private:
   QTcpSocket socket;
   QByteArray buffer, password;
   int state = 0, rects = -1;
+  bool hadFrameRect = false;
   QTimer refresh;
   void parse();
   void updateRequest(bool incremental);
@@ -36,6 +46,7 @@ class GuestView : public QWidget {
 public:
   VNC *vnc;
   bool helpers = true, captured = false;
+  bool swapAltCommand = false;
   bool followsWindow = false, fitWindow = false;
   bool paused = false;
   int widthAlignment = 1;
@@ -46,6 +57,8 @@ public:
   explicit GuestView(VNC *, QWidget *parent = nullptr);
   ~GuestView() override;
   void release();
+  void showFullScreenHint();
+  void hideFullScreenHint();
   QRectF screenRect() const;
   QRect displayViewport() const;
   QSize desiredSize() const;
@@ -56,12 +69,15 @@ signals:
   void toggleFullScreen();
 
 protected:
+  bool focusNextPrevChild(bool) override { return false; }
   void paintEvent(QPaintEvent *) override;
   void keyPressEvent(QKeyEvent *) override;
   void keyReleaseEvent(QKeyEvent *) override;
   void mousePressEvent(QMouseEvent *) override;
   void mouseReleaseEvent(QMouseEvent *) override;
   void mouseMoveEvent(QMouseEvent *) override;
+  void enterEvent(QEnterEvent *) override;
+  void leaveEvent(QEvent *) override;
   void wheelEvent(QWheelEvent *) override;
   void focusOutEvent(QFocusEvent *) override;
   void resizeEvent(QResizeEvent *) override;
@@ -70,15 +86,28 @@ protected:
 
 private:
   QScrollBar *horizontalScroll, *verticalScroll;
-  void updateScrollbars();
+  void updateScrollbars(bool force = false);
+  void updateGuestCursor();
+  void applyCursorAt(QPointF pos);
+  void checkDprChange();
+  void connectScreenSignal();
   void mouse(QMouseEvent *);
-  QSet<quint32> keys;
+  QHash<quint64, QPair<quint32, quint32>> activeKeys;
   int mask = 0;
   bool controlClick = false;
-  QTimer resizeDebounce, resizeDeadline, resizeSettled;
+  QTimer resizeDebounce, resizeDeadline, resizeSettled, fullScreenHintTimer;
   static constexpr int maxResizeAttempts = 60;
   QSize observedSize, pendingSize;
-  QPoint lastPointer;
+  QSize lastScrollFrameSize, lastScrollViewSize;
+  qreal lastScrollDpr = 0, lastDpr = 0;
+  bool lastScrollFit = false;
+  int lastScrollZoom = -1;
+  QPoint lastPointer, lastRelativePos;
+  QCursor guestCursor;
+  QMetaObject::Connection screenChangedConn;
+  bool fullScreenHintVisible = false;
+  bool rawInputActive = false;
+  QAbstractNativeEventFilter *rawFilter = nullptr;
   int resizeAttempts = 0, wheelRemainder = 0;
   bool resizeArmed = false, wantsResize = false, shownOnce = false;
   void requestResize();

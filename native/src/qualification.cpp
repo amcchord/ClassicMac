@@ -180,6 +180,21 @@ int selfTest(const QString &fixtures, const QString &output) {
   auto profiles = QJsonDocument::fromJson(golden.readAll()).array();
   for (auto row : profiles) {
     auto profile = row.toObject();
+    const auto platform = profile["platform"].toString();
+    if (!platform.isEmpty()) {
+#if defined(Q_OS_LINUX)
+      if (platform != "linux")
+        continue;
+#elif defined(Q_OS_WIN)
+      if (platform != "windows")
+        continue;
+#elif defined(Q_OS_MACOS)
+      if (platform != "macos" && platform != "darwin")
+        continue;
+#else
+      continue;
+#endif
+    }
     auto actual = Model::argumentsFor(
         {"/fixture/Test.classic", profile["config"].toObject()}, 6000, true);
     for (auto &s : actual)
@@ -640,8 +655,10 @@ public:
         entry["diskCapacityBytes"] = 512;
         app->catalogRows[found] = entry;
         if (step["corrupt"].toBool()) bytes[bytes.size() / 2] = char(bytes[bytes.size() / 2] ^ 1);
-        require(QDir().mkpath(Model::dataDirectory() + "/Downloads"), "Cannot create fixture cache");
-        QFile cache(Model::dataDirectory() + "/Downloads/" + QString::fromLatin1(sha) + ".tar.gz.part");
+        const auto cachePath = Library::cacheFile(entry);
+        require(!cachePath.isEmpty() && QDir().mkpath(QFileInfo(cachePath).absolutePath()),
+                "Cannot create fixture cache");
+        QFile cache(cachePath);
         require(cache.open(QFile::WriteOnly) && cache.write(bytes) == bytes.size(),
                 "Cannot populate fixture cache");
         done = true;
@@ -885,9 +902,16 @@ public:
         }
       } else if (action == "guestEscape") {
         if (auto e = app->currentEngine()) {
-          auto view = app->guest(e)->findChild<GuestView *>();
-          QKeyEvent event(QEvent::KeyPress, Qt::Key_Escape, Qt::NoModifier);
-          QApplication::sendEvent(view, &event);
+          auto w = app->guest(e);
+          auto view = w->findChild<GuestView *>();
+          if (w->isFullScreen()) {
+            QKeyEvent event(QEvent::KeyPress, Qt::Key_F,
+                            Qt::ControlModifier | Qt::AltModifier);
+            QApplication::sendEvent(view, &event);
+          } else {
+            QKeyEvent event(QEvent::KeyPress, Qt::Key_Escape, Qt::NoModifier);
+            QApplication::sendEvent(view, &event);
+          }
           done = true;
         }
       } else if (action == "setup") {

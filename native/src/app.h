@@ -15,7 +15,7 @@ public:
   void startSelected();
   void showLibrary();
   void showEditor(bool create = false);
-  void showMedia();
+  void showMedia(QWidget *parent = nullptr);
   void showSetup();
   void showMachineActions();
   void removeSelected();
@@ -30,6 +30,7 @@ public:
 
 private:
   friend class Qualification;
+  friend class Preview;
   QWidget *home = nullptr;
   QWidget *machineSidebar = nullptr;
   QBoxLayout *homeColumns = nullptr;
@@ -42,13 +43,16 @@ private:
   PButton *manageButton = nullptr, *powerButton = nullptr;
   QJsonArray catalogRows;
   QStringList unavailablePaths;
+  QMap<QString, QImage> livePreviews;
   void buildHome();
   void importMachine();
   void registerMachine(const Model::Machine &);
   void settingsSaved(QJsonObject);
   QJsonArray loadCatalog();
-  Model::Machine install(QJsonObject, const QString &name);
-  void showPaste(Engine *);
+  Model::Machine install(QJsonObject, const QString &name,
+                         const QString &destination = {});
+  void showAbout();
+  void showPaste(Engine *, QWidget *parent = nullptr);
   void select(int);
   void reflowHome();
 protected:

@@ -12,13 +12,9 @@ public:
   QRgb ink = 0xff000000;
   bool wrap = false;
   explicit PLabel(QString text = {}, QWidget *parent = nullptr);
-  void setText(const QString &s) {
-    value = s;
-    setAccessibleName(s);
-    updateGeometry();
-    update();
-  }
+  void setText(const QString &s);
   QSize sizeHint() const override;
+  QSize minimumSizeHint() const override;
   bool hasHeightForWidth() const override { return wrap; }
   int heightForWidth(int w) const override;
 
@@ -31,13 +27,9 @@ public:
   bool defaultButton = false, radio = false, toggleButton = false;
   QString widgetKind;
   PButton(const QString &, QWidget *parent = nullptr, bool def = false);
-  void setText(const QString &value) {
-    QAbstractButton::setText(value);
-    setAccessibleName(value);
-    updateGeometry();
-    update();
-  }
+  void setText(const QString &value);
   QSize sizeHint() const override;
+  QSize minimumSizeHint() const override;
 
 protected:
   void paintEvent(QPaintEvent *) override;
@@ -122,6 +114,7 @@ public:
   }
 signals:
   void closed();
+  void windowStateChanged();
 
 protected:
   void paintEvent(QPaintEvent *) override;
@@ -146,9 +139,12 @@ private:
   QPoint drag, origin;
   QSize startSize;
   bool resizing = false;
+  bool shadedFromMaximized = false;
   bool screenConnected = false;
+  qreal lastDpr = 0;
   QMetaObject::Connection workAreaConnection;
   void followWorkArea();
+  void fitToScreen(bool allowMove);
   QString hit(QPoint) const;
 };
 class PDialog : public PWindow {

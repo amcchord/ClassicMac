@@ -1,12 +1,40 @@
 #include "app.h"
 #include "display.h"
+#include <QDesktopServices>
 #include <QtConcurrent>
+#include <QtMath>
 #include <optional>
 #ifdef Q_OS_WIN
 #include <windows.h>
 #endif
 using Model::fail;
 using namespace Platinum;
+static bool isUsefulPreview(const QImage &image) {
+  if (image.isNull() || image.width() <= 0 || image.height() <= 0)
+    return false;
+  QRgb first = 0;
+  bool hasFirst = false, nonBlack = false, varied = false;
+  const int cols = std::min(9, image.width());
+  const int rows = std::min(9, image.height());
+  for (int r = 0; r < rows; ++r) {
+    const int y = ((r * 2 + 1) * image.height()) / (2 * rows);
+    for (int c = 0; c < cols; ++c) {
+      const int x = ((c * 2 + 1) * image.width()) / (2 * cols);
+      const QRgb px = image.pixel(x, y);
+      if (!hasFirst) {
+        first = px;
+        hasFirst = true;
+      } else if (px != first) {
+        varied = true;
+      }
+      if (qRed(px) > 12 || qGreen(px) > 12 || qBlue(px) > 12)
+        nonBlack = true;
+      if (nonBlack && varied)
+        return true;
+    }
+  }
+  return false;
+}
 static void performAction(const std::function<void()> &action) {
   try { action(); }
   catch (const std::exception &error) {
@@ -21,6 +49,7 @@ static QString iconName(const QString &f) {
 static QString modelName(const QString &f) {
   return f == "quadra800"      ? "Quadra 800"
          : f == "powerMac7500" ? "Power Mac 7500"
+         : f == "powerMacOSX"  ? "Power Mac G4 — Mac OS X"
                                : "Power Mac G4";
 }
 class MachineDelegate : public QStyledItemDelegate {
@@ -43,7 +72,8 @@ public:
                  e->paused ? "Paused" : "Running now") : modelName(m.family()),
          45, 31, 0xff555555, "small");
     QPainter painter(&p.image);
-    painter.drawImage(5, 4, QImage(":/" + iconName(m.family()) + "-32.png"));
+    painter.drawImage(5, 4,
+                      cachedIcon(":/" + iconName(m.family()) + "-32.png"));
     if (e) {
       painter.fillRect(31, 29, 7, 7, Qt::black);
       painter.fillRect(32, 30, 5, 5,
@@ -59,6 +89,10 @@ public:
 class Preview : public QWidget {
 public:
   App *app;
+  QString cachedPath;
+  QDateTime cachedModified;
+  qint64 cachedSize = -1;
+  QImage cachedImage;
   explicit Preview(App *a) : QWidget(a), app(a) {
     setAccessibleName("Mac preview");
     setMinimumSize(200, 150);
@@ -68,20 +102,47 @@ public:
   QSize sizeHint() const override { return {400, 300}; }
   bool hasHeightForWidth() const override { return true; }
   int heightForWidth(int w) const override { return std::clamp(w * 3 / 4, 150, 300); }
+  QImage loadCachedPreview(const QString &folder) {
+    try {
+      const auto path = Model::machineFile(folder, "preview.png");
+      const QFileInfo info(path);
+      if (!info.exists() || info.size() > 16 * 1048576) {
+        if (cachedPath == path) {
+          cachedPath.clear();
+          cachedModified = {};
+          cachedSize = -1;
+          cachedImage = {};
+        }
+        return {};
+      }
+      if (cachedPath != path || cachedSize != info.size() ||
+          cachedModified != info.lastModified()) {
+        QImage loaded;
+        loaded.load(path);
+        cachedPath = path;
+        cachedSize = info.size();
+        cachedModified = info.lastModified();
+        cachedImage = loaded;
+      }
+      return cachedImage;
+    } catch (const std::exception &) {
+      return {};
+    }
+  }
   void paintEvent(QPaintEvent *) override {
     Pixels p(width(), height(), 0xff63639c);
     sunken(p);
     auto m = app->current();
     QImage image;
-    if (auto e = app->currentEngine())
-      image = e->vnc.frame;
-    else if (m) {
-      try {
-        auto path = Model::machineFile(m->folder, "preview.png");
-        if (QFileInfo(path).size() <= 16 * 1048576)
-          image.load(path);
-      } catch (const std::exception &) { /* A preview is optional. */
-      }
+    if (auto e = app->currentEngine()) {
+      if (isUsefulPreview(e->vnc.frame))
+        image = e->vnc.frame;
+      else
+        image = app->livePreviews.value(e->machine.id());
+      if (image.isNull() && m)
+        image = loadCachedPreview(m->folder);
+    } else if (m) {
+      image = loadCachedPreview(m->folder);
     }
     QPainter q(&p.image);
     q.setRenderHint(QPainter::SmoothPixmapTransform, false);
@@ -94,7 +155,7 @@ public:
     else {
       q.drawImage(
           (width() - 32) / 2, height() / 2 - 30,
-          QImage(":/" + iconName(m ? m->family() : "powerMacG4") + "-32.png"));
+          cachedIcon(":/" + iconName(m ? m->family() : "powerMacG4") + "-32.png"));
       const auto hint = m ? "Start up to see your Mac's screen."
                           : "Choose a Mac from the Library.";
       text(p, elide(hint, width() - 24, "small"),
@@ -191,11 +252,10 @@ App::App() : PWindow("ClassicMac", {940, 700}) {
   buildHome();
   canClose = [this] { return requestQuit(); };
   render();
-  if (machines.isEmpty())
-    QTimer::singleShot(0, this, [&] {
-      if (qEnvironmentVariableIsEmpty("CLASSICMAC_QUALIFY"))
-        showSetup();
-    });
+  QTimer::singleShot(0, this, [this] {
+    if (machines.isEmpty() && qEnvironmentVariableIsEmpty("CLASSICMAC_QUALIFY"))
+      showSetup();
+  });
 }
 Model::Machine *App::current() {
   return selected >= 0 && selected < machines.size() ? &machines[selected]
@@ -253,12 +313,7 @@ void App::buildHome() {
   tools->addWidget(button("Library…", [this] { showLibrary(); }, toolbar));
   tools->addWidget(button("New Mac…", [this] { showEditor(true); }, toolbar));
   tools->addWidget(button("Open Mac…", [this] { importMachine(); }, toolbar));
-  tools->addWidget(button("About…", [this] {
-    problem(this, "ClassicMac " CLASSICMAC_VERSION
-      "\n\nThe classic Mac OS era on your computer.\n\n"
-      "System icons © Apple Computer, Inc. Machine artwork © The Iconfactory, "
-      "included with permission.\n\nCopland requires the macOS edition.");
-  }, toolbar));
+  tools->addWidget(button("About…", [this] { showAbout(); }, toolbar));
   outer->addWidget(toolbar);
   home = new QWidget(body);
   auto columns = new QBoxLayout(QBoxLayout::LeftToRight, home);
@@ -437,9 +492,18 @@ void App::render() {
              " GB\nScreen:     " + QString::number(c["width"].toInt()) + " × " +
              QString::number(c["height"].toInt()) + "\nGraphics:  " +
              (c["graphicsCard"].toString() == "atiRadeon" ? "ATI Radeon"
-                                                          : "Standard") +
-             "\nSharing:    " +
-             (c["sharedFolderPath"].toString().isEmpty() ? "Off" : "On");
+                                                          : "Standard");
+    if (Model::supportsHostSharing() && m->family() != "powerMacOSX" &&
+        m->family() != "powerMac7500") {
+      const auto shared = c["sharedFolderPath"].toString();
+      const auto sharedName = QFileInfo(shared).fileName();
+      detail += "\nSharing:    " +
+                (shared.isEmpty()
+                     ? QString("Off")
+                     : (sharedName.isEmpty()
+                            ? QDir::toNativeSeparators(shared)
+                            : sharedName));
+    }
   }
   details->setText(detail);
   infoButton->setEnabled(m && !e);
@@ -458,6 +522,101 @@ void App::render() {
           : "Choose Library for a ready-to-run Mac, New Mac to use your own installation CD, or Open Mac for an existing .classic folder.");
   preview->update();
 }
+void App::showAbout() {
+  static QPointer<PDialog> existing;
+  if (existing) {
+    existing->show();
+    existing->raise();
+    existing->activateWindow();
+    return;
+  }
+  PDialog d("About ClassicMac", {540, 420}, this);
+  existing = &d;
+  auto v = dialogLayout(&d);
+  auto header = new QHBoxLayout;
+  header->setSpacing(14);
+  auto iconLabel = new QLabel(&d);
+  iconLabel->setFixedSize(72, 72);
+  iconLabel->setPixmap(QPixmap::fromImage(
+      QImage(":/app.png").scaled(72, 72, Qt::KeepAspectRatio,
+                                 Qt::SmoothTransformation)));
+  header->addWidget(iconLabel, 0, Qt::AlignTop);
+  auto titleCol = new QVBoxLayout;
+  titleCol->setSpacing(4);
+  titleCol->addWidget(label("ClassicMac", &d));
+  titleCol->addWidget(label("Version " CLASSICMAC_VERSION, &d, "small"));
+  titleCol->addWidget(
+      label("The whole classic Mac OS era on your computer.", &d, "regular", true));
+  header->addLayout(titleCol, 1);
+  v->addLayout(header);
+  auto credits = new QGridLayout;
+  credits->setHorizontalSpacing(10);
+  credits->setVerticalSpacing(4);
+  int row = 0;
+  for (const auto &item : QList<QPair<QString, QString>>{
+           {"Emulation:",
+            "QEMU 11 (Power Mac & Quadra) and QEMU 10 (Mac OS X); Copland requires the macOS edition."},
+           {"Graphics:",
+            "ATI Radeon graphics and Platinum appearance shared with RetroBoot."},
+           {"Firmware:", "OpenBIOS; classicvirtio host folder sharing."},
+           {"System icons:",
+            "Original classic Mac OS artwork © Apple Computer, Inc."},
+           {"Mac icons:", "© The Iconfactory, included with permission."}}) {
+    auto key = label(item.first, &d, "small");
+    credits->addWidget(key, row, 0, Qt::AlignRight | Qt::AlignTop);
+    credits->addWidget(label(item.second, &d, "small", true), row, 1);
+    ++row;
+  }
+  credits->setColumnStretch(1, 1);
+  v->addLayout(credits);
+  v->addWidget(
+      label("© 2026 Austin McChord. See Third-Party Notices for licenses.", &d,
+            "small", true));
+  v->addStretch();
+  auto notices = button(
+      "Third-Party Notices…",
+      [&] {
+        QString noticesPath;
+        const auto dir = QCoreApplication::applicationDirPath();
+        for (const auto &candidate : {
+                 dir + "/ThirdPartyNotices.md",
+                 dir + "/THIRD_PARTY_NOTICES.md",
+                 dir + "/../ThirdPartyNotices.md",
+                 dir + "/../share/doc/classicmac/ThirdPartyNotices.md",
+                 dir + "/../../THIRD_PARTY_NOTICES.md",
+                 dir + "/../../../THIRD_PARTY_NOTICES.md",
+             }) {
+          if (QFileInfo::exists(candidate)) {
+            noticesPath = QFileInfo(candidate).canonicalFilePath();
+            break;
+          }
+        }
+        if (noticesPath.isEmpty()) {
+          problem(&d,
+                  "ThirdPartyNotices.md could not be found next to the application.");
+          return;
+        }
+        if (!QDesktopServices::openUrl(QUrl::fromLocalFile(noticesPath))) {
+          QFile file(noticesPath);
+          if (file.open(QFile::ReadOnly)) {
+            PDialog viewer("Third-Party Notices", {620, 480}, &d);
+            auto lv = dialogLayout(&viewer);
+            auto textView = new QPlainTextEdit(&viewer);
+            textView->setReadOnly(true);
+            textView->setPlainText(QString::fromUtf8(file.readAll()));
+            lv->addWidget(textView, 1);
+            buttonRow(lv,
+                      {button("Close", [&] { viewer.done(); }, &viewer, true)});
+            viewer.exec();
+          } else {
+            problem(&d, "Could not open ThirdPartyNotices.md.");
+          }
+        }
+      },
+      &d);
+  buttonRow(v, {notices, button("Close", [&] { d.done(); }, &d, true)});
+  d.exec();
+}
 PWindow *App::guest(Engine *e) {
   if (guests.contains(e->machine.id()))
     return guests[e->machine.id()];
@@ -466,21 +625,30 @@ PWindow *App::guest(Engine *e) {
   QSettings viewSettings(Model::dataDirectory() + "/view.ini", QSettings::IniFormat);
   const auto &config = e->machine.config;
   const bool ppc = e->machine.family() == "powerMacG4";
-  const bool followsWindow = ppc || config["useEnhancedFramebuffer"].toBool();
+  const bool followsWindow =
+      ppc || (e->machine.family() == "quadra800" &&
+              config["useEnhancedFramebuffer"].toBool());
   const QString scaleKey = "display/" + e->machine.id() + "/scale";
   const int savedScale = std::clamp(viewSettings.value(scaleKey, followsWindow ? 0 : 3).toInt(), 0, 3);
   int zoom = savedScale == 1 ? 1 : savedScale == 2 ? 2 : NativeDisplay::preferredZoom(dpi);
-  const QSize source(e->machine.config["width"].toInt(), e->machine.config["height"].toInt());
-  auto initialSize = [&](int factor) {
-    if (savedScale == 3) return QSize(source.width() + 13, source.height() + 87);
-    return QSize(qCeil(source.width() * factor / dpi) + 13,
-                  qCeil(source.height() * factor / dpi) + 87);
+  const QSize source(config["width"].toInt(), config["height"].toInt());
+  auto contentSizeFor = [&](int factor) {
+    if (savedScale == 3)
+      return source;
+    return QSize(qCeil(source.width() * factor / dpi),
+                 qCeil(source.height() * factor / dpi));
   };
-  while (zoom > 1 && display &&
-         (initialSize(zoom).width() > display->availableGeometry().width() - 8 ||
-          initialSize(zoom).height() > display->availableGeometry().height() - 8))
+  const int chromeW = 13, chromeH = 29;
+  while (zoom > 1 && display) {
+    const auto cs = contentSizeFor(zoom);
+    if (cs.width() + chromeW <= display->availableGeometry().width() - 8 &&
+        cs.height() + chromeH + 92 <= display->availableGeometry().height() - 8)
+      break;
     --zoom;
-  auto w = new PWindow(e->machine.name(), initialSize(zoom), this);
+  }
+  auto w = new PWindow(e->machine.name(),
+                       contentSizeFor(zoom) + QSize(chromeW, chromeH + 63),
+                       this);
   w->contentOnlyFullScreen = true;
   w->canClose = [this, guard = QPointer<Engine>(e)] {
     if (!guard || !guard->running) return true;
@@ -494,7 +662,8 @@ PWindow *App::guest(Engine *e) {
   v->setContentsMargins(0, 0, 0, 0);
   v->setSpacing(0);
   auto screen = new GuestView(&e->vnc, w->body);
-  screen->helpers = e->machine.config["classicInputHelpers"].toBool();
+  screen->helpers = config["classicInputHelpers"].toBool();
+  screen->swapAltCommand = config["swapAltCommand"].toBool();
   screen->followsWindow = followsWindow;
   screen->widthAlignment = ppc ? 8 : 1;
   if (ppc && config["graphicsCard"].toString() == "atiRadeon" && !config["bootFromCD"].toBool()) {
@@ -520,26 +689,38 @@ PWindow *App::guest(Engine *e) {
   scale->setFixedWidth(126);
   displayRow->addWidget(scale);
   footerLayout->addLayout(displayRow);
-  auto updateDisplayStatus = [=] {
-    QString s = e->vnc.frame.isNull() ? "Starting up…" :
-        QString("%1 × %2").arg(e->vnc.frame.width()).arg(e->vnc.frame.height());
+  auto updateDisplayStatus = [guard = QPointer<Engine>(e),
+                              screen = QPointer<GuestView>(screen),
+                              status = QPointer<PLabel>(status)] {
+    if (!guard || !screen || !status) return;
+    QString s = guard->vnc.frame.isNull()
+                    ? "Starting up…"
+                    : QString("%1 × %2")
+                          .arg(guard->vnc.frame.width())
+                          .arg(guard->vnc.frame.height());
+    if (guard->paused)
+      s += " · Paused";
     if (!screen->followsWindow)
       s += " · Fixed resolution";
     if (!screen->resizeNotice.isEmpty())
       s += " · " + screen->resizeNotice;
-    else if (e->vnc.relative)
-      s += screen->captured ? " · Escape releases mouse" : " · Click to capture mouse";
+    else if (guard->vnc.relative && !guard->paused)
+      s += screen->captured ? " · Escape or Ctrl+Alt releases mouse"
+                            : " · Click to capture mouse";
     if (status->value != s)
       status->setText(s);
   };
-  connect(scale, qOverload<int>(&QComboBox::currentIndexChanged), screen, [=](int mode) {
-    screen->fitWindow = mode == 3;
-    screen->pixelZoom = mode == 1 ? 1 : mode == 2 ? 2 : 0;
-    screen->scheduleResize();
-    screen->update();
-    QSettings settings(Model::dataDirectory() + "/view.ini", QSettings::IniFormat);
-    settings.setValue(scaleKey, mode);
-  });
+  connect(scale, qOverload<int>(&QComboBox::currentIndexChanged), screen,
+          [screen = QPointer<GuestView>(screen), scaleKey](int mode) {
+            if (!screen) return;
+            screen->fitWindow = mode == 3;
+            screen->pixelZoom = mode == 1 ? 1 : mode == 2 ? 2 : 0;
+            screen->scheduleResize();
+            screen->update();
+            QSettings settings(Model::dataDirectory() + "/view.ini",
+                               QSettings::IniFormat);
+            settings.setValue(scaleKey, mode);
+          });
   connect(screen, &GuestView::displayChanged, w, updateDisplayStatus);
   connect(screen, &GuestView::captureChanged, w, updateDisplayStatus);
   connect(&e->vnc, &VNC::changed, w, updateDisplayStatus);
@@ -547,80 +728,137 @@ PWindow *App::guest(Engine *e) {
   auto controls = new PFlowLayout(toolbar);
   auto pause = button(
       "Pause",
-      [e, p = QPointer<PWindow>(w)] {
-        if (e->paused)
-          e->resume();
+      [guard = QPointer<Engine>(e), p = QPointer<PWindow>(w)] {
+        if (!guard) return;
+        if (guard->paused)
+          guard->resume();
         else
-          e->pause();
+          guard->pause();
         if (p)
           p->update();
       },
       w);
   controls->addWidget(pause);
-  auto restart = button("Restart", [e] { e->shutdown(true); }, w);
-  auto shutdown = button("Shut Down", [e] { e->shutdown(); }, w);
-  if (e->machine.family() == "powerMacOSX") {
-    restart->hide();
-    shutdown->hide();
-  } else {
-    controls->addWidget(restart);
-    controls->addWidget(shutdown);
-  }
-  controls->addWidget(button("Power…", [this, e] { showPowerActions(e); }, w));
-  controls->addWidget(button("Paste…", [this, e] { showPaste(e); }, w));
-  controls->addWidget(button("Media…", [this, e] {
-    for (int i = 0; i < machines.size(); ++i)
-      if (machines[i].id() == e->machine.id()) { select(i); break; }
-    showMedia();
-  }, w));
+  controls->addWidget(button(
+      "Power…",
+      [this, guard = QPointer<Engine>(e)] {
+        if (guard && guard->running) showPowerActions(guard);
+      },
+      w));
+  auto paste = button(
+      "Paste…",
+      [this, guard = QPointer<Engine>(e), pw = QPointer<PWindow>(w)] {
+        if (guard && guard->running && !guard->paused) showPaste(guard, pw);
+      },
+      w);
+  controls->addWidget(paste);
+  controls->addWidget(button(
+      "Media…",
+      [this, guard = QPointer<Engine>(e), pw = QPointer<PWindow>(w)] {
+        if (!guard) return;
+        for (int i = 0; i < machines.size(); ++i)
+          if (machines[i].id() == guard->machine.id()) { select(i); break; }
+        showMedia(pw);
+      },
+      w));
   auto fullScreen = new PButton("Full Screen", w);
-  auto toggleFullScreen = [w, screen, fullScreen, footer] {
-        screen->release();
-        if (w->isFullScreen())
-          w->showNormal();
-        else
-          w->showFullScreen();
-        fullScreen->setText(w->isFullScreen() ? "Window" : "Full Screen");
-        footer->setVisible(!w->isFullScreen());
-        screen->setFocus();
-      };
+  auto syncFullScreen = [pw = QPointer<PWindow>(w),
+                         screen = QPointer<GuestView>(screen),
+                         fullScreen = QPointer<PButton>(fullScreen),
+                         footer = QPointer<QWidget>(footer)] {
+    if (!pw || !screen || !fullScreen || !footer) return;
+    const bool fs = pw->isFullScreen();
+    footer->setVisible(!fs);
+    fullScreen->setText(fs ? "Window" : "Full Screen");
+    if (!fs)
+      screen->hideFullScreenHint();
+  };
+  auto toggleFullScreen = [pw = QPointer<PWindow>(w),
+                           screen = QPointer<GuestView>(screen),
+                           syncFullScreen] {
+    if (!pw || !screen) return;
+    screen->release();
+    if (pw->isFullScreen()) {
+      screen->hideFullScreenHint();
+      pw->showNormal();
+    } else {
+      pw->showFullScreen();
+      screen->showFullScreenHint();
+    }
+    syncFullScreen();
+    screen->setFocus();
+  };
+  connect(w, &PWindow::windowStateChanged, w, syncFullScreen);
   connect(fullScreen, &PButton::clicked, w, toggleFullScreen);
   connect(screen, &GuestView::toggleFullScreen, w, toggleFullScreen);
   auto shortcut = new QShortcut(QKeySequence("Alt+Return"), w);
   connect(shortcut, &QShortcut::activated, w, toggleFullScreen);
+  auto fsShortcut = new QShortcut(QKeySequence("Ctrl+Alt+F"), w);
+  connect(fsShortcut, &QShortcut::activated, w, toggleFullScreen);
   controls->addWidget(fullScreen);
   footerLayout->addWidget(toolbar);
   v->addWidget(footer);
+  w->ensurePolished();
+  auto measureFooter = [&](int contentW) {
+    footerLayout->activate();
+    const int fh = footerLayout->hasHeightForWidth()
+                       ? footerLayout->heightForWidth(contentW)
+                       : footer->sizeHint().height();
+    return std::max(fh, 63);
+  };
+  while (zoom > 1 && display) {
+    const auto cs = contentSizeFor(zoom);
+    const int fh = measureFooter(cs.width());
+    if (cs.width() + chromeW <= display->availableGeometry().width() - 8 &&
+        cs.height() + chromeH + fh <= display->availableGeometry().height() - 8)
+      break;
+    --zoom;
+  }
+  const auto finalContent = contentSizeFor(zoom);
+  const QSize finalSize(finalContent.width() + chromeW,
+                        finalContent.height() + chromeH +
+                            measureFooter(finalContent.width()));
+  w->resize(finalSize);
+  w->expanded = finalSize;
+  w->fitToScreen();
   guests[e->machine.id()] = w;
-  connect(e, &Engine::changed, w, [=] {
-    pause->setText(e->paused ? "Resume" : "Pause");
-    pause->setEnabled(!e->stoppingRequested());
-    restart->setEnabled(!e->stoppingRequested());
-    shutdown->setEnabled(!e->stoppingRequested());
-    bool wasPaused = screen->paused;
-    screen->paused = e->paused;
-    if (screen->paused)
-      screen->release();
-    if (wasPaused && !screen->paused)
-      screen->scheduleResize();
-  });
+  connect(e, &Engine::changed, w,
+          [guard = QPointer<Engine>(e), pause, paste,
+           screen = QPointer<GuestView>(screen), updateDisplayStatus] {
+            if (!guard) return;
+            const bool stopping = guard->stoppingRequested();
+            pause->setText(guard->paused ? "Resume" : "Pause");
+            pause->setEnabled(!stopping);
+            paste->setEnabled(!guard->paused && !stopping);
+            if (screen) {
+              bool wasPaused = screen->paused;
+              screen->paused = guard->paused;
+              if (screen->paused)
+                screen->release();
+              if (wasPaused && !screen->paused)
+                screen->scheduleResize();
+            }
+            updateDisplayStatus();
+          });
   connect(&e->vnc, &VNC::problem, this, [this](QString s) {
     QTimer::singleShot(0, this, [this, s] { problem(this, s); });
   });
+  const QString machineId = e->machine.id();
   auto previewClock = std::make_shared<QElapsedTimer>();
-  previewClock->start();
-  connect(&e->vnc, &VNC::changed, this, [this, e, previewClock] {
-    preview->update();
-    if (previewClock->elapsed() > 1000 && !e->vnc.frame.isNull()) {
-      previewClock->restart();
-      QSaveFile file(e->machine.folder + "/preview.png");
-      if (file.open(QFile::WriteOnly) &&
-          e->vnc.frame
-              .scaled(400, 300, Qt::KeepAspectRatio, Qt::FastTransformation)
-              .save(&file, "PNG"))
-        file.commit();
-    }
-  });
+  connect(&e->vnc, &VNC::changed, this,
+          [this, guard = QPointer<Engine>(e), machineId, previewClock] {
+            if (!guard) return;
+            const bool firstFrame = !livePreviews.contains(machineId);
+            if (isUsefulPreview(guard->vnc.frame) &&
+                (firstFrame || !previewClock->isValid() ||
+                 previewClock->elapsed() > 1000)) {
+              previewClock->restart();
+              livePreviews[machineId] = guard->vnc.frame.scaled(
+                  400, 300, Qt::KeepAspectRatio, Qt::FastTransformation);
+            }
+            if (auto *cur = current(); cur && cur->id() == machineId)
+              preview->update();
+          });
   return w;
 }
 void App::startSelected() {
@@ -641,13 +879,38 @@ void App::startSelected() {
   e = new Engine(*m, this);
   engines[id] = e;
   connect(e, &Engine::changed, this, &App::render);
-  connect(e, &Engine::exited, this, [this, id, e](bool restart, QString error) {
+  connect(e, &Engine::exited, this,
+          [this, id, guard = QPointer<Engine>(e)](bool restart, QString error) {
+    QImage finalPreview;
+    QString machineFolder;
+    if (guard) {
+      machineFolder = guard->machine.folder;
+      if (isUsefulPreview(guard->vnc.frame))
+        finalPreview = guard->vnc.frame.scaled(
+            400, 300, Qt::KeepAspectRatio, Qt::FastTransformation);
+      for (auto &machine : machines)
+        if (machine.id() == id) {
+          machine.config = guard->machine.config;
+          break;
+        }
+    }
+    if (finalPreview.isNull())
+      finalPreview = livePreviews.take(id);
+    else
+      livePreviews.remove(id);
+    if (!finalPreview.isNull() && !machineFolder.isEmpty() &&
+        QDir(machineFolder).exists()) {
+      QSaveFile file(machineFolder + "/preview.png");
+      if (file.open(QFile::WriteOnly) && finalPreview.save(&file, "PNG"))
+        file.commit();
+    }
     engines.remove(id);
     if (auto w = guests.take(id)) {
       w->hide();
       w->deleteLater();
     }
-    e->deleteLater();
+    if (guard)
+      guard->deleteLater();
     render();
     if (!error.isEmpty())
       problem(this, error);
@@ -691,104 +954,291 @@ void App::settingsSaved(QJsonObject c) {
   render();
 }
 void App::showEditor(bool create) {
+  static QPointer<PDialog> newMacDialog;
+  static QMap<QString, QPointer<PDialog>> infoDialogs;
+  if (create && newMacDialog) {
+    newMacDialog->show();
+    newMacDialog->raise();
+    newMacDialog->activateWindow();
+    return;
+  }
   auto m = current();
   if (!create && !m)
     return;
-  if (!create && currentEngine())
-    fail("Shut down this Mac before changing its settings.");
-  PDialog d(create ? "New Mac" : "Get Info", {590, create ? 300 : 620}, this);
+  if (!create) {
+    if (auto existing = infoDialogs.value(m->id())) {
+      existing->show();
+      existing->raise();
+      existing->activateWindow();
+      return;
+    }
+    if (currentEngine())
+      fail("Shut down this Mac before changing its settings.");
+  }
+  const QString machineId = m ? m->id() : QString();
+  PDialog d(create ? "New Mac" : "Get Info", {590, create ? 340 : 640}, this);
+  if (create)
+    newMacDialog = &d;
+  else
+    infoDialogs[machineId] = &d;
   auto v = dialogLayout(&d);
   auto form = new QGridLayout;
   form->setHorizontalSpacing(12);
   form->setVerticalSpacing(10);
   auto c = create ? Model::freshConfig("Mac OS 9") : m->config;
-  bool osx = !create && m->family() == "powerMacOSX";
+  const QString fam = !create ? m->family() : QString();
+  const bool osx = !create && fam == "powerMacOSX";
+  const bool ppc = !create && fam == "powerMacG4";
+  const bool quadra = !create && fam == "quadra800";
+  const bool copland = !create && fam == "powerMac7500";
   auto name = new PEdit(c["name"].toString(), &d);
   name->setAccessibleName("Mac name");
   name->setObjectName("machineName");
   form->addWidget(label("Name:", &d), 0, 0);
   form->addWidget(name, 0, 1);
   auto family = new PCombo(&d);
-  family->addItem("Power Mac G4", "powerMacG4");
-  family->addItem("Power Mac G4 — Mac OS X", "powerMacOSX");
-  family->addItem("Quadra 800", "quadra800");
   auto capacity = new PCombo(&d);
-  for (int n : {1, 2, 4, 8, 16, 32, 64, 120})
-    capacity->addItem(QString::number(n) + " GB", n);
-  capacity->setCurrentIndex(5);
   auto ram = new PEdit(QString::number(c["ramMB"].toInt()), &d);
   ram->setAccessibleName("Memory in megabytes");
   auto resolution = new PCombo(&d);
-  for (auto s :
-       {"640x480", "800x600", "1024x768", "1280x960", "1600x1200", "1920x1080"})
-    resolution->addItem(s);
-  const auto currentResolution =
-      QString("%1x%2").arg(c["width"].toInt()).arg(c["height"].toInt());
-  if (resolution->findText(currentResolution) < 0)
-    resolution->addItem(currentResolution);
-  resolution->setCurrentText(currentResolution);
+  auto customBox = new QWidget(&d);
+  auto customRow = new QHBoxLayout(customBox);
+  customRow->setContentsMargins(0, 0, 0, 0);
+  customRow->setSpacing(6);
+  auto customW = new PEdit(QString::number(c["width"].toInt()), customBox);
+  customW->setAccessibleName("Custom screen width");
+  customW->setMaximumWidth(80);
+  auto customH = new PEdit(QString::number(c["height"].toInt()), customBox);
+  customH->setAccessibleName("Custom screen height");
+  customH->setMaximumWidth(80);
+  customRow->addWidget(customW);
+  customRow->addWidget(label("×", customBox));
+  customRow->addWidget(customH);
+  customRow->addStretch();
+  customBox->hide();
   auto depth = new PCombo(&d);
-  for (int n : {1, 2, 4, 8, 16, 32})
-    depth->addItem(n == 1    ? "Black & White"
-                   : n == 16 ? "Thousands"
-                   : n == 32 ? "Millions"
-                             : QString::number(1 << n),
-                   n);
-  depth->setCurrentIndex(depth->findData(c["depth"].toInt()));
   auto graphics = new PCombo(&d);
-  graphics->setAccessibleName("Graphics card");
-  graphics->addItem("Standard", "standard");
-  graphics->addItem("ATI Radeon (3D acceleration)", "atiRadeon");
-  graphics->setCurrentIndex(graphics->findData(c["graphicsCard"].toString()));
-  graphics->setEnabled(create || m->family() == "powerMacG4");
+  QString cdPath;
+  QString sharedPath = c["sharedFolderPath"].toString();
+  const int minRam = quadra ? 16 : osx ? 256 : 32;
+  const int maxRam = quadra ? 1000 : osx ? 2048 : 896;
+
+  auto populateResolutions = [&](bool enhanced, int curW, int curH) {
+    QSignalBlocker block(resolution);
+    resolution->clear();
+    const QStringList presets =
+        (quadra && !enhanced)
+            ? QStringList{"640x480", "800x600", "1152x870"}
+            : QStringList{"640x480", "800x600", "1024x768", "1152x870",
+                          "1280x960", "1600x1200", "1920x1080", "Custom…"};
+    for (const auto &s : presets)
+      resolution->addItem(s);
+    const QString cur = QString("%1x%2").arg(curW).arg(curH);
+    const int idx = resolution->findText(cur);
+    if (idx >= 0 && cur != "Custom…") {
+      resolution->setCurrentIndex(idx);
+      customBox->hide();
+    } else if (quadra && !enhanced) {
+      resolution->setCurrentText("800x600");
+      customBox->hide();
+    } else {
+      resolution->setCurrentText("Custom…");
+      customW->setText(QString::number(curW));
+      customH->setText(QString::number(curH));
+      customBox->show();
+    }
+  };
+  auto populateDepths = [&](bool enhanced, int width, int desired) {
+    QSignalBlocker block(depth);
+    depth->clear();
+    QList<int> allowed;
+    if (ppc)
+      allowed = {16, 32};
+    else if (quadra && !enhanced && width >= 1152)
+      allowed = {8};
+    else
+      allowed = {1, 2, 4, 8, 16, 32};
+    for (int n : allowed)
+      depth->addItem(n == 1    ? "Black & White"
+                     : n == 16 ? "Thousands"
+                     : n == 32 ? "Millions"
+                               : QString::number(1 << n),
+                     n);
+    int idx = depth->findData(desired);
+    if (idx < 0)
+      idx = depth->findData(allowed.contains(16) ? 16 : allowed.last());
+    if (idx >= 0)
+      depth->setCurrentIndex(idx);
+  };
+
+  QString lastAutoName = c["name"].toString();
+  bool nameEdited = false;
   if (create) {
     ram->hide();
     resolution->hide();
     depth->hide();
     graphics->hide();
+    family->addItem("Power Mac G4", "powerMacG4");
+    family->addItem("Power Mac G4 — Mac OS X", "powerMacOSX");
+    family->addItem("Quadra 800", "quadra800");
+    for (int n : {1, 2, 4, 8, 16, 32, 64, 120})
+      capacity->addItem(QString::number(n) + " GB", n);
+    capacity->setCurrentIndex(capacity->findData(32));
     form->addWidget(label("Model:", &d), 1, 0);
     form->addWidget(family, 1, 1);
     form->addWidget(label("Hard disk:", &d), 2, 0);
     form->addWidget(capacity, 2, 1);
+    auto cdRow = new QHBoxLayout;
+    cdRow->setSpacing(6);
+    auto cdLabel = label("None (blank hard disk)", &d, "small", true);
+    auto clearCD = button(
+        "Clear",
+        [&] {
+          cdPath.clear();
+          cdLabel->setText("None (blank hard disk)");
+          cdLabel->setToolTip({});
+        },
+        &d);
+    clearCD->setEnabled(false);
+    auto chooseCD = button(
+        "Choose CD…",
+        [&] {
+          auto path = QFileDialog::getOpenFileName(
+              &d, "Choose an installation CD image", {},
+              "CD images (*.iso *.img *.toast *.cdr)");
+          if (!path.isEmpty()) {
+            cdPath = path;
+            cdLabel->setText(QFileInfo(path).fileName());
+            cdLabel->setToolTip(QDir::toNativeSeparators(path));
+            clearCD->setEnabled(true);
+          }
+        },
+        &d);
+    connect(clearCD, &PButton::clicked, &d,
+            [&] { clearCD->setEnabled(!cdPath.isEmpty()); });
+    cdRow->addWidget(chooseCD);
+    cdRow->addWidget(clearCD);
+    cdRow->addWidget(cdLabel, 1);
+    form->addWidget(label("Install CD:", &d), 3, 0);
+    form->addLayout(cdRow, 3, 1);
+    connect(name, &PEdit::textEdited, &d, [&](const QString &) {
+      const auto trimmed = name->text().trimmed();
+      nameEdited = !trimmed.isEmpty() && trimmed != lastAutoName;
+    });
+    connect(family, qOverload<int>(&QComboBox::currentIndexChanged), &d,
+            [&](int) {
+              const auto newFam = family->currentData().toString();
+              const int defaultDisk = newFam == "quadra800" ? 2 : 32;
+              const int idx = capacity->findData(defaultDisk);
+              if (idx >= 0)
+                capacity->setCurrentIndex(idx);
+              const QString defName = newFam == "quadra800"    ? "Quadra 800"
+                                      : newFam == "powerMacOSX" ? "Mac OS X"
+                                                                : "Mac OS 9";
+              if (!nameEdited || name->text().trimmed().isEmpty()) {
+                lastAutoName = defName;
+                name->setText(defName);
+                nameEdited = false;
+              }
+            });
   } else {
     family->hide();
     capacity->hide();
     form->addWidget(label("Memory (MB):", &d), 1, 0);
-    form->addWidget(ram, 1, 1);
-    form->addWidget(label("Screen:", &d), 2, 0);
-    form->addWidget(resolution, 2, 1);
+    auto ramRow = new QHBoxLayout;
+    ramRow->setSpacing(8);
+    ramRow->addWidget(ram);
+    ramRow->addWidget(
+        label(QString("%1–%2 MB").arg(minRam).arg(maxRam), &d, "small"));
+    ramRow->addStretch();
+    form->addLayout(ramRow, 1, 1);
+    auto screenCol = new QVBoxLayout;
+    screenCol->setContentsMargins(0, 0, 0, 0);
+    screenCol->setSpacing(6);
+    screenCol->addWidget(resolution);
+    screenCol->addWidget(customBox);
+    form->addWidget(label("Screen:", &d), 2, 0, Qt::AlignTop);
+    form->addLayout(screenCol, 2, 1);
+    const bool enhanced = c["useEnhancedFramebuffer"].toBool();
+    populateResolutions(enhanced, c["width"].toInt(), c["height"].toInt());
+    graphics->setAccessibleName("Graphics card");
+    graphics->addItem("Standard", "standard");
+    graphics->addItem("ATI Radeon (3D acceleration)", "atiRadeon");
+    graphics->setCurrentIndex(graphics->findData(c["graphicsCard"].toString()));
+    graphics->setEnabled(ppc);
     if (osx) {
       depth->hide();
       graphics->hide();
     } else {
+      populateDepths(enhanced, c["width"].toInt(), c["depth"].toInt());
       form->addWidget(label("Colors:", &d), 3, 0);
       form->addWidget(depth, 3, 1);
       form->addWidget(label("Graphics:", &d), 4, 0);
       form->addWidget(graphics, 4, 1);
     }
+    if (Model::supportsHostSharing() && !osx && !copland) {
+      auto shareRow = new QHBoxLayout;
+      shareRow->setSpacing(6);
+      auto shareLabel = label("", &d, "small", true);
+      auto turnOffShare = button("Turn Off", nullptr, &d);
+      auto syncShare = [&] {
+        const auto folderName = QFileInfo(sharedPath).fileName();
+        shareLabel->setText(
+            sharedPath.isEmpty()
+                ? "Off"
+                : (folderName.isEmpty()
+                       ? QDir::toNativeSeparators(sharedPath)
+                       : folderName));
+        shareLabel->setToolTip(QDir::toNativeSeparators(sharedPath));
+        turnOffShare->setEnabled(!sharedPath.isEmpty());
+      };
+      connect(turnOffShare, &PButton::clicked, &d, [&] {
+        sharedPath.clear();
+        syncShare();
+      });
+      auto chooseShare = button(
+          "Choose…",
+          [&] {
+            auto path = QFileDialog::getExistingDirectory(
+                &d, "Share a Folder with This Mac",
+                sharedPath.isEmpty() ? Model::documents() : sharedPath);
+            if (!path.isEmpty()) {
+              sharedPath = path;
+              syncShare();
+            }
+          },
+          &d);
+      syncShare();
+      shareRow->addWidget(chooseShare);
+      shareRow->addWidget(turnOffShare);
+      shareRow->addWidget(shareLabel, 1);
+      form->addWidget(label("Sharing:", &d), osx ? 3 : 5, 0);
+      form->addLayout(shareRow, osx ? 3 : 5, 1);
+    }
   }
   v->addLayout(form);
   if (create)
     v->addWidget(label("This creates a blank Mac. Use Library for a ready-to-run system, "
-                       "or choose an installation CD in Media after creating it.", &d, "regular", true));
-  if (!create && m->family() == "powerMacG4")
+                       "or choose an installation CD above or in Media later.",
+                       &d, "regular", true));
+  if (ppc)
     v->addWidget(label("Standard and ATI Radeon graphics change the Mac's resolution with the window. ATI requires the guest's ATI display software.",
-                        &d, "small", true));
-  if (!create && m->family() == "quadra800")
+                       &d, "small", true));
+  if (quadra)
     v->addWidget(label("Enhanced Quadra video changes the Mac's resolution with the window. Sharp Pixels keeps complete pixels; built-in video uses a fixed resolution.",
-                        &d, "small", true));
+                       &d, "small", true));
   QMap<QString, PButton *> checks;
   if (!create) {
     for (auto pair : QList<QPair<QString, QString>>{
              {"toolsCDInserted", "ClassicMac Tools CD"},
              {"useG4CPU", "PowerPC G4 CPU"},
-
              {"useEnhancedFramebuffer", "Enhanced Quadra framebuffer"},
              {"sound", "Sound"},
              {"networking", "Networking"},
              {"tabletInput", "Tablet pointer"},
              {"classicInputHelpers",
               "Right click as Control-click; scroll as arrow keys"},
+             {"swapAltCommand", "Swap Alt and Command keys"},
              {"bootFromCD", "Start from inserted CD"}}) {
       auto check = new PButton(pair.second, &d);
       check->toggleButton = true;
@@ -796,52 +1246,114 @@ void App::showEditor(bool create) {
       check->setChecked(c[pair.first].toBool());
       checks[pair.first] = check;
       if ((osx && (pair.first == "toolsCDInserted" || pair.first == "classicInputHelpers")) ||
-          (pair.first == "useG4CPU" && m->family() != "powerMacG4") ||
-          (pair.first == "useEnhancedFramebuffer" && m->family() != "quadra800")) {
+          (pair.first == "useG4CPU" && !ppc) ||
+          (pair.first == "useEnhancedFramebuffer" && !quadra)) {
         check->hide();
         continue;
       }
       v->addWidget(check);
+    }
+    auto selectedWidth = [&] {
+      if (resolution->currentText() == "Custom…")
+        return customW->text().toInt();
+      return resolution->currentText().section('x', 0, 0).toInt();
+    };
+    connect(resolution, qOverload<int>(&QComboBox::currentIndexChanged), &d,
+            [&](int) {
+              const bool isCustom = resolution->currentText() == "Custom…";
+              customBox->setVisible(isCustom);
+              if (!isCustom) {
+                auto parts = resolution->currentText().split('x');
+                if (parts.size() == 2) {
+                  customW->setText(parts[0]);
+                  customH->setText(parts[1]);
+                }
+              }
+              if (quadra && checks.contains("useEnhancedFramebuffer"))
+                populateDepths(checks["useEnhancedFramebuffer"]->isChecked(),
+                               selectedWidth(),
+                               depth->currentData().toInt());
+            });
+    if (quadra && checks.contains("useEnhancedFramebuffer")) {
+      connect(checks["useEnhancedFramebuffer"], &PButton::toggled, &d,
+              [&](bool enh) {
+                int w = selectedWidth();
+                int h = resolution->currentText() == "Custom…"
+                            ? customH->text().toInt()
+                            : resolution->currentText().section('x', 1, 1).toInt();
+                populateResolutions(enh, w, h);
+                populateDepths(enh, selectedWidth(), depth->currentData().toInt());
+              });
+      connect(customW, &PEdit::textChanged, &d, [&](const QString &) {
+        if (resolution->currentText() == "Custom…")
+          populateDepths(checks["useEnhancedFramebuffer"]->isChecked(),
+                         selectedWidth(), depth->currentData().toInt());
+      });
     }
     v->addWidget(
         label("Shut down the Mac before changing hardware or startup media.",
               &d, "small", true));
   }
   v->addStretch();
-  buttonRow(v, {button(
-                    "Cancel", [&] { d.done(0); }, &d),
+  buttonRow(v, {button("Cancel", [&] { d.done(0); }, &d),
                 button(
                     create ? "Create" : "Save",
                     [&] {
+                      const auto cleanName = Model::sanitizedName(name->text());
+                      if (cleanName.isEmpty())
+                        fail("Enter a name for this Mac.");
                       if (create) {
-                        const auto newName = name->text();
                         const auto newFamily = family->currentData().toString();
                         const auto diskSize = capacity->currentData().toInt();
                         auto machine = background<Model::Machine>(
                             &d, "Creating Mac",
                             [=](std::atomic_bool &, Library::Progress) {
-                              return Model::createMachine(newName, newFamily,
+                              return Model::createMachine(cleanName, newFamily,
                                                           diskSize,
-                                                          Model::documents());
+                                                          Model::documents(),
+                                                          cdPath);
                             },
                             false);
                         registerMachine(machine);
                       } else {
                         auto next = c;
-                        next["name"] = name->text();
-                        bool ok;
+                        next["name"] = cleanName;
+                        bool ok = false;
                         int n = ram->text().toInt(&ok);
-                        if (!ok)
-                          fail("Enter a whole number for memory.");
+                        if (!ok || n < minRam || n > maxRam)
+                          fail(QString("Enter memory between %1 and %2 MB.")
+                                   .arg(minRam)
+                                   .arg(maxRam));
                         next["ramMB"] = n;
-                        auto r = resolution->currentText().split('x');
-                        next["width"] = r[0].toInt();
-                        next["height"] = r[1].toInt();
-                        next["depth"] = depth->currentData().toInt();
+                        int nextW = 0, nextH = 0;
+                        if (resolution->currentText() == "Custom…") {
+                          bool okW = false, okH = false;
+                          nextW = customW->text().toInt(&okW);
+                          nextH = customH->text().toInt(&okH);
+                          if (!okW || !okH || nextW < 480 || nextW > 3840 ||
+                              nextH < 480 || nextH > 2160)
+                            fail("Enter a custom resolution between 480×480 and 3840×2160.");
+                        } else {
+                          auto r = resolution->currentText().split('x');
+                          nextW = r.value(0).toInt();
+                          nextH = r.value(1).toInt();
+                        }
+                        next["width"] = nextW;
+                        next["height"] = nextH;
+                        if (!osx)
+                          next["depth"] = depth->currentData().toInt();
                         next["graphicsCard"] =
                             graphics->currentData().toString();
                         for (auto it = checks.begin(); it != checks.end(); ++it)
                           next[it.key()] = it.value()->isChecked();
+                        if (Model::supportsHostSharing() && !osx && !copland) {
+                          if (sharedPath.isEmpty())
+                            next.remove("sharedFolderPath");
+                          else {
+                            next["sharedFolderPath"] = sharedPath;
+                            next["sharedVolumeName"] = "Shared Files";
+                          }
+                        }
                         settingsSaved(next);
                       }
                       d.done();
@@ -849,21 +1361,61 @@ void App::showEditor(bool create) {
                     &d, true)});
   d.exec();
 }
-void App::showMedia() {
+void App::showMedia(QWidget *parent) {
+  static QMap<QString, QPointer<PDialog>> mediaDialogs;
   auto m = current();
   if (!m)
     return;
-  PDialog d("Media", {540, 430}, this);
+  const QString machineId = m->id();
+  if (auto existing = mediaDialogs.value(machineId)) {
+    existing->show();
+    existing->raise();
+    existing->activateWindow();
+    return;
+  }
+  const QString family = m->family();
+  const bool osx = family == "powerMacOSX";
+  const bool copland = family == "powerMac7500";
+  PDialog d("Media", {540, 460}, parent ? parent : this);
+  mediaDialogs[machineId] = &d;
   auto v = dialogLayout(&d);
   v->addWidget(label(m->name(), &d));
-  v->addWidget(label("Choose CD or floppy images to use with this Mac. Shut down before changing media.", &d,
-                     "regular", true));
+  v->addWidget(label(
+      family == "quadra800"
+          ? "Choose CD, floppy, or startup media for this Mac. Shut down before changing media."
+          : "Choose CD or startup media for this Mac. Shut down before changing media.",
+      &d, "regular", true));
+  auto findMachine = [&]() -> Model::Machine * {
+    for (auto &item : machines)
+      if (item.id() == machineId)
+        return &item;
+    return nullptr;
+  };
+  auto ensureEditable = [&]() -> Model::Machine * {
+    if (engines.contains(machineId))
+      fail("Shut down this Mac before changing media.");
+    auto *cur = findMachine();
+    if (!cur)
+      fail("This Mac is no longer in your library.");
+    for (int i = 0; i < machines.size(); ++i)
+      if (machines[i].id() == machineId) {
+        if (selected != i)
+          select(i);
+        break;
+      }
+    return findMachine();
+  };
   QList<std::function<void()>> updates;
-  auto refreshMedia = [&] { for (auto &update : updates) update(); };
+  auto refreshMedia = [&] {
+    for (auto &update : updates)
+      update();
+  };
   auto choose = [&](QString key, QString title, QString filters) {
-    auto path = QFileDialog::getOpenFileName(&d, title, m->folder, filters);
+    auto *cur = ensureEditable();
+    auto path = QFileDialog::getOpenFileName(&d, title, cur->folder, filters);
     if (!path.isEmpty()) {
-      auto c = m->config;
+      cur = ensureEditable();
+      auto c = cur->config;
       c[key] = path;
       if (key == "cdImagePath")
         c["bootFromCD"] = true;
@@ -873,12 +1425,11 @@ void App::showMedia() {
   };
   for (auto key :
        QStringList{"cdImagePath", "floppyImagePath", "sharedFolderPath"}) {
-    if (m->family() == "powerMacOSX" && key != "cdImagePath")
+    if (key == "floppyImagePath" && family != "quadra800")
       continue;
-#ifdef Q_OS_WIN
-    if (key == "sharedFolderPath" && m->config[key].toString().isEmpty())
+    if (key == "sharedFolderPath" &&
+        (!Model::supportsHostSharing() || osx || copland))
       continue;
-#endif
     QString title = key == "cdImagePath"       ? "CD image"
                     : key == "floppyImagePath" ? "Floppy image"
                                                : "Shared folder";
@@ -889,37 +1440,34 @@ void App::showMedia() {
         "Choose " + title + "…",
         [&, key, title] {
           if (key == "sharedFolderPath") {
-#ifdef Q_OS_WIN
-            fail("Host folder sharing requires Linux or macOS.");
-#else
+            auto *cur = ensureEditable();
             auto path = QFileDialog::getExistingDirectory(
-                &d, "Share a Folder with This Mac");
+                &d, "Share a Folder with This Mac",
+                cur->config[key].toString().isEmpty()
+                    ? Model::documents()
+                    : cur->config[key].toString());
             if (!path.isEmpty()) {
-              auto c = m->config;
+              cur = ensureEditable();
+              auto c = cur->config;
               c[key] = path;
               c["sharedVolumeName"] = "Shared Files";
               settingsSaved(c);
               refreshMedia();
             }
-#endif
-          } else
+          } else {
             choose(key, "Choose " + title,
                    key == "cdImagePath"
                        ? "CD images (*.iso *.img *.toast *.cdr)"
                        : "Floppy images (*.img *.dsk *.ima *.raw)");
+          }
         },
         &d);
-    chooseButton->setEnabled(!currentEngine() && (key != "floppyImagePath" ||
-                                                  m->family() == "quadra800"));
     row->addWidget(chooseButton);
-#ifdef Q_OS_WIN
-    if (key == "sharedFolderPath")
-      chooseButton->hide();
-#endif
     auto eject = button(
         key == "sharedFolderPath" ? "Turn Off" : "Eject",
         [&, key] {
-          auto c = m->config;
+          auto *cur = ensureEditable();
+          auto c = cur->config;
           c.remove(key);
           if (key == "cdImagePath")
             c["bootFromCD"] = false;
@@ -927,39 +1475,90 @@ void App::showMedia() {
           refreshMedia();
         },
         &d);
-    eject->setEnabled(!currentEngine() && !m->config[key].toString().isEmpty());
     row->addWidget(eject);
     row->addStretch();
     v->addLayout(row);
-    updates.append([=] {
-      const auto path = m->config[key].toString();
-      mediaPath->setText(title + ": " + (path.isEmpty() ? "Not inserted" : QFileInfo(path).fileName()));
+    updates.append([&, key, title, mediaPath, chooseButton, eject] {
+      auto *cur = findMachine();
+      const bool running = engines.contains(machineId);
+      const auto path = cur ? cur->config[key].toString() : QString();
+      mediaPath->setText(
+          title + ": " +
+          (path.isEmpty() ? "Not inserted"
+                          : (QFileInfo(path).fileName().isEmpty()
+                                 ? QDir::toNativeSeparators(path)
+                                 : QFileInfo(path).fileName())));
       mediaPath->setToolTip(QDir::toNativeSeparators(path));
-      chooseButton->setEnabled(!currentEngine() && (key != "floppyImagePath" || m->family() == "quadra800"));
-      eject->setEnabled(!currentEngine() && !path.isEmpty());
+      chooseButton->setEnabled(!running && cur);
+      eject->setEnabled(!running && cur && !path.isEmpty());
     });
   }
+  bool syncing = false;
+  auto toolsCheck = new PButton("ClassicMac Tools CD", &d);
+  toolsCheck->toggleButton = true;
+  toolsCheck->setCheckable(true);
+  if (osx)
+    toolsCheck->hide();
+  else
+    v->addWidget(toolsCheck);
+  auto bootCheck = new PButton("Start from inserted CD", &d);
+  bootCheck->toggleButton = true;
+  bootCheck->setCheckable(true);
+  v->addWidget(bootCheck);
+  auto toggleOption = [&](const QString &key, bool on) {
+    if (syncing)
+      return;
+    auto *cur = ensureEditable();
+    auto c = cur->config;
+    c[key] = on;
+    settingsSaved(c);
+    refreshMedia();
+  };
+  connect(toolsCheck, &PButton::toggled, &d,
+          [&](bool on) { toggleOption("toolsCDInserted", on); });
+  connect(bootCheck, &PButton::toggled, &d,
+          [&](bool on) { toggleOption("bootFromCD", on); });
+  updates.append([&] {
+    syncing = true;
+    auto *cur = findMachine();
+    const bool running = engines.contains(machineId);
+    toolsCheck->setChecked(cur && cur->config["toolsCDInserted"].toBool());
+    toolsCheck->setEnabled(!running && cur);
+    bootCheck->setChecked(cur && cur->config["bootFromCD"].toBool());
+    bootCheck->setEnabled(!running && cur);
+    syncing = false;
+  });
   refreshMedia();
-  if (m->family() == "powerMacG4")
-    v->addWidget(label("Floppy images are supported by the Quadra 800. Power Macs use CD images.", &d, "small", true));
   v->addStretch();
   auto power = button("Power…", [&] {
     d.done();
-    if (auto engine = currentEngine()) showPowerActions(engine);
+    if (auto engine = engines.value(machineId))
+      showPowerActions(engine);
   }, &d);
-  power->setVisible(currentEngine() != nullptr);
+  power->setVisible(engines.contains(machineId));
   QTimer mediaTimer;
   connect(&mediaTimer, &QTimer::timeout, &d, [&] {
     refreshMedia();
-    power->setVisible(currentEngine() != nullptr);
+    power->setVisible(engines.contains(machineId));
   });
   mediaTimer.start(250);
   buttonRow(v, {power, button("Done", [&] { d.done(); }, &d, true)});
   d.exec();
 }
-void App::showPaste(Engine *e) {
+void App::showPaste(Engine *e, QWidget *parent) {
+  static QMap<QString, QPointer<PDialog>> pasteDialogs;
   QPointer<Engine> target(e);
-  PDialog d("Paste Text into Mac", {590, 400}, this);
+  if (!target)
+    return;
+  const QString machineId = target->machine.id();
+  if (auto existing = pasteDialogs.value(machineId)) {
+    existing->show();
+    existing->raise();
+    existing->activateWindow();
+    return;
+  }
+  PDialog d("Paste Text into Mac", {590, 400}, parent ? parent : this);
+  pasteDialogs[machineId] = &d;
   auto v = dialogLayout(&d);
   v->addWidget(label("Focus the destination in Mac OS first. The Mac must use "
                      "its US keyboard layout.",
@@ -982,29 +1581,59 @@ void App::showPaste(Engine *e) {
   std::atomic_bool cancel = false;
   bool busy = false;
   d.canClose = [&] {
-    cancel = true;
-    return !busy;
+    if (busy) {
+      cancel = true;
+      status->setText("Cancelling…");
+      return false;
+    }
+    return true;
   };
-  auto send = button(
+  PButton *send = nullptr;
+  auto syncControls = [&] {
+    const bool running = target && target->running;
+    const bool paused = running && target->paused;
+    const bool editable = running && !paused && !busy;
+    if (send)
+      send->setEnabled(editable);
+    edit->setEnabled(editable);
+    slow->setEnabled(editable);
+    if (!running)
+      status->setText("This Mac has shut down.");
+    else if (paused)
+      status->setText("Resume this Mac before pasting text.");
+    else if (!busy && status->value == "Resume this Mac before pasting text.")
+      status->setText("");
+  };
+  send = button(
       "Paste Text",
       [&] {
         if (!target || !target->running)
           fail("This Mac has shut down. Start it again before pasting text.");
+        if (target->paused)
+          fail("Resume this Mac before pasting text.");
         busy = true;
         cancel = false;
-        auto guard = qScopeGuard([&] { busy = false; });
-        target->paste(edit->toPlainText(), slow->isChecked(), cancel,
-                 [&](int n, int total) {
-                   status->setText(
-                       QString("Typed %1 of %2 characters.").arg(n).arg(total));
-                 });
-        status->setText("Finished.");
+        syncControls();
+        auto guard = qScopeGuard([&] {
+          busy = false;
+          syncControls();
+        });
+        const QString textPayload = edit->toPlainText();
+        target->paste(textPayload, slow->isChecked(), cancel,
+                      [&](int n, int total) {
+                        status->setText(
+                            QString("Typed %1 of %2 characters.")
+                                .arg(n)
+                                .arg(total));
+                      });
+        status->setText(cancel ? "Cancelled." : "Finished.");
       },
       &d, true);
-  connect(e, &Engine::exited, &d, [&] {
+  syncControls();
+  connect(target, &Engine::changed, &d, syncControls);
+  connect(target, &Engine::exited, &d, [&] {
     cancel = true;
-    send->setEnabled(false);
-    status->setText("This Mac has shut down.");
+    syncControls();
   });
   buttonRow(v, {button(
                     "Cancel",
@@ -1012,6 +1641,8 @@ void App::showPaste(Engine *e) {
                       cancel = true;
                       if (!busy)
                         d.done();
+                      else
+                        status->setText("Cancelling…");
                     },
                     &d),
                 send});
@@ -1021,11 +1652,20 @@ void App::showSetup() {
   if (settingUp)
     return;
   settingUp = true;
-  auto guard = qScopeGuard([&] { settingUp = false; });
-  PDialog d("Welcome to ClassicMac", {660, 540}, this);
+  auto guard = qScopeGuard([this] { settingUp = false; });
+  PDialog d("Welcome to ClassicMac", {660, 560}, this);
   auto v = dialogLayout(&d);
+  auto headerRow = new QHBoxLayout;
+  headerRow->setSpacing(12);
+  auto appIcon = new QLabel(&d);
+  appIcon->setFixedSize(40, 40);
+  appIcon->setPixmap(QPixmap::fromImage(
+      QImage(":/app.png").scaled(40, 40, Qt::KeepAspectRatio,
+                                 Qt::SmoothTransformation)));
+  headerRow->addWidget(appIcon);
   auto heading = label("Your first classic Mac", &d);
-  v->addWidget(heading);
+  headerRow->addWidget(heading, 1);
+  v->addLayout(headerRow);
   auto stack = new QStackedWidget(&d);
   v->addWidget(stack, 1);
   QList<QWidget *> pages;
@@ -1035,19 +1675,23 @@ void App::showSetup() {
     pages << p;
   }
   auto welcome = new QVBoxLayout(pages[0]);
-  welcome->setSpacing(18);
-  welcome->addWidget(
-      label("Set up a Mac", pages[0]));
+  welcome->setSpacing(16);
+  welcome->addWidget(label("Set up a Mac", pages[0]));
   welcome->addWidget(
       label("Download a prepared Mac from the Library, bring your own "
             "installation CD, or open a .classic machine you already have.",
             pages[0], "regular", true));
+  auto licenseGroup = new PGroup("Software License", pages[0]);
+  auto licenseBox = new QVBoxLayout(licenseGroup);
+  licenseBox->setContentsMargins(12, 24, 12, 12);
   auto license = new PButton(
-      "I have the right to use the Mac OS software I choose.", pages[0]);
+      "I have the right to use the Mac OS software I choose.", licenseGroup);
   license->toggleButton = true;
   license->setCheckable(true);
-  welcome->addWidget(license);
-  welcome->addWidget(button(
+  licenseBox->addWidget(license);
+  welcome->addWidget(licenseGroup);
+  auto openRow = new QHBoxLayout;
+  openRow->addWidget(button(
       "Open an existing Mac…",
       [&] {
         importMachine();
@@ -1055,6 +1699,8 @@ void App::showSetup() {
           d.done();
       },
       pages[0]));
+  openRow->addStretch();
+  welcome->addLayout(openRow);
   welcome->addStretch();
   auto sourceLayout = new QVBoxLayout(pages[1]);
   sourceLayout->addWidget(label("How would you like to start?", pages[1]));
@@ -1069,8 +1715,8 @@ void App::showSetup() {
   installer->setAutoExclusive(true);
   sourceLayout->addWidget(download);
   sourceLayout->addWidget(
-      label("Choose System 7.5.5, Mac OS 8.1, 8.6 or Mac OS 9.", pages[1],
-            "regular", true));
+      label("Choose System 7.5.5, Mac OS 8.1, 8.6, Mac OS 9, or Mac OS X.",
+            pages[1], "regular", true));
   sourceLayout->addWidget(installer);
   sourceLayout->addWidget(label(
       "Create a blank Mac and install from your ISO, IMG, Toast or CDR image.",
@@ -1084,6 +1730,8 @@ void App::showSetup() {
   model->addItem("Quadra 800", "quadra800");
   auto summary = label("", pages[2], "regular", true);
   auto name = new PEdit("Mac OS 9", pages[2]);
+  QString lastAutoName = "Mac OS 9";
+  bool nameEdited = false;
   QString cd;
   auto chooseCD = button(
       "Choose Installation CD…",
@@ -1122,23 +1770,53 @@ void App::showSetup() {
     later->setVisible(step == 3);
     cancel->setVisible(!machines.isEmpty());
     next->setEnabled(step != 0 || license->isChecked());
+    QString downloadAction = "Download Mac";
+    if (step == 2 && !installer->isChecked() && editions->currentIndex() >= 0) {
+      const auto entry = editions->currentData().toJsonObject();
+      if (QFileInfo(Library::cacheFile(entry)).size() > 0)
+        downloadAction = "Resume Download";
+    }
     next->setText(
         step < 2    ? "Continue"
         : step == 3 ? (installer->isChecked() ? "Start Installer" : "Start Mac")
-                    : (installer->isChecked() ? "Create Mac" : "Download Mac"));
+                    : (installer->isChecked() ? "Create Mac" : downloadAction));
     heading->setText(
         QString("Step %1 of 4 · Your first classic Mac").arg(step + 1));
   };
   buttonRow(v, {cancel, back, later, next});
+  connect(name, &PEdit::textEdited, &d, [&](const QString &) {
+    const auto trimmed = name->text().trimmed();
+    nameEdited = !trimmed.isEmpty() && trimmed != lastAutoName;
+  });
   connect(license, &PButton::toggled, &d, update);
   connect(stack, &QStackedWidget::currentChanged, &d, update);
+  connect(model, qOverload<int>(&QComboBox::currentIndexChanged), &d,
+          [&](int) {
+            if (!installer->isChecked())
+              return;
+            const auto fam = model->currentData().toString();
+            const QString defName = fam == "quadra800"    ? "Quadra 800"
+                                    : fam == "powerMacOSX" ? "Mac OS X"
+                                                           : "Mac OS 9";
+            if (!nameEdited || name->text().trimmed().isEmpty()) {
+              lastAutoName = defName;
+              name->setText(defName);
+              nameEdited = false;
+            }
+          });
   connect(editions, qOverload<int>(&QComboBox::currentIndexChanged), &d,
           [&](int i) {
             if (i < 0)
               return;
             auto entry = editions->itemData(i).toJsonObject();
-            name->setText(entry["name"].toString());
-            summary->setText(entry["summary"].toString());
+            const auto title = Library::displayTitle(entry);
+            if (!nameEdited || name->text().trimmed().isEmpty()) {
+              lastAutoName = title;
+              name->setText(title);
+              nameEdited = false;
+            }
+            summary->setText(Library::cleanSummary(entry));
+            update();
           });
   connect(next, &PButton::clicked, &d, [&] {
     try {
@@ -1170,37 +1848,89 @@ void App::showSetup() {
                     newest[base]["id"].toString().section("-v", -1).toInt())
               newest[base] = e;
           }
-          for (auto e : newest)
-            editions->addItem(e["name"].toString(), QVariant::fromValue(e));
+          auto editionRank = [](const QJsonObject &e) {
+            const auto fam = e.value("machineFamily").toString("powerMacG4");
+            const auto text =
+                (e["id"].toString() + " " + e["name"].toString()).toLower();
+            if (fam == "powerMacOSX" || text.contains("os x") ||
+                text.contains("osx"))
+              return 1;
+            if (text.contains("os 9") || text.contains("os9"))
+              return 0;
+            if (text.contains("os 8") || text.contains("os8"))
+              return 2;
+            if (text.contains("system 7") || text.contains("7."))
+              return 3;
+            return 4;
+          };
+          auto ordered = newest.values();
+          std::stable_sort(
+              ordered.begin(), ordered.end(),
+              [&](const QJsonObject &a, const QJsonObject &b) {
+                const int ra = editionRank(a), rb = editionRank(b);
+                if (ra != rb)
+                  return ra < rb;
+                return Library::displayTitle(a) < Library::displayTitle(b);
+              });
+          for (const auto &e : ordered)
+            editions->addItem(Library::displayTitle(e), QVariant::fromValue(e));
           if (editions->count() == 0)
             fail("The Library has no compatible editions.");
           auto entry = editions->currentData().toJsonObject();
-          name->setText(entry["name"].toString());
-          summary->setText(entry["summary"].toString());
+          const auto title = Library::displayTitle(entry);
+          if (!nameEdited || name->text().trimmed().isEmpty()) {
+            lastAutoName = title;
+            name->setText(title);
+            nameEdited = false;
+          }
+          summary->setText(Library::cleanSummary(entry));
+        } else {
+          if (!cd.isEmpty())
+            summary->setText(QFileInfo(cd).fileName());
+          const auto fam = model->currentData().toString();
+          const QString defName = fam == "quadra800"    ? "Quadra 800"
+                                  : fam == "powerMacOSX" ? "Mac OS X"
+                                                         : "Mac OS 9";
+          if (!nameEdited || name->text().trimmed().isEmpty()) {
+            lastAutoName = defName;
+            name->setText(defName);
+            nameEdited = false;
+          }
         }
         stack->setCurrentIndex(2);
       } else if (step == 2) {
+        const auto cleanName = Model::sanitizedName(name->text());
+        if (cleanName.isEmpty())
+          fail("Enter a name for this Mac.");
         if (installer->isChecked()) {
           if (cd.isEmpty())
             fail("Choose your Mac OS installation CD image first.");
-          const auto newName = name->text();
           const auto newFamily = model->currentData().toString();
           auto m = background<Model::Machine>(
               &d, "Creating your Mac",
               [=](std::atomic_bool &, Library::Progress) {
-                return Model::createMachine(newName, newFamily,
+                return Model::createMachine(cleanName, newFamily,
                                             newFamily == "quadra800" ? 2 : 32,
                                             Model::documents(), cd);
               },
               false);
           registerMachine(m);
-          help->setText("Start the installer. Inside Mac OS, initialize the "
-                        "blank hard disk with the CD's disk utility, then run "
-                        "Installer. On Power Mac, turn off Update Apple Hard "
-                        "Disk Drivers in Options. After installation, shut "
-                        "down, eject the CD in Media, then start your Mac.");
+          if (newFamily == "powerMacOSX") {
+            help->setText(
+                "Start the installer. Inside Mac OS X Installer, open "
+                "Utilities → Disk Utility, erase the blank hard disk as "
+                "Mac OS Extended with an Apple Partition Map scheme, then "
+                "install Mac OS X. After installation, shut down, eject the "
+                "CD in Media, then start your Mac.");
+          } else {
+            help->setText("Start the installer. Inside Mac OS, initialize the "
+                          "blank hard disk with the CD's disk utility, then run "
+                          "Installer. On Power Mac, turn off Update Apple Hard "
+                          "Disk Drivers in Options. After installation, shut "
+                          "down, eject the CD in Media, then start your Mac.");
+          }
         } else {
-          install(editions->currentData().toJsonObject(), name->text());
+          install(editions->currentData().toJsonObject(), cleanName);
           help->setText("Everything is in place. Start your Mac to go straight "
                         "to the classic desktop.");
         }

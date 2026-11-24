@@ -1,7 +1,11 @@
 #include "platinum.h"
 #include <QFile>
+#include <QHash>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QMutex>
+#include <QPoint>
+#include <QVector>
 #include <algorithm>
 #include <cmath>
 
@@ -19,21 +23,45 @@ const QJsonObject &measured() {
   static const auto m = assets()["measured"].toObject();
   return m;
 }
-static QJsonArray table(const QString &key) {
-  return measured()[key].toArray();
+static const QJsonArray &table(const QString &key) {
+  static const QHash<QString, QJsonArray> cache = [] {
+    QHash<QString, QJsonArray> out;
+    const auto &m = measured();
+    for (auto it = m.begin(); it != m.end(); ++it)
+      if (it.value().isArray())
+        out.insert(it.key(), it.value().toArray());
+    return out;
+  }();
+  static const QJsonArray empty;
+  auto it = cache.constFind(key);
+  return it != cache.constEnd() ? it.value() : empty;
+}
+QImage cachedIcon(const QString &resourcePath) {
+  static QMutex mutex;
+  static QHash<QString, QImage> cache;
+  QMutexLocker lock(&mutex);
+  auto it = cache.constFind(resourcePath);
+  if (it != cache.constEnd())
+    return it.value();
+  QImage img(resourcePath);
+  cache.insert(resourcePath, img);
+  return img;
 }
 QRgb color(QChar ch) {
-  if (ch == '.' || ch == ' ')
+  const ushort u = ch.unicode();
+  if (u == '.' || u == ' ')
     return 0;
-  if (ch == 'K')
+  if (u == 'K')
     return 0xff000000;
-  if (ch == 'W')
+  if (u == 'W')
     return 0xffffffff;
-  if (QString("0123456789abcdef").contains(ch))
-    return 0xff000000 | QString(ch).toUInt(nullptr, 16) * 0x111111;
+  if (u >= '0' && u <= '9')
+    return 0xff000000 | uint(u - '0') * 0x111111;
+  if (u >= 'a' && u <= 'f')
+    return 0xff000000 | uint(u - 'a' + 10) * 0x111111;
   static const unsigned ramp[] = {0xeeeeee, 0xccccff, 0x9999ff, 0x6666cc,
                                   0x333399, 0x000088, 0x000055, 0};
-  const int i = ch.unicode() - 'A';
+  const int i = int(u) - 'A';
   return i >= 0 && i < 8 ? 0xff000000 | ramp[i] : 0;
 }
 Pixels::Pixels(int w, int h, QRgb background)
@@ -291,13 +319,58 @@ void progress(Pixels &p, double value, int phase) {
     }
   }
 }
-static QJsonArray glyph(uint code, const QString &font) {
-  static const auto fonts = assets()["fonts"].toObject();
-  auto f = fonts[font].toObject();
-  return f.value(QString::number(code)).toArray().isEmpty()
-             ? f["63"].toArray()
-             : f[QString::number(code)].toArray();
+namespace {
+struct DecodedGlyph {
+  int advance = 0;
+  QVector<QPoint> pixels;
+};
+struct FontTable {
+  QHash<uint, DecodedGlyph> glyphs;
+  DecodedGlyph fallback;
+};
+DecodedGlyph decodeGlyph(const QJsonArray &g) {
+  DecodedGlyph out;
+  out.advance = g[0].toInt();
+  const int w = g[1].toInt(), h = g[2].toInt(), dx = g[3].toInt(), dy = g[4].toInt();
+  const auto rows = g[5].toArray();
+  for (int j = 0; j < h; ++j) {
+    const auto str = rows[j].toString();
+    const auto row = str.toULongLong(nullptr, 16);
+    const int bits = str.size() * 4;
+    for (int i = 0; i < w; ++i)
+      if (row & (quint64(1) << (bits - i - 1)))
+        out.pixels.append(QPoint(dx + i, -dy - h + j));
+  }
+  return out;
 }
+const FontTable &fontTable(const QString &font) {
+  static const QHash<QString, FontTable> tables = [] {
+    QHash<QString, FontTable> out;
+    const auto fonts = assets()["fonts"].toObject();
+    for (auto it = fonts.begin(); it != fonts.end(); ++it) {
+      FontTable table;
+      const auto f = it.value().toObject();
+      for (auto git = f.begin(); git != f.end(); ++git) {
+        bool ok = false;
+        const uint code = git.key().toUInt(&ok);
+        const auto arr = git.value().toArray();
+        if (ok && !arr.isEmpty())
+          table.glyphs.insert(code, decodeGlyph(arr));
+      }
+      table.fallback = table.glyphs.value(63);
+      out.insert(it.key(), std::move(table));
+    }
+    return out;
+  }();
+  static const FontTable empty;
+  auto it = tables.constFind(font);
+  return it != tables.constEnd() ? it.value() : empty;
+}
+inline const DecodedGlyph &glyphRef(const FontTable &table, uint code) {
+  auto it = table.glyphs.constFind(code);
+  return it != table.glyphs.constEnd() ? it.value() : table.fallback;
+}
+} // namespace
 void scrollBar(Pixels &p, int thumb, int pressed) {
   const bool active = thumb >= 0;
   const int arrowTop = std::max(0, p.h() - 31);
@@ -321,35 +394,48 @@ void scrollBar(Pixels &p, int thumb, int pressed) {
   p.sprite(table(!active ? "SCROLLBAR_DOWN_DISABLED" : pressed == 1 ? "SCROLLBAR_DOWN_HELD" : "SCROLLBAR_DOWN"), 0, arrowTop + 15);
 }
 int textWidth(const QString &s, const QString &font) {
+  const auto &ft = fontTable(font);
   int x = 0;
   for (uint ch : s.toUcs4())
-    x += glyph(ch, font)[0].toInt();
+    x += glyphRef(ft, ch).advance;
   return x;
 }
 QString elide(const QString &s, int width, const QString &font) {
-  if (textWidth(s, font) <= width)
+  const auto &ft = fontTable(font);
+  const auto ucs4 = s.toUcs4();
+  QVector<int> prefix(ucs4.size() + 1, 0);
+  for (int i = 0; i < ucs4.size(); ++i)
+    prefix[i + 1] = prefix[i] + glyphRef(ft, ucs4[i]).advance;
+  if (prefix.last() <= width)
     return s;
-  QString t = s;
-  while (!t.isEmpty() && textWidth(t + QString::fromUtf8("…"), font) > width)
-    t.chop(1);
-  return t + QString::fromUtf8("…");
+  const QString ellipsis = QString::fromUtf8("…");
+  const int ellipsisWidth = textWidth(ellipsis, font);
+  const int budget = width - ellipsisWidth;
+  int lo = 0, hi = ucs4.size();
+  while (lo < hi) {
+    const int mid = lo + (hi - lo + 1) / 2;
+    if (prefix[mid] <= budget)
+      lo = mid;
+    else
+      hi = mid - 1;
+  }
+  return QString::fromUcs4(reinterpret_cast<const char32_t *>(ucs4.constData()), lo) + ellipsis;
 }
 void text(Pixels &p, const QString &s, int x, int baseline, QRgb c,
           const QString &font) {
+  if (!qAlpha(c))
+    return;
+  const auto &ft = fontTable(font);
+  const int pw = p.w(), ph = p.h();
   for (uint ch : s.toUcs4()) {
-    auto g = glyph(ch, font);
-    auto rows = g[5].toArray();
-    int w = g[1].toInt(), h = g[2].toInt(), dx = g[3].toInt(),
-        dy = g[4].toInt();
-    for (int j = 0; j < h; ++j) {
-      auto str = rows[j].toString();
-      auto row = str.toULongLong(nullptr, 16);
-      int bits = str.size() * 4;
-      for (int i = 0; i < w; ++i)
-        if (row & (quint64(1) << (bits - i - 1)))
-          p.pixel(x + dx + i, baseline - dy - h + j, c);
+    const auto &g = glyphRef(ft, ch);
+    for (const QPoint pt : g.pixels) {
+      const int px = x + pt.x();
+      const int py = baseline + pt.y();
+      if (px >= 0 && py >= 0 && px < pw && py < ph)
+        reinterpret_cast<QRgb *>(p.image.scanLine(py))[px] = c;
     }
-    x += g[0].toInt();
+    x += g.advance;
   }
 }
 } // namespace Platinum
