@@ -1,6 +1,7 @@
 import Foundation
 import SwiftUI
 import AppKit
+import Darwin
 import UniformTypeIdentifiers
 
 extension UTType {
@@ -22,9 +23,20 @@ final class VMStore: ObservableObject {
     static let shared = VMStore()
 
     @Published var vms: [VMConfig] = []
+    @Published private(set) var unavailablePaths: [String] = []
     @Published var selectedID: UUID?
     @Published var isPresentingNewVM = false
     @Published var lastError: AppError?
+
+    private let indexURL: URL
+    private let mediaDir: URL
+    private let migrateLegacy: Bool
+
+    private enum CachedTemplateOS {
+        case missing
+        case present(String)
+    }
+    private var templateOSVersionCache: [URL: CachedTemplateOS] = [:]
 
     private let encoder: JSONEncoder = {
         let e = JSONEncoder()
@@ -33,32 +45,68 @@ final class VMStore: ObservableObject {
     }()
     private let decoder = JSONDecoder()
 
-    init() {
+    init(
+        indexURL: URL = AppPaths.libraryIndexURL,
+        mediaDir: URL = AppPaths.mediaDir,
+        migrateLegacy: Bool = true
+    ) {
+        self.indexURL = indexURL
+        self.mediaDir = mediaDir
+        self.migrateLegacy = migrateLegacy
         reload()
     }
 
-    // MARK: Loading
+    // MARK: Loading & template cache
 
     func reload() {
-        migrateLegacyVMsIfNeeded()
+        if migrateLegacy {
+            migrateLegacyVMsIfNeeded()
+        }
+        templateOSVersionCache.removeAll()
 
         let previousSelection = selectedID
         var loaded: [VMConfig] = []
-        var validPaths: [String] = []
+        var retainedPaths: [String] = []
+        var missingPaths: [String] = []
+        let fm = FileManager.default
+
         for url in indexedBundleURLs() {
-            guard let config = loadConfig(from: url) else { continue }
-            loaded.append(config)
-            validPaths.append(url.standardizedFileURL.path)
+            let path = url.standardizedFileURL.path
+            if let config = loadConfig(from: url) {
+                loaded.append(config)
+                retainedPaths.append(path)
+            } else if !fm.fileExists(atPath: path) {
+                // Retain missing/unmounted paths (e.g. external drives) across
+                // reloads instead of dropping them from library.json.
+                missingPaths.append(path)
+                retainedPaths.append(path)
+            }
         }
         loaded.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
         vms = loaded
+        unavailablePaths = missingPaths
         if let previousSelection, loaded.contains(where: { $0.id == previousSelection }) {
             selectedID = previousSelection
         } else {
             selectedID = loaded.first?.id
         }
-        // Prune entries whose packages have gone missing.
-        writeIndex(validPaths)
+        writeIndex(retainedPaths)
+    }
+
+    func templateOSVersion(for vm: VMConfig) -> String? {
+        let key = vm.folder.standardizedFileURL
+        if let cached = templateOSVersionCache[key] {
+            switch cached {
+            case .missing: return nil
+            case .present(let version): return version
+            }
+        }
+        if let version = VMTemplateMetadata.load(from: key)?.osVersion {
+            templateOSVersionCache[key] = .present(version)
+            return version
+        }
+        templateOSVersionCache[key] = .missing
+        return nil
     }
 
     private func loadConfig(from bundleURL: URL) -> VMConfig? {
@@ -91,6 +139,7 @@ final class VMStore: ObservableObject {
             )
             return false
         }
+        templateOSVersionCache.removeValue(forKey: bundle.standardizedFileURL)
         upsert(config)
         addToIndex(bundle)
         return true
@@ -105,6 +154,26 @@ final class VMStore: ObservableObject {
     // file is left behind.
     @discardableResult
     func createVM(_ config: VMConfig) -> VMConfig? {
+        guard let setup = prepareCreateVM(config) else { return nil }
+        if let failure = Self.createImages(for: config) {
+            return setup.fail(failure)
+        }
+        return finalizeCreateVM(config, fail: setup.fail)
+    }
+
+    @discardableResult
+    func createVMAsync(_ config: VMConfig) async -> VMConfig? {
+        guard let setup = prepareCreateVM(config) else { return nil }
+        let failure: String? = await Task.detached(priority: .userInitiated) {
+            Self.createImages(for: config)
+        }.value
+        if let failure {
+            return setup.fail(failure)
+        }
+        return finalizeCreateVM(config, fail: setup.fail)
+    }
+
+    private func prepareCreateVM(_ config: VMConfig) -> (fail: (String) -> VMConfig?, ())? {
         let errorTitle = "Couldn't Create \u{201C}\(config.name)\u{201D}"
         guard let bundle = config.bundleURL else {
             lastError = AppError(errorTitle, "No save location was chosen for the new machine.")
@@ -120,18 +189,31 @@ final class VMStore: ObservableObject {
             return nil
         }
 
-        // Remove the package we just created if any later step fails.
-        func fail(_ message: String) -> VMConfig? {
-            lastError = AppError(errorTitle, message)
+        let fail: (String) -> VMConfig? = { [weak self] message in
+            self?.lastError = AppError(errorTitle, message)
             if !bundleExisted {
                 try? fm.removeItem(at: bundle)
             }
             return nil
         }
+        return (fail, ())
+    }
 
+    private func finalizeCreateVM(_ config: VMConfig, fail: (String) -> VMConfig?) -> VMConfig? {
+        guard let bundle = config.bundleURL else { return nil }
+        if !save(config) {
+            return fail(lastError?.message ?? "The machine's settings could not be saved.")
+        }
+        NSDocumentController.shared.noteNewRecentDocumentURL(bundle)
+        selectedID = config.id
+        return config
+    }
+
+    nonisolated private static func createImages(for config: VMConfig) -> String? {
+        let fm = FileManager.default
         let diskResult = QEMUManager.createRawImage(at: config.diskImageURL, sizeArgument: "\(config.diskSizeGB)G")
         if case let .failure(message) = diskResult {
-            return fail("The machine's hard disk could not be created. \(message)")
+            return "The machine's hard disk could not be created. \(message)"
         }
 
         // The Power Mac (mac99) keeps its NVRAM inside the machine; only the
@@ -147,22 +229,16 @@ final class VMStore: ObservableObject {
                     }
                     try fm.copyItem(at: AppPaths.pramSeed, to: config.pramImageURL)
                 } catch {
-                    return fail("The machine's startup memory could not be created. \(error.localizedDescription)")
+                    return "The machine's startup memory could not be created. \(error.localizedDescription)"
                 }
             } else {
                 let pramResult = QEMUManager.createRawImage(at: config.pramImageURL, sizeArgument: "256b")
                 if case let .failure(message) = pramResult {
-                    return fail("The machine's startup memory could not be created. \(message)")
+                    return "The machine's startup memory could not be created. \(message)"
                 }
             }
         }
-
-        if !save(config) {
-            return fail(lastError?.message ?? "The machine's settings could not be saved.")
-        }
-        NSDocumentController.shared.noteNewRecentDocumentURL(bundle)
-        selectedID = config.id
-        return config
+        return nil
     }
 
     // MARK: Opening existing packages
@@ -171,13 +247,32 @@ final class VMStore: ObservableObject {
     // recent document, and optionally boots it. Used by File > Open and by the
     // Finder/dock open handler (double-click).
     func openBundle(at url: URL, autostart: Bool) {
-        guard let config = loadConfig(from: url) else {
+        templateOSVersionCache.removeValue(forKey: url.standardizedFileURL)
+        guard var config = loadConfig(from: url) else {
             lastError = AppError(
                 "Couldn't Open \u{201C}\(url.lastPathComponent)\u{201D}",
                 "It doesn't appear to be a ClassicMac machine, or its settings file is damaged."
             )
             return
         }
+        let targetResolved = url.standardizedFileURL.resolvingSymlinksInPath().path
+        if let existing = vms.first(where: { $0.id == config.id }),
+           existing.folder.standardizedFileURL.resolvingSymlinksInPath().path != targetResolved {
+            // Finder duplicate of an existing .classic bundle: assign a fresh
+            // UUID so both machines have independent identities and sockets.
+            config.id = UUID()
+            do {
+                let data = try encoder.encode(config)
+                try data.write(to: config.configURL, options: .atomic)
+            } catch {
+                lastError = AppError(
+                    "Couldn't Open \u{201C}\(url.lastPathComponent)\u{201D}",
+                    "The duplicated machine's settings could not be updated. \(error.localizedDescription)"
+                )
+                return
+            }
+        }
+        unavailablePaths.removeAll { $0 == url.standardizedFileURL.path }
         upsert(config)
         addToIndex(url)
         NSDocumentController.shared.noteNewRecentDocumentURL(url)
@@ -211,6 +306,7 @@ final class VMStore: ObservableObject {
             selectedID = vms.isEmpty ? nil : vms[nextIndex].id
         }
         if let bundle = config.bundleURL {
+            templateOSVersionCache.removeValue(forKey: bundle.standardizedFileURL)
             removeFromIndex(bundle)
         }
     }
@@ -218,6 +314,13 @@ final class VMStore: ObservableObject {
     // Forgets a VM and moves its package to the Trash.
     func moveToTrash(_ config: VMConfig) {
         if let bundle = config.bundleURL {
+            guard isSafePackageToTrash(bundle, matching: config.id) else {
+                lastError = AppError(
+                    "Couldn't Move \u{201C}\(config.name)\u{201D} to the Trash",
+                    "This folder could not be verified as a ClassicMac package."
+                )
+                return
+            }
             do {
                 try FileManager.default.trashItem(at: bundle, resultingItemURL: nil)
             } catch {
@@ -228,7 +331,68 @@ final class VMStore: ObservableObject {
                 return
             }
         }
+        let candidateMedia = [config.cdImagePath, config.floppyImagePath]
+            .compactMap { $0 }
+            .filter { !$0.isEmpty }
         removeFromLibrary(config)
+        cleanUpUnreferencedMedia(candidateMedia)
+    }
+
+    private func isSafePackageToTrash(_ bundle: URL, matching vmID: UUID) -> Bool {
+        guard bundle.pathExtension.lowercased() == VMConfig.packageExtension else {
+            return false
+        }
+        var st = stat()
+        guard lstat(bundle.path, &st) == 0,
+              (st.st_mode & S_IFMT) == S_IFDIR else {
+            return false
+        }
+        let configURL = bundle.appendingPathComponent("config.json")
+        var cfgStat = stat()
+        guard lstat(configURL.path, &cfgStat) == 0,
+              (cfgStat.st_mode & S_IFMT) == S_IFREG,
+              let data = try? Data(contentsOf: configURL),
+              let decoded = try? decoder.decode(VMConfig.self, from: data),
+              decoded.id == vmID else {
+            return false
+        }
+        let bundleResolved = bundle.standardizedFileURL.resolvingSymlinksInPath().path
+        let prefix = bundleResolved.hasSuffix("/") ? bundleResolved : bundleResolved + "/"
+        for other in vms where other.id != vmID {
+            let otherResolved = other.folder.standardizedFileURL.resolvingSymlinksInPath().path
+            if otherResolved == bundleResolved || otherResolved.hasPrefix(prefix) {
+                return false
+            }
+        }
+        for unavailable in unavailablePaths {
+            let otherResolved = URL(fileURLWithPath: unavailable).standardizedFileURL.resolvingSymlinksInPath().path
+            if otherResolved == bundleResolved || otherResolved.hasPrefix(prefix) {
+                return false
+            }
+        }
+        return true
+    }
+
+    private func cleanUpUnreferencedMedia(_ candidatePaths: [String]) {
+        guard !candidatePaths.isEmpty else { return }
+        let fm = FileManager.default
+        let resolvedMediaRoot = mediaDir.standardizedFileURL.resolvingSymlinksInPath().path
+        let mediaPrefix = resolvedMediaRoot.hasSuffix("/") ? resolvedMediaRoot : resolvedMediaRoot + "/"
+
+        let referenced = Set(vms.flatMap { vm in
+            [vm.cdImagePath, vm.floppyImagePath]
+                .compactMap { $0 }
+                .filter { !$0.isEmpty }
+                .map { URL(fileURLWithPath: $0).standardizedFileURL.resolvingSymlinksInPath().path }
+        })
+
+        for path in candidatePaths {
+            let resolved = URL(fileURLWithPath: path).standardizedFileURL.resolvingSymlinksInPath().path
+            guard resolved.hasPrefix(mediaPrefix), !referenced.contains(resolved) else { continue }
+            var st = stat()
+            guard lstat(resolved, &st) == 0, (st.st_mode & S_IFMT) == S_IFREG else { continue }
+            try? fm.removeItem(atPath: resolved)
+        }
     }
 
     // MARK: In-memory list helpers
@@ -245,7 +409,7 @@ final class VMStore: ObservableObject {
     // MARK: Library index (list of package paths)
 
     private func indexedBundleURLs() -> [URL] {
-        guard let data = try? Data(contentsOf: AppPaths.libraryIndexURL),
+        guard let data = try? Data(contentsOf: indexURL),
               let paths = try? decoder.decode([String].self, from: data) else {
             return []
         }
@@ -269,7 +433,7 @@ final class VMStore: ObservableObject {
             }
         }
         guard let data = try? encoder.encode(unique) else { return }
-        try? data.write(to: AppPaths.libraryIndexURL, options: .atomic)
+        try? data.write(to: indexURL, options: .atomic)
     }
 
     private func addToIndex(_ bundle: URL) {
@@ -281,6 +445,7 @@ final class VMStore: ObservableObject {
     private func removeFromIndex(_ bundle: URL) {
         let target = bundle.standardizedFileURL.path
         let paths = indexedBundleURLs().map { $0.path }.filter { $0 != target }
+        unavailablePaths.removeAll { $0 == target }
         writeIndex(paths)
     }
 
@@ -356,10 +521,14 @@ final class VMStore: ObservableObject {
         return candidate
     }
 
-    private func sanitizedBundleName(_ name: String) -> String {
+    func sanitizedBundleName(_ name: String) -> String {
         var cleaned = name.trimmingCharacters(in: .whitespacesAndNewlines)
         cleaned = cleaned.replacingOccurrences(of: "/", with: "-")
         cleaned = cleaned.replacingOccurrences(of: ":", with: "-")
+        while let first = cleaned.first, first == "." || first.isWhitespace || first.isNewline {
+            cleaned.removeFirst()
+        }
+        cleaned = cleaned.trimmingCharacters(in: .whitespacesAndNewlines)
         if cleaned.isEmpty {
             return "Machine"
         }

@@ -1,6 +1,7 @@
 import Foundation
 import SwiftUI
 import AppKit
+import Darwin
 
 enum CommandResult {
     case success(String)
@@ -31,18 +32,37 @@ final class DataBox: @unchecked Sendable {
 // instruction-timed after startup.
 final class BootClockHandoff: @unchecked Sendable {
     private let socketPath: String
-    private let started = ProcessInfo.processInfo.systemUptime
+    private let queue = DispatchQueue.global(qos: .userInitiated)
     private let lock = NSLock()
+    private var workItem: DispatchWorkItem?
     private var cancelled = false
 
     init(socketPath: String) {
         self.socketPath = socketPath
     }
 
+    func start(delay: TimeInterval = 15.0) {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !cancelled else { return }
+        workItem?.cancel()
+        let path = socketPath
+        let item = DispatchWorkItem { [weak self] in
+            guard let self, !self.isCancelled else { return }
+            _ = HMPClient.command("classicmac-boot-complete",
+                                  socketPath: path)
+        }
+        workItem = item
+        queue.asyncAfter(deadline: .now() + delay, execute: item)
+    }
+
     func cancel() {
         lock.lock()
         cancelled = true
+        let item = workItem
+        workItem = nil
         lock.unlock()
+        item?.cancel()
     }
 
     private var isCancelled: Bool {
@@ -51,18 +71,8 @@ final class BootClockHandoff: @unchecked Sendable {
         return cancelled
     }
 
-    private func wait(until target: TimeInterval) -> Bool {
-        while ProcessInfo.processInfo.systemUptime - started < target {
-            if isCancelled { return false }
-            usleep(25_000)
-        }
-        return !isCancelled
-    }
-
     func run() {
-        guard wait(until: 15.0) else { return }
-        _ = HMPClient.command("classicmac-boot-complete",
-                              socketPath: socketPath)
+        start()
     }
 }
 
@@ -91,6 +101,7 @@ final class QEMUManager: ObservableObject {
     private var previewTimers: [UUID: Timer] = [:]
     private var bootClockHandoffs: [UUID: BootClockHandoff] = [:]
     private var forcedStopWorkItems: [UUID: DispatchWorkItem] = [:]
+    private var intentionalForceStopIDs: Set<UUID> = []
 
     func isRunning(_ id: UUID) -> Bool {
         runningIDs.contains(id)
@@ -103,15 +114,11 @@ final class QEMUManager: ObservableObject {
     static func monitorSocketURL(for id: UUID) -> URL {
         // Unix domain socket paths must fit in sockaddr_un (< 104 bytes on macOS),
         // so the long Application Support path cannot be used. Keep it short.
-        let dir = URL(fileURLWithPath: "/tmp/ClassicMac", isDirectory: true)
-        AppPaths.ensureDirectory(dir)
-        return dir.appendingPathComponent("\(id.uuidString).sock")
+        AppPaths.runtimeSocketDir.appendingPathComponent("\(id.uuidString).sock")
     }
 
     static func qmpSocketURL(for id: UUID) -> URL {
-        let dir = URL(fileURLWithPath: "/tmp/ClassicMac", isDirectory: true)
-        AppPaths.ensureDirectory(dir)
-        return dir.appendingPathComponent("\(id.uuidString).qmp.sock")
+        AppPaths.runtimeSocketDir.appendingPathComponent("\(id.uuidString).qmp.sock")
     }
 
     // SHUTDOWN event reasons after which the VM should boot right back up:
@@ -182,11 +189,9 @@ final class QEMUManager: ObservableObject {
 
         let process = Process()
         process.executableURL = AppPaths.qemuBinary(for: config.machineFamily)
-        process.arguments = QEMUManager.buildArguments(
-            for: config,
-            browserWebSocketPort: displayServer?.endpoint.webSocketPort ?? 60_800
-        )
+        process.arguments = QEMUManager.buildArguments(for: config)
         process.currentDirectoryURL = config.folder
+        intentionalForceStopIDs.remove(config.id)
 
         // The Quadra's SCSI CD driver notices live media changes, so publish
         // the bundled image to its running-window menu. Power Macs receive
@@ -249,26 +254,55 @@ final class QEMUManager: ObservableObject {
                 self.forcedStopWorkItems.removeValue(forKey: config.id)?.cancel()
                 self.stopBootClockHandoff(for: config.id)
                 self.stopPreviewUpdates(for: config.id)
+                let wasIntentionalForceStop = self.intentionalForceStopIDs.remove(config.id) != nil
                 if displayServer != nil {
                     try? FileManager.default.removeItem(
                         at: BrowserDisplayEndpoint.vncSocketURL(for: config.id)
                     )
                 }
+                if let session = GuestWindows.shared.session(for: config.id),
+                   let cgImage = session.takeFrame(force: true) {
+                    let finalImage = NSImage(
+                        cgImage: cgImage,
+                        size: NSSize(width: cgImage.width, height: cgImage.height)
+                    )
+                    if self.previews[config.id] == nil || MachinePreviewQuality.isUseful(finalImage) {
+                        self.previews[config.id] = finalImage
+                    }
+                }
                 self.persistPreview(config)
-                if config.machineFamily == .powerMac7500,
+                if !wasIntentionalForceStop,
+                   config.machineFamily == .powerMac7500,
                    proc.terminationReason == .exit, proc.terminationStatus == 75 {
                     self.start(savedConfig, reusing: nil, openDisplay: true)
                     return
                 }
-                if proc.terminationStatus != 0 && proc.terminationReason == .exit {
+                let failedExit = proc.terminationReason == .exit && proc.terminationStatus != 0
+                let crashedBySignal = proc.terminationReason == .uncaughtSignal && !wasIntentionalForceStop
+                if failedExit || crashedBySignal {
                     monitor?.cancel()
                     self.stopBrowserDisplay(for: config.id)
                     GuestWindows.shared.machineStopped(config.id)
+                    var logBody = message.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if crashedBySignal {
+                        let sig = proc.terminationStatus
+                        let sigName = String(cString: strsignal(sig))
+                        let header = "Terminated by signal \(sig) (\(sigName))."
+                        logBody = logBody.isEmpty ? header : "\(header)\n\(logBody)"
+                    } else if logBody.isEmpty {
+                        logBody = "Exited with status \(proc.terminationStatus)."
+                    }
                     self.lastError = AppError(
                         "\u{201C}\(config.name)\u{201D} Shut Down Unexpectedly",
                         "The Mac stopped on its own. Try starting it again.",
-                        logURL: AppLog.write(message, machineName: config.name)
+                        logURL: AppLog.write(logBody, machineName: config.name)
                     )
+                    return
+                }
+                if wasIntentionalForceStop {
+                    monitor?.cancel()
+                    self.stopBrowserDisplay(for: config.id)
+                    GuestWindows.shared.machineStopped(config.id)
                     return
                 }
                 // An installer blesses the destination System Folder before
@@ -450,16 +484,16 @@ final class QEMUManager: ObservableObject {
                     continue
                 }
                 let renderer = ATIDisplay.rendererName(fromHMP: reply)
-                await MainActor.run { self?.atiRenderers[id] = renderer }
+                await MainActor.run { [weak self] in
+                    self?.atiRenderers[id] = renderer
+                }
                 return
             }
         }
     }
 
     static func screenDumpURL(for id: UUID) -> URL {
-        let dir = URL(fileURLWithPath: "/tmp/ClassicMac", isDirectory: true)
-        AppPaths.ensureDirectory(dir)
-        return dir.appendingPathComponent("\(id.uuidString).screen.ppm")
+        AppPaths.runtimeSocketDir.appendingPathComponent("\(id.uuidString).screen.ppm")
     }
 
     private func startBootClockHandoff(for config: VMConfig) {
@@ -468,9 +502,7 @@ final class QEMUManager: ObservableObject {
             socketPath: QEMUManager.monitorSocketURL(for: config.id).path
         )
         bootClockHandoffs[config.id] = handoff
-        DispatchQueue.global(qos: .userInitiated).async {
-            handoff.run()
-        }
+        handoff.start()
     }
 
     private func stopBootClockHandoff(for id: UUID) {
@@ -510,6 +542,18 @@ final class QEMUManager: ObservableObject {
             else { coplandHaltedIDs.remove(config.id) }
             return
         }
+        let needsLivePreview = WindowManager.shared.mainWindow?.isVisible == true || previews[config.id] == nil
+        if let session = GuestWindows.shared.session(for: config.id) {
+            guard needsLivePreview else { return }
+            if let cgImage = session.takeFrame(force: true) {
+                previews[config.id] = NSImage(
+                    cgImage: cgImage,
+                    size: NSSize(width: cgImage.width, height: cgImage.height)
+                )
+            }
+            return
+        }
+        guard needsLivePreview else { return }
         let socketPath = QEMUManager.monitorSocketURL(for: config.id).path
         let dumpURL = QEMUManager.screenDumpURL(for: config.id)
         DispatchQueue.global(qos: .utility).async { [weak self] in
@@ -518,7 +562,7 @@ final class QEMUManager: ObservableObject {
             // emulator a moment before reading it back.
             usleep(400_000)
             guard let image = PPMImage.load(dumpURL) else { return }
-            Task { @MainActor in
+            Task { @MainActor [weak self] in
                 self?.previews[config.id] = image
             }
         }
@@ -528,12 +572,21 @@ final class QEMUManager: ObservableObject {
     // library can show it across launches.
     private func persistPreview(_ config: VMConfig) {
         guard let image = previews[config.id], let bundle = config.bundleURL else { return }
-        guard let tiff = image.tiffRepresentation,
-              let rep = NSBitmapImageRep(data: tiff),
-              let png = rep.representation(using: .png, properties: [:]) else {
-            return
+        let destination = bundle.appendingPathComponent("preview.png")
+        let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil)
+        let tiffData = cgImage == nil ? image.tiffRepresentation : nil
+        DispatchQueue.global(qos: .userInitiated).async {
+            let rep: NSBitmapImageRep
+            if let cgImage {
+                rep = NSBitmapImageRep(cgImage: cgImage)
+            } else if let tiffData, let tiffRep = NSBitmapImageRep(data: tiffData) {
+                rep = tiffRep
+            } else {
+                return
+            }
+            guard let png = rep.representation(using: .png, properties: [:]) else { return }
+            try? png.write(to: destination, options: .atomic)
         }
-        try? png.write(to: bundle.appendingPathComponent("preview.png"))
     }
 
     func requestStop(_ id: UUID) {
@@ -545,14 +598,56 @@ final class QEMUManager: ObservableObject {
         pendingStopID = nil
     }
 
+    @MainActor
+    func forceStop(_ id: UUID) {
+        intentionalForceStopIDs.insert(id)
+        forcedStopWorkItems.removeValue(forKey: id)?.cancel()
+        guard let process = processes[id] else { return }
+        let pid = process.processIdentifier
+        if process.isRunning {
+            process.terminate()
+        }
+        guard pid > 0 else { return }
+        let killWork = DispatchWorkItem { [weak self, weak process] in
+            if process?.isRunning == true {
+                kill(pid, SIGKILL)
+            }
+            Task { @MainActor [weak self] in
+                self?.forcedStopWorkItems.removeValue(forKey: id)
+            }
+        }
+        forcedStopWorkItems[id] = killWork
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3, execute: killWork)
+    }
+
     /// Shuts every running Mac down safely (for Quit), then calls back once
     /// they have all stopped, or after 25 seconds.
     func shutDownAll(then completion: @escaping () -> Void) {
         pendingStopID = nil
         for id in runningIDs { stop(id) }
+        let forceStopAt = Date().addingTimeInterval(15)
         let deadline = Date().addingTimeInterval(25)
+        var escalated = false
         func poll() {
-            if runningIDs.isEmpty || Date() > deadline {
+            if runningIDs.isEmpty {
+                completion()
+                return
+            }
+            let now = Date()
+            if !escalated && now >= forceStopAt {
+                escalated = true
+                for id in runningIDs {
+                    forceStop(id)
+                }
+            }
+            if now > deadline {
+                for id in runningIDs {
+                    intentionalForceStopIDs.insert(id)
+                    forcedStopWorkItems.removeValue(forKey: id)?.cancel()
+                    if let process = processes[id], process.isRunning, process.processIdentifier > 0 {
+                        kill(process.processIdentifier, SIGKILL)
+                    }
+                }
                 completion()
                 return
             }
@@ -565,7 +660,7 @@ final class QEMUManager: ObservableObject {
         guard let id = pendingStopID else { return }
         pendingStopID = nil
         if VMStore.shared.vms.first(where: { $0.id == id })?.machineFamily == .powerMacOSX {
-            processes[id]?.terminate()
+            forceStop(id)
         } else {
             stop(id)
         }
@@ -579,6 +674,12 @@ final class QEMUManager: ObservableObject {
             // is an explicitly confirmed power-off for a frozen preview.
             pausedIDs.remove(id)
             sendCopland("quit", to: id)
+            let fallback = DispatchWorkItem { [weak self] in
+                self?.forceStop(id)
+            }
+            forcedStopWorkItems[id]?.cancel()
+            forcedStopWorkItems[id] = fallback
+            DispatchQueue.main.asyncAfter(deadline: .now() + 15, execute: fallback)
             return
         }
         let socketPath = QEMUManager.monitorSocketURL(for: id).path
@@ -595,20 +696,20 @@ final class QEMUManager: ObservableObject {
                 usleep(100_000)
             }
             guard HMPClient.send("sendkey power", socketPath: socketPath) else {
-                Task { @MainActor in
-                    process?.terminate()
-                    self?.forcedStopWorkItems.removeValue(forKey: id)?.cancel()
+                Task { @MainActor [weak self] in
+                    self?.forceStop(id)
                 }
                 return
             }
             usleep(750_000)
             guard process?.isRunning == true,
                   HMPClient.send("sendkey ret", socketPath: socketPath) else {
-                Task { @MainActor in
+                Task { @MainActor [weak self] in
                     if process?.isRunning == true {
-                        process?.terminate()
+                        self?.forceStop(id)
+                    } else {
+                        self?.forcedStopWorkItems.removeValue(forKey: id)?.cancel()
                     }
-                    self?.forcedStopWorkItems.removeValue(forKey: id)?.cancel()
                 }
                 return
             }
@@ -618,13 +719,8 @@ final class QEMUManager: ObservableObject {
         // the emulator stuck forever. This preserves the old forced-off
         // behavior as a bounded fallback, after giving Mac OS ample time to
         // finish an ordinary shutdown.
-        let fallback = DispatchWorkItem { [weak self, weak process] in
-            if process?.isRunning == true {
-                process?.terminate()
-            }
-            Task { @MainActor in
-                self?.forcedStopWorkItems.removeValue(forKey: id)
-            }
+        let fallback = DispatchWorkItem { [weak self] in
+            self?.forceStop(id)
         }
         forcedStopWorkItems[id]?.cancel()
         forcedStopWorkItems[id] = fallback
@@ -687,7 +783,7 @@ final class QEMUManager: ObservableObject {
     // doing nothing.
     private func sendMonitor(_ command: String, to id: UUID, actionLabel: String, onFailure: (() -> Void)?) {
         let path = QEMUManager.monitorSocketURL(for: id).path
-        DispatchQueue.global(qos: .userInitiated).async {
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             let sent = HMPClient.send(command, socketPath: path)
             if !sent {
                 Task { @MainActor [weak self] in
@@ -785,14 +881,12 @@ final class QEMUManager: ObservableObject {
 
     // MARK: Argument construction
 
-    static func buildArguments(
-        for config: VMConfig,
-        browserWebSocketPort: UInt16 = 60_800
-    ) -> [String] {
-        let display = BrowserDisplayEndpoint(
-            vmID: config.id,
-            webSocketPort: browserWebSocketPort
-        )
+    nonisolated static func qemuEscape(_ s: String) -> String {
+        s.replacingOccurrences(of: ",", with: ",,")
+    }
+
+    static func buildArguments(for config: VMConfig) -> [String] {
+        let display = BrowserDisplayEndpoint(vmID: config.id)
         switch config.machineFamily {
         case .quadra800:
             return buildQuadraArguments(for: config, display: display)
@@ -809,22 +903,22 @@ final class QEMUManager: ObservableObject {
         for config: VMConfig, display: BrowserDisplayEndpoint
     ) -> [String] {
         let firmware = AppPaths.osxFirmwareDir
-        let name = config.name.replacingOccurrences(of: ",", with: ",,")
-        let disk = config.diskImageURL.path.replacingOccurrences(of: ",", with: ",,")
-        let flash = config.folder.appendingPathComponent("nvram.img").path.replacingOccurrences(of: ",", with: ",,")
+        let name = qemuEscape(config.name)
+        let disk = qemuEscape(config.diskImageURL.path)
+        let flash = qemuEscape(config.folder.appendingPathComponent("nvram.img").path)
         let width = config.width / 8 * 8
         let height = config.height
         let bootCD = config.bootFromCD && config.cdImagePath?.isEmpty == false
         var cd = "if=ide,index=2,media=cdrom,id=cd0,readonly=on"
         if let path = config.cdImagePath, !path.isEmpty {
-            cd += ",file=\(path.replacingOccurrences(of: ",", with: ",,")),format=raw"
+            cd += ",file=\(qemuEscape(path)),format=raw"
         }
         return [
             "-L", firmware.path, "-bios", firmware.appendingPathComponent("openbios-ppc-osx").path,
             "-name", name, "-accel", "tcg,tb-size=512", "-cpu", "7400",
             "-m", String(config.ramMB),
             "-M", "mac99,via=pmu,usb=off,audiodev=snd0",
-            "-audiodev", config.sound ? "coreaudio,id=snd0" : "none,id=snd0",
+            "-audiodev", config.sound ? "coreaudio,id=snd0,out.buffer-length=50000" : "none,id=snd0",
             "-global", "macio-nvram.osx-flash=on",
             "-drive", "if=none,id=osxnv,file=\(flash),format=raw",
             "-global", "macio-nvram.drive=osxnv",
@@ -838,8 +932,8 @@ final class QEMUManager: ObservableObject {
             "-device", config.tabletInput ? "usb-tablet,bus=osx-usb.0" : "usb-mouse,bus=osx-usb.0",
             "-nic", config.networking ? "user,model=sungem" : "none",
             "-serial", "none", "-action", "reboot=shutdown",
-            "-monitor", "unix:\(monitorSocketURL(for: config.id).path),server=on,wait=off",
-            "-qmp", "unix:\(qmpSocketURL(for: config.id).path),server=on,wait=off",
+            "-monitor", "unix:\(qemuEscape(monitorSocketURL(for: config.id).path)),server=on,wait=off",
+            "-qmp", "unix:\(qemuEscape(qmpSocketURL(for: config.id).path)),server=on,wait=off",
         ] + displayArguments(for: config, browser: display)
     }
 
@@ -850,13 +944,13 @@ final class QEMUManager: ObservableObject {
         if config.useBrowserDisplay {
             return ["-display", display.qemuDisplay]
         }
-        if config.machineFamily == .powerMacOSX {
-            return ["-display", "cocoa,swap-opt-cmd=off"]
-        }
         if usesClassicMacDisplay(config) {
             // ClassicMac draws the Mac's screen in its own Platinum window;
             // QEMU hands over the framebuffer and takes input on this socket.
-            return ["-display", "classicmac,socket=\(GuestDisplaySession.socketPath(for: config.id))"]
+            return ["-display", "classicmac,socket=\(qemuEscape(GuestDisplaySession.socketPath(for: config.id)))"]
+        }
+        if config.machineFamily == .powerMacOSX {
+            return ["-display", "cocoa,swap-opt-cmd=off"]
         }
         return [
             "-display",
@@ -866,9 +960,15 @@ final class QEMUManager: ObservableObject {
 
     /// Whether this Mac's screen appears in ClassicMac's own window.
     static func usesClassicMacDisplay(_ config: VMConfig) -> Bool {
-        !config.useBrowserDisplay && config.machineFamily != .powerMac7500 &&
-            config.machineFamily != .powerMacOSX &&
-            !UserDefaults.standard.bool(forKey: "ClassicMacUseQEMUWindow")
+        guard !config.useBrowserDisplay,
+              config.machineFamily != .powerMac7500,
+              !UserDefaults.standard.bool(forKey: "ClassicMacUseQEMUWindow") else {
+            return false
+        }
+        if config.machineFamily == .powerMacOSX {
+            return AppPaths.osxSupportsClassicMacDisplay
+        }
+        return true
     }
 
     // Extra Cocoa options for the classic input helpers (right-click as
@@ -895,7 +995,7 @@ final class QEMUManager: ObservableObject {
         }
         options += ["media=cdrom", "id=tools0"]
         if loadMedia, config.toolsCDInserted, let toolsCD = AppPaths.toolsCD {
-            options += ["file=\(toolsCD.path)", "format=raw"]
+            options += ["file=\(qemuEscape(toolsCD.path))", "format=raw"]
         }
         options.append("readonly=on")
         return options.joined(separator: ",")
@@ -1066,7 +1166,7 @@ final class QEMUManager: ObservableObject {
         // scripts/build-qemu.sh), the display stays black until the Mac OS
         // boot screen takes over.
         args += ["-prom-env", "output-device=ttya"]
-        args += ["-name", config.name]
+        args += ["-name", qemuEscape(config.name)]
 
         // Audio through the screamer at 44.1 kHz. When sound is off, route to
         // the null backend so nothing touches the host audio device.
@@ -1077,7 +1177,7 @@ final class QEMUManager: ObservableObject {
         }
 
         // HMP monitor on a unix socket so the app can pause/resume/reboot.
-        args += ["-monitor", "unix:\(QEMUManager.monitorSocketURL(for: config.id).path),server=on,wait=off"]
+        args += ["-monitor", "unix:\(qemuEscape(QEMUManager.monitorSocketURL(for: config.id).path)),server=on,wait=off"]
 
         // An in-place system reset hangs the mac99 machine (a longstanding
         // QEMU limitation: the guest never comes back, leaving a black
@@ -1087,12 +1187,13 @@ final class QEMUManager: ObservableObject {
         // Restart behave like a real reboot. A guest Shut Down still just
         // stops the machine.
         args += ["-action", "reboot=shutdown"]
-        args += ["-qmp", "unix:\(QEMUManager.qmpSocketURL(for: config.id).path),server=on,wait=off"]
+        args += ["-qmp", "unix:\(qemuEscape(QEMUManager.qmpSocketURL(for: config.id).path)),server=on,wait=off"]
 
+        let escapedDiskPath = qemuEscape(config.diskImageURL.path)
         if config.useVirtioDisk {
             // Pin the startup device: OpenBIOS reuses virtio0 for every
             // block device, so an auxiliary disk must not select the boot disk.
-            args += ["-drive", "file=\(config.diskImageURL.path),format=raw,if=none,id=startup0"]
+            args += ["-drive", "file=\(escapedDiskPath),format=raw,if=none,id=startup0"]
             if !bootingG3CompatibilityCD {
                 args += ["-device", "virtio-blk-pci,drive=startup0,addr=0xf"]
             }
@@ -1100,7 +1201,7 @@ final class QEMUManager: ObservableObject {
                 args += ["-prom-env", "boot-device=/pci@f2000000/scsi@f/disk:\\\\:tbxi"]
             }
         } else {
-            args += ["-drive", "file=\(config.diskImageURL.path),format=raw,media=disk"]
+            args += ["-drive", "file=\(escapedDiskPath),format=raw,media=disk"]
         }
 
         // Keep a user-facing disc tray present on the optical IDE channel,
@@ -1109,8 +1210,7 @@ final class QEMUManager: ObservableObject {
         // selected startup disc; normal hard-disk starts reserve it for Tools.
         let userDiscIndex = bootingFromUserCD ? 2 : 3
         var userDisc = "if=ide,index=\(userDiscIndex),media=cdrom,id=cd0,readonly=on"
-        let escapedCDPath = config.cdImagePath?
-            .replacingOccurrences(of: ",", with: ",,")
+        let escapedCDPath = config.cdImagePath.map(qemuEscape)
         if let escapedCDPath, !escapedCDPath.isEmpty {
             userDisc += ",file=\(escapedCDPath),format=raw"
         }
@@ -1152,8 +1252,7 @@ final class QEMUManager: ObservableObject {
         }
 
         if toolsViaVirtio, let toolsCD = AppPaths.toolsCD {
-            let escapedToolsPath = toolsCD.path
-                .replacingOccurrences(of: ",", with: ",,")
+            let escapedToolsPath = qemuEscape(toolsCD.path)
             args += [
                 "-blockdev",
                 "driver=file,node-name=classicmac-tools-file,filename=\(escapedToolsPath),read-only=on",
@@ -1178,7 +1277,7 @@ final class QEMUManager: ObservableObject {
         // executed by OpenBIOS in place of the default boot command. Tablet
         // input uses the same loader to install the virtio-tablet-pci driver.
         if needsNdrvLoader {
-            args += ["-device", "loader,addr=0x4000000,file=\(AppPaths.ndrvLoader.path)"]
+            args += ["-device", "loader,addr=0x4000000,file=\(qemuEscape(AppPaths.ndrvLoader.path))"]
             args += ["-prom-env", "boot-command=init-program go"]
             if tablet {
                 // Automatic slot 18 shares Sungem's interrupt when ATI and
@@ -1189,8 +1288,8 @@ final class QEMUManager: ObservableObject {
                 args += ["-device", tabletDevice]
             }
             if sharing {
-                args += ["-device", "virtio-9p-pci,fsdev=share0,mount_tag=\(config.sharedVolumeName)"]
-                let escapedPath = config.sharedFolderPath!.replacingOccurrences(of: ",", with: ",,")
+                args += ["-device", "virtio-9p-pci,fsdev=share0,mount_tag=\(qemuEscape(config.sharedVolumeName))"]
+                let escapedPath = qemuEscape(config.sharedFolderPath!)
                 args += ["-fsdev", "local,id=share0,security_model=none,path=\(escapedPath)"]
             }
         }
@@ -1241,7 +1340,7 @@ final class QEMUManager: ObservableObject {
         if !qfbAsDevice {
             args += ["-g", "\(config.width)x\(config.height)x\(config.depth)"]
         }
-        args += ["-name", config.name]
+        args += ["-name", qemuEscape(config.name)]
 
         // Audio. The Apple Sound Chip is patched (see qfb/asc-silence.patch) to
         // always feed the backend silence when idle, so a live CoreAudio backend
@@ -1256,27 +1355,27 @@ final class QEMUManager: ObservableObject {
         }
 
         // HMP monitor on a unix socket so the app can pause/resume/reboot.
-        args += ["-monitor", "unix:\(QEMUManager.monitorSocketURL(for: config.id).path),server=on,wait=off"]
+        args += ["-monitor", "unix:\(qemuEscape(QEMUManager.monitorSocketURL(for: config.id).path)),server=on,wait=off"]
 
         // End the process at the reset boundary so the app can inspect the
         // hard disk's blessing and choose CD or disk for the relaunch. This is
         // also used for ordinary Quadra restarts, mirroring the mac99 path.
         args += ["-action", "reboot=shutdown"]
-        args += ["-qmp", "unix:\(QEMUManager.qmpSocketURL(for: config.id).path),server=on,wait=off"]
+        args += ["-qmp", "unix:\(qemuEscape(QEMUManager.qmpSocketURL(for: config.id).path)),server=on,wait=off"]
 
         // PRAM (stores screen resolution + boot order across reboots).
-        args += ["-drive", "file=\(config.pramImageURL.path),format=raw,if=mtd"]
+        args += ["-drive", "file=\(qemuEscape(config.pramImageURL.path)),format=raw,if=mtd"]
 
         // Main SCSI hard disk at ID 0.
         args += ["-device", "scsi-hd,scsi-id=0,drive=hd0"]
-        args += ["-drive", "file=\(config.diskImageURL.path),media=disk,format=raw,if=none,id=hd0"]
+        args += ["-drive", "file=\(qemuEscape(config.diskImageURL.path)),media=disk,format=raw,if=none,id=hd0"]
 
         // User-facing CD-ROM at SCSI ID 3. Keep its tray available even when
         // empty so the running window's Disc menu can insert an image.
         args += ["-device", "scsi-cd,scsi-id=3,drive=cd0"]
         var userDisc = "media=cdrom,if=none,id=cd0,readonly=on"
         if let cdPath = config.cdImagePath, !cdPath.isEmpty {
-            userDisc += ",file=\(cdPath),format=raw"
+            userDisc += ",file=\(qemuEscape(cdPath)),format=raw"
             if config.bootFromCD {
                 args += ["-boot", "d"]
             }
@@ -1294,7 +1393,7 @@ final class QEMUManager: ObservableObject {
         // insert/eject capacity changes to classic Mac OS.
         var floppy = "if=none,id=fd0"
         if let floppyPath = config.floppyImagePath, !floppyPath.isEmpty {
-            floppy += ",file=\(floppyPath),format=raw"
+            floppy += ",file=\(qemuEscape(floppyPath)),format=raw"
         } else {
             floppy += ",media=cdrom,readonly=off"
         }
@@ -1315,7 +1414,7 @@ final class QEMUManager: ObservableObject {
         // so it lands in the earlier NuBus slot. The same card also provides
         // tablet input when enabled.
         if needsVirtioCard {
-            args += ["-device", "nubus-virtio-mmio,romfile=\(AppPaths.declROM.path)"]
+            args += ["-device", "nubus-virtio-mmio,romfile=\(qemuEscape(AppPaths.declROM.path))"]
             args += ["-device", "virtio-blk-device,drive=fd0,removable=on"]
             if qfbAsDevice {
                 args += ["-device", "nubus-qfb,width=\(config.width),height=\(config.height),depth=\(config.depth)"]
@@ -1324,8 +1423,8 @@ final class QEMUManager: ObservableObject {
                 args += ["-device", "virtio-tablet-device"]
             }
             if sharing {
-                args += ["-device", "virtio-9p-device,fsdev=share0,mount_tag=\(config.sharedVolumeName)"]
-                let escapedPath = config.sharedFolderPath!.replacingOccurrences(of: ",", with: ",,")
+                args += ["-device", "virtio-9p-device,fsdev=share0,mount_tag=\(qemuEscape(config.sharedVolumeName))"]
+                let escapedPath = qemuEscape(config.sharedFolderPath!)
                 args += ["-fsdev", "local,id=share0,security_model=none,path=\(escapedPath)"]
             }
         }
@@ -1335,7 +1434,7 @@ final class QEMUManager: ObservableObject {
 
     // MARK: qemu-img helpers
 
-    static func createRawImage(at url: URL, sizeArgument: String) -> CommandResult {
+    nonisolated static func createRawImage(at url: URL, sizeArgument: String) -> CommandResult {
         if FileManager.default.fileExists(atPath: url.path) {
             return .success("Image already exists")
         }
@@ -1349,7 +1448,7 @@ final class QEMUManager: ObservableObject {
     }
 
     @discardableResult
-    static func runQemuImg(_ arguments: [String]) -> CommandResult {
+    nonisolated static func runQemuImg(_ arguments: [String]) -> CommandResult {
         let binary = AppPaths.qemuImgBinary
         guard FileManager.default.isExecutableFile(atPath: binary.path) else {
             return .failure("The disk tool is missing from this copy of ClassicMac. Reinstall ClassicMac to fix this.")

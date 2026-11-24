@@ -18,52 +18,54 @@ struct MediaDrawerView: View {
     private var snapshot: MediaSnapshot? { controller.snapshots[config.id] }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .top, spacing: 12) {
-                PlatinumIcon("cd", size: 32)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("Media for \u{201C}\(config.name)\u{201D}").platinumText(.emphasis)
-                    Text(guidance).platinumText(.small).fixedSize(horizontal: false, vertical: true)
+        PlatinumScrollView(line: 16) {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .top, spacing: 12) {
+                    PlatinumIcon("cd", size: 32)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Media for \u{201C}\(config.name)\u{201D}").platinumText(.emphasis)
+                        Text(guidance).platinumText(.small).fixedSize(horizontal: false, vertical: true)
+                    }
+                    Spacer(minLength: 0)
                 }
-                Spacer(minLength: 0)
-            }
-            status
-            PlatinumGroupBox("CD") { drive(.disc, icon: "cd") }
-            if config.machineFamily != .powerMacOSX {
-                PlatinumGroupBox("ClassicMac Tools") {
-                    VStack(alignment: .leading, spacing: 6) {
-                        drive(.tools, icon: "cd")
-                        Text(config.machineFamily == .powerMacG4
-                             ? "Classic Mac utilities. Tools mounts at startup; while the Mac starts from an installer CD it waits for the first hard-disk startup."
-                             : "Classic Mac utilities, including StuffIt Expander and Disk Copy.")
-                            .platinumText(.detail).fixedSize(horizontal: false, vertical: true)
+                status
+                PlatinumGroupBox("CD") { drive(.disc, icon: "cd") }
+                if config.machineFamily != .powerMacOSX {
+                    PlatinumGroupBox("ClassicMac Tools") {
+                        VStack(alignment: .leading, spacing: 6) {
+                            drive(.tools, icon: "cd")
+                            Text(config.machineFamily == .powerMacG4
+                                 ? "Classic Mac utilities. Tools mounts at startup; while the Mac starts from an installer CD it waits for the first hard-disk startup."
+                                 : "Classic Mac utilities, including StuffIt Expander and Disk Copy.")
+                                .platinumText(.detail).fixedSize(horizontal: false, vertical: true)
+                        }
                     }
                 }
-            }
-            if config.machineFamily.supportsFloppyDisk {
-                PlatinumGroupBox("Floppy Disk") {
-                    VStack(alignment: .leading, spacing: 6) {
-                        drive(.floppy, icon: "disk")
-                        Text("Floppy images are writable. Eject waits for the Mac to finish writing.")
-                            .platinumText(.detail)
+                if config.machineFamily.supportsFloppyDisk {
+                    PlatinumGroupBox("Floppy Disk") {
+                        VStack(alignment: .leading, spacing: 6) {
+                            drive(.floppy, icon: "disk")
+                            Text("Floppy images are writable. Eject waits for the Mac to finish writing.")
+                                .platinumText(.detail)
+                        }
                     }
                 }
+                HStack(alignment: .top, spacing: 10) {
+                    Text("Start up from:").platinumText(.emphasis)
+                    PlatinumRadioGroup(selection: $config.bootFromCD, options: [
+                        (false, "Hard disk", true),
+                        (true, "CD", config.cdImagePath?.isEmpty == false),
+                    ])
+                    .disabled(busy)
+                    Spacer(minLength: 0)
+                }
+                if !visibleRecents.isEmpty {
+                    recentsSection
+                }
             }
-            HStack(alignment: .top, spacing: 10) {
-                Text("Start up from:").platinumText(.emphasis)
-                PlatinumRadioGroup(selection: $config.bootFromCD, options: [
-                    (false, "Hard disk", true),
-                    (true, "CD", config.cdImagePath?.isEmpty == false),
-                ])
-                .disabled(busy)
-                Spacer(minLength: 0)
-            }
-            if !visibleRecents.isEmpty {
-                recentsSection
-            }
-            Spacer(minLength: 0)
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
         }
-        .padding(12)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(Platinum.face.color)
         .task(id: "\(config.id):\(isRunning)") {
@@ -164,7 +166,7 @@ struct MediaDrawerView: View {
                     .platinumText(displayedPath == nil ? .disabled : .emphasis)
                     .lineLimit(1).truncationMode(.middle)
                     .help(displayedPath ?? "")
-                if isRunning && (config.machineFamily == .powerMacG4 || (live && runningPath != savedPath && snapshot != nil)) {
+                if isRunning && (config.machineFamily == .powerMacG4 || config.machineFamily == .powerMacOSX || (live && runningPath != savedPath && snapshot != nil)) {
                     Text("Next startup: \(savedPath.map { URL(fileURLWithPath: $0).lastPathComponent } ?? "nothing")")
                         .platinumText(.detail).lineLimit(1).truncationMode(.middle)
                 }
@@ -201,9 +203,12 @@ struct MediaDrawerView: View {
     }
 
     private func change(_ device: MediaDevice, path: String?, replacingRecent: RecentMedia? = nil) {
+        let vmID = config.id
+        let fallback = config
         Task {
-            if await controller.change(device, path: path, config: config, running: isRunning, paused: isPaused) {
-                config = device.setting(path: path, in: config)
+            if await controller.change(device, path: path, config: fallback, running: isRunning, paused: isPaused) {
+                let latest = VMStore.shared.vms.first(where: { $0.id == vmID }) ?? fallback
+                config = device.setting(path: path, in: latest)
                 if let replacingRecent { recents.forget(replacingRecent) }
             }
         }

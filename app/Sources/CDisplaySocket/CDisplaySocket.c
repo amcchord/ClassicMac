@@ -33,12 +33,20 @@ int cds_listen(const char *path)
     addr.sun_family = AF_UNIX;
     strncpy(addr.sun_path, path, sizeof(addr.sun_path) - 1);
     unlink(path);
-    if (bind(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0 || listen(fd, 2) < 0) {
+    mode_t prev_umask = umask(0077);
+    int bind_rc = bind(fd, (struct sockaddr *)&addr, sizeof(addr));
+    int bind_err = errno;
+    umask(prev_umask);
+    if (bind_rc < 0) {
+        close(fd);
+        return -bind_err;
+    }
+    if (chmod(path, 0600) < 0 || listen(fd, 2) < 0) {
         int err = errno;
         close(fd);
+        unlink(path);
         return -err;
     }
-    chmod(path, 0600);
     int rc = set_nonblocking(fd);
     if (rc < 0) {
         close(fd);

@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 
 // Resolves the locations of the bundled QEMU tools / firmware and the
 // per-user Application Support directories that hold VMs and imported media.
@@ -224,7 +225,114 @@ enum AppPaths {
         }
     }
 
+    // MARK: Private runtime sockets
+
+    // Maximum socket filename inside runtimeSocketDir is "<UUID>.qmp.sock" / ".vnc.sock" (45 bytes).
+    // sockaddr_un.sun_path is 104 bytes including NUL terminator, leaving 57 bytes max for the dir path.
+    private static let maxSocketDirectoryBytes = 104 - 1 - 45 - 1
+
+    static var runtimeSocketDir: URL {
+        let uid = getuid()
+        let primary = URL(fileURLWithPath: "/tmp/ClassicMac-\(uid)", isDirectory: true)
+        let tmpRoot = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true).standardizedFileURL
+        let fallback = tmpRoot.appendingPathComponent("cm-\(uid)", isDirectory: true)
+        return verifiedRuntimeSocketDir(primary: primary, fallback: fallback, uid: uid)
+    }
+
+    static func verifiedRuntimeSocketDir(primary: URL, fallback: URL, uid: uid_t = getuid()) -> URL {
+        if let verified = verifiedPrivateDirectory(at: primary, uid: uid),
+           verified.path.utf8.count <= maxSocketDirectoryBytes {
+            return verified
+        }
+        let parent = fallback.deletingLastPathComponent()
+        if !FileManager.default.fileExists(atPath: parent.path) {
+            try? FileManager.default.createDirectory(at: parent, withIntermediateDirectories: true)
+        }
+        if fallback.path.utf8.count <= maxSocketDirectoryBytes,
+           let verifiedFallback = verifiedPrivateDirectory(at: fallback, uid: uid) {
+            return verifiedFallback
+        }
+        if parent.path.utf8.count <= maxSocketDirectoryBytes,
+           let verifiedParent = verifiedPrivateDirectory(at: parent, uid: uid) {
+            return verifiedParent
+        }
+        let shortPIDDir = URL(fileURLWithPath: "/tmp/cm-\(uid)-\(getpid())", isDirectory: true)
+        if let verifiedShort = verifiedPrivateDirectory(at: shortPIDDir, uid: uid) {
+            return verifiedShort
+        }
+        return fallback
+    }
+
+    private static func verifiedPrivateDirectory(at url: URL, uid: uid_t) -> URL? {
+        let path = url.standardizedFileURL.path
+        var st = stat()
+        if lstat(path, &st) != 0 {
+            if errno != ENOENT { return nil }
+            if mkdir(path, 0o700) != 0 && errno != EEXIST {
+                return nil
+            }
+            guard lstat(path, &st) == 0 else { return nil }
+        }
+        guard (st.st_mode & S_IFMT) == S_IFDIR, st.st_uid == uid else {
+            return nil
+        }
+        if (st.st_mode & 0o777) != 0o700 {
+            guard chmod(path, 0o700) == 0,
+                  lstat(path, &st) == 0,
+                  (st.st_mode & S_IFMT) == S_IFDIR,
+                  st.st_uid == uid,
+                  (st.st_mode & 0o077) == 0 else {
+                return nil
+            }
+        }
+        return URL(fileURLWithPath: path, isDirectory: true)
+    }
+
     // MARK: Health checks
+
+    private static let displayProbeLock = NSLock()
+    private static var cachedOSXDisplayProbe: (path: String, supported: Bool)?
+
+    static var osxSupportsClassicMacDisplay: Bool {
+        let binary = qemuBinary(for: .powerMacOSX)
+        displayProbeLock.lock()
+        if let cached = cachedOSXDisplayProbe, cached.path == binary.path {
+            displayProbeLock.unlock()
+            return cached.supported
+        }
+        displayProbeLock.unlock()
+
+        let supported = probeClassicMacDisplay(binary: binary)
+        displayProbeLock.lock()
+        if FileManager.default.isExecutableFile(atPath: binary.path) {
+            cachedOSXDisplayProbe = (binary.path, supported)
+        }
+        displayProbeLock.unlock()
+        return supported
+    }
+
+    static func probeClassicMacDisplay(binary: URL) -> Bool {
+        guard FileManager.default.isExecutableFile(atPath: binary.path) else { return false }
+        let process = Process()
+        process.executableURL = binary
+        process.arguments = ["-display", "help"]
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = pipe
+        do {
+            try process.run()
+        } catch {
+            return false
+        }
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        guard process.terminationStatus == 0,
+              let output = String(data: data, encoding: .utf8) else { return false }
+        return output
+            .components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .contains("classicmac")
+    }
 
     static var qemuIsAvailable: Bool {
         FileManager.default.isExecutableFile(atPath: qemuSystemBinary.path)

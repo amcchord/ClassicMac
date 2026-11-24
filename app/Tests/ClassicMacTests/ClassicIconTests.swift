@@ -98,4 +98,22 @@ final class ClassicIconTests: XCTestCase {
         XCTAssertEqual(Array(pixels[0..<4]), [255, 255, 255, 255], "visible white pixel")
         XCTAssertEqual(Array(pixels[4..<8]), [0, 0, 0, 0], "masked pixel is transparent")
     }
+
+    func testIconPackDestinationRejectsTraversalAndLeadingDots() throws {
+        let base = FileManager.default.temporaryDirectory
+            .appendingPathComponent("IconPacks-\(UUID().uuidString)", isDirectory: true)
+            .standardizedFileURL
+
+        for bad in ["", "   ", ".", "..", "...", ". .", "bad\u{0}name", "bad\nname"] {
+            XCTAssertThrowsError(try IconPacks.collectionDestination(named: bad, in: base), "Expected rejection for \(bad)")
+        }
+
+        let dotted = try IconPacks.collectionDestination(named: "..ClassicIcons", in: base)
+        XCTAssertEqual(dotted.lastPathComponent, "ClassicIcons")
+        XCTAssertEqual(dotted.deletingLastPathComponent().standardizedFileURL.path, base.path)
+
+        let slashed = try IconPacks.collectionDestination(named: "../escape", in: base)
+        XCTAssertEqual(slashed.deletingLastPathComponent().standardizedFileURL.path, base.path)
+        XCTAssertFalse(slashed.lastPathComponent.hasPrefix("."))
+    }
 }

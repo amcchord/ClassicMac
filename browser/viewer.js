@@ -288,7 +288,18 @@ try {
     classicInputHelpers:
       document.querySelector('meta[name="classicmac-input-helpers"]')?.content === "true",
   };
-  if (!configuration.webSocketURL) throw new Error("The display URL is missing");
+  if (!configuration.webSocketURL && !configuration.actionToken) {
+    throw new Error("The display URL is missing");
+  }
+  const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+  const wsURL = new URL(configuration.webSocketURL || "/websockify", window.location.href);
+  wsURL.protocol = wsProtocol;
+  wsURL.host = window.location.host;
+  wsURL.pathname = "/websockify";
+  if (configuration.actionToken) {
+    wsURL.searchParams.set("token", configuration.actionToken);
+  }
+  configuration.webSocketURL = wsURL.toString();
   machineName.textContent = configuration.machineName || "ClassicMac";
   document.title = `${machineName.textContent} — ClassicMac`;
   connect();
