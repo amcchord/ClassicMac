@@ -105,6 +105,7 @@ enum MachineFamily: String, Codable, CaseIterable, Identifiable {
     var supportsEnhancedFramebuffer: Bool { self == .quadra800 }
     var supportsSharedFolder: Bool { self == .quadra800 || self == .powerMacG4 }
     var supportsSound: Bool { self != .powerMac7500 }
+    var supportsPrinting: Bool { self != .powerMac7500 }
     var supportsCustomResolution: Bool { self != .powerMac7500 }
     var supportsFloppyDisk: Bool { self == .quadra800 }
     var usesPRAMImage: Bool { self == .quadra800 }
@@ -256,6 +257,8 @@ struct VMConfig: Codable, Identifiable, Hashable {
     // Misc
     var networking: Bool
     var sound: Bool
+    var printingEnabled: Bool
+    var printerName: String?
 
     // Display card (Power Mac only). Older packages have no key: Standard.
     var graphicsCard: GraphicsCard
@@ -304,7 +307,7 @@ struct VMConfig: Codable, Identifiable, Hashable {
         case width, height, depth, useEnhancedFramebuffer, customResolution
         case useBrowserDisplay
         case cdImagePath, bootFromCD, floppyImagePath, bootFromFloppy
-        case networking, sound, useG4CPU, useVirtioDisk, sharedFolderPath, graphicsCard
+        case networking, sound, printingEnabled, printerName, useG4CPU, useVirtioDisk, sharedFolderPath, graphicsCard
         case classicInputHelpers, legacyMouseTracking, mouseDPI, tabletInput, toolsCDInserted
         case toolsDeliveryVersion
     }
@@ -327,6 +330,8 @@ struct VMConfig: Codable, Identifiable, Hashable {
          toolsCDInserted: Bool? = nil,
          networking: Bool = true,
          sound: Bool = true,
+         printingEnabled: Bool = false,
+         printerName: String? = nil,
          useG4CPU: Bool = true,
          useVirtioDisk: Bool = false,
          graphicsCard: GraphicsCard = .standard,
@@ -357,6 +362,8 @@ struct VMConfig: Codable, Identifiable, Hashable {
         self.toolsDeliveryVersion = Self.currentToolsDeliveryVersion
         self.networking = networking
         self.sound = sound
+        self.printingEnabled = printingEnabled
+        self.printerName = printerName
         self.useG4CPU = machineFamily == .powerMacG4 && useG4CPU
         self.useVirtioDisk = machineFamily == .powerMacG4 && useVirtioDisk
         self.graphicsCard = graphicsCard
@@ -446,6 +453,8 @@ struct VMConfig: Codable, Identifiable, Hashable {
         toolsDeliveryVersion = Self.currentToolsDeliveryVersion
         networking = try c.decodeIfPresent(Bool.self, forKey: .networking) ?? true
         sound = try c.decodeIfPresent(Bool.self, forKey: .sound) ?? true
+        printingEnabled = try c.decodeIfPresent(Bool.self, forKey: .printingEnabled) ?? false
+        printerName = try c.decodeIfPresent(String.self, forKey: .printerName)
         // Preserve the boot-compatible G3 identity for existing VM packages.
         // Newly created Power Macs opt into G4 through the regular initializer.
         useG4CPU = try c.decodeIfPresent(Bool.self, forKey: .useG4CPU) ?? false
@@ -541,6 +550,16 @@ struct VMConfig: Codable, Identifiable, Hashable {
             bootFromCD = false; cdImagePath = nil; toolsCDInserted = false
             networking = false; sound = false
             tabletInput = false; classicInputHelpers = false
+        }
+        if let trimmedPrinter = printerName?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !trimmedPrinter.isEmpty {
+            printerName = trimmedPrinter
+        } else {
+            printerName = nil
+        }
+        if !machineFamily.supportsPrinting {
+            printingEnabled = false
+            printerName = nil
         }
         if ramMB < 8 {
             ramMB = machineFamily.defaultRAMMB

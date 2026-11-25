@@ -510,4 +510,54 @@ final class VMConfigTests: XCTestCase {
         XCTAssertTrue(decoded.legacyMouseTracking)
         XCTAssertNil(decoded.mouseDPI)
     }
+
+    func testBundleDiskUsageBytesSumsRegularFilesAndHandlesMissingBundle() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("vmstore-usage-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let missing = root.appendingPathComponent("Missing.classic", isDirectory: true)
+        XCTAssertEqual(VMStore.bundleDiskUsageBytes(for: missing), 0)
+
+        let bundle = root.appendingPathComponent("Sample.classic", isDirectory: true)
+        let nested = bundle.appendingPathComponent("Sub", isDirectory: true)
+        try FileManager.default.createDirectory(at: nested, withIntermediateDirectories: true)
+        try Data(repeating: 0xAB, count: 4_096).write(to: bundle.appendingPathComponent("disk.img"))
+        try Data(repeating: 0xCD, count: 1_024).write(to: nested.appendingPathComponent("config.json"))
+
+        let usage = VMStore.bundleDiskUsageBytes(for: bundle)
+        XCTAssertGreaterThanOrEqual(usage, 5_120)
+    }
+
+    @MainActor
+    func testVMStoreMoveToTrashSucceedsWhenBundleAlreadyMissing() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("vmstore-missing-trash-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let indexURL = root.appendingPathComponent("library.json")
+        let mediaDir = root.appendingPathComponent("Media", isDirectory: true)
+        try FileManager.default.createDirectory(at: mediaDir, withIntermediateDirectories: true)
+        let store = VMStore(indexURL: indexURL, mediaDir: mediaDir, migrateLegacy: false)
+
+        let orphanMedia = mediaDir.appendingPathComponent("orphan.iso")
+        try Data([1, 2, 3]).write(to: orphanMedia)
+
+        let bundle = root.appendingPathComponent("Gone.classic", isDirectory: true)
+        let vm = VMConfig(
+            name: "Gone",
+            machineFamily: .powerMacG4,
+            cdImagePath: orphanMedia.path,
+            bundleURL: bundle
+        )
+        XCTAssertTrue(store.save(vm))
+        try FileManager.default.removeItem(at: bundle)
+
+        store.moveToTrash(vm)
+        XCTAssertNil(store.lastError)
+        XCTAssertTrue(store.vms.isEmpty)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: orphanMedia.path))
+    }
 }

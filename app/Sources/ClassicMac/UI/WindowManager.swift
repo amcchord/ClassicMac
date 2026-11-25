@@ -274,12 +274,31 @@ final class WindowManager {
 
     func confirmRemove(_ vm: VMConfig) {
         let store = VMStore.shared
-        alert(.caution, "Remove \u{201C}\(vm.name)\u{201D} from ClassicMac?",
-              informative: "Remove from List keeps the Mac's file where it is, so you can open it again later. Move to Trash puts the Mac, its disk and its settings in the Trash.",
-              buttons: [
-                PlatinumAlertButton("Remove from List", role: .default) { store.removeFromLibrary(vm) },
-                PlatinumAlertButton("Cancel", role: .cancel),
-                PlatinumAlertButton("Move to Trash") { store.moveToTrash(vm) },
-              ], width: 460)
+        let manager = QEMUManager.shared
+        let bytes = VMStore.bundleDiskUsageBytes(for: vm.folder)
+        let sizeText = ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+        let displayPath = (vm.folder.path as NSString).abbreviatingWithTildeInPath
+
+        if manager.isRunning(vm.id) {
+            alert(.caution, "Delete running Mac \u{201C}\(vm.name)\u{201D}?",
+                  informative: "\u{201C}\(vm.name)\u{201D} is currently running (\(sizeText) on disk at \(displayPath)). Shut it down safely first or force stop it, then move its files to the Trash.",
+                  buttons: [
+                    PlatinumAlertButton("Cancel", role: .cancel),
+                    PlatinumAlertButton("Shut Down & Move to Trash") {
+                        manager.stopAndWait(vm.id, force: false) { store.moveToTrash(vm) }
+                    },
+                    PlatinumAlertButton("Force Stop & Move to Trash") {
+                        manager.stopAndWait(vm.id, force: true) { store.moveToTrash(vm) }
+                    },
+                  ], width: 500)
+        } else {
+            alert(.caution, "Delete \u{201C}\(vm.name)\u{201D}?",
+                  informative: "Move to Trash deletes \u{201C}\(vm.folder.lastPathComponent)\u{201D} (\(sizeText) on disk) and frees space; you can restore it from the Trash later.\n\nRemove from List hides it from ClassicMac without deleting its files.",
+                  buttons: [
+                    PlatinumAlertButton("Cancel", role: .cancel),
+                    PlatinumAlertButton("Remove from List") { store.removeFromLibrary(vm) },
+                    PlatinumAlertButton("Move to Trash") { store.moveToTrash(vm) },
+                  ], width: 460)
+        }
     }
 }

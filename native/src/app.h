@@ -43,7 +43,8 @@ private:
          *notice = nullptr;
   QWidget *preview = nullptr;
   PButton *startButton = nullptr, *infoButton = nullptr, *mediaButton = nullptr;
-  PButton *manageButton = nullptr, *powerButton = nullptr;
+  PButton *manageButton = nullptr, *deleteButton = nullptr,
+          *powerButton = nullptr;
   QJsonArray catalogRows;
   QStringList unavailablePaths;
   QMap<QString, QImage> livePreviews;

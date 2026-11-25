@@ -137,17 +137,22 @@ struct HomeView: View {
                             NSWorkspace.shared.activateFileViewerSelecting([vm.folder])
                         }
                         Divider()
-                        Button("Remove Mac…") {
+                        Button("Delete Mac…") {
                             store.selectedID = vm.id
                             WindowManager.shared.confirmRemove(vm)
                         }
-                        .disabled(isRunning)
                     }
             }
-            HStack(spacing: 10) {
+            HStack(spacing: 6) {
                 PlatinumButton("New Mac…") { WindowManager.shared.presentNewMac() }
                 PlatinumButton("Library…") { WindowManager.shared.showLibrary() }
                 Spacer(minLength: 0)
+                PlatinumButton("Delete…") {
+                    if let id = store.selectedID, let vm = store.vms.first(where: { $0.id == id }) {
+                        WindowManager.shared.confirmRemove(vm)
+                    }
+                }
+                .disabled(store.selectedID == nil)
             }
         }
         .frame(width: 262)
@@ -286,6 +291,7 @@ struct MachinePanel: View {
                         infoRow("Graphics:", graphicsText)
                     }
                     infoRow("Sharing:", sharingText)
+                    infoRow("Printing:", printingText)
                 }
                 Spacer(minLength: 0)
                 VStack(alignment: .trailing, spacing: 10) {
@@ -351,6 +357,14 @@ struct MachinePanel: View {
         if !vm.machineFamily.supportsSharedFolder { return "Unavailable" }
         guard let path = vm.sharedFolderPath, !path.isEmpty else { return "Off" }
         return "\u{201C}\(URL(fileURLWithPath: path).lastPathComponent)\u{201D}"
+    }
+
+    private var printingText: String {
+        if !vm.machineFamily.supportsPrinting { return "Unavailable" }
+        if !vm.printingEnabled { return "Off" }
+        if vm.printerName == HostPrinterManager.pdfTargetValue { return "Save as PDF" }
+        if let name = vm.printerName, !name.isEmpty { return name }
+        return "System Default"
     }
 
     // MARK: Context

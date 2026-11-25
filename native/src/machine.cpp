@@ -132,13 +132,34 @@ QJsonObject validate(QJsonObject c) {
   for (auto key : {"sound", "networking", "tabletInput", "classicInputHelpers",
                    "useG4CPU", "useEnhancedFramebuffer", "bootFromCD",
                    "bootFromFloppy", "toolsCDInserted", "useVirtioDisk",
-                   "legacyMouseTracking"}) {
+                   "legacyMouseTracking", "printingEnabled"}) {
     if (!c.contains(key))
       c[key] = !QStringList{"bootFromCD", "bootFromFloppy", "toolsCDInserted",
-                            "useVirtioDisk"}
+                            "useVirtioDisk", "printingEnabled"}
                     .contains(key);
     if (!c[key].isBool())
       fail("Invalid " + QString(key) + " option.");
+  }
+  if (c.contains("printerName")) {
+    if (c["printerName"].isNull()) {
+      c.remove("printerName");
+    } else {
+      if (!c["printerName"].isString())
+        fail("Invalid printerName option.");
+      const QString rawPrinter = c["printerName"].toString();
+      if (rawPrinter.size() > 256 ||
+          rawPrinter.contains(QRegularExpression("[\\x00-\\x1f\\x7f]")))
+        fail("Invalid printerName option.");
+      const QString trimmed = rawPrinter.trimmed();
+      if (trimmed.isEmpty())
+        c.remove("printerName");
+      else
+        c["printerName"] = trimmed;
+    }
+  }
+  if (copland) {
+    c["printingEnabled"] = false;
+    c.remove("printerName");
   }
   int mouseDpi = integer(c, "mouseDPI", 0, 0, 100000);
   if (mouseDpi != 0 && mouseDpi < 100)
@@ -507,7 +528,8 @@ QString osxRtcBase(const QString &nvramPath, qint64 nowUtcSeconds) {
 }
 
 QStringList qemuArguments(const Machine &m, int port,
-                          const QString &audioOverride) {
+                          const QString &audioOverride,
+                          const PrintPorts &printPorts) {
   if (port < 5900 || port > 65535)
     fail("Invalid VNC display port.");
   auto c = validate(m.config);
@@ -546,6 +568,32 @@ QStringList qemuArguments(const Machine &m, int port,
        sharing = !cdBoot && !s("sharedFolderPath").isEmpty(),
        needsNdrvLoader =
            ppc && (tools || b("tabletInput") || ati || legacy || compatCD || sharing);
+  const QString nicModel =
+      (m.family() == "powerMacOSX" || ppc)
+          ? (legacy ? QStringLiteral("rtl8139") : QStringLiteral("sungem"))
+          : QStringLiteral("dp83932");
+  auto buildNicArg = [&]() -> QString {
+    if (!b("printingEnabled"))
+      return b("networking") ? QStringLiteral("user,model=") + nicModel
+                             : QStringLiteral("none");
+    QString nic = QStringLiteral("user");
+    if (!b("networking"))
+      nic += QStringLiteral(",restrict=on");
+    nic += QStringLiteral(",model=") + nicModel;
+    if (printPorts.active()) {
+      const QString bridge = opt(printPorts.bridgePath);
+      nic += QString(",guestfwd=tcp:10.0.2.4:515-cmd:%1 --tcp-bridge 127.0.0.1 %2")
+                 .arg(bridge)
+                 .arg(printPorts.lpd);
+      nic += QString(",guestfwd=tcp:10.0.2.4:631-cmd:%1 --tcp-bridge 127.0.0.1 %2")
+                 .arg(bridge)
+                 .arg(printPorts.ipp);
+      nic += QString(",guestfwd=tcp:10.0.2.4:9100-cmd:%1 --tcp-bridge 127.0.0.1 %2")
+                 .arg(bridge)
+                 .arg(printPorts.raw);
+    }
+    return nic;
+  };
   QStringList a = {"-L",
                    r + (m.family() == "powerMacOSX" ? "/qemu-osx" : "/qemu/pc-bios"),
                    "-name",
@@ -605,7 +653,7 @@ QStringList qemuArguments(const Machine &m, int port,
       << "-device" << "usb-kbd,bus=osx-usb.0"
       << "-device" << (b("tabletInput") ? "usb-tablet,bus=osx-usb.0"
                                        : "usb-mouse,bus=osx-usb.0")
-      << "-nic" << (b("networking") ? "user,model=sungem" : "none");
+      << "-nic" << buildNicArg();
     return a;
   }
   if (ppc) {
@@ -777,12 +825,8 @@ QStringList qemuArguments(const Machine &m, int port,
       << "-device"
       << dev + ",fsdev=share0,mount_tag=" + opt(tag);
   }
-  a << "-nic"
-    << (b("networking")
-            ? QString("user,model=") +
-                  (ppc ? (legacy ? "rtl8139" : "sungem") : "dp83932")
-            : "none");
-  if (legacy && b("networking"))
+  a << "-nic" << buildNicArg();
+  if (legacy && (b("networking") || b("printingEnabled")))
     a << "-global" << "rtl8139.romfile=" << "-global"
       << "rtl8139.tx-delay-ns=1000000";
   return a;

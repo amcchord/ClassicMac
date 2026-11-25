@@ -297,6 +297,30 @@ final class VMStore: ObservableObject {
 
     // MARK: Removing
 
+    nonisolated static func bundleDiskUsageBytes(for bundle: URL) -> Int64 {
+        let keys: Set<URLResourceKey> = [
+            .isRegularFileKey,
+            .totalFileAllocatedSizeKey,
+            .fileAllocatedSizeKey,
+            .fileSizeKey,
+        ]
+        guard let enumerator = FileManager.default.enumerator(
+            at: bundle,
+            includingPropertiesForKeys: Array(keys),
+            options: []
+        ) else {
+            return 0
+        }
+        var total: Int64 = 0
+        for case let fileURL as URL in enumerator {
+            guard let values = try? fileURL.resourceValues(forKeys: keys),
+                  values.isRegularFile == true else { continue }
+            let size = values.totalFileAllocatedSize ?? values.fileAllocatedSize ?? values.fileSize ?? 0
+            total += Int64(max(size, 0))
+        }
+        return total
+    }
+
     // Forgets a VM but leaves its package on disk.
     func removeFromLibrary(_ config: VMConfig) {
         let removedIndex = vms.firstIndex { $0.id == config.id }
@@ -314,21 +338,26 @@ final class VMStore: ObservableObject {
     // Forgets a VM and moves its package to the Trash.
     func moveToTrash(_ config: VMConfig) {
         if let bundle = config.bundleURL {
-            guard isSafePackageToTrash(bundle, matching: config.id) else {
-                lastError = AppError(
-                    "Couldn't Move \u{201C}\(config.name)\u{201D} to the Trash",
-                    "This folder could not be verified as a ClassicMac package."
-                )
-                return
-            }
-            do {
-                try FileManager.default.trashItem(at: bundle, resultingItemURL: nil)
-            } catch {
-                lastError = AppError(
-                    "Couldn't Move \u{201C}\(config.name)\u{201D} to the Trash",
-                    error.localizedDescription
-                )
-                return
+            var st = stat()
+            if lstat(bundle.path, &st) != 0 && errno == ENOENT {
+                // Already absent from disk; remove from library and clean up orphaned media.
+            } else {
+                guard isSafePackageToTrash(bundle, matching: config.id) else {
+                    lastError = AppError(
+                        "Couldn't Move \u{201C}\(config.name)\u{201D} to the Trash",
+                        "This folder could not be verified as a ClassicMac package."
+                    )
+                    return
+                }
+                do {
+                    try FileManager.default.trashItem(at: bundle, resultingItemURL: nil)
+                } catch {
+                    lastError = AppError(
+                        "Couldn't Move \u{201C}\(config.name)\u{201D} to the Trash",
+                        error.localizedDescription
+                    )
+                    return
+                }
             }
         }
         let candidateMedia = [config.cdImagePath, config.floppyImagePath]

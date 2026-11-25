@@ -1,6 +1,9 @@
 #pragma once
 #include "machine.h"
 #include "vnc.h"
+namespace Printer {
+class Server;
+}
 class Engine : public QObject {
   Q_OBJECT
 public:
@@ -55,5 +58,7 @@ private:
   QString reason;
   QByteArray password;
   QTimer bootHandoffTimer;
+  Printer::Server *printServer = nullptr;
+  void stopPrintServer();
   void read();
 };

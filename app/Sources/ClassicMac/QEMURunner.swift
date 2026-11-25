@@ -97,6 +97,7 @@ final class QEMUManager: ObservableObject {
     private var coplandControls: [UUID: Pipe] = [:]
     private var processes: [UUID: Process] = [:]
     private var browserServers: [UUID: BrowserDisplayServer] = [:]
+    private var printServers: [UUID: PrintServer] = [:]
     private var qmpMonitors: [UUID: QMPEventMonitor] = [:]
     private var previewTimers: [UUID: Timer] = [:]
     private var bootClockHandoffs: [UUID: BootClockHandoff] = [:]
@@ -200,9 +201,46 @@ final class QEMUManager: ObservableObject {
             }
         }
 
+        let printServer: PrintServer?
+        if config.printingEnabled && config.machineFamily.supportsPrinting {
+            GuestPrinterProvisioner.ensurePrinterIfApplicable(for: config)
+            let server = PrintServer(
+                targetPrinter: config.printerName,
+                pdfOutputDir: HostPrinterManager.defaultPDFOutputDirectory(for: config)
+            )
+            server.onError = { [weak self] error in
+                Task { @MainActor [weak self] in
+                    self?.lastError = AppError(
+                        "Couldn't Print from \u{201C}\(config.name)\u{201D}",
+                        error.localizedDescription
+                    )
+                }
+            }
+            do {
+                try server.start()
+                printServer = server
+            } catch {
+                if let displayServer {
+                    if browserServers[config.id] === displayServer {
+                        stopBrowserDisplay(for: config.id)
+                    } else {
+                        displayServer.stop()
+                    }
+                }
+                GuestWindows.shared.machineStopped(config.id)
+                lastError = AppError(
+                    "Couldn't Start \u{201C}\(config.name)\u{201D}",
+                    "The virtual printer could not be started. \(error.localizedDescription)"
+                )
+                return
+            }
+        } else {
+            printServer = nil
+        }
+
         let process = Process()
         process.executableURL = AppPaths.qemuBinary(for: config.machineFamily)
-        process.arguments = QEMUManager.buildArguments(for: config)
+        process.arguments = QEMUManager.buildArguments(for: config, printerPorts: printServer?.ports)
         process.currentDirectoryURL = config.folder
         intentionalForceStopIDs.remove(config.id)
 
@@ -271,6 +309,7 @@ final class QEMUManager: ObservableObject {
                 let wasOSXRestartRequested = self.osxRestartRequestedIDs.remove(config.id) != nil
                 self.stopBootClockHandoff(for: config.id)
                 self.stopPreviewUpdates(for: config.id)
+                self.printServers.removeValue(forKey: config.id)?.stop()
                 let wasIntentionalForceStop = self.intentionalForceStopIDs.remove(config.id) != nil
                 if displayServer != nil {
                     try? FileManager.default.removeItem(
@@ -368,6 +407,8 @@ final class QEMUManager: ObservableObject {
         do {
             try process.run()
         } catch {
+            printServer?.stop()
+            printServers.removeValue(forKey: config.id)
             GuestWindows.shared.machineStopped(config.id)
             coplandControls.removeValue(forKey: config.id)
             if let displayServer {
@@ -385,6 +426,9 @@ final class QEMUManager: ObservableObject {
         }
 
         processes[config.id] = process
+        if let printServer {
+            printServers[config.id] = printServer
+        }
         runningFamilies[config.id] = config.machineFamily
         runningNames[config.id] = config.name
         VMCheckpointStore.markStarted(in: config.folder)
@@ -644,6 +688,37 @@ final class QEMUManager: ObservableObject {
         }
         forcedStopWorkItems[id] = killWork
         DispatchQueue.main.asyncAfter(deadline: .now() + 3, execute: killWork)
+    }
+
+    @MainActor
+    func stopAndWait(_ id: UUID, force: Bool, then completion: @escaping @MainActor () -> Void) {
+        guard runningIDs.contains(id) else {
+            completion()
+            return
+        }
+        pendingStopID = nil
+        if force {
+            forceStop(id)
+        } else {
+            stop(id)
+        }
+        Task { @MainActor [weak self] in
+            let escalateAt = Date().addingTimeInterval(16)
+            let deadline = Date().addingTimeInterval(22)
+            var escalated = force
+            while let self, self.runningIDs.contains(id) {
+                let now = Date()
+                if !escalated && now >= escalateAt {
+                    escalated = true
+                    self.forceStop(id)
+                }
+                if now >= deadline {
+                    break
+                }
+                try? await Task.sleep(nanoseconds: 100_000_000)
+            }
+            completion()
+        }
     }
 
     /// Shuts every running Mac down safely (for Quit), then calls back once
@@ -1002,22 +1077,45 @@ final class QEMUManager: ObservableObject {
         s.replacingOccurrences(of: ",", with: ",,")
     }
 
-    static func buildArguments(for config: VMConfig) -> [String] {
+    struct PrinterForwardPorts: Equatable, Sendable {
+        let lpd: UInt16
+        let ipp: UInt16
+        let raw: UInt16
+    }
+
+    private static func nicArgument(
+        model: String,
+        networking: Bool,
+        printerPorts: PrinterForwardPorts?
+    ) -> String {
+        guard let p = printerPorts else {
+            return networking ? "user,model=\(model)" : "none"
+        }
+        let restrict = networking ? "" : ",restrict=on"
+        return "user\(restrict),model=\(model)"
+            + ",guestfwd=tcp:10.0.2.4:515-cmd:/usr/bin/nc 127.0.0.1 \(p.lpd)"
+            + ",guestfwd=tcp:10.0.2.4:631-cmd:/usr/bin/nc 127.0.0.1 \(p.ipp)"
+            + ",guestfwd=tcp:10.0.2.4:9100-cmd:/usr/bin/nc 127.0.0.1 \(p.raw)"
+    }
+
+    static func buildArguments(for config: VMConfig, printerPorts: PrinterForwardPorts? = nil) -> [String] {
         let display = BrowserDisplayEndpoint(vmID: config.id)
         switch config.machineFamily {
         case .quadra800:
-            return buildQuadraArguments(for: config, display: display)
+            return buildQuadraArguments(for: config, display: display, printerPorts: printerPorts)
         case .powerMacG4:
-            return buildPowerMacArguments(for: config, display: display)
+            return buildPowerMacArguments(for: config, display: display, printerPorts: printerPorts)
         case .powerMacOSX:
-            return buildOSXArguments(for: config, display: display)
+            return buildOSXArguments(for: config, display: display, printerPorts: printerPorts)
         case .powerMac7500:
             return CoplandMachine.arguments(for: config)
         }
     }
 
     private static func buildOSXArguments(
-        for config: VMConfig, display: BrowserDisplayEndpoint
+        for config: VMConfig,
+        display: BrowserDisplayEndpoint,
+        printerPorts: PrinterForwardPorts? = nil
     ) -> [String] {
         let firmware = AppPaths.osxFirmwareDir
         let name = qemuEscape(config.name)
@@ -1050,7 +1148,7 @@ final class QEMUManager: ObservableObject {
             "-prom-env", "output-device=ttya",
             "-device", "pci-ohci,id=osx-usb", "-device", "usb-kbd,bus=osx-usb.0",
             "-device", config.tabletInput ? "usb-tablet,bus=osx-usb.0" : "usb-mouse,bus=osx-usb.0",
-            "-nic", config.networking ? "user,model=sungem" : "none",
+            "-nic", nicArgument(model: "sungem", networking: config.networking, printerPorts: printerPorts),
             "-serial", "none", "-action", "reboot=shutdown",
             "-monitor", "unix:\(qemuEscape(monitorSocketURL(for: config.id).path)),server=on,wait=off",
             "-qmp", "unix:\(qemuEscape(qmpSocketURL(for: config.id).path)),server=on,wait=off",
@@ -1207,7 +1305,8 @@ final class QEMUManager: ObservableObject {
     // davbus/awacs nodes.
     private static func buildPowerMacArguments(
         for config: VMConfig,
-        display: BrowserDisplayEndpoint
+        display: BrowserDisplayEndpoint,
+        printerPorts: PrinterForwardPorts? = nil
     ) -> [String] {
         var args: [String] = []
 
@@ -1409,12 +1508,10 @@ final class QEMUManager: ObservableObject {
         }
 
         // User-mode networking through the mac99 onboard sungem ethernet.
-        if config.networking {
-            args += ["-nic", legacy ? "user,model=rtl8139" : "user,model=sungem"]
-            if legacy { args += ["-global", "rtl8139.romfile=", "-global", "rtl8139.tx-delay-ns=1000000"] }
-        } else {
-            // QEMU otherwise creates the mac99 machine's default Sungem NIC.
-            args += ["-nic", "none"]
+        let nicModel = legacy ? "rtl8139" : "sungem"
+        args += ["-nic", nicArgument(model: nicModel, networking: config.networking, printerPorts: printerPorts)]
+        if legacy && (config.networking || printerPorts != nil) {
+            args += ["-global", "rtl8139.romfile=", "-global", "rtl8139.tx-delay-ns=1000000"]
         }
 
         // Shared folder via virtio-9p-pci and the classicvirtio ndrvloader.
@@ -1432,7 +1529,7 @@ final class QEMUManager: ObservableObject {
                 let tabletDevice: String
                 if legacy {
                     tabletDevice = "virtio-tablet-pci,addr=0x14"
-                } else if ati && toolsViaVirtio && config.networking {
+                } else if ati && toolsViaVirtio && (config.networking || printerPorts != nil) {
                     tabletDevice = "virtio-tablet-pci,addr=0x13"
                 } else {
                     tabletDevice = "virtio-tablet-pci"
@@ -1454,7 +1551,8 @@ final class QEMUManager: ObservableObject {
 
     private static func buildQuadraArguments(
         for config: VMConfig,
-        display: BrowserDisplayEndpoint
+        display: BrowserDisplayEndpoint,
+        printerPorts: PrinterForwardPorts? = nil
     ) -> [String] {
         var args: [String] = []
 
@@ -1557,12 +1655,7 @@ final class QEMUManager: ObservableObject {
         // User-mode networking through the Quadra's built-in SONIC ethernet.
         // The q800 machine creates the onboard dp8393x and binds it to nd_table[0],
         // so networking is configured with -nic (not a separate -device).
-        if config.networking {
-            args += ["-nic", "user,model=dp83932"]
-        } else {
-            // QEMU otherwise creates the q800 machine's default NIC.
-            args += ["-nic", "none"]
-        }
+        args += ["-nic", nicArgument(model: "dp83932", networking: config.networking, printerPorts: printerPorts)]
 
         // Shared folder via the classicvirtio NuBus virtio transport. The
         // nubus-virtio-mmio card must be created before the nubus-qfb framebuffer

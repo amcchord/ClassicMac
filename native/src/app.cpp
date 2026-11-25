@@ -1,5 +1,6 @@
 #include "app.h"
 #include "display.h"
+#include "printer.h"
 #include "transfer_meter.h"
 #include <QDesktopServices>
 #include <QtConcurrent>
@@ -383,6 +384,9 @@ void App::buildHome() {
   controls->addWidget(mediaButton);
   manageButton = button("Manage…", [this] { showMachineActions(); }, group);
   controls->addWidget(manageButton);
+  deleteButton = button("Delete…", [this] { performAction([this] { removeSelected(); }); }, group);
+  deleteButton->setObjectName("deleteMachineButton");
+  controls->addWidget(deleteButton);
   controls->addStretch();
   g->addLayout(controls);
   panel->addWidget(group);
@@ -423,8 +427,8 @@ void App::buildHome() {
     add("Manage…", [this] { showMachineActions(); });
     if (currentEngine()) add("Power…", [this] { showPowerActions(currentEngine()); });
     menu.addSeparator();
-    auto remove = add("Remove Mac…", [this] { removeSelected(); });
-    remove->setEnabled(!currentEngine());
+    auto remove = add("Delete Mac…", [this] { removeSelected(); });
+    remove->setEnabled(true);
     menu.exec(list->viewport()->mapToGlobal(pos));
   });
   auto shortcut = [this](const char *key, std::function<void()> action) {
@@ -514,11 +518,21 @@ void App::render() {
                             ? QDir::toNativeSeparators(shared)
                             : sharedName));
     }
+    if (m->family() != "powerMac7500") {
+      const bool printOn = c["printingEnabled"].toBool();
+      const QString pName = c["printerName"].toString();
+      detail += "\nPrinting:    " +
+                (!printOn          ? QString("Off")
+                 : pName == "pdf"  ? QString("Save as PDF")
+                 : pName.isEmpty() ? QString("System Default")
+                                   : pName);
+    }
   }
   details->setText(detail);
   infoButton->setEnabled(m && !e);
   mediaButton->setEnabled(m);
   manageButton->setEnabled(m);
+  deleteButton->setEnabled(m != nullptr);
   powerButton->setVisible(e != nullptr);
   startButton->setEnabled(m && m->family() != "powerMac7500");
   startButton->setText(e ? (e->paused ? "Resume Mac" : "Show Mac")
@@ -1560,6 +1574,7 @@ void App::showEditor(bool create) {
     v->addWidget(label("Enhanced Quadra video changes the Mac's resolution with the window. Sharp Pixels keeps complete pixels; built-in video uses a fixed resolution.",
                        &d, "small", true));
   QMap<QString, PButton *> checks;
+  PCombo *printerCombo = nullptr;
   PEdit *mouseDpiEdit = nullptr;
   if (!create) {
     for (auto pair : QList<QPair<QString, QString>>{
@@ -1568,6 +1583,7 @@ void App::showEditor(bool create) {
              {"useEnhancedFramebuffer", "Enhanced Quadra framebuffer"},
              {"sound", "Sound"},
              {"networking", "Networking"},
+             {"printingEnabled", "Enable virtual printer (off by default)"},
              {"tabletInput", "Tablet pointer"},
              {"legacyMouseTracking", "Native classic mouse tracking"},
              {"classicInputHelpers",
@@ -1582,11 +1598,108 @@ void App::showEditor(bool create) {
       checks[pair.first] = check;
       if ((osx && (pair.first == "toolsCDInserted" || pair.first == "classicInputHelpers")) ||
           (pair.first == "useG4CPU" && !ppc) ||
+          (pair.first == "printingEnabled" && copland) ||
           ((pair.first == "useEnhancedFramebuffer" || pair.first == "bootFromFloppy") && !quadra)) {
         check->hide();
         continue;
       }
       v->addWidget(check);
+    }
+    if (!copland) {
+      auto printRow = new QHBoxLayout;
+      printRow->setSpacing(6);
+      printRow->addWidget(label("Printer:", &d));
+      printerCombo = new PCombo(&d);
+      printerCombo->setObjectName("printerCombo");
+      printerCombo->setAccessibleName("Printer");
+      auto populatePrinters = [printerCombo](const QString &desired) {
+        QSignalBlocker block(printerCombo);
+        printerCombo->clear();
+        const auto printers = Printer::availablePrinters();
+        QString defName;
+        for (const auto &p : printers) {
+          if (p.isDefault) {
+            defName = p.displayName.isEmpty() ? p.queueName : p.displayName;
+            break;
+          }
+        }
+        if (defName.isEmpty())
+          defName = Printer::defaultPrinterName();
+        printerCombo->addItem(
+            defName.isEmpty()
+                ? QStringLiteral("System Default")
+                : QStringLiteral("System Default (%1)").arg(defName),
+            QString());
+        for (const auto &p : printers) {
+          const QString text =
+              (p.displayName.isEmpty() || p.displayName == p.queueName)
+                  ? p.queueName
+                  : QStringLiteral("%1 (%2)").arg(p.displayName, p.queueName);
+          printerCombo->addItem(text, p.queueName);
+        }
+        printerCombo->addItem(QStringLiteral("Save as PDF (Printed PDFs)"),
+                              QStringLiteral("pdf"));
+        if (!desired.isEmpty() && printerCombo->findData(desired) < 0)
+          printerCombo->addItem(desired + QStringLiteral(" (saved)"), desired);
+        const int idx = printerCombo->findData(desired);
+        printerCombo->setCurrentIndex(idx >= 0 ? idx : 0);
+      };
+      populatePrinters(c["printerName"].toString());
+      printRow->addWidget(printerCombo, 1);
+      auto refreshPrinters = button(
+          "Refresh",
+          [printerCombo, populatePrinters] {
+            populatePrinters(printerCombo->currentData().toString());
+          },
+          &d);
+      refreshPrinters->setObjectName("refreshPrintersButton");
+      printRow->addWidget(refreshPrinters);
+      auto testPageBtn = button(
+          "Test Page",
+          [&, printerCombo] {
+            const QString target = printerCombo->currentData().toString();
+            const QString labelText =
+                target == QStringLiteral("pdf")
+                    ? QStringLiteral("Print to PDF")
+                    : target.isEmpty()
+                          ? (Printer::defaultPrinterName().isEmpty()
+                                 ? QStringLiteral("System Default")
+                                 : Printer::defaultPrinterName())
+                          : target;
+            const QByteArray ps = Printer::generateTestPostScript(
+                labelText, QStringLiteral(CLASSICMAC_VERSION));
+            QString err, savedPath;
+            if (!Printer::submitJob(ps, QStringLiteral("ClassicMac Test Page"),
+                                    target, Printer::defaultPdfDir(*m), &err,
+                                    &savedPath)) {
+              fail(err);
+            }
+            PDialog okDlg("Test Page", {440, 170}, &d);
+            auto ov = dialogLayout(&okDlg);
+            ov->addWidget(label(
+                savedPath.isEmpty()
+                    ? QStringLiteral("Test page sent to printer.")
+                    : QStringLiteral("Test page saved to:\n") +
+                          QDir::toNativeSeparators(savedPath),
+                &okDlg, "regular", true));
+            ov->addStretch();
+            buttonRow(ov, {button("OK", [&] { okDlg.done(); }, &okDlg, true)});
+            okDlg.exec();
+          },
+          &d);
+      testPageBtn->setObjectName("testPrintPageButton");
+      printRow->addWidget(testPageBtn);
+      v->addLayout(printRow);
+#ifdef Q_OS_WIN
+      const QString guestAddr = QStringLiteral("10.0.2.2");
+#else
+      const QString guestAddr = QStringLiteral("10.0.2.4");
+#endif
+      v->addWidget(label(
+          QStringLiteral("Guest printer address: %1 · LPD queue: classicmac · "
+                         "IPP: 631 · JetDirect: 9100")
+              .arg(guestAddr),
+          &d, "small", true));
     }
     auto dpiRow = new QHBoxLayout;
     dpiRow->setSpacing(8);
@@ -1713,6 +1826,14 @@ void App::showEditor(bool create) {
                             graphics->currentData().toString();
                         for (auto it = checks.begin(); it != checks.end(); ++it)
                           next[it.key()] = it.value()->isChecked();
+                        if (printerCombo && !copland) {
+                          const QString chosenPrinter =
+                              printerCombo->currentData().toString().trimmed();
+                          if (chosenPrinter.isEmpty())
+                            next.remove("printerName");
+                          else
+                            next["printerName"] = chosenPrinter;
+                        }
                         if (mouseDpiEdit) {
                           const QString dpiText = mouseDpiEdit->text().trimmed();
                           if (dpiText.isEmpty() ||

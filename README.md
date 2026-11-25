@@ -29,17 +29,31 @@
   <img src="docs/screenshots/powermacg4-macos92.png" width="410" alt="Mac OS 9.2 on the emulated Power Mac G4">
 </p>
 
-## Download ClassicMac 4.9.0
+## Download ClassicMac 4.10.0
 
 | System | Download | Requirements |
 | --- | --- | --- |
-| Windows | [Portable EXE](https://github.com/amcchord/ClassicMac/releases/download/v4.9.0/ClassicMac-4.9.0-windows-x64.exe) | Windows 11 x64; unsigned. |
-| macOS | [DMG](https://github.com/amcchord/ClassicMac/releases/download/v4.9.0/ClassicMac-4.9.0.dmg) · [ZIP](https://github.com/amcchord/ClassicMac/releases/download/v4.9.0/ClassicMac-4.9.0.zip) | Apple Silicon, macOS 15+; signed and notarized. |
-| Linux | [AppImage](https://github.com/amcchord/ClassicMac/releases/download/v4.9.0/ClassicMac-4.9.0-linux-x64.AppImage) | x64, glibc 2.39+ and a desktop. |
+| Windows | [Portable EXE](https://github.com/amcchord/ClassicMac/releases/download/v4.10.0/ClassicMac-4.10.0-windows-x64.exe) | Windows 11 x64; unsigned. |
+| macOS | [DMG](https://github.com/amcchord/ClassicMac/releases/download/v4.10.0/ClassicMac-4.10.0.dmg) · [ZIP](https://github.com/amcchord/ClassicMac/releases/download/v4.10.0/ClassicMac-4.10.0.zip) | Apple Silicon, macOS 15+; signed and notarized. |
+| Linux | [AppImage](https://github.com/amcchord/ClassicMac/releases/download/v4.10.0/ClassicMac-4.10.0-linux-x64.AppImage) | x64, glibc 2.39+ and a desktop. |
 
-[Release notes, checksums and engine sources](https://github.com/amcchord/ClassicMac/releases/tag/v4.9.0).
+[Release notes, checksums and engine sources](https://github.com/amcchord/ClassicMac/releases/tag/v4.10.0).
 Windows runs directly. Drag the Mac app to Applications. On Linux, mark the
 AppImage executable; use `--appimage-extract-and-run` if FUSE is unavailable.
+
+## New in ClassicMac 4.10.0
+
+- **Virtual printing to host printers or PDF.** Ported from RetroBoot (off by
+  default): enable per Mac in **Get Info → Printing** (macOS) or **Get Info**
+  (Windows/Linux) to print via LPD (`515`), IPP (`631`), or JetDirect (`9100`)
+  to your computer's **System Default** printer, a chosen host printer, or
+  **Save as PDF**. On macOS, Power Mac G4 hard-disk boots automatically
+  provision a `ClassicMac Printer` Desktop Printer for Mac OS 9 when enabled.
+- **Easier Mac deletion.** Delete any Mac directly from the **Delete…** button
+  on Home (or **⌘⌫** on macOS) with a single confirmation showing its on-disk
+  size and optional stop-and-trash for running Macs.
+
+## Download ClassicMac 4.9.0 (previous)
 
 ## New in ClassicMac 4.9.0
 

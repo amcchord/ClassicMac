@@ -30,8 +30,18 @@ QString binary(const QString &name);
 bool supportsHostSharing();
 QString sanitizedName(const QString &raw);
 QProcessEnvironment hostEnvironment();
+struct PrintPorts {
+  quint16 lpd = 0;
+  quint16 ipp = 0;
+  quint16 raw = 0;
+  QString bridgePath;
+  bool active() const {
+    return lpd > 0 && ipp > 0 && raw > 0 && !bridgePath.isEmpty();
+  }
+};
 QStringList qemuArguments(const Machine &m, int vncPort,
-                          const QString &audioOverride = {});
+                          const QString &audioOverride = {},
+                          const PrintPorts &printPorts = {});
 QStringList argumentsFor(const Machine &, int port, bool silent = false);
 bool supportedVersion(const QString &);
 bool makeSparse(QFile &);

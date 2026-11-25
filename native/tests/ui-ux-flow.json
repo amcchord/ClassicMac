@@ -532,7 +532,7 @@
     },
     {
       "action": "window",
-      "title": "Remove Mac"
+      "title": "Delete Mac"
     },
     {
       "action": "capture",
@@ -596,7 +596,7 @@
     {
       "action": "assertUI",
       "object": "removeMachine",
-      "enabled": false
+      "enabled": true
     },
     {
       "action": "capture",
@@ -763,12 +763,8 @@
       "object": "removeMachine"
     },
     {
-      "action": "click",
-      "object": "deleteMachineFiles"
-    },
-    {
       "action": "window",
-      "title": "Delete Mac Files"
+      "title": "Delete Mac"
     },
     {
       "action": "assertSafeDefault"
@@ -780,7 +776,7 @@
     },
     {
       "action": "click",
-      "object": "cancelDestructiveAction"
+      "object": "cancelRemoveMachine"
     },
     {
       "action": "assertState",
@@ -793,11 +789,11 @@
     },
     {
       "action": "click",
-      "object": "deleteMachineFiles"
+      "object": "removeMachine"
     },
     {
       "action": "click",
-      "object": "confirmDeleteMachine"
+      "object": "deleteMachineFiles"
     },
     {
       "action": "assertState",

@@ -160,7 +160,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case #selector(showSettings(_:)), #selector(showCheckpoints(_:)), #selector(revealInFinder(_:)):
             return vm != nil && !blocked
         case #selector(removeMac(_:)):
-            return vm != nil && !running && !blocked
+            return vm != nil && !blocked
         case #selector(newMac(_:)), #selector(openMac(_:)), #selector(showIconPacks(_:)):
             return !blocked
         case #selector(collapseWindow(_:)):
@@ -235,7 +235,7 @@ enum MainMenu {
         mac.addItem(item("Force Quit Frontmost App…", #selector(AppDelegate.forceQuitApp(_:))))
         mac.addItem(.separator())
         mac.addItem(item("Show in Finder", #selector(AppDelegate.revealInFinder(_:))))
-        mac.addItem(item("Remove Mac…", #selector(AppDelegate.removeMac(_:))))
+        mac.addItem(item("Delete Mac…", #selector(AppDelegate.removeMac(_:)), "\u{8}"))
 
         let window = submenu(bar, "Window")
         window.addItem(item("Minimize", #selector(NSWindow.performMiniaturize(_:)), "m"))

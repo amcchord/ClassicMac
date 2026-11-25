@@ -1,5 +1,6 @@
 #include "engine.h"
 #include "checkpoint.h"
+#include "printer.h"
 #include <QDir>
 #include <QMap>
 #include <QPointer>
@@ -387,6 +388,7 @@ Engine::Engine(Model::Machine m, QObject *p)
   connect(&process, qOverload<int, QProcess::ExitStatus>(&QProcess::finished),
           this, [&](int code, QProcess::ExitStatus) {
             bootHandoffTimer.stop();
+            stopPrintServer();
             running = false;
             paused = false;
             osxShuttingDown = false;
@@ -445,9 +447,17 @@ Engine::Engine(Model::Machine m, QObject *p)
 Engine::~Engine() { // Application close is refused while a guest is mounted.
   // This path is reached only after a normal exit or explicit Force Off.
   bootHandoffTimer.stop();
+  stopPrintServer();
   if (process.state() != QProcess::NotRunning) {
     process.kill();
     process.waitForFinished(5000);
+  }
+}
+void Engine::stopPrintServer() {
+  if (printServer) {
+    printServer->stop();
+    printServer->deleteLater();
+    printServer = nullptr;
   }
 }
 void Engine::read() {
@@ -569,7 +579,26 @@ void Engine::start() {
       fail("The attached media image is missing. Choose it again in Media.");
 
   initializing = true;
-  auto guard = qScopeGuard([&] { initializing = false; });
+  auto guard = qScopeGuard([&] {
+    initializing = false;
+    if (!running)
+      stopPrintServer();
+  });
+  stopPrintServer();
+  Model::PrintPorts printPorts;
+  if (machine.config["printingEnabled"].toBool()) {
+    printServer = new Printer::Server(
+        machine.config["printerName"].toString(),
+        Printer::defaultPdfDir(machine), false, this);
+    if (!printServer->start())
+      fail("Could not start the virtual printer service.");
+#ifndef Q_OS_WIN
+    printPorts.lpd = printServer->lpdPort();
+    printPorts.ipp = printServer->ippPort();
+    printPorts.raw = printServer->rawPort();
+    printPorts.bridgePath = Printer::ensureBridgeSymlink();
+#endif
+  }
   silentAudioFallback = false;
   audioUnavailable = false;
   QString audioOverride;
@@ -597,7 +626,7 @@ void Engine::start() {
     buffer.clear();
     reason.clear();
     stopping = restarting = forced = osxShuttingDown = false;
-    auto args = Model::qemuArguments(machine, port, audioOverride);
+    auto args = Model::qemuArguments(machine, port, audioOverride, printPorts);
     process.setProgram(binPath);
     process.setArguments(args);
     process.setWorkingDirectory(r + "/bin");

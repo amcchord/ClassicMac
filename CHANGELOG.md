@@ -1,5 +1,25 @@
 # Changelog
 
+## 4.10.0 — Streamlined Mac Deletion & RetroBoot Virtual Printing (2026-11-25)
+
+### Added
+
+- **RetroBoot virtual printing (off by default):** Ported RetroBoot's virtual
+  printer server (LPD on port 515, IPP on port 631, and AppSocket/JetDirect on
+  port 9100) across macOS, Windows, and Linux. Turn it on per Mac in **Get Info
+  → Printing** (macOS) or **Get Info** (Windows/Linux) and choose **System
+  Default**, any installed host printer, or **Save as PDF** (`Printed PDFs`),
+  with a **Print Test Page** button for instant verification.
+- **Mac OS 9 automatic Desktop Printer setup (macOS):** When virtual printing
+  is enabled for a Power Mac G4 booting from its hard disk, ClassicMac
+  automatically ensures `ClassicMac Printer` is configured in Mac OS 9 (while
+  preserving any existing user-created Desktop Printer).
+- **Streamlined Mac deletion:** Added a direct **Delete…** button in the main
+  window (plus **⌘⌫** / **Delete Mac…** on macOS and **Delete…** on
+  Windows/Linux) with a single clear confirmation dialog showing the `.classic`
+  folder's on-disk size and allowing running Macs to be shut down or stopped and
+  moved to Trash / Recycle Bin in one step.
+
 ## 4.9.0 — RetroBoot 3.4 Parity, OS X Reliability, Checkpoints & In-App Updates (2026-11-25)
 
 ### Added

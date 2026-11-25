@@ -8,7 +8,7 @@ import PlatinumKit
 struct SettingsDialog: View {
     static let size = NSSize(width: 520, height: 475)
 
-    enum Pane: Hashable { case general, display, sharing }
+    enum Pane: Hashable { case general, display, sharing, printing }
 
     let original: VMConfig
     let handle: DialogHandle
@@ -17,6 +17,7 @@ struct SettingsDialog: View {
         switch ProcessInfo.processInfo.environment["CLASSICMAC_UI_SETTINGS_PANE"] {
         case "display": return .display
         case "sharing": return .sharing
+        case "printing": return .printing
         default: return .general
         }
     }()
@@ -24,6 +25,11 @@ struct SettingsDialog: View {
     @State private var heightText: String
     @State private var mouseDPIText: String
     @State private var errorMessage: String?
+    @State private var printers: [HostPrinter] = []
+    @State private var defaultPrinterQueue: String?
+    @State private var printingStatusMessage: String?
+    @State private var printingStatusIsError = false
+    @State private var isPrintingTestPage = false
     @ObservedObject private var manager = QEMUManager.shared
 
     init(original: VMConfig, handle: DialogHandle) {
@@ -54,6 +60,7 @@ struct SettingsDialog: View {
                     (Pane.general, "General Information"),
                     (Pane.display, "Display"),
                     (Pane.sharing, "Sharing"),
+                    (Pane.printing, "Printing"),
                 ], width: 190)
                 Spacer()
             }
@@ -63,6 +70,7 @@ struct SettingsDialog: View {
                 case .general: generalPane
                 case .display: displayPane
                 case .sharing: sharingPane
+                case .printing: printingPane
                 }
             }
             .disabled(running)
@@ -93,7 +101,10 @@ struct SettingsDialog: View {
         .padding(12)
         .frame(width: Self.size.width, height: Self.size.height)
         .background(Platinum.face.color)
-        .onAppear { coerceDepth() }
+        .onAppear {
+            coerceDepth()
+            refreshPrinters()
+        }
         .onChange(of: config.name) { _, _ in errorMessage = nil }
     }
 
@@ -430,6 +441,151 @@ struct SettingsDialog: View {
         panel.prompt = "Share"
         if panel.runModal() == .OK, let url = panel.url {
             config.sharedFolderPath = url.path
+        }
+    }
+
+    // MARK: Printing
+
+    @ViewBuilder
+    private var printingPane: some View {
+        if !config.machineFamily.supportsPrinting {
+            Text("Printing is unavailable for Copland.")
+                .platinumText(.body)
+        } else {
+            VStack(alignment: .leading, spacing: 10) {
+                PlatinumCheckbox("Enable virtual printer (off by default)", isOn: $config.printingEnabled)
+
+                HStack(spacing: 10) {
+                    Text("Printer:").platinumText(.emphasis)
+                    PlatinumPopUp(selection: printerSelection, options: printerOptions, width: 280)
+                }
+
+                HStack(spacing: Platinum.buttonGap) {
+                    PlatinumButton("Refresh Printers") {
+                        refreshPrinters(announce: true)
+                    }
+                    PlatinumButton("Print Test Page") {
+                        printTestPage()
+                    }
+                    .disabled(isPrintingTestPage)
+                }
+
+                if let printingStatusMessage {
+                    Text(printingStatusMessage)
+                        .platinumText(.small)
+                        .foregroundStyle(printingStatusIsError ? Platinum.errorText.color : Platinum.dimText.color)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Guest connection: 10.0.2.4 · LPD queue classicmac · IPP ipp://10.0.2.4:631/printers/classicmac · JetDirect 9100.")
+                        .platinumText(.detail)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if config.machineFamily == .powerMacG4 {
+                        Text("Mac OS 9 automatically creates “ClassicMac Printer” on the desktop when enabled.")
+                            .platinumText(.detail)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    if HostPrinterManager.ghostscriptPath() == nil {
+                        Text("Tip: Install Ghostscript (brew install ghostscript) for Save as PDF and AirPrint or raster printers.")
+                            .platinumText(.detail)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .padding(.top, 2)
+            }
+        }
+    }
+
+    private var printerSelection: Binding<String> {
+        Binding(
+            get: { config.printerName ?? "" },
+            set: { value in
+                let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+                config.printerName = trimmed.isEmpty ? nil : trimmed
+                printingStatusMessage = nil
+            }
+        )
+    }
+
+    private var printerOptions: [(String, String)] {
+        let defaultDisplay: String? = defaultPrinterQueue.flatMap { queue in
+            printers.first(where: { $0.queueName == queue })?.displayName ?? queue
+        }
+        let defaultLabel = defaultDisplay.map { "System Default (\($0))" } ?? "System Default Printer"
+        var options: [(String, String)] = [("", defaultLabel)]
+        for printer in printers {
+            let label = printer.isDefault ? "\(printer.displayName) (Default)" : printer.displayName
+            options.append((printer.queueName, label))
+        }
+        if let saved = config.printerName,
+           !saved.isEmpty,
+           saved != HostPrinterManager.pdfTargetValue,
+           !printers.contains(where: { $0.queueName == saved }) {
+            options.append((saved, "\(saved) (Offline)"))
+        }
+        options.append((HostPrinterManager.pdfTargetValue, "Save as PDF (Printed PDFs)"))
+        return options
+    }
+
+    private func refreshPrinters(announce: Bool = false) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            let discovered = HostPrinterManager.availablePrinters()
+            let defaultQueue = HostPrinterManager.defaultPrinterQueue()
+            DispatchQueue.main.async {
+                printers = discovered
+                defaultPrinterQueue = defaultQueue
+                if announce {
+                    printingStatusIsError = false
+                    printingStatusMessage = discovered.isEmpty
+                        ? "No CUPS printers found. You can still use Save as PDF."
+                        : "Found \(discovered.count) printer\(discovered.count == 1 ? "" : "s")."
+                }
+            }
+        }
+    }
+
+    private func printTestPage() {
+        isPrintingTestPage = true
+        printingStatusMessage = "Sending test page…"
+        printingStatusIsError = false
+        let targetPrinter = config.printerName
+        let pdfDir = HostPrinterManager.defaultPDFOutputDirectory(for: config)
+        let targetLabel: String
+        if targetPrinter == HostPrinterManager.pdfTargetValue {
+            targetLabel = "Save as PDF"
+        } else if let targetPrinter, !targetPrinter.isEmpty {
+            targetLabel = targetPrinter
+        } else {
+            targetLabel = defaultPrinterQueue ?? "System Default Printer"
+        }
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? ""
+
+        DispatchQueue.global(qos: .userInitiated).async {
+            let ps = HostPrinterManager.generateTestPostScript(targetLabel: targetLabel, version: version)
+            do {
+                let result = try HostPrinterManager.submitJob(
+                    data: ps,
+                    jobName: "ClassicMac Test Page (\(targetLabel))",
+                    targetPrinter: targetPrinter,
+                    pdfOutputDir: pdfDir
+                )
+                DispatchQueue.main.async {
+                    isPrintingTestPage = false
+                    printingStatusIsError = false
+                    if let url = result.savedPDFURL {
+                        printingStatusMessage = "Saved test PDF: \(url.lastPathComponent)"
+                    } else {
+                        printingStatusMessage = "Sent test page to \(result.target)."
+                    }
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    isPrintingTestPage = false
+                    printingStatusIsError = true
+                    printingStatusMessage = error.localizedDescription
+                }
+            }
         }
     }
 }

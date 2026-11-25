@@ -1,15 +1,35 @@
 #include "app.h"
 #include "checkpoint.h"
+#include <QDirIterator>
 #include <QtConcurrent>
 #include <optional>
 
 namespace {
-QString checkpointSizeText(qint64 bytes) {
-  if (bytes >= 1073741824)
-    return QString::number(double(bytes) / 1073741824, 'f', 1) + " GB";
-  if (bytes >= 1048576)
-    return QString::number(double(bytes) / 1048576, 'f', 1) + " MB";
+qint64 folderSizeBytes(const QString &folder) {
+  if (folder.isEmpty() || !QFileInfo(folder).isDir())
+    return 0;
+  qint64 total = 0;
+  QDirIterator it(folder,
+                  QDir::Files | QDir::Hidden | QDir::System |
+                      QDir::NoDotAndDotDot,
+                  QDirIterator::Subdirectories);
+  while (it.hasNext()) {
+    it.next();
+    total += it.fileInfo().size();
+  }
+  return total;
+}
+
+QString formatDiskSize(qint64 bytes) {
+  if (bytes >= 1073741824LL)
+    return QString::number(double(bytes) / 1073741824.0, 'f', 1) + " GB";
+  if (bytes >= 1048576LL)
+    return QString::number(double(bytes) / 1048576.0, 'f', 1) + " MB";
   return QString::number(std::max<qint64>(0, bytes) / 1024) + " KB";
+}
+
+QString checkpointSizeText(qint64 bytes) {
+  return formatDiskSize(bytes);
 }
 
 template <class Fn>
@@ -192,7 +212,7 @@ void App::showMachineActions() {
   }, &dialog);
   checkpoints->setObjectName("manageMachineCheckpoints");
   actions->addWidget(checkpoints, 0, Qt::AlignLeft);
-  auto remove = button("Remove Mac…", [&] {
+  auto remove = button("Delete Mac…", [&] {
     for (int i = 0; i < machines.size(); ++i)
       if (machines[i].id() == machine.id()) {
         select(i);
@@ -212,11 +232,11 @@ void App::showMachineActions() {
     auto engine = engines.value(machine.id());
     state->setText(powerState(engine));
     power->setEnabled(engine && engine->running);
-    remove->setEnabled(!engine);
+    remove->setEnabled(true);
     explanation->setText(engine
-        ? "Shut down this Mac before removing it. If it stops responding, "
-          "open Power to force it to stop."
-        : "Remove Mac lets you keep the files or move the entire machine "
+        ? "Delete Mac can force stop this running Mac and move its folder "
+          "to the " + trashName() + "."
+        : "Delete Mac lets you keep the files or move the entire machine "
           "folder to the " + trashName() + ".");
   };
   QTimer timer;
@@ -438,64 +458,111 @@ void App::removeSelected() {
   if (!current())
     return;
   const auto machine = *current();
-  if (engines.contains(machine.id())) {
-    problem(this, "Shut down this Mac before removing it. Open Power to stop "
-                  "a Mac that is not responding.");
-    return;
+  const bool wasRunning = engines.contains(machine.id());
+  const QString sizeText = formatDiskSize(folderSizeBytes(machine.folder));
+  int result = 0;
+
+  if (wasRunning) {
+    PDialog dialog("Delete Running Mac", {560, 320}, this);
+    dialog.setObjectName("removeMachineDialog");
+    auto layout = dialogLayout(&dialog);
+    layout->addWidget(label("Delete running Mac “" + machine.name() + "”?",
+                            &dialog));
+    layout->addWidget(folderField(machine, &dialog));
+    layout->addWidget(label("Folder size on disk: " + sizeText, &dialog,
+                            "small"));
+    layout->addWidget(label(
+        "Deleting a running Mac will stop the emulation engine immediately "
+        "(unsaved work inside the Mac will be lost) and move its .classic "
+        "folder (" +
+            sizeText + ") to the " + trashName() +
+            ". Attached media and shared folders outside this folder stay "
+            "where they are.",
+        &dialog, "regular", true));
+    layout->addStretch();
+    auto cancel = button("Cancel", [&] { dialog.done(0); }, &dialog, true);
+    cancel->setObjectName("cancelRemoveMachine");
+    auto erase = button("Force Stop & Move to " + trashName(),
+                        [&] { dialog.done(2); }, &dialog);
+    erase->setObjectName("deleteMachineFiles");
+    buttonRow(layout, {cancel, erase});
+    cancel->setFocus();
+    result = dialog.exec();
+  } else {
+    PDialog dialog("Delete Mac", {560, 380}, this);
+    dialog.setObjectName("removeMachineDialog");
+    auto layout = dialogLayout(&dialog);
+    layout->addWidget(label("Delete “" + machine.name() + "”?", &dialog));
+    layout->addWidget(folderField(machine, &dialog));
+    layout->addWidget(label("Folder size on disk: " + sizeText, &dialog,
+                            "small"));
+    layout->addWidget(label(
+        "Remove from List keeps this folder and every file inside it. Use "
+        "Open Mac later to add it again.",
+        &dialog, "regular", true));
+    auto keep = button("Remove from List", [&] { dialog.done(1); }, &dialog);
+    keep->setObjectName("removeMachineKeepFiles");
+    layout->addWidget(keep, 0, Qt::AlignLeft);
+    layout->addWidget(label(
+        "Move to " + trashName() +
+            " moves the entire .classic folder (" + sizeText +
+            "), including its virtual hard disk, to the " + trashName() +
+            " immediately. Attached media and shared folders outside this "
+            "folder stay where they are.",
+        &dialog, "regular", true));
+    auto erase = button("Move to " + trashName(),
+                        [&] { dialog.done(2); }, &dialog);
+    erase->setObjectName("deleteMachineFiles");
+    layout->addWidget(erase, 0, Qt::AlignLeft);
+    layout->addStretch();
+    auto cancel = button("Cancel", [&] { dialog.done(0); }, &dialog, true);
+    cancel->setObjectName("cancelRemoveMachine");
+    buttonRow(layout, {cancel});
+    cancel->setFocus();
+    result = dialog.exec();
   }
-  PDialog dialog("Remove Mac", {560, 370}, this);
-  dialog.setObjectName("removeMachineDialog");
-  auto layout = dialogLayout(&dialog);
-  layout->addWidget(label("Remove “" + machine.name() + "”?", &dialog));
-  layout->addWidget(folderField(machine, &dialog));
-  layout->addWidget(label("Remove from List keeps this folder and every file "
-                          "inside it. Use Open Mac later to add it again.",
-                          &dialog, "regular", true));
-  auto keep = button("Remove from List", [&] { dialog.done(1); }, &dialog);
-  keep->setObjectName("removeMachineKeepFiles");
-  layout->addWidget(keep, 0, Qt::AlignLeft);
-  layout->addWidget(label("Delete Files moves the entire .classic folder, "
-                          "including its virtual hard disk, to the " +
-                          trashName() + ". Attached media and shared folders "
-                          "outside this folder stay where they are.",
-                          &dialog, "regular", true));
-  auto erase = button("Delete Files…", [&] {
-    validatedDeleteFolder(machine, machines);
-    if (confirmAction(&dialog, "Delete Mac Files",
-                      "Move “" + machine.name() + "” and all files in its "
-                      ".classic folder to the " + trashName() + "?\n\n" +
-                      QDir::toNativeSeparators(machine.folder) +
-                      "\n\nThis includes everything saved on this Mac's "
-                      "virtual hard disk. You can restore the folder from "
-                      "the " + trashName() + " until it is emptied.",
-                      "Move to " + trashName(), "deleteMachineConfirmDialog"))
-      dialog.done(2);
-  }, &dialog);
-  erase->setObjectName("deleteMachineFiles");
-  layout->addWidget(erase, 0, Qt::AlignLeft);
-  layout->addStretch();
-  auto cancel = button("Cancel", [&] { dialog.done(0); }, &dialog, true);
-  cancel->setObjectName("cancelRemoveMachine");
-  buttonRow(layout, {cancel});
-  cancel->setFocus();
-  const auto result = dialog.exec();
+
   if (!result)
     return;
-  if (engines.contains(machine.id()))
-    Model::fail("The Mac is running. Shut it down before removing it.");
+
+  if (wasRunning) {
+    if (auto *eng = engines.value(machine.id())) {
+      QEventLoop waitLoop;
+      QTimer timeout;
+      timeout.setSingleShot(true);
+      auto conn =
+          connect(eng, &Engine::exited, &waitLoop, &QEventLoop::quit);
+      connect(&timeout, &QTimer::timeout, &waitLoop, &QEventLoop::quit);
+      eng->forceOff();
+      if (engines.contains(machine.id())) {
+        timeout.start(5000);
+        waitLoop.exec();
+      }
+      disconnect(conn);
+      if (engines.contains(machine.id()))
+        Model::fail("The running Mac could not be stopped. Try Force Stop in "
+                    "Power, then delete it again.");
+    }
+  } else if (engines.contains(machine.id())) {
+    Model::fail("The Mac started running. Stop it or delete it again.");
+  }
+
   int index = -1;
   for (int i = 0; i < machines.size(); ++i)
-    if (machines[i].id() == machine.id() && machines[i].folder == machine.folder)
+    if (machines[i].id() == machine.id() &&
+        machines[i].folder == machine.folder)
       index = i;
   if (index < 0)
     return;
-  if (result == 2) {
+
+  if (result == 2 && QFileInfo::exists(machine.folder)) {
     const auto folder = validatedDeleteFolder(machine, machines);
     if (!QFile::moveToTrash(folder))
       Model::fail("The machine could not be moved to the " + trashName() +
                   ". Its files were kept. Use Show Files to inspect the "
                   "folder or Remove from List to keep it.");
   }
+
   const auto oldMachines = machines;
   const auto oldSelection = selected;
   machines.removeAt(index);

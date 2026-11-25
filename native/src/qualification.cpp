@@ -1,6 +1,7 @@
 #include "qualification.h"
 #include "app.h"
 #include "checkpoint.h"
+#include "printer.h"
 #include "transfer_meter.h"
 #include "updater.h"
 #include <QDirIterator>
@@ -939,6 +940,302 @@ int selfTest(const QString &fixtures, const QString &output) {
                 stdMac.config["ramMB"].toInt() == 384 &&
                 !stdMac.config["useG4CPU"].toBool(),
             "Library base edition recommendedSettings");
+  }
+
+  // Virtual printing config validation, QEMU arguments, test page, PDF passthrough, and protocol server tests.
+  {
+    auto pCfg = Model::freshConfig("Print Test");
+    require(!pCfg["printingEnabled"].toBool(),
+            "printingEnabled must default to false");
+    require(!pCfg.contains("printerName"),
+            "printerName must be absent by default");
+
+    auto coplandCfg = Model::freshConfig("Copland Print", "powerMac7500");
+    coplandCfg["printingEnabled"] = true;
+    coplandCfg["printerName"] = "HP_LaserJet";
+    auto coplandValid = Model::validate(coplandCfg);
+    require(!coplandValid["printingEnabled"].toBool() &&
+                !coplandValid.contains("printerName"),
+            "Copland must clear printingEnabled and printerName");
+
+    auto roundTripCfg = pCfg;
+    roundTripCfg["printerName"] = "  Office Printer  ";
+    auto rtValid = Model::validate(roundTripCfg);
+    require(rtValid["printerName"].toString() == "Office Printer",
+            "printerName must trim surrounding whitespace");
+
+    auto emptyPrinterCfg = pCfg;
+    emptyPrinterCfg["printerName"] = "   ";
+    require(!Model::validate(emptyPrinterCfg).contains("printerName"),
+            "Empty trimmed printerName must be removed");
+
+    auto badPrinterCfg = pCfg;
+    badPrinterCfg["printerName"] = QString("Bad\nPrinter");
+    bool badPrinterRejected = false;
+    try {
+      Model::validate(badPrinterCfg);
+    } catch (const std::exception &) {
+      badPrinterRejected = true;
+    }
+    require(badPrinterRejected, "Control characters in printerName must fail");
+
+    const Model::Machine printOffMac{"/fixture/Print.classic", pCfg};
+    const auto argsOff = Model::argumentsFor(printOffMac, 6000, true);
+    const auto argsWithEmptyPorts =
+        Model::qemuArguments(printOffMac, 6000, QStringLiteral("none"), {});
+    require(argsOff == argsWithEmptyPorts,
+            "Printing off must preserve exact QEMU arguments");
+
+    auto pOnCfg = pCfg;
+    pOnCfg["printingEnabled"] = true;
+    pOnCfg["networking"] = false;
+    const Model::Machine printOnMac{"/fixture/Print.classic", pOnCfg};
+    const Model::PrintPorts ports{5150, 6310, 9101, "/tmp/cm-bridge-test"};
+    const auto argsOn =
+        Model::qemuArguments(printOnMac, 6000, QStringLiteral("none"), ports);
+    const int nicIdx = argsOn.indexOf(QStringLiteral("-nic"));
+    require(nicIdx >= 0 && nicIdx + 1 < argsOn.size(),
+            "Missing -nic argument when printing is enabled");
+    const QString nicVal = argsOn[nicIdx + 1];
+    require(nicVal.contains("restrict=on") &&
+                nicVal.contains("guestfwd=tcp:10.0.2.4:515-cmd:/tmp/cm-bridge-test --tcp-bridge 127.0.0.1 5150") &&
+                nicVal.contains("guestfwd=tcp:10.0.2.4:631-cmd:/tmp/cm-bridge-test --tcp-bridge 127.0.0.1 6310") &&
+                nicVal.contains("guestfwd=tcp:10.0.2.4:9100-cmd:/tmp/cm-bridge-test --tcp-bridge 127.0.0.1 9101"),
+            "Printing on with networking off must emit restrict=on and 515/631/9100 guestfwd rules");
+
+    const QByteArray testPs =
+        Printer::generateTestPostScript("LaserWriter", "9.9.9");
+    require(testPs.startsWith("%!PS-Adobe-3.0") &&
+                testPs.contains("ClassicMac 9.9.9") &&
+                testPs.contains("Target: LaserWriter") &&
+                testPs.contains("showpage"),
+            "generateTestPostScript output invalid");
+
+    const QString pdfOutDir = tmp.path() + "/Printed PDFs";
+    const QByteArray samplePdf("%PDF-1.4\n%sample\n%%EOF\n");
+    QString pdfErr, savedPdfPath;
+    require(Printer::submitJob(samplePdf, "Quarterly Report.ps", "pdf",
+                               pdfOutDir, &pdfErr, &savedPdfPath),
+            "PDF passthrough submitJob failed: " + pdfErr);
+    require(!savedPdfPath.isEmpty() && QFileInfo(savedPdfPath).isFile() &&
+                savedPdfPath.endsWith(" - Quarterly Report.pdf"),
+            "PDF passthrough saved unexpected path: " + savedPdfPath);
+    {
+      QFile pf(savedPdfPath);
+      require(pf.open(QFile::ReadOnly) && pf.readAll() == samplePdf,
+              "PDF passthrough contents mismatch");
+    }
+
+    // Live loopback Printer::Server tests for LPD, IPP, and Raw 9100.
+    Printer::Server server("pdf", pdfOutDir, true);
+    QList<QPair<QString, QByteArray>> capturedJobs;
+    server.testHandler = [&](const QByteArray &data, const QString &jobName,
+                             QString *) {
+      capturedJobs.append({jobName, data});
+      return true;
+    };
+    require(server.start() && server.lpdPort() > 0 && server.ippPort() > 0 &&
+                server.rawPort() > 0,
+            "Printer::Server failed to start on ephemeral loopback ports");
+
+    auto pumpUntil = [&](const std::function<bool()> &pred, int timeoutMs = 4000) {
+      QElapsedTimer t;
+      t.start();
+      while (!pred() && t.elapsed() < timeoutMs) {
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
+      }
+      return pred();
+    };
+
+    // 1. LPD with OS 9 NUL padding and duplicate subcommand header re-send.
+    {
+      capturedJobs.clear();
+      QTcpSocket sock;
+      sock.connectToHost(QHostAddress::LocalHost, server.lpdPort());
+      require(sock.waitForConnected(2000), "LPD connect failed");
+      auto readAck = [&](int count = 1) -> QByteArray {
+        require(pumpUntil([&] { return sock.bytesAvailable() >= count; }),
+                "LPD ACK timeout");
+        return sock.read(count);
+      };
+      sock.write("\x02" "classicmac\n");
+      sock.flush();
+      require(readAck() == QByteArray("\x00", 1), "LPD queue ACK failed");
+
+      const QByteArray ctrl = "Hhost\nPuser\nJMy LPD Doc\n";
+      const QByteArray ctrlHdr =
+          QByteArray("\x02") + QByteArray::number(ctrl.size()) + " cfA001host\n";
+      // Leading NUL padding before control subcommand (OS 9 behavior)
+      sock.write(QByteArray("\x00\x00", 2) + ctrlHdr);
+      sock.flush();
+      require(readAck() == QByteArray("\x00", 1), "LPD ctrl header ACK failed");
+      sock.write(ctrl + QByteArray("\x00", 1));
+      sock.flush();
+      require(readAck() == QByteArray("\x00", 1), "LPD ctrl data ACK failed");
+
+      const QByteArray psPayload("%!PS-Adobe-3.0\nshowpage\n");
+      const QByteArray dataHdr =
+          QByteArray("\x03") + QByteArray::number(psPayload.size()) + " dfA001host\n";
+      sock.write(dataHdr);
+      sock.flush();
+      require(readAck() == QByteArray("\x00", 1), "LPD data header ACK 1 failed");
+      // Re-send subcommand header (OS 9 Desktop PrintMonitor quirk)
+      sock.write(dataHdr);
+      sock.flush();
+      require(readAck() == QByteArray("\x00", 1), "LPD duplicate header ACK failed");
+      sock.write(psPayload + QByteArray("\x00", 1));
+      sock.flush();
+      require(readAck() == QByteArray("\x00", 1), "LPD data payload ACK failed");
+      sock.disconnectFromHost();
+      require(pumpUntil([&] { return !capturedJobs.isEmpty(); }),
+              "LPD job was not dispatched");
+      require(capturedJobs.size() == 1 &&
+                  capturedJobs[0].first == "My LPD Doc" &&
+                  capturedJobs[0].second == psPayload,
+              "LPD captured job mismatch");
+    }
+
+    // 2. IPP: Get-Printer-Attributes, Create-Job + Send-Document, Print-Job.
+    {
+      auto makeIppAttr = [](quint8 tag, const QByteArray &name,
+                            const QByteArray &val) {
+        QByteArray b;
+        b.append(char(tag));
+        b.append(char((name.size() >> 8) & 0xff));
+        b.append(char(name.size() & 0xff));
+        b.append(name);
+        b.append(char((val.size() >> 8) & 0xff));
+        b.append(char(val.size() & 0xff));
+        b.append(val);
+        return b;
+      };
+      auto makeIppInt = [&](quint8 tag, const QByteArray &name, qint32 val) {
+        QByteArray v(4, '\0');
+        v[0] = char((val >> 24) & 0xff);
+        v[1] = char((val >> 16) & 0xff);
+        v[2] = char((val >> 8) & 0xff);
+        v[3] = char(val & 0xff);
+        return makeIppAttr(tag, name, v);
+      };
+      auto makeIppReq = [&](quint16 opId, quint32 reqId,
+                            const QByteArray &attrs,
+                            const QByteArray &payload = {}) {
+        QByteArray b;
+        b.append('\x01');
+        b.append('\x01');
+        b.append(char((opId >> 8) & 0xff));
+        b.append(char(opId & 0xff));
+        b.append(char((reqId >> 24) & 0xff));
+        b.append(char((reqId >> 16) & 0xff));
+        b.append(char((reqId >> 8) & 0xff));
+        b.append(char(reqId & 0xff));
+        b.append('\x01');
+        b.append(makeIppAttr(0x47, "attributes-charset", "utf-8"));
+        b.append(makeIppAttr(0x48, "attributes-natural-language", "en"));
+        b.append(attrs);
+        b.append('\x03');
+        b.append(payload);
+        return b;
+      };
+      auto sendIppHttp = [&](const QByteArray &ippBody,
+                             bool expectContinue = false) -> QByteArray {
+        QTcpSocket sock;
+        sock.connectToHost(QHostAddress::LocalHost, server.ippPort());
+        require(sock.waitForConnected(2000), "IPP connect failed");
+        QByteArray hdr =
+            QStringLiteral(
+                "POST /printers/classicmac HTTP/1.1\r\n"
+                "Host: 127.0.0.1\r\n"
+                "Content-Type: application/ipp\r\n"
+                "Content-Length: %1\r\n"
+                "%2"
+                "Connection: close\r\n\r\n")
+                .arg(ippBody.size())
+                .arg(expectContinue ? QStringLiteral("Expect: 100-continue\r\n")
+                                    : QString())
+                .toLatin1();
+        sock.write(hdr);
+        sock.flush();
+        if (expectContinue) {
+          require(pumpUntil([&] { return sock.bytesAvailable() > 0; }),
+                  "IPP 100-continue timeout");
+          const QByteArray cont = sock.readAll();
+          require(cont.startsWith("HTTP/1.1 100 Continue\r\n\r\n"),
+                  "Missing HTTP 100 Continue");
+        }
+        sock.write(ippBody);
+        sock.flush();
+        QByteArray resp;
+        require(pumpUntil([&] {
+          resp.append(sock.readAll());
+          return sock.state() == QAbstractSocket::UnconnectedState &&
+                 sock.bytesAvailable() == 0;
+        }),
+                "IPP response timeout");
+        resp.append(sock.readAll());
+        const int sep = resp.indexOf("\r\n\r\n");
+        require(sep > 0 && resp.startsWith("HTTP/1.1 200 OK"),
+                "IPP HTTP 200 header missing");
+        return resp.mid(sep + 4);
+      };
+
+      const QByteArray gpaResp = sendIppHttp(makeIppReq(0x000B, 101, {}), true);
+      require(gpaResp.size() >= 8 && quint8(gpaResp[2]) == 0 &&
+                  quint8(gpaResp[3]) == 0 &&
+                  gpaResp.contains("application/postscript"),
+              "IPP Get-Printer-Attributes failed");
+
+      const QByteArray createResp = sendIppHttp(
+          makeIppReq(0x0005, 102, makeIppAttr(0x42, "job-name", "CreateSend")));
+      require(createResp.size() >= 8 && quint8(createResp[2]) == 0 &&
+                  quint8(createResp[3]) == 0 && createResp.contains("job-id"),
+              "IPP Create-Job failed");
+
+      capturedJobs.clear();
+      const QByteArray ippPayload("%!PS-Adobe-3.0\n%ipp\n");
+      const QByteArray sendResp = sendIppHttp(makeIppReq(
+          0x0006, 103,
+          makeIppInt(0x21, "job-id", 1) +
+              makeIppAttr(0x22, "last-document", QByteArray("\x01", 1)),
+          ippPayload));
+      require(sendResp.size() >= 8 && quint8(sendResp[2]) == 0 &&
+                  quint8(sendResp[3]) == 0 &&
+                  capturedJobs.size() == 1 &&
+                  capturedJobs[0].first == "CreateSend" &&
+                  capturedJobs[0].second == ippPayload,
+              "IPP Send-Document failed");
+
+      capturedJobs.clear();
+      const QByteArray printResp = sendIppHttp(makeIppReq(
+          0x0002, 104, makeIppAttr(0x42, "job-name", "Direct PrintJob"),
+          ippPayload));
+      require(printResp.size() >= 8 && quint8(printResp[2]) == 0 &&
+                  quint8(printResp[3]) == 0 &&
+                  capturedJobs.size() == 1 &&
+                  capturedJobs[0].first == "Direct PrintJob" &&
+                  capturedJobs[0].second == ippPayload,
+              "IPP Print-Job failed");
+    }
+
+    // 3. Raw 9100 (AppSocket / JetDirect) with %%Title: and EOT stripping.
+    {
+      capturedJobs.clear();
+      QTcpSocket sock;
+      sock.connectToHost(QHostAddress::LocalHost, server.rawPort());
+      require(sock.waitForConnected(2000), "Raw 9100 connect failed");
+      const QByteArray rawPs("%!PS-Adobe-3.0\n%%Title: (Raw Test Page)\nshowpage\n");
+      sock.write(rawPs + QByteArray("\x04", 1));
+      sock.flush();
+      sock.disconnectFromHost();
+      require(pumpUntil([&] { return !capturedJobs.isEmpty(); }),
+              "Raw 9100 job was not dispatched");
+      require(capturedJobs.size() == 1 &&
+                  capturedJobs[0].first == "Raw Test Page" &&
+                  capturedJobs[0].second == rawPs,
+              "Raw 9100 captured job mismatch");
+    }
+
+    server.stop();
   }
   if (!output.isEmpty())
     Model::writeJSON(output + "/self-test.json",

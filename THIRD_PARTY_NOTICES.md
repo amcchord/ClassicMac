@@ -22,8 +22,8 @@ QEMU emulator as a whole is licensed under the GNU General Public License,
 version 2. Individual source and firmware files may carry compatible licenses,
 as described by QEMU's `LICENSE` file and their source headers.
 
-The exact corresponding source is reproducible from the ClassicMac 4.9.0
-source at <https://github.com/amcchord/ClassicMac/tree/v4.9.0>. The repository's
+The exact corresponding source is reproducible from the ClassicMac 4.10.0
+source at <https://github.com/amcchord/ClassicMac/tree/v4.10.0>. The repository's
 `scripts/build-qemu.sh` retrieves the pinned upstream QEMU 11.0.2 source and
 applies every ClassicMac modification stored in the repository.
 
@@ -172,17 +172,18 @@ for the shared public RetroBoot download catalog. QEMU modifications remain
 GPL-2.0-or-later, and provenance and test verification are recorded in
 `docs/retroboot-3.0.0-parity.md`.
 
-### RetroBoot 3.0.1–3.4.0 parity imports
+### RetroBoot 3.0.1–3.4.0 & printing parity imports
 
 Further reliability and usability fixes are ported from RetroBoot through `v3.4.0`
 (<https://github.com/amcchord/RetroBoot/tree/v3.4.0>): IDE software-reset
 no-IRQ handling (`startup/retroboot-ide-srst-no-irq.patch`), USB HID
 `wheel-per-report` scroll pacing (`usb/retroboot-hid-wheel-per-report.patch`),
-and `classicvirtio` shared-folder fixes (`retroboot-local-time.patch`,
+`classicvirtio` shared-folder fixes (`retroboot-local-time.patch`,
 `retroboot-folder-finfo.patch`, `retroboot-folder-move.patch`, and
-`retroboot-names.patch`), together with OS X NVRAM/RTC, Apple-menu shutdown,
-native DPI-normalized relative pointer math, `recommendedSettings`, and
-`TransferMeter` parity. QEMU modifications remain GPL-2.0-or-later.
+`retroboot-names.patch`), virtual LPD/IPP/JetDirect printing and Mac OS 9
+Desktop Printer provisioning, together with OS X NVRAM/RTC, Apple-menu
+shutdown, native DPI-normalized relative pointer math, `recommendedSettings`,
+and `TransferMeter` parity. QEMU modifications remain GPL-2.0-or-later.
 
 ## Original Mac OS icons
 

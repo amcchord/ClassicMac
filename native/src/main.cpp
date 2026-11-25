@@ -1,9 +1,15 @@
 #include "app.h"
+#include "printer.h"
 #include "qualification.h"
 #include <QMessageBox>
 #include <QSessionManager>
 #include <cstdio>
+#include <cstdlib>
+#include <cstring>
 int main(int argc, char **argv) {
+  if (argc >= 4 && std::strcmp(argv[1], "--tcp-bridge") == 0)
+    return Printer::runTcpBridge(QString::fromUtf8(argv[2]),
+                                 static_cast<quint16>(std::atoi(argv[3])));
   // The Platinum artwork is pixel art: fractional UI zoom makes alternate
   // stripes, glyph strokes and bevels different widths. Keep OS DPI awareness
   // while snapping the interface to the nearest whole physical-pixel zoom.
