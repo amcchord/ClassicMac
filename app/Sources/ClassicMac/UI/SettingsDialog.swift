@@ -6,7 +6,7 @@ import PlatinumKit
 /// pop-up for General, Display and Sharing, then Cancel and OK. Edits apply
 /// when you click OK.
 struct SettingsDialog: View {
-    static let size = NSSize(width: 520, height: 440)
+    static let size = NSSize(width: 520, height: 475)
 
     enum Pane: Hashable { case general, display, sharing }
 
@@ -22,6 +22,7 @@ struct SettingsDialog: View {
     }()
     @State private var widthText: String
     @State private var heightText: String
+    @State private var mouseDPIText: String
     @State private var errorMessage: String?
     @ObservedObject private var manager = QEMUManager.shared
 
@@ -31,6 +32,7 @@ struct SettingsDialog: View {
         _config = State(initialValue: original)
         _widthText = State(initialValue: String(original.width))
         _heightText = State(initialValue: String(original.height))
+        _mouseDPIText = State(initialValue: original.mouseDPI.map(String.init) ?? "")
     }
 
     private var running: Bool { manager.isRunning(original.id) }
@@ -108,6 +110,18 @@ struct SettingsDialog: View {
             config.width = VMConfig.clampedWidth(Int(widthText) ?? config.width)
             config.height = VMConfig.clampedHeight(Int(heightText) ?? config.height)
         }
+        if !copland {
+            let trimmedDPI = mouseDPIText.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmedDPI.isEmpty || trimmedDPI.caseInsensitiveCompare("auto") == .orderedSame {
+                config.mouseDPI = nil
+            } else if let dpiValue = Int(trimmedDPI) {
+                config.mouseDPI = VMConfig.clampedMouseDPI(dpiValue)
+            } else {
+                errorMessage = "Mouse DPI must be Auto or a number between 100 and 100000."
+                NSSound.beep()
+                return
+            }
+        }
         coerceDepth()
         if config != original {
             if !VMStore.shared.save(config) { return }
@@ -145,11 +159,18 @@ struct SettingsDialog: View {
                         PlatinumCheckbox("Right-click and scroll wheel in classic apps", isOn: $config.classicInputHelpers)
                     }
                     PlatinumCheckbox("Seamless mouse: move in and out freely", isOn: $config.tabletInput)
+                    PlatinumCheckbox("Native classic mouse tracking", isOn: $config.legacyMouseTracking)
+                    HStack(spacing: 8) {
+                        Text("Mouse DPI:").platinumText(.small)
+                        PlatinumTextField("Auto", text: $mouseDPIText, width: 76, alignment: .trailing)
+                        Text("Auto (1000) or 100–100000").platinumText(.detail)
+                    }
+                    .disabled(!config.legacyMouseTracking)
                     if config.machineFamily == .powerMacOSX {
                         Text("Turn off the seamless mouse to use a relative USB mouse.")
                             .platinumText(.detail)
                     } else {
-                        Text("Turn off right-click and scrolling when USB Overdrive is installed in Mac OS. Games can still capture the mouse.")
+                        Text("Turn off right-click and scrolling when USB Overdrive is installed in Mac OS 8.5–9.2.2 (68k / System 7 / Mac OS 8.1 use Control-click). Games can still capture the mouse.")
                             .platinumText(.detail)
                             .fixedSize(horizontal: false, vertical: true)
                     }

@@ -282,6 +282,14 @@ struct VMConfig: Codable, Identifiable, Hashable {
     // installed in the guest, which would otherwise double up input.
     var classicInputHelpers: Bool
 
+    // DPI-normalized relative mouse tracking for captured Classic Mac games.
+    // On by default (maps host DPI to classic 200 DPI baseline).
+    var legacyMouseTracking: Bool
+
+    // Host mouse DPI used by legacyMouseTracking (nil = Auto / 1000 DPI;
+    // valid range 100...100_000 when explicitly set).
+    var mouseDPI: Int?
+
     // Host folder shared with the guest (appears on the Mac desktop). Optional.
     var sharedFolderPath: String?
 
@@ -297,7 +305,7 @@ struct VMConfig: Codable, Identifiable, Hashable {
         case useBrowserDisplay
         case cdImagePath, bootFromCD, floppyImagePath, bootFromFloppy
         case networking, sound, useG4CPU, useVirtioDisk, sharedFolderPath, graphicsCard
-        case classicInputHelpers, tabletInput, toolsCDInserted
+        case classicInputHelpers, legacyMouseTracking, mouseDPI, tabletInput, toolsCDInserted
         case toolsDeliveryVersion
     }
 
@@ -324,6 +332,8 @@ struct VMConfig: Codable, Identifiable, Hashable {
          graphicsCard: GraphicsCard = .standard,
          tabletInput: Bool = true,
          classicInputHelpers: Bool = true,
+         legacyMouseTracking: Bool = true,
+         mouseDPI: Int? = nil,
          sharedFolderPath: String? = nil,
          bundleURL: URL? = nil) {
         self.id = id
@@ -352,6 +362,8 @@ struct VMConfig: Codable, Identifiable, Hashable {
         self.graphicsCard = graphicsCard
         self.tabletInput = tabletInput
         self.classicInputHelpers = classicInputHelpers
+        self.legacyMouseTracking = legacyMouseTracking
+        self.mouseDPI = mouseDPI
         self.sharedFolderPath = sharedFolderPath
         self.bundleURL = bundleURL
         sanitize()
@@ -362,6 +374,14 @@ struct VMConfig: Codable, Identifiable, Hashable {
     static let maxHeight = 2160
     static let minWidth = 512
     static let minHeight = 384
+
+    static let minMouseDPI = 100
+    static let maxMouseDPI = 100_000
+    static let defaultMouseDPI = 1000
+
+    static func clampedMouseDPI(_ value: Int) -> Int {
+        min(max(value, minMouseDPI), maxMouseDPI)
+    }
 
     static func clampedWidth(_ value: Int) -> Int {
         min(max(value, minWidth), maxWidth)
@@ -432,6 +452,8 @@ struct VMConfig: Codable, Identifiable, Hashable {
         useVirtioDisk = try c.decodeIfPresent(Bool.self, forKey: .useVirtioDisk) ?? false
         graphicsCard = (try? c.decodeIfPresent(GraphicsCard.self, forKey: .graphicsCard)) ?? .standard
         classicInputHelpers = try c.decodeIfPresent(Bool.self, forKey: .classicInputHelpers) ?? true
+        legacyMouseTracking = try c.decodeIfPresent(Bool.self, forKey: .legacyMouseTracking) ?? true
+        mouseDPI = try c.decodeIfPresent(Int.self, forKey: .mouseDPI)
         tabletInput = try c.decodeIfPresent(Bool.self, forKey: .tabletInput) ?? true
         sharedFolderPath = try c.decodeIfPresent(String.self, forKey: .sharedFolderPath)
         sanitize()
@@ -522,6 +544,9 @@ struct VMConfig: Codable, Identifiable, Hashable {
         }
         if ramMB < 8 {
             ramMB = machineFamily.defaultRAMMB
+        }
+        if let dpi = mouseDPI {
+            mouseDPI = Self.clampedMouseDPI(dpi)
         }
     }
 
