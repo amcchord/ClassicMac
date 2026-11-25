@@ -1,8 +1,11 @@
 #include "catalog.h"
 #include "CMachineArchive.h"
+#include "checkpoint.h"
+#include <QElapsedTimer>
 #include <QMutex>
 #include <QMutexLocker>
 #include <QtNetwork>
+#include <algorithm>
 #include <cstdlib>
 #include <cstring>
 #include <memory>
@@ -15,9 +18,11 @@
 #include <sys/file.h>
 #include <unistd.h>
 #ifdef Q_OS_LINUX
+#include <sys/sysinfo.h>
 #include <sys/vfs.h>
 #elif defined(Q_OS_MACOS)
 #include <sys/mount.h>
+#include <sys/sysctl.h>
 #endif
 #endif
 using Model::fail;
@@ -202,18 +207,47 @@ QJsonArray parse(const QByteArray &data) {
   }
   return result;
 }
+static qint64 hostMemoryMB() {
+#ifdef Q_OS_MACOS
+  uint64_t mem = 0;
+  size_t len = sizeof(mem);
+  if (::sysctlbyname("hw.memsize", &mem, &len, nullptr, 0) == 0 && mem > 0)
+    return qint64(mem / (1024ULL * 1024ULL));
+#elif defined(Q_OS_LINUX)
+  struct sysinfo si {};
+  if (::sysinfo(&si) == 0 && si.totalram > 0)
+    return qint64((quint64(si.totalram) * quint64(si.mem_unit)) /
+                  (1024ULL * 1024ULL));
+#elif defined(Q_OS_WIN)
+  MEMORYSTATUSEX ms{};
+  ms.dwLength = sizeof(ms);
+  if (GlobalMemoryStatusEx(&ms) && ms.ullTotalPhys > 0)
+    return qint64(ms.ullTotalPhys / (1024ULL * 1024ULL));
+#endif
+  return 0;
+}
+
 // One request per worker thread; no network objects cross Qt thread boundaries.
 static void request(const QUrl &initial, const QByteArray &range,
                     qint64 maximum, std::atomic_bool &cancel,
                     const std::function<void(QNetworkReply *)> &headers,
-                    const std::function<void(QByteArray)> &chunk) {
+                    const std::function<void(QByteArray)> &chunk,
+                    int totalTimeoutMs = 0) {
   QNetworkAccessManager manager;
   QUrl u = initial;
+  QElapsedTimer totalTimer;
+  if (totalTimeoutMs > 0)
+    totalTimer.start();
   for (int redirect = 0; redirect < 4; ++redirect) {
+    if (totalTimeoutMs > 0 && totalTimer.elapsed() >= totalTimeoutMs)
+      fail("The request timed out.");
     QNetworkRequest req(u);
     req.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
                      QNetworkRequest::ManualRedirectPolicy);
-    req.setTransferTimeout(30000);
+    req.setTransferTimeout(
+        totalTimeoutMs > 0
+            ? int(std::max<qint64>(1, totalTimeoutMs - totalTimer.elapsed()))
+            : 30000);
     req.setRawHeader("Accept-Encoding", "identity");
     req.setRawHeader("User-Agent", "ClassicMac/" CLASSICMAC_VERSION " Native");
     if (!range.isEmpty())
@@ -231,6 +265,8 @@ static void request(const QUrl &initial, const QByteArray &range,
         return;
       try {
         checkCancel(cancel);
+        if (totalTimeoutMs > 0 && totalTimer.elapsed() >= totalTimeoutMs)
+          fail("The request timed out.");
         if (!checked) {
           if (!reply->attribute(QNetworkRequest::HttpStatusCodeAttribute)
                    .isValid())
@@ -265,6 +301,10 @@ static void request(const QUrl &initial, const QByteArray &range,
       if (cancel) {
         failure =
             "Paused. Your download is saved. Choose Download again to resume.";
+        reply->abort();
+      } else if (totalTimeoutMs > 0 &&
+                 totalTimer.elapsed() >= totalTimeoutMs) {
+        failure = "The request timed out.";
         reply->abort();
       }
     });
@@ -318,7 +358,7 @@ QJsonArray load(std::atomic_bool &cancel) {
             if (r->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() != 200)
               fail("The Library catalog could not be downloaded.");
           },
-          [&](QByteArray bytes) { data += bytes; });
+          [&](QByteArray bytes) { data += bytes; }, 30000);
       for (const auto &row : parse(data)) {
         const auto id = row.toObject()["id"].toString();
         if (!ids.contains(id)) {
@@ -881,6 +921,42 @@ Model::Machine install(QJsonObject entry, const QString &parent,
           .match(m["id"].toString())
           .hasMatch())
     c["graphicsCard"] = "atiRadeon";
+
+  QJsonObject recommended;
+  if (source.contains("recommendedSettings") &&
+      source["recommendedSettings"].isObject())
+    recommended = source["recommendedSettings"].toObject();
+  if (m.contains("recommendedSettings") && m["recommendedSettings"].isObject()) {
+    const QJsonObject entryRec = m["recommendedSettings"].toObject();
+    for (auto it = entryRec.constBegin(); it != entryRec.constEnd(); ++it)
+      recommended.insert(it.key(), it.value());
+  }
+  if (!recommended.isEmpty()) {
+    const bool quad = family == "quadra800";
+    const bool osx = family == "powerMacOSX";
+    const int minRam = quad ? 16 : osx ? 256 : 32;
+    int maxRam = quad ? 1000 : osx ? 2048 : 896;
+    const qint64 hostMB = hostMemoryMB();
+    if (hostMB > 0)
+      maxRam = std::min(maxRam, int(std::max<qint64>(minRam, hostMB / 2)));
+    const QJsonValue ramVal =
+        (osx && recommended.contains("osx_ram_mb"))
+            ? recommended.value("osx_ram_mb")
+            : recommended.value("ram_mb");
+    if (ramVal.isDouble()) {
+      const double d = ramVal.toDouble();
+      if (d > 0 && d == qint64(d))
+        c["ramMB"] = std::clamp(int(d), minRam, maxRam);
+    }
+    if (family == "powerMacG4" && recommended.value("cpu").isString()) {
+      const QString cpu = recommended.value("cpu").toString().trimmed().toLower();
+      if (cpu == "g3")
+        c["useG4CPU"] = false;
+      else if (cpu == "7400" || cpu == "g4")
+        c["useG4CPU"] = true;
+    }
+  }
+
   Model::writeJSON(folder + "/config.json", Model::validate(c));
   Model::writeJSON(
       folder + "/template-info.json",
@@ -891,6 +967,7 @@ Model::Machine install(QJsonObject entry, const QString &parent,
                   {"importedAt",
                    QDateTime::currentDateTimeUtc().toString(Qt::ISODate)}});
   complete = true;
+  Checkpoints::createFreshInstallIfPossible(folder);
   return Model::readMachine(folder);
 }
 QString install(const QJsonObject &entry, const QString &name,

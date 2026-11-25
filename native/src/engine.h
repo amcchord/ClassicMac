@@ -15,6 +15,17 @@ public:
   qint64 processId() const { return process.processId(); }
   bool stoppingRequested() const { return stopping; }
   bool forcedStopRequested() const { return forced; }
+  bool osxShutdownInProgress() const { return osxShuttingDown; }
+  QImage currentFrame() const;
+  static bool detectOsxMenuOpened(int width, int height,
+                                  const QByteArray &beforeRgb,
+                                  const QByteArray &currentRgb);
+  static bool detectOsxMenuSelectionMoved(int width, int height,
+                                          const QByteArray &prevMenuRgb,
+                                          const QByteArray &currentRgb);
+  static bool detectOsxConfirmationDialog(int width, int height,
+                                          const QByteArray &beforeRgb,
+                                          const QByteArray &currentRgb);
   static bool hasBlessedSystemFolder(const QString &diskPath);
   static void applyQuadraBootPRAM(const QString &pramPath,
                                   const QJsonObject &config);
@@ -38,7 +49,8 @@ private:
   friend class Qualification;
   QProcess process;
   QByteArray buffer;
-  bool initializing = false, stopping = false, restarting = false, forced = false;
+  bool initializing = false, stopping = false, restarting = false,
+       forced = false, osxShuttingDown = false;
   int sequence = 0;
   QString reason;
   QByteArray password;
