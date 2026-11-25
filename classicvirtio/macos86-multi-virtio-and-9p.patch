@@ -23,8 +23,9 @@ index 3e3d6a5..aac2119 100644
  #include <OSUtils.h>
  #include <Start.h>
  #include <Traps.h>
-@@ -90,8 +91,14 @@ static bool visName(const char *name);
+@@ -90,9 +91,15 @@ static bool visName(const char *name);
  static int32_t mactime(int64_t unixtime);
+ static int64_t unixtime(uint32_t mactime);
  static long fsCall(void *pb, long selector);
  static OSErr fsDispatch(void *pb, unsigned short selector);
 +static bool claimDevice(short refNum);

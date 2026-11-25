@@ -1,0 +1,120 @@
+diff --git a/device-9p.c b/device-9p.c
+index 0d7d2d5..6896166 100644
+--- a/device-9p.c
++++ b/device-9p.c
+@@ -921,6 +921,15 @@ static OSErr fsSetFileInfo(struct HFileInfo *pb) {
+ 
+ 	if (IsDir(cnid)) {
+ 		MF.DSetAttr(cnid, FID1, name, fields, &attr);
++		// RetroBoot: the folder's Finder flags live beside it (multifork-3.c), so its
++		// own date does not change: its cache entry takes what was kept now
++		struct dirInfo *d = dirFind(cnid);
++		if (d != NULL) {
++			struct MFAttr kept = {};
++			MF.DGetAttr(cnid, FID1, name, MF_FINFO, &kept);
++			memcpy(d->attr.finfo, kept.finfo, sizeof kept.finfo);
++			memcpy(d->attr.fxinfo, kept.fxinfo, sizeof kept.fxinfo);
++		}
+ 	} else {
+ 		MF.FSetAttr(cnid, FID1, name, fields, &attr);
+ 	}
+diff --git a/multifork-3.c b/multifork-3.c
+index d8f9be8..bc6a24b 100644
+--- a/multifork-3.c
++++ b/multifork-3.c
+@@ -258,9 +258,25 @@ int fsetattr3(int32_t cnid, uint32_t fid, const char *name, unsigned fields, con
+ 	return 0;
+ }
+ 
++// RetroBoot: a folder's Finder flags live beside it in its parent, FOLDER.idump, in
++// the format of a file's sidecar, so a folder Mac OS makes invisible (the Finder's
++// TheVolumeSettingsFolder, Network Trash Folder, Temporary Items, or the user's
++// own) stays invisible, as on HFS; its label, name lock and custom icon flag are kept
++// too.  Only these flags are kept: not the window's place and view (as before), nor
++// the bookkeeping bits the Finder sets on every folder it sees (kHasBeenInited,
++// 0x0040, 0x0080), so a folder gets a sidecar only while a person-visible flag is
++// set.  The share's root folder keeps nothing.
++#define DIRFLAGS_KEPT 0x540e /* kIsInvisible, kNameLocked, kHasCustomIcon, the label */
++
++static void keptDirFlags(char finfo[16]) {
++	memset(finfo, 0, 8); // frRect
++	finfo[8] &= DIRFLAGS_KEPT >> 8;
++	finfo[9] &= DIRFLAGS_KEPT & 0xff;
++	memset(finfo + 10, 0, 6); // frLocation, frView
++}
++
+ int dgetattr3(int32_t cnid, uint32_t fid, const char *name, unsigned fields, struct MFAttr *attr) {
+-	// Folder Finder info is still not stored (benignly unimplemented), but the
+-	// modification date is real: the Finder refreshes an open window when its
++	// The modification date is real: the Finder refreshes an open window when its
+ 	// folder's date changes, so files added by the host show up promptly.
+ 	memset(attr, 0, sizeof *attr);
+ 	if (fields & MF_TIME) {
+@@ -269,15 +285,50 @@ int dgetattr3(int32_t cnid, uint32_t fid, const char *name, unsigned fields, str
+ 			attr->unixtime = stat.mtime_sec;
+ 		}
+ 	}
++	if ((fields & MF_FINFO) && cnid != 2) {
++		char ipath[MAXNAME+12];
++		sprintf(ipath, "../%s.idump", name);
++		if (!WalkPath9(fid, FINFOFID, ipath)
++				&&
++				!Lopen9(FINFOFID, O_RDONLY, NULL, NULL)) {
++			uint32_t len = 0;
++			char buffer[512];
++			Read9(FINFOFID, buffer, 0, sizeof buffer-1, &len);
++			Clunk9(FINFOFID);
++			buffer[len] = 0;
++			textToFlags(attr->finfo, attr->fxinfo, buffer, len);
++			keptDirFlags(attr->finfo);
++			memset(attr->fxinfo, 0, sizeof attr->fxinfo);
++		}
++	}
+ 	return 0;
+ }
+ 
+ int dsetattr3(int32_t cnid, uint32_t fid, const char *name, unsigned fields, const struct MFAttr *attr) {
+-	// Folder Finder info is still benignly unimplemented; RetroBoot: the
+-	// modification time (UTC) is set
++	// RetroBoot: the modification time (UTC) is set
+ 	if (fields & MF_TIME) {
+ 		Setattr9(fid, SET_MTIME|SET_MTIME_SET, (struct Stat9){.mtime_sec = attr->unixtime});
+ 	}
++	if ((fields & MF_FINFO) && cnid != 2) {
++		char finfo[16], fxinfo[16] = {}, iname[MAXNAME+8];
++		memcpy(finfo, attr->finfo, sizeof finfo);
++		keptDirFlags(finfo);
++		if (WalkPath9(fid, FINFOFID, "..")) return 0;
++		sprintf(iname, "%s.idump", name);
++		if (finfo[8] || finfo[9]) {
++			// Rewriting an existing sidecar does not change the parent folder's date
++			int err = Lcreate9(FINFOFID, O_WRONLY|O_TRUNC|O_CREAT, 0666, 0, iname, NULL, NULL);
++			if (!err) {
++				char blob[512];
++				int len = flagsToText(blob, finfo, fxinfo);
++				err = Write9(FINFOFID, blob, 0, len, NULL);
++			}
++			Clunk9(FINFOFID);
++			return err;
++		}
++		Unlinkat9(FINFOFID, iname, 0); // no kept flag: no sidecar (ENOENT when there was none)
++		Clunk9(FINFOFID);
++	}
+ 	return 0;
+ }
+ 
+@@ -303,7 +354,13 @@ static int del3(uint32_t fid, const char *name, bool isdir) {
+ 	WalkPath9(fid, TMPFID, "..");
+ 
+ 	if (isdir) {
+-		return Unlinkat9(TMPFID, name, 0x200 /*AT_REMOVEDIR*/);
++		int err = Unlinkat9(TMPFID, name, 0x200 /*AT_REMOVEDIR*/);
++		if (!err) { // RetroBoot: and its Finder flags (dsetattr3)
++			char iname[MAXNAME+8];
++			sprintf(iname, "%s.idump", name);
++			Unlinkat9(TMPFID, iname, 0);
++		}
++		return err;
+ 	} else {
+ 		// The main file must be deleted,
+ 		// then delete the sidecars on a best-effort basis

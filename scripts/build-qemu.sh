@@ -142,10 +142,12 @@ PATCHED_FILES=(
   hw/input/adb-kbd.c
   hw/input/adb-mouse.c
   hw/input/adb.c
+  hw/input/hid.c
   hw/misc/mac_via.c
   include/hw/audio/screamer.h
   include/hw/display/mac_qfb.h
   include/hw/input/adb.h
+  include/hw/input/hid.h
   include/hw/misc/mac_via.h
   include/system/physmem.h
   include/tcg/startup.h
@@ -521,6 +523,7 @@ log "Installing startup race fixes (Cuda sync, VIA timer 2, IDE soft reset)"
 for patch in "$STARTUP_DIR/retroboot-cuda-shift-interrupt-timing" \
              "$TIMERS_DIR/retroboot-cuda-via-timers" \
              "$STARTUP_DIR/retroboot-macio-ide-srst-complete" \
+             "$STARTUP_DIR/retroboot-ide-srst-no-irq" \
              "$TIMERS_DIR/retroboot-pmu-via-timers" \
              "$TIMERS_DIR/retroboot-via-t2-hold"; do
   git -C "$QEMU_DIR" apply "$patch.patch" || die "Failed to apply ${patch#"$ROOT_DIR"/}.patch"
@@ -559,6 +562,7 @@ for patch in "$STARTUP_DIR/retroboot-macio-ide-pio-status-drain" \
              "$STARTUP_DIR/retroboot-ide-atapi-bcl-abort-irq" \
              "$ROOT_DIR/usb/retroboot-ohci-idle-frames" \
              "$ROOT_DIR/usb/retroboot-ohci-idle-hid" \
+             "$ROOT_DIR/usb/retroboot-hid-wheel-per-report" \
              "$QFB_DIR/retroboot-q800-t2-slow-host" \
              "$QFB_DIR/retroboot-qfb-snapshot-mode" \
              "$QFB_DIR/classicmac-q800-scsi-disk"; do
@@ -820,6 +824,11 @@ fi
 printf '%s\n' "$MACIO_IDE_HELP" | grep -Eq "^ *srst-complete-on-access=.*default: on" || \
   die "macio-ide property srst-complete-on-access missing or not on by default"
 printf '    OK  MacIO IDE soft reset completed on access (ppc)\n'
+if "$QEMU_PPC_BIN" -device usb-mouse,help 2>&1 | grep -q "wheel-per-report"; then
+  printf '    OK  USB HID scroll-wheel pacing (ppc)\n'
+else
+  die "usb-mouse property wheel-per-report missing from the ppc build"
+fi
 if grep -F 'qemu_input_queue_rel(dcl.con, INPUT_AXIS_Y, [event deltaY]);' \
     "$QEMU_DIR/ui/cocoa.m" >/dev/null; then
   printf '    OK  Cocoa raw relative mouse Y forwarding\n'

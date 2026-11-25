@@ -1,0 +1,571 @@
+diff --git a/9p.c b/9p.c
+index 7d8bf0c..ab6f8b2 100644
+--- a/9p.c
++++ b/9p.c
+@@ -336,7 +336,7 @@ void DirRecord9(char **buffer, struct Qid9 *retqid, uint64_t *retoffset, char *r
+ 
+ 	if (retname) {
+ 		uint16_t copylen = nlen;
+-		if (copylen > MAXNAME) copylen = 0; // too-long names get reduced to zero
++		if (copylen >= MAXNAME) copylen = 0; // too-long names get reduced to zero (RetroBoot: room for the zero)
+ 		memcpy(retname, *buffer + 24, copylen);
+ 		retname[copylen] = 0;
+ 	}
+diff --git a/catalog.c b/catalog.c
+index d3c50e9..1566e91 100644
+--- a/catalog.c
++++ b/catalog.c
+@@ -18,6 +18,7 @@ There is a tiny bit of trickiness about files that get their name-cases changed!
+ 
+ #include "9p.h"
+ #include "fids.h"
++#include "multifork.h"
+ #include "panic.h"
+ #include "printf.h"
+ #include "unicode.h"
+@@ -27,6 +28,9 @@ There is a tiny bit of trickiness about files that get their name-cases changed!
+ enum {
+ 	CATALOGFID = FIRSTFID_CATALOG,
+ 	TMPFID,
++	NAMEFID, // RetroBoot: CatalogMacName's sibling check
++	SCANDIRFID, // RetroBoot: findByMacName
++	SCANLISTFID,
+ 
+ 	// tunable:
+ 	BUCKETS = 32,
+@@ -56,6 +60,8 @@ static int whichSlot(int bucket, uint32_t cnid);
+ static char *slotName(int bucket, int slot);
+ static void deleteSlotName(int bucket, int slot);
+ static bool ciEqual(const char *a, const char *b);
++static bool macNameCandidate(const char *mac, int len);
++static bool findByMacName(int nparent, const char *const *parent, const char *mac, int len, char *retname);
+ 
+ static struct bucket cache[BUCKETS];
+ static struct Qid9 rootQID;
+@@ -134,6 +140,11 @@ int32_t CatalogWalk(uint32_t fid, int32_t cnid, const unsigned char *paspath, in
+ 	}
+ 	int nelByID = nel; // portion of path components found by ID
+ 
++	// RetroBoot: each textual component as Mac OS gave it, for findByMacName
++	const char *macel[sizeof el/sizeof *el];
++	int maclen[sizeof el/sizeof *el];
++	for (int i=0; i<nel; i++) maclen[i] = -1;
++
+ 	if (p<pend && *p==':') p++; // remove up to 1 leading colon
+ 
+ 	while (p<pend) {
+@@ -141,6 +152,9 @@ int32_t CatalogWalk(uint32_t fid, int32_t cnid, const unsigned char *paspath, in
+ 			if (nel == sizeof el/sizeof *el) {
+ 				return bdNamErr; // too many components
+ 			}
++			macel[nel] = p;
++			maclen[nel] = 0;
++			while (p+maclen[nel]<pend && p[maclen[nel]]!=':') maclen[nel]++;
+ 			el[nel++] = scratch + nbyte;
+ 			while (p<pend && *p!=':') {
+ 				long uc = utf8char(*p++);
+@@ -164,6 +178,7 @@ int32_t CatalogWalk(uint32_t fid, int32_t cnid, const unsigned char *paspath, in
+ 			if (nel == sizeof el/sizeof *el) {
+ 				return bdNamErr; // too many components
+ 			}
++			maclen[nel] = -1;
+ 			el[nel++] = "..";
+ 			p++;
+ 		}
+@@ -173,6 +188,19 @@ int32_t CatalogWalk(uint32_t fid, int32_t cnid, const unsigned char *paspath, in
+ 	uint16_t got = 0;
+ 	Walk9(ROOTFID, fid, nel, (const char *const *)el, &got, qids);
+ 
++	// RetroBoot: a name Mac OS was given for a host name that can't be shown as it is
++	// (CatalogMacName) is not the host name: look for it in its folder
++	for (int tries=0; got<nel && tries<nel; tries++) {
++		int k = got; // the component that was not found
++		if (maclen[k] < 0 || !macNameCandidate(macel[k], maclen[k])) break;
++		if (k > 0 && (qids[k-1].type & 0x80) == 0) break; // not in a folder
++		if (nbyte + MAXNAME > sizeof scratch) break;
++		if (!findByMacName(k, (const char *const *)el, macel[k], maclen[k], scratch + nbyte)) break;
++		el[k] = scratch + nbyte;
++		nbyte += strlen(scratch + nbyte) + 1;
++		Walk9(ROOTFID, fid, nel, (const char *const *)el, &got, qids);
++	}
++
+ 	for (int i=0; i<got-1; i++) { // Not allowed to ".." from a file
+ 		if ((qids[i].type&0x80) == 0) {
+ 			return dirNFErr;
+@@ -482,3 +510,114 @@ static bool ciEqual(const char *a, const char *b) {
+ 		b++;
+ 	}
+ }
++
++// RetroBoot: the name Mac OS sees for a host file or folder (emulator/classicvirtio/README.md,
++// "Names").  A host name that converts to at most 31 characters of Mac OS Roman is shown
++// as it is: written decomposed, as this driver writes names, or precomposed when no
++// decomposed sibling of the same name exists.  Any other name (longer, with characters
++// Mac OS Roman lacks, or a second spelling of a sibling's name) is shown shortened, with
++// '#' and its CNID in hex before a short extension, as Mac OS shows long HFS Plus names:
++// "A rather long report#58E9D7.txt".  CatalogWalk finds such names again
++// (findByMacName).  fid is the item itself, or its folder when fidIsDir.
++void CatalogMacName(unsigned char *roman, const char *host, int32_t cnid, uint32_t fid, bool fidIsDir) {
++	if (cnid == 2) { // the volume
++		mr31name(roman, host);
++		return;
++	}
++
++	int how = mrname(roman, host);
++	if (how != MR_NONE) {
++		char canon[MAXNAME];
++		utf8name(canon, roman);
++		if (!strcmp(canon, host)) return; // as this driver writes it
++		if (how == MR_COMPOSED) {
++			char path[MAXNAME+4] = "../";
++			strcpy(path + 3, canon);
++			if (WalkPath9(fid, NAMEFID, fidIsDir ? canon : path) != 0) return; // no decomposed sibling
++		}
++	}
++
++	unsigned char lossy[256];
++	mrlossy(lossy, 255, host);
++
++	char suffix[12];
++	int n = sprintf(suffix, "#%lX", (unsigned long)(cnid & 0x3fffffff));
++
++	// A short extension stays at the end
++	int dot = 0, extlen = 0;
++	for (int i=lossy[0]; i>1; i--) {
++		if (lossy[i] == '.') {
++			dot = i;
++			break;
++		}
++	}
++	if (dot > 1 && lossy[0] - dot >= 1 && lossy[0] - dot <= 5) extlen = lossy[0] - dot + 1;
++	int stem = extlen ? dot - 1 : lossy[0];
++	if (stem > 31 - n - extlen) stem = 31 - n - extlen;
++
++	memcpy(roman + 1, lossy + 1, stem);
++	memcpy(roman + 1 + stem, suffix, n);
++	memcpy(roman + 1 + stem + n, lossy + 1 + lossy[0] - extlen, extlen);
++	roman[0] = stem + n + extlen;
++}
++
++// Could Mac OS have this name from CatalogMacName for a host name other than the one
++// utf8name gives?  Only with a '#' or a character beyond ASCII; other names fail fast.
++static bool macNameCandidate(const char *mac, int len) {
++	for (int i=0; i<len; i++) {
++		if (mac[i] == '#' || (unsigned char)mac[i] >= 0x80) return true;
++	}
++	return false;
++}
++
++static bool macEqual(const unsigned char *roman, const char *mac, int len, bool ci) {
++	if (roman[0] != len) return false;
++	for (int i=0; i<len; i++) {
++		unsigned char a = roman[i+1], b = mac[i];
++		if (ci) {
++			if (a>='a' && a<='z') a += 'A'-'a';
++			if (b>='a' && b<='z') b += 'A'-'a';
++		}
++		if (a != b) return false;
++	}
++	return true;
++}
++
++// The host name in the folder at el[0..nparent-1] that Mac OS calls mac (exactly, else
++// ignoring ASCII case)
++static bool findByMacName(int nparent, const char *const *parent, const char *mac, int len, char *retname) {
++	uint16_t got = 0;
++	struct Qid9 qids[32];
++	Walk9(ROOTFID, SCANDIRFID, nparent, parent, &got, qids);
++	if (got != nparent) return false;
++	WalkPath9(SCANDIRFID, SCANLISTFID, "");
++	if (Lopen9(SCANLISTFID, O_RDONLY|O_DIRECTORY, NULL, NULL)) return false;
++
++	bool found = false, foundExact = false;
++	char rdbuf[4096];
++	uint64_t magic = 0;
++	uint32_t count = 0;
++	while (!foundExact && (Readdir9(SCANLISTFID, magic, sizeof rdbuf, &count, rdbuf), count>0)) {
++		char *ptr = rdbuf;
++		while (ptr < rdbuf + count) {
++			struct Qid9 qid = {};
++			char type = 0;
++			char name[MAXNAME] = "";
++			DirRecord9(&ptr, &qid, &magic, &type, name);
++			if (name[0] == 0 || name[0] == '.' || MF.IsSidecar(name)) continue;
++			qid.type = (type == 4) ? 0x80 : 0; // readdir's qid type is not meaningful
++			unsigned char roman[32];
++			CatalogMacName(roman, name, QID2CNID(qid), SCANDIRFID, true);
++			if (macEqual(roman, mac, len, false)) {
++				strcpy(retname, name);
++				found = foundExact = true;
++				break;
++			} else if (!found && macEqual(roman, mac, len, true)) {
++				strcpy(retname, name);
++				found = true;
++			}
++		}
++	}
++	Clunk9(SCANLISTFID);
++	return found;
++}
+diff --git a/catalog.h b/catalog.h
+index d599bd8..83573c0 100644
+--- a/catalog.h
++++ b/catalog.h
+@@ -13,3 +13,4 @@ int32_t CatalogGet(int32_t cnid, char *retname);
+ bool IsErr(int32_t cnid);
+ bool IsDir(int32_t cnid);
+ int32_t QID2CNID(struct Qid9 qid);
++void CatalogMacName(unsigned char *roman, const char *host, int32_t cnid, uint32_t fid, bool fidIsDir);
+diff --git a/device-9p.c b/device-9p.c
+index 1f81f5c..7fded35 100644
+--- a/device-9p.c
++++ b/device-9p.c
+@@ -156,6 +156,7 @@ struct dirInfo {
+ 	int16_t nall, nfiles; // visible children: all of them, files only
+ 	struct MFAttr attr;
+ 	char name[MAXNAME];
++	unsigned char mac[32]; // RetroBoot: the name Mac OS sees (CatalogMacName)
+ };
+ 
+ static struct dirInfo dirCache[DIRCACHE];
+@@ -619,7 +620,10 @@ static struct dirInfo *dirInfo(int32_t cnid, int32_t parent, const char *name, u
+ 	if (d != NULL && statOK && stat.mtime_sec == d->msec && stat.mtime_nsec == d->mnsec) {
+ 		// Unchanged on the host: only the parent or the name can have changed here
+ 		d->parent = parent;
+-		strcpy(d->name, name);
++		if (strcmp(d->name, name)) {
++			strcpy(d->name, name);
++			CatalogMacName(d->mac, name, cnid, fid, false);
++		}
+ 		d->checked = d->used = now;
+ 		d->local = false;
+ 		return d;
+@@ -642,6 +646,7 @@ static struct dirInfo *dirInfo(int32_t cnid, int32_t parent, const char *name, u
+ 	d->cnid = cnid;
+ 	d->parent = parent;
+ 	strcpy(d->name, name);
++	CatalogMacName(d->mac, name, cnid, fid, false);
+ 	MF.DGetAttr(cnid, fid, name, MF_FINFO, &d->attr);
+ 	d->attr.unixtime = statOK ? (int64_t)stat.mtime_sec : 0;
+ 	d->msec = statOK ? stat.mtime_sec : 0;
+@@ -762,7 +767,7 @@ static OSErr fsGetFileInfo(struct HFileInfo *pb) {
+ 		struct dirInfo *d = dirFind(cnid);
+ 		if (d != NULL && dirFresh(d)) {
+ 			d->used = TickCount();
+-			if (pb->ioNamePtr != NULL) mr31name(pb->ioNamePtr, d->name);
++			if (pb->ioNamePtr != NULL) pstrcpy(pb->ioNamePtr, d->mac);
+ 			fillDirPB((void *)pb, d);
+ 			return noErr;
+ 		}
+@@ -787,8 +792,9 @@ static OSErr fsGetFileInfo(struct HFileInfo *pb) {
+ 	}
+ 
+ 	// A special return field: don't change the field, just follow the pointer
++	// (RetroBoot: FID1 is the item itself here; the name Mac OS sees, CatalogMacName)
+ 	if ((idx != 0) && (pb->ioNamePtr != NULL)) {
+-		mr31name(pb->ioNamePtr, name);
++		CatalogMacName(pb->ioNamePtr, name, cnid, FID1, false);
+ 	}
+ 
+ 	if (IsDir(cnid)) {
+@@ -871,7 +877,7 @@ static void countDir(int fid, int16_t *retall, int16_t *retfiles) {
+ 			char type = 0;
+ 			char childname[MAXNAME] = "";
+ 			DirRecord9(&ptr, NULL, &magic, &type, childname);
+-			if (visName(childname)) {
++			if (childname[0] != 0 && visName(childname)) { // RetroBoot: as sortdir.c lists them
+ 				all++;
+ 				if (type != 4) files++;
+ 			}
+@@ -981,7 +987,7 @@ static OSErr fsMakeFSSpec(struct HIOParam *pb) {
+ 		} else {
+ 			spec->vRefNum = vcb.vcbVRefNum;
+ 			spec->parID = parent;
+-			mr31name(spec->name, name);
++			CatalogMacName(spec->name, name, cnid, FID1, false);
+ 		}
+ 		return noErr;
+ 	} else if (cnid == fnfErr) {
+@@ -1056,7 +1062,7 @@ static OSErr fsOpen(struct HIOParam *pb) {
+ 	fcb->fcbClmpSize = 512;
+ 	fcb->fcbDirID = parent;
+ 	memcpy(&fcb->fcbFType, attr.finfo, 4); // 4char type code
+-	mr31name(fcb->fcbCName, name);
++	CatalogMacName(fcb->fcbCName, name, cnid, FID1, false);
+ 
+ 	int lerr = MF.Open(fcb, cnid, FID1, name);
+ 	if (lerr) fcb->fcbFlNm = 0; // don't leak an FCB on error
+@@ -1299,6 +1305,10 @@ static OSErr fsCreate(struct HFileParam *pb) {
+ 	if (IsErr(parent)) return parent;
+ 	else if (!IsDir(parent)) return dirNFErr;
+ 
++	// RetroBoot: Mac OS may already know an item by this name under another host
++	// name (CatalogMacName: a precomposed name, or a shortened one)
++	if (!IsErr(CatalogWalk(FID3, pbDirID(pb), pb->ioNamePtr, NULL, NULL))) return dupFNErr;
++
+ 	if ((pb->ioTrap & 0xff) == (_Create & 0xff)) {
+ 		switch (Lcreate9(FID1, O_WRONLY|O_CREAT|O_EXCL, 0666, 0, uniname, NULL, NULL)) {
+ 		case 0:
+@@ -1370,6 +1380,13 @@ static OSErr fsRename(struct IOParam *pb) {
+ 		return noErr;
+ 	}
+ 
++	// RetroBoot: Mac OS may already know another item by the new name under another
++	// host name (CatalogMacName); renaming an item to its own name is left alone
++	{
++		int32_t other = CatalogWalk(FID3, parent, newNameR, NULL, NULL);
++		if (!IsErr(other) && other != cnid) return dupFNErr;
++	}
++
+ 	// Reserve the new filename atomically.  RetroBoot: a folder reserves an empty
+ 	// folder, which rename(2) replaces with the folder; over a file it failed (ENOTDIR),
+ 	// so a folder could not be renamed and an empty file took its new name.
+@@ -1513,7 +1530,9 @@ static OSErr fsResolveFileIDRef(struct FIDParam *pb) {
+ 
+ 	pb->ioSrcDirID = parent;
+ 	if (pb->ioNamePtr) {
+-		mr31name(pb->ioNamePtr, name);
++		// RetroBoot: the name Mac OS sees (CatalogMacName), worked out in the folder
++		if (IsErr(CatalogWalk(FID1, parent, NULL, NULL, NULL))) return fidNotFound;
++		CatalogMacName(pb->ioNamePtr, name, pb->ioFileID, FID1, true);
+ 	}
+ 	return noErr;
+ }
+diff --git a/multifork-3.c b/multifork-3.c
+index bc6a24b..ce4b6be 100644
+--- a/multifork-3.c
++++ b/multifork-3.c
+@@ -241,7 +241,7 @@ int fsetattr3(int32_t cnid, uint32_t fid, const char *name, unsigned fields, con
+ 		int err = WalkPath9(fid, FINFOFID, "..");
+ 		if (err) panic("dot-dot should never fail");
+ 
+-		char iname[MAXNAME];
++		char iname[MAXNAME+8]; // RetroBoot: room for the suffix after a long name
+ 		strcpy(iname, name);
+ 		strcat(iname, ".idump");
+ 		err = Lcreate9(FINFOFID, O_WRONLY|O_TRUNC|O_CREAT, 0666, 0, iname, NULL, NULL);
+@@ -340,7 +340,7 @@ static int move3(uint32_t fid1, const char *name1, uint32_t fid2, const char *na
+ 
+ 	const char *sidecars[] = {"%s.rdump", "%s.idump"};
+ 	for (int i=0; i<sizeof sidecars/sizeof *sidecars; i++) {
+-		char sidename1[MAXNAME], sidename2[MAXNAME];
++		char sidename1[MAXNAME+8], sidename2[MAXNAME+8]; // RetroBoot: room for the suffix
+ 		sprintf(sidename1, sidecars[i], name1);
+ 		sprintf(sidename2, sidecars[i], name2);
+ 		err = Renameat9(fid1, sidename1, fid2, sidename2);
+@@ -366,7 +366,7 @@ static int del3(uint32_t fid, const char *name, bool isdir) {
+ 		// then delete the sidecars on a best-effort basis
+ 		const char *sidecars[] = {"%s", "%s.rdump", "%s.idump"};
+ 		for (int i=0; i<sizeof sidecars/sizeof *sidecars; i++) {
+-			char delname[MAXNAME];
++			char delname[MAXNAME+8]; // RetroBoot: room for the suffix
+ 			sprintf(delname, sidecars[i], name);
+ 			int err = Unlinkat9(TMPFID, delname, 0);
+ 			if (err && i==0) return err;
+diff --git a/sortdir.c b/sortdir.c
+index 48395c7..c83bd1a 100644
+--- a/sortdir.c
++++ b/sortdir.c
+@@ -77,7 +77,7 @@ enum {
+ 	} \
+ } while (0)
+ 
+-static void populate(const char *ignore, bool dirOK, bool *isComplete);
++static void populate(const char *ignore, int32_t ignoreCNID, bool dirOK, bool *isComplete);
+ static struct Qid9 fixQID(struct Qid9 qid, char linuxType);
+ static void startPacking(void);
+ static bool pack(int32_t cnid, const char *name); // returns false when no more room
+@@ -90,6 +90,7 @@ int32_t ReadDirSorted(uint32_t navfid, int32_t pcnid, int16_t index, bool dirOK,
+ 	static bool lastDirOK;
+ 	static bool isComplete;
+ 	static char lastName[MAXNAME];
++	static int32_t lastChildCNID;
+ 
+ 	if (index <= 0) panic("invalid child index");
+ 
+@@ -124,12 +125,13 @@ int32_t ReadDirSorted(uint32_t navfid, int32_t pcnid, int16_t index, bool dirOK,
+ 			if (isComplete) {
+ 				return fnfErr;
+ 			}
+-			populate(lastName, dirOK, &isComplete); // make costly FS call when unpack fails
++			populate(lastName, lastChildCNID, dirOK, &isComplete); // make costly FS call when unpack fails
+ 			ok = unpack(&childCNID, lastName);
+ 			if (!ok) {
+ 				return fnfErr; // have fully iterated the directory
+ 			}
+ 		}
++		lastChildCNID = childCNID;
+ 
+ 		// if this listed name was stale then just skip it
+ 		if (WalkPath9(DIRFID, navfid, lastName) == 0) lastIndex++;
+@@ -140,7 +142,7 @@ int32_t ReadDirSorted(uint32_t navfid, int32_t pcnid, int16_t index, bool dirOK,
+ 	return childCNID;
+ }
+ 
+-static void populate(const char *ignore, bool dirOK, bool *isComplete) {
++static void populate(const char *ignore, int32_t ignoreCNID, bool dirOK, bool *isComplete) {
+ 	*isComplete = true;
+ 
+ 	// "Leaderboard" of the lexically-lowest children in this directory,
+@@ -149,6 +151,7 @@ static void populate(const char *ignore, bool dirOK, bool *isComplete) {
+ 	struct leader {
+ 		struct {struct leader *l, *r;} link[POWER];
+ 		int32_t cnid;
++		unsigned char mac[32]; // RetroBoot: the name Mac OS sees, worked out once
+ 		char name[MAXNAME];
+ 	} ldboard[1<<POWER] = {};
+ 	int nlead = 0;
+@@ -156,6 +159,7 @@ static void populate(const char *ignore, bool dirOK, bool *isComplete) {
+ 	// Special limiting elements
+ 	struct leader leftmost = {}, rightmost = {};
+ 	strcpy(leftmost.name, ignore);
++	if (ignore[0] != 0) CatalogMacName(leftmost.mac, ignore, ignoreCNID, DIRFID, true);
+ 	for (int d=0; d<POWER; d++) {
+ 		leftmost.link[d].r = &rightmost;
+ 		rightmost.link[d].l = &leftmost;
+@@ -179,20 +183,20 @@ static void populate(const char *ignore, bool dirOK, bool *isComplete) {
+ 
+ 			DirRecord9(&ptr, &qid, &magic, &type, name);
+ 			int32_t cnid = QID2CNID(fixQID(qid, type));
+-			mr31name(name31, name);
+ 
+ 			if (!dirOK && type == 4) goto skipFile; // been asked not to return directories
+-			if (name31[0] == 0) goto skipFile; // unrepresentable name
++			if (name[0] == 0) goto skipFile; // longer than MAXNAME-1 bytes (DirRecord9)
+ 			if (name[0] == '.' || MF.IsSidecar(name)) goto skipFile; // . or .. or some other hidden metadata file
+ 
++			// RetroBoot: every other name is shown, shortened if need be (CatalogMacName)
++			CatalogMacName(name31, name, cnid, DIRFID, true);
++
+ 			// search the skiplist for where to insert
+ 			struct leader *right = &rightmost;
+ 			for (int d=POWER-1; d>=0; d--) {
+ 				for (;;) {
+ 					struct leader *stepleft = right->link[d].l;
+-					unsigned char try31[32] = "";
+-					mr31name(try31, stepleft->name);
+-					if (RelString(name31, try31, true, true) > 0) break;
++					if (RelString(name31, stepleft->mac, true, true) > 0) break;
+ 					right = stepleft;
+ 					if (right == &leftmost) goto skipFile;
+ 				}
+@@ -201,6 +205,7 @@ static void populate(const char *ignore, bool dirOK, bool *isComplete) {
+ 			if (nlead < sizeof ldboard/sizeof *ldboard) { // empty slots available, use one
+ 				struct leader *el = &ldboard[nlead++];
+ 				el->cnid = cnid;
++				memcpy(el->mac, name31, sizeof el->mac);
+ 				strcpy(el->name, name);
+ 				SKIPLIST_INSERT(right, el, el->cnid);
+ 				goto skipFile;
+@@ -213,6 +218,7 @@ static void populate(const char *ignore, bool dirOK, bool *isComplete) {
+ 
+ 			struct leader *el = rightmost.link[0].l; // steal the slot of the lexically latest item
+ 			el->cnid = cnid;
++			memcpy(el->mac, name31, sizeof el->mac);
+ 			strcpy(el->name, name);
+ 			if (el == right) { // straight replacement (quite rare case)
+ 				goto skipFile;
+diff --git a/unicode.c b/unicode.c
+index 0d60e0b..3fa634e 100644
+--- a/unicode.c
++++ b/unicode.c
+@@ -14,29 +14,61 @@ char * means UTF-8
+ unsigned char * means Mac Roman
+ */
+ 
+-static int toMacRoman(const char **utf8);
++static int toMacRoman(const unsigned char **utf8);
+ 
+ // Does colon-to-slash conversion
+ // If the name fails conversion then return the empty string
+ void mr31name(unsigned char *roman, const char *utf8) {
+-	const char *next = utf8;
++	mrname(roman, utf8);
++}
++
++// RetroBoot: toMacRoman() used to take a const char ** and advance it through a
++// const unsigned char ** cast.  Those pointer types may not alias, so GCC -Os kept
++// "next" in mr31name equal to the start of the name, and the too-long test after the
++// loop read the name's first byte: every name of exactly 31 characters came back
++// empty and was hidden from Mac OS (emulator/reports/sharenames-20261013.md).
++// Returns MR_NONE (roman[0] == 0: unrepresentable or longer than 31 characters),
++// MR_COMPOSED (no decomposed accented letter was read) or MR_DECOMPOSED.
++int mrname(unsigned char *roman, const char *utf8) {
++	const unsigned char *next = (const unsigned char *)utf8;
++	int how = MR_COMPOSED;
+ 
+ 	roman[0] = 0;
+-	while (roman[0] < 31) {
+-		int ch = toMacRoman(&next); // increments this
++	for (;;) {
++		const unsigned char *at = next;
++		int ch = toMacRoman(&next); // increments next
+ 		if (ch == 0) { // end of string
+-			return;
+-		} else if (ch < 0) { // not representable
++			return roman[0] ? how : MR_NONE;
++		} else if (ch < 0 || roman[0] == 31) { // not representable, or too long
+ 			roman[0] = 0;
+-			return;
++			return MR_NONE;
+ 		} else if (ch == ':') {
+ 			roman[++(roman[0])] = '/';
+ 		} else { // ordinary char
+ 			roman[++(roman[0])] = ch;
+ 		}
++		if (at[0] < 0x80 && next - at == 3) how = MR_DECOMPOSED; // letter + combining mark
+ 	}
+-	if (*next != 0) { // too long
+-		roman[0] = 0;
++}
++
++// RetroBoot: every character, at most max of them; one '_' for each character Mac OS
++// Roman lacks (a whole UTF-8 sequence).  The start of a name that can't be shown as it
++// is (catalog.c CatalogMacName).
++void mrlossy(unsigned char *roman, int max, const char *utf8) {
++	const unsigned char *next = (const unsigned char *)utf8;
++
++	roman[0] = 0;
++	while (roman[0] < max) {
++		int ch = toMacRoman(&next);
++		if (ch == 0) {
++			return;
++		} else if (ch < 0) {
++			while ((*next & 0xc0) == 0x80) next++; // the rest of this character
++			ch = '_';
++		} else if (ch == ':') {
++			ch = '/';
++		}
++		roman[++(roman[0])] = ch;
+ 	}
+ }
+ 
+@@ -197,11 +229,9 @@ long utf8char(unsigned char roman) {
+ 	}
+ }
+ 
+-static int toMacRoman(const char **utf8signed) {
++static int toMacRoman(const unsigned char **utf8) {
+ 	int nbytes, roman;
+ 
+-	const unsigned char **utf8 = (const unsigned char **)utf8signed;
+-
+ 	if ((*utf8)[0]=='A' && (*utf8)[1]==0xcc && (*utf8)[2]==0x88) {
+ 		// LATIN CAPITAL LETTER A + COMBINING DIAERESIS
+ 		nbytes = 3;
+diff --git a/unicode.h b/unicode.h
+index 6a5062c..82c93b9 100644
+--- a/unicode.h
++++ b/unicode.h
+@@ -9,5 +9,10 @@
+ // UTF-8 is null-terminated, Roman is Pascal
+ 
+ void mr31name(unsigned char *roman, const char *utf8);
++
++// RetroBoot (emulator/classicvirtio/README.md, names)
++enum {MR_NONE = 0, MR_COMPOSED = 1, MR_DECOMPOSED = 2};
++int mrname(unsigned char *roman, const char *utf8);
++void mrlossy(unsigned char *roman, int max, const char *utf8);
+ void utf8name(char *utf8, const unsigned char *roman);
+ long utf8char(unsigned char roman);
+\ No newline at end of file

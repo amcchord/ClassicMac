@@ -242,6 +242,9 @@ if [ "$IS_47_OR_NEWER" -eq 1 ]; then
   OHCI_HELP="$("$PPC_QEMU" -device pci-ohci,help 2>&1)"
   printf '%s\n' "$OHCI_HELP" | grep -q 'idle-frames' || \
     die "Bundled Power Mac QEMU lacks pci-ohci.idle-frames"
+  USB_MOUSE_HELP="$("$PPC_QEMU" -device usb-mouse,help 2>&1)"
+  printf '%s\n' "$USB_MOUSE_HELP" | grep -q 'wheel-per-report' || \
+    die "Bundled Power Mac QEMU lacks usb-mouse.wheel-per-report"
 fi
 if [ "$VERSION_MAJOR" -ge 4 ]; then
   if printf '%s\n' "$DEVICE_HELP" | grep "gxmetal" >/dev/null; then
