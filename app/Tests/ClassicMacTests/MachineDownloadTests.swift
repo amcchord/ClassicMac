@@ -626,8 +626,9 @@ final class MachineDownloadTests: XCTestCase {
         XCTAssertEqual(machine.minimumAppVersion, "4.4.0")
         try MachineDownloadTransfer.verify(archive, machine: machine)
         let destination = try MachineTemplateInstaller.installVerifiedArchive(archive, machine: machine, name: "Packaged", in: directory)
-        XCTAssertEqual(Set(try FileManager.default.contentsOfDirectory(atPath: destination.path)),
-                       ["config.json", "disk.img", "template-info.json"])
+        let installedContents = Set(try FileManager.default.contentsOfDirectory(atPath: destination.path))
+        XCTAssertTrue(installedContents.isSuperset(of: ["config.json", "disk.img", "template-info.json"]))
+        XCTAssertTrue(installedContents.subtracting(["config.json", "disk.img", "template-info.json", "Checkpoints", ".session-state.json"]).isEmpty)
         XCTAssertEqual(try Data(contentsOf: sourceBundle.appendingPathComponent("config.json")), sourceConfig)
         XCTAssertFalse(try String(contentsOf: destination.appendingPathComponent("config.json"), encoding: .utf8).contains("/Users/source"))
     }

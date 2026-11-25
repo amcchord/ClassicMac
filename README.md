@@ -29,17 +29,35 @@
   <img src="docs/screenshots/powermacg4-macos92.png" width="410" alt="Mac OS 9.2 on the emulated Power Mac G4">
 </p>
 
-## Download ClassicMac 4.8.1
+## Download ClassicMac 4.9.0
 
 | System | Download | Requirements |
 | --- | --- | --- |
-| Windows | [Portable EXE](https://github.com/amcchord/ClassicMac/releases/download/v4.8.1/ClassicMac-4.8.1-windows-x64.exe) | Windows 11 x64; unsigned. |
-| macOS | [DMG](https://github.com/amcchord/ClassicMac/releases/download/v4.8.1/ClassicMac-4.8.1.dmg) · [ZIP](https://github.com/amcchord/ClassicMac/releases/download/v4.8.1/ClassicMac-4.8.1.zip) | Apple Silicon, macOS 15+; signed and notarized. |
-| Linux | [AppImage](https://github.com/amcchord/ClassicMac/releases/download/v4.8.1/ClassicMac-4.8.1-linux-x64.AppImage) | x64, glibc 2.39+ and a desktop. |
+| Windows | [Portable EXE](https://github.com/amcchord/ClassicMac/releases/download/v4.9.0/ClassicMac-4.9.0-windows-x64.exe) | Windows 11 x64; unsigned. |
+| macOS | [DMG](https://github.com/amcchord/ClassicMac/releases/download/v4.9.0/ClassicMac-4.9.0.dmg) · [ZIP](https://github.com/amcchord/ClassicMac/releases/download/v4.9.0/ClassicMac-4.9.0.zip) | Apple Silicon, macOS 15+; signed and notarized. |
+| Linux | [AppImage](https://github.com/amcchord/ClassicMac/releases/download/v4.9.0/ClassicMac-4.9.0-linux-x64.AppImage) | x64, glibc 2.39+ and a desktop. |
 
-[Release notes, checksums and engine sources](https://github.com/amcchord/ClassicMac/releases/tag/v4.8.1).
+[Release notes, checksums and engine sources](https://github.com/amcchord/ClassicMac/releases/tag/v4.9.0).
 Windows runs directly. Drag the Mac app to Applications. On Linux, mark the
 AppImage executable; use `--appimage-extract-and-run` if FUSE is unavailable.
+
+## New in ClassicMac 4.9.0
+
+- **In-app software updates.** Check for updates from the app and install
+  verified releases in place across macOS (Developer ID + SHA-256), Windows
+  portable EXE, and Linux AppImage.
+- **Zero-cost Checkpoints.** Instant APFS/reflink machine snapshots with
+  automatic Fresh Install and pre-restore/pre-recovery backups.
+- **Mac OS X reliability & clean shutdown.** Apple-menu verified Shut Down &
+  Restart for Jaguar/Panther/Tiger, flash NVRAM & RTC sync, Screamer OS X codec
+  and PMU sleep flags, plus `recommendedSettings` RAM provisioning.
+- **Classic shared folders, IDE & input fixes.** Ports RetroBoot's
+  `classicvirtio` folder move/name/time/Finder-flag fixes, IDE `SRST` no-IRQ
+  fix, USB HID `wheel-per-report=1` scroll pacing, DPI-normalized relative
+  mouse tracking, macOS `thinArchive` support, 30 s catalog timeouts, and
+  sliding-window transfer speed/ETA.
+
+## Download ClassicMac 4.8.1 (previous)
 
 ## New in ClassicMac 4.8.1
 

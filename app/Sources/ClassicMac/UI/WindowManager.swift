@@ -24,6 +24,8 @@ final class WindowManager {
     private(set) var showingError = false
     private var pendingErrors: [(error: AppError, clear: () -> Void)] = []
     private weak var shutDownAlert: PlatinumWindow?
+    private weak var updateWindow: PlatinumWindow?
+    private var lastAutoPresentedUpdateVersion: String?
 
     static let mainContentSize = NSSize(width: 780, height: 500)
     static let mainMinimumContent = NSSize(width: 660, height: 440)
@@ -53,6 +55,23 @@ final class WindowManager {
             .sink { [weak self] _ in
                 store.isPresentingNewVM = false
                 self?.presentNewMac()
+            }
+            .store(in: &subscriptions)
+        NotificationCenter.default.publisher(for: .classicMacCheckForUpdates)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.showUpdateChecker(interactive: true)
+            }
+            .store(in: &subscriptions)
+        AppUpdater.shared.$state
+            .receive(on: RunLoop.main)
+            .sink { [weak self] state in
+                guard let self, case .available(let release) = state else { return }
+                guard self.updateWindow == nil,
+                      !self.mainIsBlocked,
+                      self.lastAutoPresentedUpdateVersion != release.version else { return }
+                self.lastAutoPresentedUpdateVersion = release.version
+                self.showUpdateChecker(interactive: false)
             }
             .store(in: &subscriptions)
     }
@@ -161,6 +180,25 @@ final class WindowManager {
         showMain()
         presentDialog(title: "New Mac", size: NewMacDialog.size) { handle in
             NewMacDialog(handle: handle)
+        }
+    }
+
+    func showUpdateChecker(interactive: Bool = true) {
+        if let updateWindow, updateWindow.isVisible {
+            updateWindow.makeKeyAndOrderFront(nil)
+            return
+        }
+        let updater = AppUpdater.shared
+        if interactive && !updater.isBusy {
+            switch updater.state {
+            case .available, .readyToInstall:
+                break
+            default:
+                updater.checkForUpdates(interactive: true)
+            }
+        }
+        updateWindow = presentDialog(title: "Software Update", size: UpdateDialog.size) { handle in
+            UpdateDialog(handle: handle)
         }
     }
 

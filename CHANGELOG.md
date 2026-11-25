@@ -1,5 +1,49 @@
 # Changelog
 
+## 4.9.0 — RetroBoot 3.4 Parity, OS X Reliability, Checkpoints & In-App Updates (2026-11-25)
+
+### Added
+
+- **In-app update checker and verified in-place updater:** Check for new
+  ClassicMac releases from **ClassicMac → Check for Updates…** / **About**
+  (macOS) or **Check for Updates…** (Windows portable EXE & Linux AppImage)
+  with 24-hour automatic checks, release notes, SHA-256 verification against
+  `SHA256SUMS`, Developer ID signature verification on macOS, and atomic
+  in-place replacement and relaunch.
+- **Zero-cost Copy-on-Write Checkpoints:** Instant `clonefile` (APFS) /
+  `FICLONE` & `--reflink` (Linux) / sparse (Windows) machine checkpoints with
+  automatic **Fresh install** snapshots on Library import, **Pre-restore** and
+  **Pre-recovery** backups, and a Platinum **Checkpoints…** manager.
+- **Verified Mac OS X clean shutdown & restart:** Apple-menu keyboard shutdown
+  with visual menu/selection/confirmation verification across Jaguar 10.2.8,
+  Panther 10.3.9, and Tiger 10.4.11 (`Shut Down…` / `Restart` enabled for OS X
+  across macOS, Windows, and Linux).
+- **OS X NVRAM validation, RTC sync, and QEMU 10 flags:** Validates 8 KB flash
+  banks with Adler-32 before launch, derives `-rtc base=...` from `XPRAM[0xEC]`,
+  and enables `screamer.osx-codec=on`, `screamer.dma-lead-us=0`, and
+  `via-pmu.osx-sleep=on` (Panther/Tiger).
+- **Native DPI-normalized relative mouse tracking:** Adds `legacyMouseTracking`
+  and `mouseDPI` (`Auto` or `100–100000`) matching RetroBoot's 200-DPI
+  unaccelerated sensor model, plus `wheel-per-report=1` USB HID scroll pacing
+  (`usb/retroboot-hid-wheel-per-report.patch`) when USB Overdrive is used on
+  Mac OS 8.5–9.2.2.
+- **Library catalog & transfer upgrades:** Supports `retroboot-thin-1` archives
+  on macOS, 30 s bounded catalog fetch timeouts across macOS/Windows/Linux,
+  catalog/template `recommendedSettings` (including Tiger/Panther RAM),
+  sliding-window `TransferMeter` speed & ETA across download/verify/extract
+  phases, and updated RetroBoot 3.2.0 curated edition notes.
+
+### Fixed
+
+- **Shared folders (`classicvirtio`):** Port `retroboot-folder-move.patch`
+  (folder rename & Trash moves), `retroboot-names.patch` (`MAXNAME` NUL-byte
+  bounds & Mac-name lookup), `retroboot-local-time.patch` (UTC timestamp
+  preservation), and `retroboot-folder-finfo.patch` (folder Finder flags) into
+  `shared/declrom` and `shared/ndrvloader`.
+- **IDE software-reset spurious IRQ:** Port `startup/retroboot-ide-srst-no-irq.patch`
+  so ATA `SRST` sets diagnostic registers without asserting `INTRQ` and lowers
+  `bus->irq`.
+
 ## 4.8.1 — Classic Mac Compatibility, Radeon 32-bit Textures & MIT License (2026-11-25)
 
 ### Added

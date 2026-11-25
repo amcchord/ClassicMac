@@ -189,6 +189,7 @@ enum MachineTemplateInstaller {
             // RENAME_EXCL makes the existence check atomic with publication,
             // including competing imports that choose the same name.
             if renamex_np(staging.path, destination.path, UInt32(RENAME_EXCL)) == 0 {
+                VMCheckpointStore.createFreshInstallIfSupported(in: destination)
                 return destination
             }
             if errno == EEXIST { continue }

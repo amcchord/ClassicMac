@@ -552,7 +552,7 @@ int selfTest(const QString &fixtures, const QString &output) {
 
   // OS X NVRAM validation and RTC base tests.
   {
-    auto buildBank = [](quint32 generation) {
+    auto buildBank = [](quint32 generation, qint32 xpramOffset = 0) {
       QByteArray bank(8192, '\0');
       auto writePart = [&](int off, quint8 sig, quint16 units, const char *name) {
         bank[off] = char(sig);
@@ -574,6 +574,13 @@ int selfTest(const QString &fixtures, const QString &output) {
       bank[23] = char(generation & 0xff);
       writePart(32, 0x70, 193, "common\0\0\0\0\0\0");
       writePart(3120, 0xa0, 81, "APL,MacOS75\0");
+      if (xpramOffset != 0) {
+        const quint32 raw = quint32(xpramOffset) & 0x00ffffffu;
+        const int xoff = 3120 + 16 + 0xec;
+        bank[xoff + 1] = char((raw >> 16) & 0xff);
+        bank[xoff + 2] = char((raw >> 8) & 0xff);
+        bank[xoff + 3] = char(raw & 0xff);
+      }
       writePart(4416, 0x7f, 236, "wwwwwwwwwwww");
       const uLong crc = adler32(
           1L, reinterpret_cast<const Bytef *>(bank.constData() + 20), 8192 - 20);
@@ -609,17 +616,22 @@ int selfTest(const QString &fixtures, const QString &output) {
                 nvf.write(validNvram) == validNvram.size(),
             "Write test OS X NVRAM");
     nvf.close();
-    const auto rtcA =
-        Model::osxRtcBase(tmp.path() + "/missing-nvram.img", 1700000000LL);
-    const auto rtcB =
-        Model::osxRtcBase(tmp.path() + "/missing-nvram.img", 1700003600LL);
-    require(rtcA != rtcB, "osxRtcBase must advance with nowUtcSeconds");
-    const auto rtcSeed1 = Model::osxRtcBase(nvramPath, 1700000000LL);
-    const auto rtcSeed2 = Model::osxRtcBase(nvramPath, 1700000000LL);
-    require(rtcSeed1 == rtcSeed2, "osxRtcBase must be deterministic");
-    if constexpr (std::is_same_v<decltype(rtcSeed1), QString>) {
-      require(!rtcSeed1.isEmpty(), "osxRtcBase string must not be empty");
-    }
+    require(Model::osxRtcBase(tmp.path() + "/missing-nvram.img", 1700000000LL) ==
+                "base=utc",
+            "Missing OS X NVRAM must fall back to base=utc");
+    require(Model::osxRtcBase(nvramPath, 1700000000LL) == "base=utc",
+            "Zero-offset OS X NVRAM must return base=utc");
+    const QByteArray offsetNvram = buildBank(1, 0) + buildBank(3, -18000);
+    const QString offsetPath = tmp.path() + "/offset-nvram.img";
+    QFile ovf(offsetPath);
+    require(ovf.open(QFile::WriteOnly | QFile::Truncate) &&
+                ovf.write(offsetNvram) == offsetNvram.size(),
+            "Write offset OS X NVRAM");
+    ovf.close();
+    const auto rtcA = Model::osxRtcBase(offsetPath, 1700000000LL);
+    const auto rtcB = Model::osxRtcBase(offsetPath, 1700003600LL);
+    require(rtcA != rtcB && rtcA.startsWith("base=") && rtcA != "base=utc",
+            "osxRtcBase must advance with nowUtcSeconds");
   }
 
   // OS X UI state detection tests (menu open, selection move, confirmation dialog).
@@ -717,6 +729,7 @@ int selfTest(const QString &fixtures, const QString &output) {
     require(!Transfer::Meter::formatEta(eta).isEmpty(),
             "Transfer::Meter::formatEta returned empty");
     meter.reset(20000, 5000);
+    meter.update(5000, 0.0, speed, eta);
     meter.update(10000, 1.0, speed, eta);
     require(speed > 0.0 && eta > 0.0, "Transfer::Meter reset failed");
   }
@@ -759,17 +772,21 @@ int selfTest(const QString &fixtures, const QString &output) {
       require(disk.open(QFile::ReadOnly) && disk.read(4) == QByteArray("AAAA"),
               "Checkpoint restore did not restore disk contents");
     }
-    require(Model::readMachine(cpFolder).config["ramMB"].toInt() == 512,
-            "Checkpoint restore did not restore config.json");
+    require(Model::readMachine(cpFolder).config["ramMB"].toInt() == 256,
+            "Checkpoint restore should preserve config.json");
+    const auto afterRestore = Checkpoints::list(cpFolder);
+    require(afterRestore.size() == 2,
+            "Checkpoint restore should create a pre-restore backup");
     Checkpoints::markSessionState(cpFolder, false, "unclean");
     require(!Checkpoints::lastSessionClean(cpFolder),
             "markSessionState(false) failed");
     Checkpoints::markSessionState(cpFolder, true);
     require(Checkpoints::lastSessionClean(cpFolder),
             "markSessionState(true) failed");
-    Checkpoints::remove(cpFolder, cpEntry.id);
+    for (const auto &e : afterRestore)
+      Checkpoints::remove(cpFolder, e.id);
     require(Checkpoints::list(cpFolder).isEmpty(),
-            "Checkpoint remove did not delete checkpoint");
+            "Checkpoint remove did not delete checkpoints");
   }
 
   // Updater parsing & version comparison tests.
@@ -862,7 +879,8 @@ int selfTest(const QString &fixtures, const QString &output) {
       else
         qputenv("CLASSICMAC_TEST_HOME", oldTestHome);
     });
-    const QJsonObject tplCfg = Model::freshConfig("Template", "powerMacG4");
+    QJsonObject tplCfg = Model::freshConfig("Template", "powerMacG4");
+    tplCfg.remove("toolsCDInserted");
     const QByteArray tplCfgBytes = QJsonDocument(tplCfg).toJson();
     const QByteArray tplArchivePayload =
         member("config.json", tplCfgBytes) +
@@ -896,7 +914,8 @@ int selfTest(const QString &fixtures, const QString &output) {
           {"sha256", gzSha}};
     };
     const QJsonObject atiEntry = makeEntry("os922-deluxe-v6");
-    const QJsonObject stdEntry = makeEntry("mac-os-8.6-base-v1");
+    QJsonObject stdEntry = makeEntry("mac-os-8.6-base-v1");
+    stdEntry["recommendedSettings"] = QJsonObject{{"ram_mb", 384}, {"cpu", "g3"}};
     const QString cachePath = Library::cacheFile(atiEntry);
     require(!cachePath.isEmpty() &&
                 QDir().mkpath(QFileInfo(cachePath).absolutePath()),
@@ -916,7 +935,9 @@ int selfTest(const QString &fixtures, const QString &output) {
             "Library ATI edition recommendedSettings");
     const Model::Machine stdMac = Library::install(
         stdEntry, libDest, "Base Edition", libCancel, [](QString, qint64, qint64) {});
-    require(stdMac.config["graphicsCard"].toString() == "standard",
+    require(stdMac.config["graphicsCard"].toString() == "standard" &&
+                stdMac.config["ramMB"].toInt() == 384 &&
+                !stdMac.config["useG4CPU"].toBool(),
             "Library base edition recommendedSettings");
   }
   if (!output.isEmpty())

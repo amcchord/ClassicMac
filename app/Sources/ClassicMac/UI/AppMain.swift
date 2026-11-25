@@ -32,6 +32,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         pendingOpenURLs.removeAll()
         NSApp.activate(ignoringOtherApps: true)
         DebugSnapshots.runIfRequested()
+        AppUpdater.shared.scheduleAutomaticCheckIfNeeded()
     }
 
     // Double-clicking a .classic package in the Finder.
@@ -83,6 +84,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     }
 
     @objc func showAbout(_ sender: Any?) { WindowManager.shared.showAbout() }
+    @objc func checkForUpdates(_ sender: Any?) { WindowManager.shared.showUpdateChecker(interactive: true) }
     @objc func showIconPacks(_ sender: Any?) { WindowManager.shared.presentIconPacks() }
     @objc func newMac(_ sender: Any?) { WindowManager.shared.presentNewMac() }
     @objc func openMac(_ sender: Any?) { store.presentOpenPanel(); WindowManager.shared.showMain() }
@@ -182,6 +184,7 @@ enum MainMenu {
 
         let app = submenu(bar, "ClassicMac")
         app.addItem(item("About ClassicMac", #selector(AppDelegate.showAbout(_:))))
+        app.addItem(item("Check for Updates…", #selector(AppDelegate.checkForUpdates(_:))))
         app.addItem(.separator())
         app.addItem(item("Iconfactory Icons…", #selector(AppDelegate.showIconPacks(_:))))
         app.addItem(.separator())
