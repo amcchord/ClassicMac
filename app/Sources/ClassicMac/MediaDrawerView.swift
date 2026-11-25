@@ -13,9 +13,34 @@ struct MediaDrawerView: View {
     @ObservedObject private var recents = MediaRecents.shared
     @State private var recentSelection: String?
 
+    private enum StartupMedia: Hashable { case hardDisk, cd, floppy }
+
     private var busy: Bool { controller.busyIDs.contains(config.id) }
     private var live: Bool { isRunning && config.machineFamily == .quadra800 }
     private var snapshot: MediaSnapshot? { controller.snapshots[config.id] }
+
+    private var startupSelection: Binding<StartupMedia> {
+        Binding(
+            get: {
+                if config.bootFromCD { return .cd }
+                if config.machineFamily == .quadra800 && config.bootFromFloppy { return .floppy }
+                return .hardDisk
+            },
+            set: { next in
+                switch next {
+                case .hardDisk:
+                    config.bootFromCD = false
+                    config.bootFromFloppy = false
+                case .cd:
+                    config.bootFromCD = true
+                    config.bootFromFloppy = false
+                case .floppy:
+                    config.bootFromCD = false
+                    config.bootFromFloppy = true
+                }
+            }
+        )
+    }
 
     var body: some View {
         PlatinumScrollView(line: 16) {
@@ -52,11 +77,20 @@ struct MediaDrawerView: View {
                 }
                 HStack(alignment: .top, spacing: 10) {
                     Text("Start up from:").platinumText(.emphasis)
-                    PlatinumRadioGroup(selection: $config.bootFromCD, options: [
-                        (false, "Hard disk", true),
-                        (true, "CD", config.cdImagePath?.isEmpty == false),
-                    ])
-                    .disabled(busy)
+                    if config.machineFamily == .quadra800 {
+                        PlatinumRadioGroup(selection: startupSelection, options: [
+                            (.hardDisk, "Hard disk", true),
+                            (.cd, "CD", config.cdImagePath?.isEmpty == false),
+                            (.floppy, "Floppy", config.floppyImagePath?.isEmpty == false),
+                        ])
+                        .disabled(busy)
+                    } else {
+                        PlatinumRadioGroup(selection: $config.bootFromCD, options: [
+                            (false, "Hard disk", true),
+                            (true, "CD", config.cdImagePath?.isEmpty == false),
+                        ])
+                        .disabled(busy)
+                    }
                     Spacer(minLength: 0)
                 }
                 if !visibleRecents.isEmpty {

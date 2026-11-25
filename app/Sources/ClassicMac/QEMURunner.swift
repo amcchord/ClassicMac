@@ -152,6 +152,7 @@ final class QEMUManager: ObservableObject {
             lastError = preflightError
             return
         }
+        QEMUManager.applyQuadraBootPRAM(for: config)
 
         let displayServer: BrowserDisplayServer?
         if config.useBrowserDisplay {
@@ -879,6 +880,30 @@ final class QEMUManager: ObservableObject {
         return nil
     }
 
+    // Quadra 800 ROM selects the boot device from PRAM DefStartRec (0x78..0x7B)
+    // rather than QEMU's -boot flag: SCSI ID 3 for CD, NuBus slot 0x0C sResource
+    // 0xA0 for Virtio floppy, or SCSI ID 0 for the hard disk.
+    static func applyQuadraBootPRAM(for config: VMConfig) {
+        guard config.machineFamily == .quadra800,
+              let handle = try? FileHandle(forUpdating: config.pramImageURL) else {
+            return
+        }
+        defer { try? handle.close() }
+        guard let size = try? handle.seekToEnd(), size >= 0x7C else {
+            return
+        }
+        let bootBytes: [UInt8]
+        if config.bootFromCD && config.cdImagePath?.isEmpty == false {
+            bootBytes = [0xff, 0xff, 0xff, 0xdc]
+        } else if config.bootFromFloppy && config.floppyImagePath?.isEmpty == false {
+            bootBytes = [0x00, 0x00, 0x0c, 0xa0]
+        } else {
+            bootBytes = [0xff, 0xff, 0xff, 0xdf]
+        }
+        try? handle.seek(toOffset: 0x78)
+        try? handle.write(contentsOf: Data(bootBytes))
+    }
+
     // MARK: Argument construction
 
     nonisolated static func qemuEscape(_ s: String) -> String {
@@ -1117,9 +1142,9 @@ final class QEMUManager: ObservableObject {
         // cursor while that device is absolute.
         //
         // Mac OS 8.5 and 8.6 predate the KeyLargo PMU used by QEMU's default
-        // mac99 profile, so all guests use the CUDA/ADB profile. Mac OS 8.6
-        // and 9 can opt into the faster 7400/G4 model; Mac OS 8.5 retains the
-        // original G3 identity advertised by the bundled OpenBIOS. The ADB
+        // mac99 profile, so all guests use the CUDA/ADB profile. Mac OS 9 can
+        // opt into the faster 7400/G4 model; retail Mac OS 8.5 and 8.6 (ROM
+        // 1.4/1.6) retain the original G3 identity advertised by OpenBIOS. The ADB
         // mouse is also a working captured fallback until the optional Virtio
         // tablet driver loads.
         // Large PowerPC games generate far more translated code than QEMU's
@@ -1239,6 +1264,17 @@ final class QEMUManager: ObservableObject {
             // from KeyLargo IDE. Keeping the image on this one path avoids a
             // duplicate desktop volume and preserves Installer's native I/O.
             args += ["-boot", "d"]
+        } else if legacy, let escapedCDPath, !escapedCDPath.isEmpty {
+            // Mirror an inserted CD read-only through Virtio on the legacy
+            // 8.5/8.6 profile, where KeyLargo IDE optical drives do not mount.
+            args += [
+                "-blockdev",
+                "driver=file,node-name=classicmac-cd-file,filename=\(escapedCDPath),read-only=on",
+                "-blockdev",
+                "driver=raw,node-name=classicmac-cd,file=classicmac-cd-file,read-only=on",
+                "-device",
+                "virtio-blk-pci,drive=classicmac-cd,addr=0x11"
+            ]
         }
 
         // Keep the compatibility IDE tray present but empty. Mac OS 9 fails to
@@ -1259,7 +1295,7 @@ final class QEMUManager: ObservableObject {
                 "-blockdev",
                 "driver=raw,node-name=classicmac-tools,file=classicmac-tools-file,read-only=on",
                 "-device",
-                "virtio-blk-pci,drive=classicmac-tools"
+                legacy ? "virtio-blk-pci,drive=classicmac-tools,addr=0x10" : "virtio-blk-pci,drive=classicmac-tools"
             ]
         }
 
@@ -1282,13 +1318,23 @@ final class QEMUManager: ObservableObject {
             if tablet {
                 // Automatic slot 18 shares Sungem's interrupt when ATI and
                 // Tools are present. Mac OS 9 can stall during startup.
-                // Slot 19 shares only the non-interrupting display control.
-                let tabletDevice = ati && !legacy && toolsViaVirtio && config.networking
-                    ? "virtio-tablet-pci,addr=0x13" : "virtio-tablet-pci"
+                // On the legacy 8.5/8.6 profile, skip slot 18 (rtl8139 IRQ 29)
+                // and pin Tools/CD/9P/Tablet to 0x10/0x11/0x13/0x14.
+                let tabletDevice: String
+                if legacy {
+                    tabletDevice = "virtio-tablet-pci,addr=0x14"
+                } else if ati && toolsViaVirtio && config.networking {
+                    tabletDevice = "virtio-tablet-pci,addr=0x13"
+                } else {
+                    tabletDevice = "virtio-tablet-pci"
+                }
                 args += ["-device", tabletDevice]
             }
             if sharing {
-                args += ["-device", "virtio-9p-pci,fsdev=share0,mount_tag=\(qemuEscape(config.sharedVolumeName))"]
+                let shareDevice = legacy
+                    ? "virtio-9p-pci,addr=0x13,fsdev=share0,mount_tag=\(qemuEscape(config.sharedVolumeName))"
+                    : "virtio-9p-pci,fsdev=share0,mount_tag=\(qemuEscape(config.sharedVolumeName))"
+                args += ["-device", shareDevice]
                 let escapedPath = qemuEscape(config.sharedFolderPath!)
                 args += ["-fsdev", "local,id=share0,security_model=none,path=\(escapedPath)"]
             }

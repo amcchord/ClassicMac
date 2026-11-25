@@ -155,6 +155,7 @@ PATCHED_FILES=(
   target/m68k/helper.c
   target/ppc/spr_common.h
   tcg/tcg-op-ldst.c
+  hw/scsi/scsi-disk.c
 )
 # Untracked files created by patches (git apply refuses to create them again)
 # or copied by earlier releases; removed before the patches are applied.
@@ -559,7 +560,8 @@ for patch in "$STARTUP_DIR/retroboot-macio-ide-pio-status-drain" \
              "$ROOT_DIR/usb/retroboot-ohci-idle-frames" \
              "$ROOT_DIR/usb/retroboot-ohci-idle-hid" \
              "$QFB_DIR/retroboot-q800-t2-slow-host" \
-             "$QFB_DIR/retroboot-qfb-snapshot-mode"; do
+             "$QFB_DIR/retroboot-qfb-snapshot-mode" \
+             "$QFB_DIR/classicmac-q800-scsi-disk"; do
   git -C "$QEMU_DIR" apply "$patch.patch" || die "Failed to apply ${patch#"$ROOT_DIR"/}.patch"
 done
 

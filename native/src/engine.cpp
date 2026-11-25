@@ -70,6 +70,26 @@ bool isBlessedVolume(QFile &f, quint64 volumeStart, quint64 byteCount,
   return be32(header, 92) != 0;
 }
 } // namespace
+void Engine::applyQuadraBootPRAM(const QString &pramPath,
+                                 const QJsonObject &config) {
+  if (config["machineFamily"].toString() != "quadra800")
+    return;
+  QFile f(pramPath);
+  if (!f.open(QIODevice::ReadWrite) || f.size() < 0x7C)
+    return;
+  QByteArray boot(4, '\0');
+  if (config["bootFromCD"].toBool() &&
+      !config["cdImagePath"].toString().isEmpty()) {
+    boot = QByteArray("\xff\xff\xff\xdc", 4);
+  } else if (config["bootFromFloppy"].toBool() &&
+             !config["floppyImagePath"].toString().isEmpty()) {
+    boot = QByteArray("\x00\x00\x0c\xa0", 4);
+  } else {
+    boot = QByteArray("\xff\xff\xff\xdf", 4);
+  }
+  if (f.seek(0x78))
+    f.write(boot);
+}
 bool Engine::hasBlessedSystemFolder(const QString &diskPath) {
   QFile f(diskPath);
   if (!f.open(QFile::ReadOnly))
@@ -259,6 +279,7 @@ void Engine::start() {
     }
     Model::machineFile(machine.folder,
                        machine.config["pramImageName"].toString());
+    applyQuadraBootPRAM(pram, machine.config);
   } else if (family == "powerMacOSX") {
     requireRuntimeFile("qemu-osx/openbios-ppc-osx");
     requireRuntimeFile("qemu-osx/qemu_vga.ndrv");

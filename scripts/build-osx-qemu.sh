@@ -9,7 +9,10 @@ revision=98f88efe8f07067667b8d9b1a5ce9551d34036c1
 repository=https://github.com/qemu/qemu.git
 
 host="$(uname -s)"
-patches=("$root/osx/retroboot-qemu10.patch")
+patches=(
+    "$root/osx/retroboot-qemu10.patch"
+    "$root/osx/classicmac-texture-swap-qemu10.patch"
+)
 extra_cflags=-O2
 extra_configure_args=()
 case "$host" in

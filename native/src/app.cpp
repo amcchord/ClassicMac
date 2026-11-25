@@ -1231,7 +1231,7 @@ void App::showEditor(bool create) {
   if (!create) {
     for (auto pair : QList<QPair<QString, QString>>{
              {"toolsCDInserted", "ClassicMac Tools CD"},
-             {"useG4CPU", "PowerPC G4 CPU"},
+             {"useG4CPU", "PowerPC G4 CPU (off for Mac OS 8.5–8.6)"},
              {"useEnhancedFramebuffer", "Enhanced Quadra framebuffer"},
              {"sound", "Sound"},
              {"networking", "Networking"},
@@ -1239,7 +1239,8 @@ void App::showEditor(bool create) {
              {"classicInputHelpers",
               "Right click as Control-click; scroll as arrow keys"},
              {"swapAltCommand", "Swap Alt and Command keys"},
-             {"bootFromCD", "Start from inserted CD"}}) {
+             {"bootFromCD", "Start from inserted CD"},
+             {"bootFromFloppy", "Start from inserted floppy"}}) {
       auto check = new PButton(pair.second, &d);
       check->toggleButton = true;
       check->setCheckable(true);
@@ -1247,11 +1248,23 @@ void App::showEditor(bool create) {
       checks[pair.first] = check;
       if ((osx && (pair.first == "toolsCDInserted" || pair.first == "classicInputHelpers")) ||
           (pair.first == "useG4CPU" && !ppc) ||
-          (pair.first == "useEnhancedFramebuffer" && !quadra)) {
+          ((pair.first == "useEnhancedFramebuffer" || pair.first == "bootFromFloppy") && !quadra)) {
         check->hide();
         continue;
       }
       v->addWidget(check);
+    }
+    if (quadra && checks.contains("bootFromFloppy")) {
+      checks["bootFromFloppy"]->setEnabled(
+          !c["floppyImagePath"].toString().isEmpty());
+      connect(checks["bootFromCD"], &PButton::toggled, &d, [&](bool on) {
+        if (on)
+          checks["bootFromFloppy"]->setChecked(false);
+      });
+      connect(checks["bootFromFloppy"], &PButton::toggled, &d, [&](bool on) {
+        if (on)
+          checks["bootFromCD"]->setChecked(false);
+      });
     }
     auto selectedWidth = [&] {
       if (resolution->currentText() == "Custom…")
@@ -1376,12 +1389,13 @@ void App::showMedia(QWidget *parent) {
   const QString family = m->family();
   const bool osx = family == "powerMacOSX";
   const bool copland = family == "powerMac7500";
+  const bool quadra = family == "quadra800";
   PDialog d("Media", {540, 460}, parent ? parent : this);
   mediaDialogs[machineId] = &d;
   auto v = dialogLayout(&d);
   v->addWidget(label(m->name(), &d));
   v->addWidget(label(
-      family == "quadra800"
+      quadra
           ? "Choose CD, floppy, or startup media for this Mac. Shut down before changing media."
           : "Choose CD or startup media for this Mac. Shut down before changing media.",
       &d, "regular", true));
@@ -1417,8 +1431,10 @@ void App::showMedia(QWidget *parent) {
       cur = ensureEditable();
       auto c = cur->config;
       c[key] = path;
-      if (key == "cdImagePath")
+      if (key == "cdImagePath") {
         c["bootFromCD"] = true;
+        c["bootFromFloppy"] = false;
+      }
       settingsSaved(c);
       refreshMedia();
     }
@@ -1471,6 +1487,8 @@ void App::showMedia(QWidget *parent) {
           c.remove(key);
           if (key == "cdImagePath")
             c["bootFromCD"] = false;
+          else if (key == "floppyImagePath")
+            c["bootFromFloppy"] = false;
           settingsSaved(c);
           refreshMedia();
         },
@@ -1505,12 +1523,23 @@ void App::showMedia(QWidget *parent) {
   bootCheck->toggleButton = true;
   bootCheck->setCheckable(true);
   v->addWidget(bootCheck);
+  auto floppyBootCheck = new PButton("Start from inserted floppy", &d);
+  floppyBootCheck->toggleButton = true;
+  floppyBootCheck->setCheckable(true);
+  if (quadra)
+    v->addWidget(floppyBootCheck);
+  else
+    floppyBootCheck->hide();
   auto toggleOption = [&](const QString &key, bool on) {
     if (syncing)
       return;
     auto *cur = ensureEditable();
     auto c = cur->config;
     c[key] = on;
+    if (on && key == "bootFromCD")
+      c["bootFromFloppy"] = false;
+    else if (on && key == "bootFromFloppy")
+      c["bootFromCD"] = false;
     settingsSaved(c);
     refreshMedia();
   };
@@ -1518,6 +1547,8 @@ void App::showMedia(QWidget *parent) {
           [&](bool on) { toggleOption("toolsCDInserted", on); });
   connect(bootCheck, &PButton::toggled, &d,
           [&](bool on) { toggleOption("bootFromCD", on); });
+  connect(floppyBootCheck, &PButton::toggled, &d,
+          [&](bool on) { toggleOption("bootFromFloppy", on); });
   updates.append([&] {
     syncing = true;
     auto *cur = findMachine();
@@ -1526,6 +1557,9 @@ void App::showMedia(QWidget *parent) {
     toolsCheck->setEnabled(!running && cur);
     bootCheck->setChecked(cur && cur->config["bootFromCD"].toBool());
     bootCheck->setEnabled(!running && cur);
+    floppyBootCheck->setChecked(cur && cur->config["bootFromFloppy"].toBool());
+    floppyBootCheck->setEnabled(
+        !running && cur && !cur->config["floppyImagePath"].toString().isEmpty());
     syncing = false;
   });
   refreshMedia();

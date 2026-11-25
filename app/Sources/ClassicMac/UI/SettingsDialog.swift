@@ -139,7 +139,7 @@ struct SettingsDialog: View {
                     PlatinumCheckbox("Use this computer's Internet connection", isOn: $config.networking)
                     PlatinumCheckbox("Play the Mac's sound", isOn: $config.sound)
                     if config.machineFamily == .powerMacG4 {
-                        PlatinumCheckbox("PowerPC G4 processor (off for Mac OS 8.5)", isOn: $config.useG4CPU)
+                        PlatinumCheckbox("PowerPC G4 processor (off for Mac OS 8.5–8.6)", isOn: $config.useG4CPU)
                     }
                     if config.machineFamily != .powerMacOSX {
                         PlatinumCheckbox("Right-click and scroll wheel in classic apps", isOn: $config.classicInputHelpers)

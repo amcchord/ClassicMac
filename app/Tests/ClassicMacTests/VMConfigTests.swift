@@ -456,4 +456,36 @@ final class VMConfigTests: XCTestCase {
             XCTAssertFalse(FileManager.default.fileExists(atPath: bundle.path))
         }
     }
+
+    func testQuadraBootFromFloppyDefaultsSanitizesAndRoundTrips() throws {
+        let encoder = JSONEncoder(), decoder = JSONDecoder()
+        let q = VMConfig(
+            name: "Quadra Floppy",
+            machineFamily: .quadra800,
+            bootFromCD: false,
+            floppyImagePath: "/tmp/DiskTools.img",
+            bootFromFloppy: true
+        )
+        let decoded = try decoder.decode(VMConfig.self, from: encoder.encode(q))
+        XCTAssertTrue(decoded.bootFromFloppy)
+
+        let conflict = VMConfig(
+            name: "Conflict",
+            machineFamily: .quadra800,
+            cdImagePath: "/tmp/CD.iso",
+            bootFromCD: true,
+            floppyImagePath: "/tmp/DiskTools.img",
+            bootFromFloppy: true
+        )
+        XCTAssertFalse(conflict.bootFromFloppy)
+
+        let nonQuadra = VMConfig(
+            name: "G4",
+            machineFamily: .powerMacG4,
+            bootFromCD: false,
+            floppyImagePath: "/tmp/DiskTools.img",
+            bootFromFloppy: true
+        )
+        XCTAssertFalse(nonQuadra.bootFromFloppy)
+    }
 }

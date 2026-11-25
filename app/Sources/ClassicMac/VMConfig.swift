@@ -239,6 +239,7 @@ struct VMConfig: Codable, Identifiable, Hashable {
     // New World Power Macs did not have floppy hardware, so this setting is
     // only available for the Quadra 800.
     var floppyImagePath: String?
+    var bootFromFloppy: Bool
 
     // Start up with the bundled ClassicMac Tools volume. Power Macs mount it
     // through a read-only Virtio disk (reliable on Mac OS 9); Quadras retain
@@ -260,8 +261,9 @@ struct VMConfig: Codable, Identifiable, Hashable {
     var graphicsCard: GraphicsCard
 
     // PowerPC CPU generation. The 7400/G4 model substantially improves
-    // classic QuickDraw and mixed 68K/PowerPC workloads on Mac OS 8.6 and 9.
-    // Mac OS 8.5 predates G4 hardware, so it can retain the G3 model.
+    // classic QuickDraw and mixed 68K/PowerPC workloads on Mac OS 9.
+    // Retail Mac OS 8.5 and 8.6 (ROM 1.4/1.6) predate G4 hardware and retain
+    // the G3 model.
     var useG4CPU: Bool
 
     // The retail Mac OS 8.6 ROM needs a Virtio startup disk on mac99.
@@ -293,7 +295,7 @@ struct VMConfig: Codable, Identifiable, Hashable {
         case id, name, machineFamily, ramMB, diskImageName, pramImageName, diskSizeGB
         case width, height, depth, useEnhancedFramebuffer, customResolution
         case useBrowserDisplay
-        case cdImagePath, bootFromCD, floppyImagePath
+        case cdImagePath, bootFromCD, floppyImagePath, bootFromFloppy
         case networking, sound, useG4CPU, useVirtioDisk, sharedFolderPath, graphicsCard
         case classicInputHelpers, tabletInput, toolsCDInserted
         case toolsDeliveryVersion
@@ -313,6 +315,7 @@ struct VMConfig: Codable, Identifiable, Hashable {
          cdImagePath: String? = nil,
          bootFromCD: Bool = true,
          floppyImagePath: String? = nil,
+         bootFromFloppy: Bool = false,
          toolsCDInserted: Bool? = nil,
          networking: Bool = true,
          sound: Bool = true,
@@ -339,6 +342,7 @@ struct VMConfig: Codable, Identifiable, Hashable {
         self.cdImagePath = cdImagePath
         self.bootFromCD = bootFromCD
         self.floppyImagePath = machineFamily.supportsFloppyDisk ? floppyImagePath : nil
+        self.bootFromFloppy = bootFromFloppy
         self.toolsCDInserted = toolsCDInserted ?? (machineFamily == .powerMacG4)
         self.toolsDeliveryVersion = Self.currentToolsDeliveryVersion
         self.networking = networking
@@ -403,6 +407,7 @@ struct VMConfig: Codable, Identifiable, Hashable {
         cdImagePath = try c.decodeIfPresent(String.self, forKey: .cdImagePath)
         bootFromCD = try c.decodeIfPresent(Bool.self, forKey: .bootFromCD) ?? false
         floppyImagePath = try c.decodeIfPresent(String.self, forKey: .floppyImagePath)
+        bootFromFloppy = try c.decodeIfPresent(Bool.self, forKey: .bootFromFloppy) ?? false
         let savedToolsDeliveryVersion = try c.decodeIfPresent(
             Int.self,
             forKey: .toolsDeliveryVersion
@@ -494,6 +499,10 @@ struct VMConfig: Codable, Identifiable, Hashable {
         }
         if !machineFamily.supportsFloppyDisk {
             floppyImagePath = nil
+            bootFromFloppy = false
+        }
+        if floppyImagePath?.isEmpty != false || bootFromCD {
+            bootFromFloppy = false
         }
         if machineFamily == .powerMacOSX {
             ramMB = min(max(ramMB, 256), 2048)

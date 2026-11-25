@@ -29,7 +29,9 @@ enum MediaDevice: String, Codable, CaseIterable {
         case .disc:
             updated.cdImagePath = path
             if path == nil { updated.bootFromCD = false }
-        case .floppy: updated.floppyImagePath = path
+        case .floppy:
+            updated.floppyImagePath = path
+            if path == nil { updated.bootFromFloppy = false }
         case .tools: updated.toolsCDInserted = path != nil
         }
         return updated

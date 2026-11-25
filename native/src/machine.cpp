@@ -128,9 +128,10 @@ QJsonObject validate(QJsonObject c) {
     c["graphicsCard"] = "standard";
   for (auto key : {"sound", "networking", "tabletInput", "classicInputHelpers",
                    "useG4CPU", "useEnhancedFramebuffer", "bootFromCD",
-                   "toolsCDInserted", "useVirtioDisk"}) {
+                   "bootFromFloppy", "toolsCDInserted", "useVirtioDisk"}) {
     if (!c.contains(key))
-      c[key] = !QStringList{"bootFromCD", "toolsCDInserted", "useVirtioDisk"}
+      c[key] = !QStringList{"bootFromCD", "bootFromFloppy", "toolsCDInserted",
+                            "useVirtioDisk"}
                     .contains(key);
     if (!c[key].isBool())
       fail("Invalid " + QString(key) + " option.");
@@ -180,6 +181,10 @@ QJsonObject validate(QJsonObject c) {
   if (osx) {
     c.remove("sharedFolderPath");
     c.remove("floppyImagePath");
+  }
+  if (!quad || c["floppyImagePath"].toString().isEmpty() ||
+      c["bootFromCD"].toBool()) {
+    c["bootFromFloppy"] = false;
   }
   return c;
 }
@@ -522,7 +527,9 @@ QStringList qemuArguments(const Machine &m, int port,
       a << "-drive"
         << "if=none,id=classicmac-tools,file=" +
                opt(r + "/ClassicMacTools.iso") + ",format=raw,readonly=on"
-        << "-device" << "virtio-blk-pci,drive=classicmac-tools";
+        << "-device"
+        << (legacy ? "virtio-blk-pci,drive=classicmac-tools,addr=0x10"
+                   : "virtio-blk-pci,drive=classicmac-tools");
     if (needsNdrvLoader)
       a << "-device" << "loader,addr=0x4000000,file=" + opt(r + "/ndrvloader")
         << "-prom-env" << "boot-command=init-program go";
@@ -532,7 +539,10 @@ QStringList qemuArguments(const Machine &m, int port,
       // tablet in slot 18, sharing Sungem's interrupt. Mac OS 9 then stalls
       // during startup. Slot 19 uses the quiet line on every desktop host,
       // shared with the display-control device, which has no PCI interrupt.
-      if (ati && !legacy && tools && b("networking"))
+      // On legacy 8.5/8.6, skip slot 18 (rtl8139 IRQ 29) and pin to 0x14.
+      if (legacy)
+        tablet += ",addr=0x14";
+      else if (ati && tools && b("networking"))
         tablet += ",addr=0x13";
       a << "-device" << tablet;
     }
@@ -548,8 +558,14 @@ QStringList qemuArguments(const Machine &m, int port,
                    : "boot-device=virtio0:\\\\:tbxi");
       if (legacy)
         a << "-device" << "virtio-blk-pci,drive=startup0,addr=0x10";
-    } else if (cdBoot)
+    } else if (cdBoot) {
       a << "-boot" << "d";
+    } else if (legacy && !s("cdImagePath").isEmpty()) {
+      a << "-drive"
+        << "if=none,id=classicmac-cd,file=" + opt(s("cdImagePath")) +
+               ",format=raw,readonly=on"
+        << "-device" << "virtio-blk-pci,drive=classicmac-cd,addr=0x11";
+    }
   } else {
     a << "-M"
       << QString("q800%1,audiodev=snd0")
@@ -603,7 +619,9 @@ QStringList qemuArguments(const Machine &m, int port,
       tag = "Shared Files";
     QString dev = ppc ? QStringLiteral("virtio-9p-pci")
                       : QStringLiteral("virtio-9p-device");
-    if (ppc && ati && !legacy && b("networking"))
+    if (ppc && legacy)
+      dev += ",addr=0x13";
+    else if (ppc && ati && b("networking"))
       dev += ",addr=0x14";
     a << "-fsdev"
       << "local,id=share0,security_model=none,path=" +

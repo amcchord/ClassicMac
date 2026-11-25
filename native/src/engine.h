@@ -16,6 +16,8 @@ public:
   bool stoppingRequested() const { return stopping; }
   bool forcedStopRequested() const { return forced; }
   static bool hasBlessedSystemFolder(const QString &diskPath);
+  static void applyQuadraBootPRAM(const QString &pramPath,
+                                  const QJsonObject &config);
   void start();
   QJsonValue command(QString name, QJsonObject args = {});
   QJsonValue hmp(const QString &);

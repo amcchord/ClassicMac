@@ -1,0 +1,59 @@
+--- a/hw/scsi/scsi-disk.c
++++ b/hw/scsi/scsi-disk.c
+@@ -1138,7 +1138,7 @@ static int mode_sense_page(SCSIDiskState *s, int page, uint8_t **p_outbuf,
+         [MODE_PAGE_R_W_ERROR]              = (1 << TYPE_DISK) | (1 << TYPE_ROM),
+         [MODE_PAGE_AUDIO_CTL]              = (1 << TYPE_ROM),
+         [MODE_PAGE_CAPABILITIES]           = (1 << TYPE_ROM),
+-        [MODE_PAGE_APPLE_VENDOR]           = (1 << TYPE_ROM),
++        [MODE_PAGE_APPLE_VENDOR]           = (1 << TYPE_DISK) | (1 << TYPE_ROM),
+     };
+ 
+     uint8_t *p = *p_outbuf + 2;
+@@ -1351,6 +1351,10 @@ static int scsi_disk_emulate_mode_sense(SCSIDiskReq *r, uint8_t *outbuf)
+         if (!blk_is_writable(s->qdev.conf.blk)) {
+             dev_specific_param |= 0x80; /* Readonly.  */
+         }
++        if ((s->quirks & (1 << SCSI_DISK_QUIRK_MODE_PAGE_APPLE_VENDOR)) &&
++            page == MODE_PAGE_APPLE_VENDOR) {
++            dbd = true;
++        }
+     } else {
+         if (s->quirks & (1 << SCSI_DISK_QUIRK_MODE_SENSE_ROM_USE_DBD)) {
+             /* Use DBD from the request... */
+@@ -1546,6 +1550,12 @@ static int scsi_disk_check_mode_select(SCSIDiskState *s, int page,
+         return -1;
+     }
+ 
++    if (s->qdev.type == TYPE_DISK &&
++        (s->quirks & (1 << SCSI_DISK_QUIRK_MODE_PAGE_VENDOR_SPECIFIC_APPLE)) &&
++        page == MODE_PAGE_R_W_ERROR && (inlen == 6 || inlen == 10)) {
++        return 0;
++    }
++
+     p = mode_current;
+     memset(mode_current, 0, inlen + 2);
+     len = mode_sense_page(s, page, &p, 0);
+@@ -3241,6 +3251,8 @@ static const Property scsi_hd_properties[] = {
+     DEFINE_PROP_BIT("quirk_mode_page_vendor_specific_apple", SCSIDiskState,
+                     quirks, SCSI_DISK_QUIRK_MODE_PAGE_VENDOR_SPECIFIC_APPLE,
+                     0),
++    DEFINE_PROP_BIT("quirk_mode_page_apple_vendor", SCSIDiskState, quirks,
++                    SCSI_DISK_QUIRK_MODE_PAGE_APPLE_VENDOR, 0),
+     DEFINE_BLOCK_CHS_PROPERTIES(SCSIDiskState, qdev.conf),
+ };
+ 
+--- a/hw/m68k/q800.c
++++ b/hw/m68k/q800.c
+@@ -797,9 +797,10 @@ static GlobalProperty hw_compat_q800[] = {
+     /* RetroBoot: Mac OS's Restart is a system reset (guest-reset) */
+     { M68K_CPU_TYPE_NAME("m68040"), "restart-resets", "on" },
+     { "scsi-hd", "quirk_mode_page_vendor_specific_apple", "on" },
+-    { "scsi-hd", "vendor", " SEAGATE" },
+-    { "scsi-hd", "product", "          ST225N" },
++    { "scsi-hd", "quirk_mode_page_apple_vendor", "on" },
++    { "scsi-hd", "vendor", "IBM OEM " },
++    { "scsi-hd", "product", "DFMSS4F         " },
+     { "scsi-hd", "ver", "1.0 " },
+     { "scsi-cd", "quirk_mode_page_apple_vendor", "on" },
+     { "scsi-cd", "quirk_mode_sense_rom_use_dbd", "on" },
+     { "scsi-cd", "quirk_mode_page_vendor_specific_apple", "on" },

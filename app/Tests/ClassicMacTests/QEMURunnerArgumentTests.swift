@@ -83,6 +83,28 @@ final class QEMURunnerArgumentTests: XCTestCase {
         XCTAssertFalse(native.contains("virtio-blk-pci,drive=startup0"))
     }
 
+    func testLegacyMultiVirtioHDBootPinsNonCollidingPCISlots() throws {
+        try withTemporaryToolsCD {
+            var vm = config(
+                cdImagePath: "/tmp/Game.iso",
+                bootFromCD: false,
+                toolsCDInserted: true,
+                useG4CPU: false,
+                tabletInput: true,
+                sharedFolderPath: "/tmp/SharedFolder"
+            )
+            vm.useVirtioDisk = true
+            let args = QEMUManager.buildArguments(for: vm)
+            let devices = optionValues("-device", in: args)
+            XCTAssertTrue(devices.contains("virtio-blk-pci,drive=startup0,addr=0xf"))
+            XCTAssertTrue(devices.contains("virtio-blk-pci,drive=classicmac-tools,addr=0x10"))
+            XCTAssertTrue(devices.contains("virtio-blk-pci,drive=classicmac-cd,addr=0x11"))
+            XCTAssertTrue(devices.contains { $0.hasPrefix("virtio-9p-pci,addr=0x13,") })
+            XCTAssertTrue(devices.contains("virtio-tablet-pci,addr=0x14"))
+            XCTAssertFalse(devices.contains { $0.contains("addr=0x12") })
+        }
+    }
+
     func testPowerMacIncludesInputSprocketHIDMouseWithAndWithoutTablet() {
         for tablet in [true, false] {
             let args = QEMUManager.buildArguments(for: config(tabletInput: tablet))
@@ -1049,5 +1071,27 @@ final class QEMURunnerArgumentTests: XCTestCase {
         var st = stat()
         XCTAssertEqual(lstat(sockPath, &st), 0)
         XCTAssertEqual(st.st_mode & 0o777, 0o600)
+    }
+
+    func testQuadraBootPRAMSetsExpectedDefStartRecBytes() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("qpram-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let pramURL = dir.appendingPathComponent("pram.img")
+        try Data(repeating: 0, count: 512).write(to: pramURL)
+
+        let hd = VMConfig(name: "Q", machineFamily: .quadra800, cdImagePath: "/tmp/cd.iso", bootFromCD: false, floppyImagePath: "/tmp/fd.img", bootFromFloppy: false, bundleURL: dir)
+        QEMUManager.applyQuadraBootPRAM(for: hd)
+        XCTAssertEqual(try Data(contentsOf: pramURL)[0x78..<0x7C], Data([0xff, 0xff, 0xff, 0xdf]))
+
+        let cd = VMConfig(name: "Q", machineFamily: .quadra800, cdImagePath: "/tmp/cd.iso", bootFromCD: true, floppyImagePath: "/tmp/fd.img", bootFromFloppy: false, bundleURL: dir)
+        QEMUManager.applyQuadraBootPRAM(for: cd)
+        XCTAssertEqual(try Data(contentsOf: pramURL)[0x78..<0x7C], Data([0xff, 0xff, 0xff, 0xdc]))
+
+        let fd = VMConfig(name: "Q", machineFamily: .quadra800, cdImagePath: "/tmp/cd.iso", bootFromCD: false, floppyImagePath: "/tmp/fd.img", bootFromFloppy: true, bundleURL: dir)
+        QEMUManager.applyQuadraBootPRAM(for: fd)
+        XCTAssertEqual(try Data(contentsOf: pramURL)[0x78..<0x7C], Data([0x00, 0x00, 0x0c, 0xa0]))
     }
 }

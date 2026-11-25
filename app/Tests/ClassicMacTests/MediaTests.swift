@@ -41,6 +41,11 @@ final class MediaTests: XCTestCase {
         XCTAssertEqual(updated.ramMB, original.ramMB)
         let replaced = MediaDevice.disc.setting(path: "/tmp/Game.iso", in: updated)
         XCTAssertFalse(replaced.bootFromCD, "Inserting a game disc must not silently change the startup device")
+
+        let floppyOrig = VMConfig(name: "Floppy", machineFamily: .quadra800, ramMB: 128, bootFromCD: false, floppyImagePath: "/tmp/Floppy.img", bootFromFloppy: true)
+        let ejectedFloppy = MediaDevice.floppy.setting(path: nil, in: floppyOrig)
+        XCTAssertNil(ejectedFloppy.floppyImagePath)
+        XCTAssertFalse(ejectedFloppy.bootFromFloppy)
     }
 
     func testMissingDirectoryAndEmptyImagesAreRejected() throws {

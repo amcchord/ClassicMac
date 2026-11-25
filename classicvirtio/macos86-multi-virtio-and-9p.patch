@@ -1,0 +1,312 @@
+diff --git a/Makefile b/Makefile
+index 350d314..6f43884 100644
+--- a/Makefile
++++ b/Makefile
+@@ -28,7 +28,7 @@ SUPPORT_CLASSIC = $(filter-out %-ndrv.c,$(SUPPORT))
+ SUPPORT_NDRV = $(filter-out %-classic.c,$(SUPPORT))
+ 
+ # Settle a dispute between MacTypes.h and stdbool.h
+-CDEFS = -DTYPE_BOOL -Dbool=_Bool -Dtrue=1 -Dfalse=0 -Wno-scalar-storage-order -Wall
++CDEFS = -DTYPE_BOOL -Dbool=_Bool -Dtrue=1 -Dfalse=0 -Wno-scalar-storage-order -Wall -DPRINTF_DISABLE_SUPPORT_FLOAT -DPRINTF_DISABLE_SUPPORT_EXPONENTIAL
+ 
+ # Uncomment this to generate a CPU time profile for the 9p driver
+ # To view it, run "./9profile.sh | flamegraph.pl > fg.svg"
+diff --git a/device-9p.c b/device-9p.c
+index 3e3d6a5..aac2119 100644
+--- a/device-9p.c
++++ b/device-9p.c
+@@ -16,6 +16,7 @@
+ #include <LowMem.h>
+ #include <Memory.h>
+ #include <MixedMode.h>
++#include <NameRegistry.h>
+ #include <OSUtils.h>
+ #include <Start.h>
+ #include <Traps.h>
+@@ -90,8 +91,14 @@ static bool visName(const char *name);
+ static int32_t mactime(int64_t unixtime);
+ static long fsCall(void *pb, long selector);
+ static OSErr fsDispatch(void *pb, unsigned short selector);
++static bool claimDevice(short refNum);
++static void releaseDevice(void);
+ 
+ static short drvrRefNum;
++static uint8_t mountRetryCountdown;
++#if GENERATINGCFM
++static RegEntryID deviceRegistryEntry;
++#endif
+ extern struct Qid9 root;
+ static char bootBlocks[1024];
+ 
+@@ -213,6 +220,11 @@ int DriverStart(short refNum) {
+ 	drvrRefNum = refNum;
+ 	InitLog();
+ 	sprintf(LogPrefix, "9P(%d) ", refNum);
++	if (!claimDevice(refNum)) {
++		printf("Another 9P driver instance is already active\n");
++		return openErr;
++	}
++	RegisterCleanup(releaseDevice);
+ 
+ 	if (!VInit(refNum)) {
+ 		printf("Transport layer failure\n");
+@@ -306,11 +318,55 @@ openErr:
+ 	return openErr;
+ }
+ 
++static bool claimDevice(short refNum) {
++#if GENERATINGCFM
++	static const char markerName[] = "classicmac-9p-active";
++	RegPropertyValueSize markerSize = 0;
++	uint8_t marker = 1;
++
++	GetDriverInformation(refNum,
++		(UnitNumber []){0},
++		(DriverFlags []){0},
++		(DriverOpenCount []){0},
++		(Str255){},
++		&deviceRegistryEntry,
++		&(CFragSystem7Locator){.u={.onDisk={.fileSpec=&(FSSpec){}}}},
++		(CFragConnectionID []){0},
++		(DriverEntryPointPtr []){NULL},
++		(DriverDescription []){{}});
++
++	if (RegistryPropertyGetSize(&deviceRegistryEntry, markerName,
++			&markerSize) == noErr) {
++		return false;
++	}
++
++	return RegistryPropertyCreate(&deviceRegistryEntry, markerName,
++		&marker, sizeof marker) == noErr;
++#else
++	return true;
++#endif
++}
++
++static void releaseDevice(void) {
++#if GENERATINGCFM
++	RegistryPropertyDelete(&deviceRegistryEntry, "classicmac-9p-active");
++#endif
++}
++
+ // Does not require _InitFS to have been called
+ static void installDrive(void) {
+-	dqe.dqe.dQDrive = 8; // conventional lowest number for HD
+-	while (findDrive(dqe.dqe.dQDrive) != NULL) dqe.dqe.dQDrive++;
+-	AddDrive(drvrRefNum, dqe.dqe.dQDrive, &dqe.dqe);
++	short driveNum = 8; // conventional lowest number for HD
++	while (findDrive(driveNum) != NULL) driveNum++;
++	dqe.dqe.dQDrive = driveNum;
++	AddDrive(drvrRefNum, driveNum, &dqe.dqe);
++	if (dqe.dqe.dQDrive != driveNum) {
++		for (struct DrvQEl *i = (struct DrvQEl *)GetDrvQHdr()->qHead; i != NULL; i = (struct DrvQEl *)i->qLink) {
++			if (i != &dqe.dqe && i->dQDrive == dqe.dqe.dQDrive) {
++				dqe.dqe.dQDrive = driveNum;
++				break;
++			}
++		}
++	}
+ 	printf("Drive number: %d\n", dqe.dqe.dQDrive);
+ }
+ 
+@@ -1751,7 +1807,17 @@ static OSErr fsDispatch(void *pb, unsigned short selector) {
+ // But these events can be lost for various reasons so TN1189
+ // advises repeatedly posting diskEvt at accRun time.
+ static OSErr cAccRun(struct CntrlParam *pb) {
+-	PostEvent(diskEvt, dqe.dqe.dQDrive);
++	if (vcb.vcbVRefNum != 0) {
++		(*GetDCtlEntry(drvrRefNum))->dCtlFlags &= ~dNeedTimeMask;
++		mountRetryCountdown = 0;
++		return noErr;
++	}
++	if (mountRetryCountdown == 0) {
++		PostEvent(diskEvt, dqe.dqe.dQDrive);
++		mountRetryCountdown = 30;
++	} else {
++		mountRetryCountdown--;
++	}
+ 	return noErr;
+ }
+ 
+@@ -1867,7 +1933,9 @@ int DriverCtl(CntrlParam *pb) {
+ 	if (LogEnable) printf("Drvr_%s", PBPrint(pb, pb->ioTrap|0xa000, 1));
+ 
+ 	int err = controlErr;
+-	if (pb->csCode == accRun) {
++	if (pb->csCode == 70) { /* kdgLowPowerMode */
++		err = noErr;
++	} else if (pb->csCode == accRun) {
+ 		err = cAccRun(pb);
+ 	} else if (pb->csCode == kDriveIcon) {
+ 		err = cIcon(pb);
+@@ -1885,9 +1953,16 @@ int DriverStatus(CntrlParam *pb) {
+ 	if (LogEnable) printf("Drvr_%s", PBPrint(pb, pb->ioTrap|0xa000, 1));
+ 
+ 	int err = statusErr;
+-	if (pb->csCode == kDriverGestaltCode) {
++	if (pb->csCode == kDriveStatus) {
++		memcpy(pb->csParam, &dqe, 22);
++		err = noErr;
++	} else if (pb->csCode == kDriverGestaltCode) {
+ 		DriverGestaltParam *gpb = (DriverGestaltParam *)pb;
+-		if (gpb->driverGestaltSelector == 'nmrg') {
++		if (gpb->driverGestaltSelector == kdgSync) {
++			gpb->driverGestaltResponse = 0;
++			GetDriverGestaltSyncResponse(gpb)->behavesSynchronously = true;
++			err = noErr;
++		} else if (gpb->driverGestaltSelector == 'nmrg') {
+ 			err = dgNameRegistryEntry(gpb);
+ 		} else if (gpb->driverGestaltSelector == 'ofpt' || gpb->driverGestaltSelector == 'ofbt') {
+ 			err = dgOpenFirmwareBoot(gpb);
+diff --git a/device-block.c b/device-block.c
+index 38f6b81..2c10c23 100644
+--- a/device-block.c
++++ b/device-block.c
+@@ -212,15 +212,10 @@ int DriverStart(short refNum) {
+ 	installDrive();
+ 	RegisterCleanup(removeDrive);
+ 	/*
+-	 * A read-only auxiliary Virtio disk can be discovered before Finder is
+-	 * ready to consume its first diskEvt. Keep accRun enabled so cAccRun can
+-	 * retry the mount notification at a bounded rate until a VCB appears.
++	 * An auxiliary Virtio disk (read-only Tools/CD or writable non-boot HD)
++	 * can be discovered before Finder is ready to consume its first diskEvt.
++	 * Keep accRun enabled until a VCB appears, then clear dNeedTimeMask.
+ 	 */
+-	/* Apple DV35 forbids dNeedTime for native drivers. Keep only the
+-	 * existing read-only Tools workaround; startup disks need no retry. */
+-#if GENERATINGCFM
+-	if (dqe.writeProt)
+-#endif
+ 	(*GetDCtlEntry(drvrRefNum))->dCtlFlags |= dNeedTimeMask;
+ 	PostEvent(diskEvt, dqe.dQDrive);
+ 
+@@ -369,6 +364,14 @@ static void installDrive(void) {
+ 	while (findDrive(driveNum) != NULL) driveNum++;
+ 	dqe.dQDrive = driveNum;
+ 	AddDrive(drvrRefNum, driveNum, (DrvQEl *)&dqe.qLink);
++	if (dqe.dQDrive != driveNum) {
++		for (struct DrvQEl *i = (struct DrvQEl *)GetDrvQHdr()->qHead; i != NULL; i = (struct DrvQEl *)i->qLink) {
++			if (i != (struct DrvQEl *)&dqe.qLink && i->dQDrive == dqe.dQDrive) {
++				dqe.dQDrive = driveNum;
++				break;
++			}
++		}
++	}
+ 	printf("Drive number: %d\n", dqe.dQDrive);
+ }
+ 
+@@ -568,8 +571,13 @@ static OSErr cAccRun(struct CntrlParam *pb) {
+ 	 * bundled Tools image into a dependable startup volume without flooding
+ 	 * the event queue.
+ 	 */
+-	if (fixedMedia() && dqe.diskInPlace && !mediaIsMounted()) {
+-		if (mountRetryCountdown == 0) {
++	if (fixedMedia() && dqe.diskInPlace) {
++		if (mediaIsMounted()) {
++#if GENERATINGCFM
++			(*GetDCtlEntry(drvrRefNum))->dCtlFlags &= ~dNeedTimeMask;
++#endif
++			mountRetryCountdown = 0;
++		} else if (mountRetryCountdown == 0) {
+ 			PostEvent(diskEvt, dqe.dQDrive);
+ 			mountRetryCountdown = 30;
+ 		} else {
+@@ -597,7 +605,7 @@ static bool mediaIsMounted(void) {
+ 	for (VCB *vcb=(VCB *)GetVCBQHdr()->qHead;
+ 		vcb!=NULL && vcb!=(VCB *)-1;
+ 		vcb=(VCB *)vcb->qLink) {
+-		if (vcb->vcbDrvNum == dqe.dQDrive) return true;
++		if (vcb->vcbDRefNum == drvrRefNum && vcb->vcbDrvNum == dqe.dQDrive) return true;
+ 	}
+ 	return false;
+ }
+diff --git a/ndrvloader.c b/ndrvloader.c
+index 2bd5b18..602e1e5 100644
+--- a/ndrvloader.c
++++ b/ndrvloader.c
+@@ -135,9 +135,12 @@ void putNDRVs(void) {
+ 		const void *ndrv;
+ 		long len;
+ 		const char *name;
++		long nameoff;
++		int count;
+ 	};
+ 
+ 	struct support supported[64] = {};
++	static char patchbuf[131072];
+ 
+ 	ofprint("Classic Mac OS Virtio Driver Loader (");
+ 	const char *next = allndrv;
+@@ -166,7 +169,13 @@ void putNDRVs(void) {
+ 		int vid = virtiotype(readhex(mtej+17, 4));
+ 		if (!vid) continue;
+ 
+-		supported[vid] = (struct support) {.ndrv=this, .len=next-this, .name=mtej+0x31};
++		supported[vid] = (struct support) {
++			.ndrv=this,
++			.len=next-this,
++			.name=mtej+0x31,
++			.nameoff=(mtej+0x30)-this,
++			.count=0,
++		};
+ 		if (this != allndrv) ofprint(" ");
+ 		ofprint(supported[vid].name);
+ 	}
+@@ -188,13 +197,29 @@ void putNDRVs(void) {
+ 		if ((vendorid != 0x1af4 && !(vendorid == 0x1234 && deviceid == 0x1112)) || vid == 0) continue;
+ 
+ 		if (supported[vid].ndrv) {
++			const void *ndrvptr = supported[vid].ndrv;
++			const char *dispname = supported[vid].name;
++			char uniq[32] = {};
++			int idx = supported[vid].count++;
++			if (idx > 0 && vid == 2 &&
++					supported[vid].len <= (long)sizeof patchbuf &&
++					supported[vid].nameoff + 32 <= supported[vid].len) {
++				memcpy(patchbuf, supported[vid].ndrv, supported[vid].len);
++				memset(patchbuf + supported[vid].nameoff, 0, 32);
++				strcpy(uniq, ".VirtioBlk0");
++				uniq[10] = '0' + (idx % 10);
++				patchbuf[supported[vid].nameoff] = (char)strlen(uniq);
++				memcpy(patchbuf + supported[vid].nameoff + 1, uniq, strlen(uniq));
++				ndrvptr = patchbuf;
++				dispname = uniq;
++			}
+ 			long len = 0;
+ 			of("setprop",
+-				4, ph, "driver,AAPL,MacOS,PowerPC", supported[vid].ndrv, supported[vid].len,
++				4, ph, "driver,AAPL,MacOS,PowerPC", ndrvptr, supported[vid].len,
+ 				1, &len);
+ 
+ 			ofprint("  ");
+-			ofprint(supported[vid].name);
++			ofprint(dispname);
+ 			ofprint("\n");
+ 		} else {
+ 			ofprint("  no NDRV for Virtio type ");
+diff --git a/paramblkprint.c b/paramblkprint.c
+index 5aeda40..3ffb95b 100644
+--- a/paramblkprint.c
++++ b/paramblkprint.c
+@@ -20,6 +20,12 @@ static const char *drvrconfname(long code);
+ static const char *minilang(const char *pb, unsigned short selector, short status);
+ 
+ char *PBPrint(void *pb, unsigned short selector, short errcode) {
++#if GENERATINGCFM && !defined(CLASSICVIRTIO_VERBOSE_LOG)
++	(void)pb;
++	(void)selector;
++	(void)errcode;
++	return "";
++#else
+ 	static char blob[4096];
+ 	blob[0] = 0;
+ 	char *str = blob;
+@@ -139,6 +145,7 @@ char *PBPrint(void *pb, unsigned short selector, short errcode) {
+ 	str = blob;
+ 	while (str[0] == '\n') str++;
+ 	return str;
++#endif
+ }
+ 
+ static const char *callname(unsigned short selector) {

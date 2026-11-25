@@ -218,6 +218,58 @@ int selfTest(const QString &fixtures, const QString &output) {
               !args.contains("shift=4,sleep=off") &&
               args.contains("virtio-blk-pci,drive=startup0,addr=0xf"),
           "8.6 startup profile lost");
+  auto legacyAll = legacy;
+  legacyAll["toolsCDInserted"] = true;
+  legacyAll["cdImagePath"] = "/fixture/Game.iso";
+  if (Model::supportsHostSharing())
+    legacyAll["sharedFolderPath"] = "/fixture/Shared";
+  legacyAll["tabletInput"] = true;
+  auto legacyAllArgs =
+      Model::argumentsFor({"/fixture/Test.classic", legacyAll}, 6000, true);
+  require(legacyAllArgs.contains("virtio-blk-pci,drive=startup0,addr=0xf") &&
+              legacyAllArgs.contains(
+                  "virtio-blk-pci,drive=classicmac-tools,addr=0x10") &&
+              legacyAllArgs.contains(
+                  "virtio-blk-pci,drive=classicmac-cd,addr=0x11") &&
+              (!Model::supportsHostSharing() ||
+               legacyAllArgs.contains(
+                   "virtio-9p-pci,addr=0x13,fsdev=share0,mount_tag=Shared Files")) &&
+              legacyAllArgs.contains("virtio-tablet-pci,addr=0x14"),
+          "8.6 multi-virtio PCI slot allocation");
+  QTemporaryDir pramTmp;
+  const QString pramPath = pramTmp.path() + "/pram.img";
+  QFile pramFile(pramPath);
+  require(pramFile.open(QFile::WriteOnly) &&
+              pramFile.write(QByteArray(512, '\0')) == 512,
+          "Quadra PRAM test file creation");
+  pramFile.close();
+  auto qBase = Model::freshConfig("QuadraPRAM", "quadra800");
+  qBase["cdImagePath"] = "/fixture/os75.iso";
+  qBase["floppyImagePath"] = "/fixture/disktools.img";
+  qBase["bootFromCD"] = false;
+  qBase["bootFromFloppy"] = false;
+  Engine::applyQuadraBootPRAM(pramPath, Model::validate(qBase));
+  auto readBootRec = [&] {
+    QFile f(pramPath);
+    require(f.open(QFile::ReadOnly) && f.seek(0x78), "Read PRAM boot rec");
+    return f.read(4);
+  };
+  require(readBootRec() == QByteArray("\xff\xff\xff\xdf", 4),
+          "Quadra PRAM HD boot bytes");
+  auto qCd = qBase;
+  qCd["bootFromCD"] = true;
+  qCd["bootFromFloppy"] = true;
+  auto qCdValid = Model::validate(qCd);
+  require(!qCdValid["bootFromFloppy"].toBool(),
+          "bootFromCD clears bootFromFloppy");
+  Engine::applyQuadraBootPRAM(pramPath, qCdValid);
+  require(readBootRec() == QByteArray("\xff\xff\xff\xdc", 4),
+          "Quadra PRAM CD boot bytes");
+  auto qFd = qBase;
+  qFd["bootFromFloppy"] = true;
+  Engine::applyQuadraBootPRAM(pramPath, Model::validate(qFd));
+  require(readBootRec() == QByteArray("\x00\x00\x0c\xa0", 4),
+          "Quadra PRAM Floppy boot bytes");
   QTemporaryDir tmp;
   QFile sparse(tmp.path() + "/sparse");
   require(sparse.open(QFile::WriteOnly) && Model::makeSparse(sparse) &&
