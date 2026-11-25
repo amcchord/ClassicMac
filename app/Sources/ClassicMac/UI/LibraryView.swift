@@ -366,6 +366,17 @@ private struct LibraryDetail: View {
                                 }
                             }
                         } else {
+                            if let highlights = entry.machine.highlights, !highlights.isEmpty {
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text("Highlights").platinumText(.emphasis)
+                                    ForEach(Array(highlights.enumerated()), id: \.offset) { _, item in
+                                        HStack(alignment: .firstTextBaseline, spacing: 5) {
+                                            Text("•").platinumText(.small)
+                                            Text(item).platinumText(.small).fixedSize(horizontal: false, vertical: true)
+                                        }
+                                    }
+                                }
+                            }
                             VStack(alignment: .leading, spacing: 3) {
                                 Text("Good to know").platinumText(.emphasis)
                                 ForEach(defaultNotes, id: \.self) { note in
@@ -427,8 +438,6 @@ struct DownloadProgressView: View {
 
     @ObservedObject var model: MachineDownloadModel
     let title: String
-    @State private var started = Date()
-    @State private var startBytes: Int64?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -450,22 +459,6 @@ struct DownloadProgressView: View {
         .padding(12)
         .frame(width: Self.size.width, height: Self.size.height)
         .background(Platinum.face.color)
-        .onAppear { anchorIfNeeded(model.completedBytes) }
-        .onChange(of: model.phase) { _, _ in
-            started = Date()
-            startBytes = nil
-            anchorIfNeeded(model.completedBytes)
-        }
-        .onChange(of: model.completedBytes) { _, bytes in
-            anchorIfNeeded(bytes)
-        }
-    }
-
-    private func anchorIfNeeded(_ bytes: Int64) {
-        guard model.phase == .downloading, bytes > 0 else { return }
-        if let existing = startBytes, bytes >= existing { return }
-        started = Date()
-        startBytes = bytes
     }
 
     private var heading: String {
@@ -493,32 +486,21 @@ struct DownloadProgressView: View {
             let percent = min(max(Int((Double(model.completedBytes) / Double(model.totalBytes) * 100).rounded(.down)), 0), 100)
             text += " (\(percent)%)"
         }
-        let elapsed = Date().timeIntervalSince(started)
-        if model.phase == .downloading, let anchor = startBytes, elapsed >= 1.5 {
-            let moved = Double(model.completedBytes - anchor)
-            if moved > 0 {
-                let rate = moved / elapsed
-                text += " · " + Self.speed(rate)
-                let remaining = Double(max(0, model.totalBytes - model.completedBytes)) / rate
-                text += " · " + Self.remaining(remaining)
+        if [.downloading, .verifying, .installing].contains(model.phase),
+           let rate = model.bytesPerSecond {
+            text += " · " + Self.speed(rate)
+            if let eta = model.etaSeconds {
+                text += " · " + Self.remaining(eta)
             }
         }
         return text
     }
 
     static func speed(_ bytesPerSecond: Double) -> String {
-        if bytesPerSecond >= 100_000 {
-            return String(format: "%.1f MB/s", bytesPerSecond / 1_000_000)
-        }
-        let kb = max(1, Int((bytesPerSecond / 1_000).rounded()))
-        return "\(kb) KB/s"
+        TransferMeter.formatSpeed(bytesPerSecond)
     }
 
     static func remaining(_ seconds: Double) -> String {
-        if seconds < 60 { return "Less than a minute remaining" }
-        let minutes = Int((seconds / 60).rounded())
-        if minutes < 60 { return "About \(minutes) minute\(minutes == 1 ? "" : "s") remaining" }
-        let hours = Int((seconds / 3600).rounded())
-        return "About \(hours) hour\(hours == 1 ? "" : "s") remaining"
+        TransferMeter.formatETA(seconds)
     }
 }
