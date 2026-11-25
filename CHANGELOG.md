@@ -1,5 +1,34 @@
 # Changelog
 
+## 4.8.1 — Classic Mac Compatibility, Radeon 32-bit Textures & MIT License (2026-11-25)
+
+### Added
+
+- Add root MIT `LICENSE` and document MIT licensing for original ClassicMac
+  code and interop patches in `README.md` and `THIRD_PARTY_NOTICES.md` (#19).
+- Add Quadra 800 startup floppy selection (`bootFromFloppy`) and write
+  explicit Quadra PRAM `DefStartRec` bytes (`0x78..0x7B`) before launch so CD,
+  NuBus Virtio floppy, and SCSI hard disk startup selection work reliably (#45).
+
+### Fixed
+
+- Fix Radeon 3D 32-bit textures rendering green on 16-bit desktops across QEMU
+  11 and QEMU 10 OS X (`ati/classicmac-texture-swap.patch` by John-Michael
+  Mulesa via PR #41, plus `osx/classicmac-texture-swap-qemu10.patch`) (#40).
+- Fix Mac OS 8.6 multi-Virtio mounting and Finder hangs
+  (`classicvirtio/macos86-multi-virtio-and-9p.patch`): preserve per-drive
+  `dQDrive`, disambiguate `mtej` block driver names, prevent `device-9p`
+  double-initialization and event flooding, stay within OpenBIOS's Forth
+  dictionary budget, and wire user-CD Virtio mirroring with non-colliding PCI
+  slots (`0xf`/`0x10`/`0x11`/`0x13`/`0x14`) (#42).
+- Fix Quadra 800 System 7.5.x 20 MB drive limit and initialization/Sad Mac
+  errors (`qfb/classicmac-q800-scsi-disk.patch`): switch default `scsi-hd`
+  identity from Seagate `ST225N` to `IBM OEM DFMSS4F`, expose
+  `MODE_PAGE_APPLE_VENDOR` on `TYPE_DISK`, and accept CCS length-6
+  `MODE_PAGE_R_W_ERROR` in `MODE SELECT` (#45).
+- Clarify the PowerPC G4 CPU setting label and comments to note disabling for
+  Mac OS 8.5–8.6 (#11).
+
 ## 4.8.0 — RetroBoot 3.0 Parity & Quality Pass (2026-11-24)
 
 ### Added

@@ -27,7 +27,7 @@ struct MachineCatalog: Codable {
     static let retroBootURL = URL(string: "https://mcchord.net/retroboot-downloads/catalog.json")!
     static let maximumCatalogBytes: Int64 = 1_048_576
     static var currentAppVersion: String {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "4.8.0"
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "4.8.1"
     }
 
     let schemaVersion: Int

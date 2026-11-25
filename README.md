@@ -29,17 +29,31 @@
   <img src="docs/screenshots/powermacg4-macos92.png" width="410" alt="Mac OS 9.2 on the emulated Power Mac G4">
 </p>
 
-## Download ClassicMac 4.8.0
+## Download ClassicMac 4.8.1
 
 | System | Download | Requirements |
 | --- | --- | --- |
-| Windows | [Portable EXE](https://github.com/amcchord/ClassicMac/releases/download/v4.8.0/ClassicMac-4.8.0-windows-x64.exe) | Windows 11 x64; unsigned. |
-| macOS | [DMG](https://github.com/amcchord/ClassicMac/releases/download/v4.8.0/ClassicMac-4.8.0.dmg) · [ZIP](https://github.com/amcchord/ClassicMac/releases/download/v4.8.0/ClassicMac-4.8.0.zip) | Apple Silicon, macOS 15+; signed and notarized. |
-| Linux | [AppImage](https://github.com/amcchord/ClassicMac/releases/download/v4.8.0/ClassicMac-4.8.0-linux-x64.AppImage) | x64, glibc 2.39+ and a desktop. |
+| Windows | [Portable EXE](https://github.com/amcchord/ClassicMac/releases/download/v4.8.1/ClassicMac-4.8.1-windows-x64.exe) | Windows 11 x64; unsigned. |
+| macOS | [DMG](https://github.com/amcchord/ClassicMac/releases/download/v4.8.1/ClassicMac-4.8.1.dmg) · [ZIP](https://github.com/amcchord/ClassicMac/releases/download/v4.8.1/ClassicMac-4.8.1.zip) | Apple Silicon, macOS 15+; signed and notarized. |
+| Linux | [AppImage](https://github.com/amcchord/ClassicMac/releases/download/v4.8.1/ClassicMac-4.8.1-linux-x64.AppImage) | x64, glibc 2.39+ and a desktop. |
 
-[Release notes, checksums and engine sources](https://github.com/amcchord/ClassicMac/releases/tag/v4.8.0).
+[Release notes, checksums and engine sources](https://github.com/amcchord/ClassicMac/releases/tag/v4.8.1).
 Windows runs directly. Drag the Mac app to Applications. On Linux, mark the
 AppImage executable; use `--appimage-extract-and-run` if FUSE is unavailable.
+
+## New in ClassicMac 4.8.1
+
+- **Radeon 32-bit texture fix.** Fixes 32-bit `ati-vga` textures rendering green
+  on 16-bit desktops across QEMU 11 (PR #41) and QEMU 10 OS X.
+- **Mac OS 8.6 multi-Virtio storage & folder sharing.** Fixes simultaneous
+  hard disk, ClassicMac Tools, CD, Shared Folder, and tablet startup on Mac OS
+  8.6 without drive collisions, Finder hangs, or OpenBIOS dictionary overflow.
+- **System 7.5.x disk size & Quadra floppy startup.** Switches Quadra `scsi-hd`
+  to `IBM OEM DFMSS4F` with Apple mode-page fixes so 2 GB+ drives initialize cleanly,
+  and adds explicit **Floppy** startup selection (`bootFromFloppy`) via Quadra
+  PRAM `DefStartRec`.
+- **MIT license.** Adds a root MIT `LICENSE` covering ClassicMac's original code
+  and interop patches.
 
 ## New in ClassicMac 4.8.0
 
@@ -484,7 +498,7 @@ Requirements:
 
 # 5. Verify the exact signed/stapled artifact, including versions, Gatekeeper,
 #    the bundled Tools CD and both Power Mac display cards
-./scripts/verify-release.sh dist/ClassicMac.dmg 4.8.0 4.8.0
+./scripts/verify-release.sh dist/ClassicMac.dmg 4.8.1 4.8.1
 ```
 
 All scripts are idempotent and safe to re-run. Building needs the Xcode command line tools and [Homebrew](https://brew.sh).
@@ -565,3 +579,9 @@ ClassicMac/
 - **Power Mac Mac OS 8 startup** — the machine uses a CUDA/G3 profile with an original-iMac OpenBIOS identity and classic Mac NVRAM/RTAS services. During CD startup, a read-only Virtio mirror lets the Mac OS 8.5/8.6 ROM read the selected disc before its IDE driver is active; the ordinary IDE CD stays present for Installer and Finder.
 - **Quadra floppy storage** — a removable `virtio-blk-device` rides on the existing classicvirtio NuBus transport. A small extension to the 68k block driver adds writes, flushes, media-change events, and a host/guest eject handshake so Finder owns the unmount before QEMU removes the raw image.
 - **Emulation speed** — all QEMU-backed machines run on QEMU's TCG JIT; an Apple Silicon Mac (and modern x64 Windows/Linux hosts) runs them comfortably faster than the original hardware.
+
+## License
+
+Original ClassicMac source code and ClassicMac-authored patches (including `powermac/openbios-classic-macos-8.patch` and the ClassicMac patches under `classicvirtio/`) are licensed under the [MIT License](LICENSE).
+
+Patches and integrations targeting upstream GPL, LGPL, MPL, or Apache-licensed projects (such as QEMU, OpenBIOS, DingusPPC, UTM, noVNC, and `ppcvid/driver`) remain compatible with and subject to the respective upstream licenses when combined or distributed. Third-party components and separate artwork (such as `Resources/Iconfactory` and `platinum/macos-icons`) retain their own terms as documented in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
