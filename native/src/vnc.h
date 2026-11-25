@@ -47,6 +47,8 @@ public:
   VNC *vnc;
   bool helpers = true, captured = false;
   bool swapAltCommand = false;
+  bool legacyMouse = true;
+  int mouseDpi = 0;
   bool followsWindow = false, fitWindow = false;
   bool paused = false;
   int widthAlignment = 1;
@@ -63,6 +65,9 @@ public:
   QRect displayViewport() const;
   QSize desiredSize() const;
   void scheduleResize();
+  static bool scaleNativeRelative(double &remX, double &remY, double dx,
+                                  double dy, int dpi, double scale,
+                                  bool legacyNative, int &outX, int &outY);
 signals:
   void captureChanged(bool);
   void displayChanged();
@@ -109,6 +114,7 @@ private:
   bool rawInputActive = false;
   QAbstractNativeEventFilter *rawFilter = nullptr;
   int resizeAttempts = 0, wheelRemainder = 0;
+  double relRemX = 0.0, relRemY = 0.0;
   bool resizeArmed = false, wantsResize = false, shownOnce = false;
   void requestResize();
   quint32 keySym(QKeyEvent *) const;

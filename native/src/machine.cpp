@@ -1,4 +1,7 @@
 #include "machine.h"
+#include <QTimeZone>
+#include <algorithm>
+#include <zlib.h>
 #ifdef Q_OS_WIN
 #include <io.h>
 #include <windows.h>
@@ -128,7 +131,8 @@ QJsonObject validate(QJsonObject c) {
     c["graphicsCard"] = "standard";
   for (auto key : {"sound", "networking", "tabletInput", "classicInputHelpers",
                    "useG4CPU", "useEnhancedFramebuffer", "bootFromCD",
-                   "bootFromFloppy", "toolsCDInserted", "useVirtioDisk"}) {
+                   "bootFromFloppy", "toolsCDInserted", "useVirtioDisk",
+                   "legacyMouseTracking"}) {
     if (!c.contains(key))
       c[key] = !QStringList{"bootFromCD", "bootFromFloppy", "toolsCDInserted",
                             "useVirtioDisk"}
@@ -136,6 +140,9 @@ QJsonObject validate(QJsonObject c) {
     if (!c[key].isBool())
       fail("Invalid " + QString(key) + " option.");
   }
+  int mouseDpi = integer(c, "mouseDPI", 0, 0, 100000);
+  if (mouseDpi != 0 && mouseDpi < 100)
+    fail("Unsupported mouseDPI setting.");
   if (c.contains("swapAltCommand") && !c["swapAltCommand"].isBool())
     fail("Invalid swapAltCommand option.");
   if (family != "powerMacG4")
@@ -376,6 +383,129 @@ QProcessEnvironment hostEnvironment() {
 #endif
   return env;
 }
+namespace {
+constexpr int kOsxNvramBytes = 16384;
+constexpr int kOsxBankBytes = 8192;
+
+quint16 readBe16(const char *p) {
+  return (quint16(quint8(p[0])) << 8) | quint16(quint8(p[1]));
+}
+
+quint32 readBe32(const char *p) {
+  return (quint32(quint8(p[0])) << 24) | (quint32(quint8(p[1])) << 16) |
+         (quint32(quint8(p[2])) << 8) | quint32(quint8(p[3]));
+}
+
+quint8 osxHeaderSum(const char *header16) {
+  int total = 0;
+  for (int i = 0; i < 16; ++i)
+    total += (i == 1) ? 0 : int(quint8(header16[i]));
+  while (total > 255)
+    total = (total & 255) + (total >> 8);
+  return quint8(total);
+}
+
+QList<QByteArray> validOsxBanks(const QByteArray &data) {
+  QList<QByteArray> banks;
+  if (data.size() != kOsxNvramBytes)
+    return banks;
+  for (int offset : {0, kOsxBankBytes}) {
+    const QByteArray bank = data.mid(offset, kOsxBankBytes);
+    const char *b = bank.constData();
+    const quint32 computedAdler = static_cast<quint32>(::adler32(
+        1L, reinterpret_cast<const Bytef *>(b + 20), kOsxBankBytes - 20));
+    if (quint8(b[0]) == 0x5au && readBe16(b + 2) == 2 &&
+        quint8(b[1]) == osxHeaderSum(b) && readBe32(b + 16) == computedAdler) {
+      banks.append(bank);
+    }
+  }
+  return banks;
+}
+
+int osxRtcOffset(const QByteArray &data) {
+  QList<QByteArray> banks = validOsxBanks(data);
+  if (banks.isEmpty())
+    fail("This Mac's OS X startup memory is damaged. Restore a checkpoint or "
+         "import the Mac again.");
+  std::sort(banks.begin(), banks.end(),
+            [](const QByteArray &a, const QByteArray &b) {
+              return readBe32(a.constData() + 20) <
+                     readBe32(b.constData() + 20);
+            });
+  if (banks.size() == 2) {
+    const quint32 g0 = readBe32(banks[0].constData() + 20);
+    const quint32 g1 = readBe32(banks[1].constData() + 20);
+    if ((g0 == g1 && banks[0] != banks[1]) || (g1 - g0) >= 0x80000000u)
+      fail("This Mac's startup-memory clock record is ambiguous.");
+  }
+  const QByteArray &bank = banks.last();
+  const char *b = bank.constData();
+  int offset = 0;
+  QList<int> found;
+  while (offset < kOsxBankBytes) {
+    if (offset + 16 > kOsxBankBytes ||
+        quint8(b[offset + 1]) != osxHeaderSum(b + offset))
+      fail("This Mac's startup-memory partition record is damaged.");
+    const int length = int(readBe16(b + offset + 2)) * 16;
+    if (length < 16 || offset + length > kOsxBankBytes)
+      fail("This Mac's startup-memory partition record is damaged.");
+    QByteArray partName = bank.mid(offset + 4, 12);
+    while (!partName.isEmpty() && partName.endsWith('\0'))
+      partName.chop(1);
+    if (partName == "APL,MacOS75") {
+      if (length < 16 + 256)
+        fail("This Mac's startup-memory clock record is incomplete.");
+      const quint32 value = readBe32(b + offset + 16 + 0xec) & 0x00ffffffu;
+      const int signedVal =
+          (value & 0x800000u) ? int(value) - 0x1000000 : int(value);
+      found.append(signedVal);
+    }
+    offset += length;
+  }
+  if (found.size() != 1 || found[0] < -86400 || found[0] > 86400)
+    fail("This Mac's startup-memory clock record is not valid.");
+  return found[0];
+}
+} // namespace
+
+bool validateOsxNvram(const QByteArray &data, QString *errorOut) {
+  if (!validOsxBanks(data).isEmpty())
+    return true;
+  if (errorOut)
+    *errorOut = QStringLiteral(
+        "This Mac's OS X startup memory is damaged. Restore a checkpoint or "
+        "import the Mac again.");
+  return false;
+}
+
+QString osxRtcBase(const QString &nvramPath, qint64 nowUtcSeconds) {
+  const QFileInfo info(nvramPath);
+  if (!info.exists() && !info.isSymLink())
+    return QStringLiteral("base=utc");
+  if (info.isSymLink() || !info.isFile())
+    fail("This Mac's OS X startup memory could not be read.");
+  QFile f(nvramPath);
+  if (!f.open(QFile::ReadOnly) || f.size() != kOsxNvramBytes)
+    fail("This Mac's OS X startup memory could not be read.");
+  const QByteArray data = f.readAll();
+  if (data.size() != kOsxNvramBytes)
+    fail("This Mac's OS X startup memory could not be read.");
+  const int offsetSec = osxRtcOffset(data);
+  if (offsetSec == 0)
+    return QStringLiteral("base=utc");
+  const qint64 nowSec =
+      nowUtcSeconds >= 0 ? nowUtcSeconds : QDateTime::currentSecsSinceEpoch();
+#if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
+  const QDateTime instant =
+      QDateTime::fromSecsSinceEpoch(nowSec + offsetSec, QTimeZone::utc());
+#else
+  const QDateTime instant =
+      QDateTime::fromSecsSinceEpoch(nowSec + offsetSec, Qt::UTC);
+#endif
+  return QStringLiteral("base=") +
+         instant.toString(QStringLiteral("yyyy-MM-dd'T'HH:mm:ss"));
+}
+
 QStringList qemuArguments(const Machine &m, int port,
                           const QString &audioOverride) {
   if (port < 5900 || port > 65535)
@@ -442,12 +572,21 @@ QStringList qemuArguments(const Machine &m, int port,
     QString cd = "if=ide,index=2,media=cdrom,id=cd0,readonly=on";
     if (!s("cdImagePath").isEmpty())
       cd += ",file=" + opt(s("cdImagePath")) + ",format=raw";
+    QString osVersion;
+    const QString tplPath = m.folder + "/template-info.json";
+    if (QFileInfo::exists(tplPath)) {
+      try {
+        osVersion = readJSON(tplPath).value("osVersion").toString();
+      } catch (...) {
+      }
+    }
     a << "-accel" << "tcg,tb-size=512"
       << "-M" << "mac99,via=pmu,usb=off,audiodev=snd0" << "-cpu" << "7400"
       << "-bios" << r + "/qemu-osx/openbios-ppc-osx"
       << "-global" << "macio-nvram.osx-flash=on"
       << "-drive" << "if=none,id=osxnv,file=" + flash + ",format=raw"
       << "-global" << "macio-nvram.drive=osxnv"
+      << "-rtc" << osxRtcBase(m.folder + "/nvram.img")
       << "-drive" << "file=" + disk + ",format=raw,media=disk,index=0"
       << "-drive" << cd << "-boot" << (cdBoot ? "d" : "c")
       << "-vga" << "std" << "-global" << "VGA.romfile="
@@ -455,8 +594,14 @@ QStringList qemuArguments(const Machine &m, int port,
       << "-global" << QString("VGA.xres=%1").arg(width)
       << "-global" << QString("VGA.yres=%1").arg(height)
       << "-g" << QString("%1x%2x32").arg(width).arg(height)
-      << "-prom-env" << "output-device=ttya"
-      << "-device" << "pci-ohci,id=osx-usb"
+      << "-prom-env" << "output-device=ttya";
+    if (!cdBoot) {
+      a << "-global" << "screamer.osx-codec=on"
+        << "-global" << "screamer.dma-lead-us=0";
+      if (!osVersion.trimmed().startsWith(QStringLiteral("10.2")))
+        a << "-global" << "via-pmu.osx-sleep=on";
+    }
+    a << "-device" << "pci-ohci,id=osx-usb"
       << "-device" << "usb-kbd,bus=osx-usb.0"
       << "-device" << (b("tabletInput") ? "usb-tablet,bus=osx-usb.0"
                                        : "usb-mouse,bus=osx-usb.0")
@@ -467,7 +612,10 @@ QStringList qemuArguments(const Machine &m, int port,
     if (legacy)
       a << "-nodefaults" << "-global" << "cuda.idle-irq-ms=50";
     else
-      a << "-device" << "usb-mouse,id=classicmac-game-mouse";
+      a << "-device"
+        << (b("classicInputHelpers")
+                ? "usb-mouse,id=classicmac-game-mouse"
+                : "usb-mouse,id=classicmac-game-mouse,wheel-per-report=1");
     a << "-accel" << "tcg,tb-size=512" << "-M"
       << (legacy ? "mac99,via=cuda,usb=off,audiodev=snd0"
                  : "mac99,via=cuda,audiodev=snd0")

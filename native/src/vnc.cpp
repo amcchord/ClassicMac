@@ -3,6 +3,8 @@
 #include "platinum.h"
 #include <QtEndian>
 #include <QtWidgets>
+#include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <openssl/des.h>
 #ifdef Q_OS_WIN
@@ -217,8 +219,14 @@ public:
   HWND targetHwnd = nullptr;
   VNC *vnc = nullptr;
   int *mask = nullptr;
-  WindowsRawInputFilter(HWND hwnd, VNC *client, int *buttons)
-      : targetHwnd(hwnd), vnc(client), mask(buttons) {}
+  bool *legacyMouse = nullptr;
+  int *mouseDpi = nullptr;
+  double *remX = nullptr;
+  double *remY = nullptr;
+  WindowsRawInputFilter(HWND hwnd, VNC *client, int *buttons, bool *legacy,
+                        int *dpi, double *rx, double *ry)
+      : targetHwnd(hwnd), vnc(client), mask(buttons), legacyMouse(legacy),
+        mouseDpi(dpi), remX(rx), remY(ry) {}
   bool nativeEventFilter(const QByteArray &eventType, void *message,
                          qintptr *) override {
     if (eventType != "windows_generic_MSG" || !vnc || !mask)
@@ -242,9 +250,19 @@ public:
     const RAWMOUSE &m = raw->data.mouse;
     if (!(m.usFlags & MOUSE_MOVE_ABSOLUTE)) {
       const int dx = int(m.lLastX), dy = int(m.lLastY);
-      if (dx || dy)
-        vnc->pointer(0x7fff + std::clamp(dx, -16384, 16384),
-                     0x7fff + std::clamp(dy, -16384, 16384), *mask);
+      if (dx || dy) {
+        int outX = 0, outY = 0;
+        const bool legacy = legacyMouse ? *legacyMouse : true;
+        const int dpi = mouseDpi ? *mouseDpi : 0;
+        double dummyX = 0.0, dummyY = 0.0;
+        if (GuestView::scaleNativeRelative(remX ? *remX : dummyX,
+                                           remY ? *remY : dummyY, double(dx),
+                                           double(dy), dpi, 1.0, legacy, outX,
+                                           outY)) {
+          vnc->pointer(0x7fff + std::clamp(outX, -16384, 16384),
+                       0x7fff + std::clamp(outY, -16384, 16384), *mask);
+        }
+      }
     }
     return false;
   }
@@ -1188,6 +1206,8 @@ void GuestView::release() {
                  vnc->relative ? 0x7fff : lastPointer.y(), 0);
   mask = 0;
   wheelRemainder = 0;
+  relRemX = 0.0;
+  relRemY = 0.0;
   if (captured) {
     captured = false;
 #ifdef Q_OS_WIN
@@ -1219,6 +1239,38 @@ void GuestView::focusOutEvent(QFocusEvent *e) {
   release();
   QWidget::focusOutEvent(e);
 }
+bool GuestView::scaleNativeRelative(double &remX, double &remY, double dx,
+                                    double dy, int dpi, double scale,
+                                    bool legacyNative, int &outX, int &outY) {
+  outX = 0;
+  outY = 0;
+  if (!std::isfinite(dx) || !std::isfinite(dy) || !std::isfinite(scale) ||
+      scale <= 0.0) {
+    remX = 0.0;
+    remY = 0.0;
+    return false;
+  }
+  auto axis = [](double &remainder, double motion) -> int {
+    const double total = remainder + motion;
+    if (total >= 32767.0 || total <= -32767.0) {
+      remainder = 0.0;
+      return total > 0.0 ? 32767 : -32767;
+    }
+    const int pixels = int(total);
+    remainder = total - double(pixels);
+    return pixels;
+  };
+  if (legacyNative) {
+    outX = axis(remX, dx);
+    outY = axis(remY, dy);
+    return outX != 0 || outY != 0;
+  }
+  const double ratio = (dpi > 0 ? double(dpi) : 1000.0) / 200.0;
+  outX = axis(remX, dx * scale / ratio);
+  outY = axis(remY, dy * scale / ratio);
+  return outX != 0 || outY != 0;
+}
+
 void GuestView::mouse(QMouseEvent *e) {
   auto r = screenRect();
   if (vnc->relative) {
@@ -1235,18 +1287,29 @@ void GuestView::mouse(QMouseEvent *e) {
         lastRelativePos = cur;
         if (delta.isNull())
           return;
-        vnc->pointer(0x7fff + delta.x(), 0x7fff + delta.y(), mask);
+        int outX = 0, outY = 0;
+        if (scaleNativeRelative(relRemX, relRemY, delta.x(), delta.y(),
+                                mouseDpi, devicePixelRatioF(), legacyMouse,
+                                outX, outY))
+          vnc->pointer(0x7fff + outX, 0x7fff + outY, mask);
       } else {
         vnc->pointer(0x7fff, 0x7fff, mask);
       }
       return;
     }
     QPoint center = rect().center(), delta = e->position().toPoint() - center;
-    if (e->type() == QEvent::MouseMove && delta.isNull())
-      return;
-    vnc->pointer(0x7fff + delta.x(), 0x7fff + delta.y(), mask);
-    if (e->type() == QEvent::MouseMove)
+    if (e->type() == QEvent::MouseMove) {
+      if (delta.isNull())
+        return;
+      int outX = 0, outY = 0;
+      if (scaleNativeRelative(relRemX, relRemY, delta.x(), delta.y(),
+                              mouseDpi, devicePixelRatioF(), legacyMouse,
+                              outX, outY))
+        vnc->pointer(0x7fff + outX, 0x7fff + outY, mask);
       QCursor::setPos(mapToGlobal(center));
+    } else {
+      vnc->pointer(0x7fff, 0x7fff, mask);
+    }
   } else if (!vnc->frame.isNull() &&
              (r.contains(e->position()) || mask ||
               e->type() == QEvent::MouseButtonRelease)) {
@@ -1280,6 +1343,8 @@ void GuestView::mousePressEvent(QMouseEvent *e) {
       return;
     }
     captured = true;
+    relRemX = 0.0;
+    relRemY = 0.0;
     grabMouse();
     setCursor(Qt::BlankCursor);
     lastRelativePos = e->position().toPoint();
@@ -1295,7 +1360,8 @@ void GuestView::mousePressEvent(QMouseEvent *e) {
         rid.hwndTarget = hwnd;
         if (RegisterRawInputDevices(&rid, 1, sizeof(rid))) {
           rawInputActive = true;
-          rawFilter = new WindowsRawInputFilter(hwnd, vnc, &mask);
+          rawFilter = new WindowsRawInputFilter(hwnd, vnc, &mask, &legacyMouse,
+                                                &mouseDpi, &relRemX, &relRemY);
           qApp->installNativeEventFilter(rawFilter);
         }
         const qreal dpr = devicePixelRatioF();
