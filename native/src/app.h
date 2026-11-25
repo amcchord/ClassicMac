@@ -1,6 +1,7 @@
 #pragma once
 #include "catalog.h"
 #include "engine.h"
+#include "updater.h"
 #include "widgets.h"
 class App : public PWindow {
   Q_OBJECT
@@ -18,8 +19,10 @@ public:
   void showMedia(QWidget *parent = nullptr);
   void showSetup();
   void showMachineActions();
+  void showCheckpoints(const Model::Machine &);
   void removeSelected();
   void showPowerActions(Engine *);
+  void checkForUpdates(bool manual = true);
   bool requestQuit();
   QJsonObject evidence() const;
   void saveLibrary();
@@ -52,6 +55,8 @@ private:
   Model::Machine install(QJsonObject, const QString &name,
                          const QString &destination = {});
   void showAbout();
+  void showUpdateDialog(const Updater::ReleaseInfo &info, bool manual);
+  void installUpdate(const Updater::ReleaseInfo &info);
   void showPaste(Engine *, QWidget *parent = nullptr);
   void select(int);
   void reflowHome();

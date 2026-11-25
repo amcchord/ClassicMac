@@ -1,4 +1,5 @@
 #include "app.h"
+#include "transfer_meter.h"
 #include <QtConcurrent>
 #include <memory>
 #include <optional>
@@ -187,13 +188,13 @@ T libraryTask(QWidget *parent, const QString &title, const QString &name,
       QElapsedTimer throttle;
       throttle.start();
       QString lastPhase;
-      qint64 phaseStart = 0;
       QElapsedTimer phaseTime;
       phaseTime.start();
+      Transfer::Meter meter;
       auto progress = [&](QString phase, qint64 complete, qint64 total) {
         if (phase != lastPhase) {
-          phaseStart = complete;
           phaseTime.restart();
+          meter.reset(total, complete);
         } else if (complete != total && throttle.elapsed() < 100) {
           return;
         }
@@ -201,23 +202,18 @@ T libraryTask(QWidget *parent, const QString &title, const QString &name,
         throttle.restart();
         auto detail = total > 0 ? bytesText(complete) + " of " + bytesText(total)
                                 : QString();
-        const double seconds = phaseTime.elapsed() / 1000.0;
-        if (phase == "Downloading" && seconds >= 1 && complete > phaseStart) {
-          const double speed = (complete - phaseStart) / seconds;
-          detail += " · " + bytesText(qint64(speed)) + "/s";
-          if (total > complete && speed > 0) {
-            const auto left = qint64((total - complete) / speed);
-            if (left >= 3600) {
-              const auto hours = (left + 1800) / 3600;
-              detail += QString(" · about %1 hour%2 left")
-                            .arg(hours)
-                            .arg(hours == 1 ? "" : "s");
-            } else if (left >= 60) {
-              detail += QString(" · about %1 min left").arg((left + 59) / 60);
-            } else {
-              detail += " · less than a minute left";
-            }
-          }
+        if (phase == "Downloading" || phase == "Checking download" ||
+            phase == "Installing") {
+          double speedBps = 0.0;
+          double etaSec = -1.0;
+          meter.update(complete, phaseTime.elapsed() / 1000.0, speedBps,
+                       etaSec);
+          const QString speedText = Transfer::Meter::formatSpeed(speedBps);
+          if (!speedText.isEmpty())
+            detail += (detail.isEmpty() ? "" : " · ") + speedText;
+          const QString etaText = Transfer::Meter::formatEta(etaSec);
+          if (!etaText.isEmpty())
+            detail += (detail.isEmpty() ? "" : " · ") + etaText;
         }
         const auto phaseText = phase == "Checking download" ? "Checking your download"
                              : phase == "Installing"        ? "Preparing your Mac"

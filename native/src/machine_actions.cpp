@@ -1,6 +1,57 @@
 #include "app.h"
+#include "checkpoint.h"
+#include <QtConcurrent>
+#include <optional>
 
 namespace {
+QString checkpointSizeText(qint64 bytes) {
+  if (bytes >= 1073741824)
+    return QString::number(double(bytes) / 1073741824, 'f', 1) + " GB";
+  if (bytes >= 1048576)
+    return QString::number(double(bytes) / 1048576, 'f', 1) + " MB";
+  return QString::number(std::max<qint64>(0, bytes) / 1024) + " KB";
+}
+
+template <class Fn>
+void runCheckpointTask(QWidget *parent, const QString &title,
+                       const QString &message, Fn &&fn) {
+  PDialog waitDlg(title, {420, 150}, parent);
+  waitDlg.setObjectName("checkpointBusyDialog");
+  auto lv = dialogLayout(&waitDlg);
+  lv->addWidget(label(message, &waitDlg, "regular", true));
+  auto bar = new PProgress(&waitDlg);
+  bar->setValue(-1);
+  lv->addWidget(bar);
+  lv->addStretch();
+  bool finished = false;
+  waitDlg.canClose = [&] { return finished; };
+  struct Result {
+    QString error;
+  };
+  QFutureWatcher<Result> watcher;
+  auto future = QtConcurrent::run([fn = std::forward<Fn>(fn)]() -> Result {
+    try {
+      fn();
+      return {};
+    } catch (const std::exception &e) {
+      return {QString::fromUtf8(e.what())};
+    } catch (...) {
+      return {"The checkpoint operation could not complete."};
+    }
+  });
+  QObject::connect(&watcher, &QFutureWatcher<Result>::finished, &waitDlg, [&] {
+    finished = true;
+    waitDlg.done();
+  });
+  watcher.setFuture(future);
+  waitDlg.exec();
+  if (!finished)
+    future.waitForFinished();
+  const auto res = future.result();
+  if (!res.error.isEmpty())
+    Model::fail(res.error);
+}
+
 QString powerState(Engine *engine) {
   if (!engine || !engine->running)
     return "Shut down";
@@ -97,7 +148,7 @@ void App::showMachineActions() {
   if (!selectedMachine)
     return;
   const auto machine = *selectedMachine;
-  PDialog dialog("Manage Mac", {540, 410}, this);
+  PDialog dialog("Manage Mac", {540, 445}, this);
   dialog.setObjectName("machineActionsDialog");
   auto layout = dialogLayout(&dialog);
   layout->addWidget(label(machine.name(), &dialog));
@@ -136,6 +187,11 @@ void App::showMachineActions() {
   }, &dialog);
   power->setObjectName("manageMachinePower");
   actions->addWidget(power, 0, Qt::AlignLeft);
+  auto checkpoints = button("Checkpoints…", [&, machine] {
+    showCheckpoints(machine);
+  }, &dialog);
+  checkpoints->setObjectName("manageMachineCheckpoints");
+  actions->addWidget(checkpoints, 0, Qt::AlignLeft);
   auto remove = button("Remove Mac…", [&] {
     for (int i = 0; i < machines.size(); ++i)
       if (machines[i].id() == machine.id()) {
@@ -167,6 +223,213 @@ void App::showMachineActions() {
   connect(&timer, &QTimer::timeout, &dialog, refresh);
   timer.start(250);
   refresh();
+  buttonRow(layout, {button("Done", [&] { dialog.done(); }, &dialog, true)});
+  dialog.exec();
+}
+
+void App::showCheckpoints(const Model::Machine &initialMachine) {
+  const QString machineId = initialMachine.id();
+  const QString machineFolder = initialMachine.folder;
+  PDialog dialog("Checkpoints", {580, 470}, this);
+  dialog.setObjectName("checkpointsDialog");
+  auto layout = dialogLayout(&dialog);
+  layout->addWidget(label(initialMachine.name(), &dialog));
+  layout->addWidget(label(
+      "Checkpoints save this Mac's virtual disk and settings so you can "
+      "restore an earlier state.",
+      &dialog, "small", true));
+  auto runningNote = label("", &dialog, "small", true);
+  runningNote->setObjectName("checkpointsRunningNotice");
+  layout->addWidget(runningNote);
+
+  auto cpList = new QListWidget(&dialog);
+  cpList->setObjectName("checkpointsList");
+  cpList->setAccessibleName("Checkpoints");
+  cpList->setFrameStyle(QFrame::Box);
+  cpList->setLineWidth(2);
+  cpList->setSelectionMode(QAbstractItemView::SingleSelection);
+  layout->addWidget(cpList, 1);
+
+  auto cpDetails = label("", &dialog, "small", true);
+  cpDetails->setObjectName("checkpointDetails");
+  layout->addWidget(cpDetails);
+
+  QList<Checkpoints::Entry> entries;
+  auto currentEntry = [&]() -> const Checkpoints::Entry * {
+    const int row = cpList->currentRow();
+    if (row < 0 || row >= entries.size())
+      return nullptr;
+    return &entries[row];
+  };
+
+  auto updateDetails = [&] {
+    if (const auto *e = currentEntry()) {
+      const qint64 bytes = e->allocatedBytes > 0 ? e->allocatedBytes : e->diskBytes;
+      cpDetails->setText(QString("Kind: %1 · Created: %2 · Method: %3 · Size: %4")
+                             .arg(e->kind, e->created, e->method,
+                                  checkpointSizeText(bytes)));
+    } else if (entries.isEmpty()) {
+      cpDetails->setText("No checkpoints saved for this Mac yet.");
+    } else {
+      cpDetails->setText("Select a checkpoint.");
+    }
+  };
+
+  auto reloadList = [&](const QString &selectId = {}) {
+    QSignalBlocker block(cpList);
+    const QString prevId =
+        !selectId.isEmpty() ? selectId
+                            : (currentEntry() ? currentEntry()->id : QString());
+    entries = Checkpoints::list(machineFolder);
+    cpList->clear();
+    int selectRow = entries.isEmpty() ? -1 : 0;
+    for (int i = 0; i < entries.size(); ++i) {
+      const auto &e = entries[i];
+      const qint64 bytes = e.allocatedBytes > 0 ? e.allocatedBytes : e.diskBytes;
+      const QString line = QString("%1 — %2 (%3)")
+                               .arg(e.label, e.created,
+                                    checkpointSizeText(bytes));
+      auto item = new QListWidgetItem(line, cpList);
+      item->setData(Qt::UserRole, e.id);
+      if (e.id == prevId)
+        selectRow = i;
+    }
+    if (selectRow >= 0)
+      cpList->setCurrentRow(selectRow);
+    updateDetails();
+  };
+
+  auto createBtn = button(
+      "Create Checkpoint…",
+      [&] {
+        if (engines.contains(machineId))
+          Model::fail("Shut down this Mac before creating a checkpoint.");
+        PDialog prompt("Create Checkpoint", {440, 190}, &dialog);
+        prompt.setObjectName("createCheckpointDialog");
+        auto pv = dialogLayout(&prompt);
+        pv->addWidget(label("Checkpoint name:", &prompt));
+        auto nameEdit = new PEdit(
+            "Checkpoint " +
+                QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm"),
+            &prompt);
+        nameEdit->setObjectName("checkpointLabelEdit");
+        nameEdit->setAccessibleName("Checkpoint name");
+        pv->addWidget(nameEdit);
+        pv->addStretch();
+        auto cancel = button("Cancel", [&] { prompt.done(0); }, &prompt);
+        auto create = button("Create", [&] { prompt.done(1); }, &prompt, true);
+        buttonRow(pv, {cancel, create});
+        nameEdit->setFocus();
+        nameEdit->selectAll();
+        if (prompt.exec() != 1)
+          return;
+        const QString cpLabel = nameEdit->text().trimmed();
+        if (cpLabel.isEmpty())
+          Model::fail("Enter a name for the checkpoint.");
+        if (engines.contains(machineId))
+          Model::fail("Shut down this Mac before creating a checkpoint.");
+        const Model::Machine latest = Model::readMachine(machineFolder);
+        QString createdId;
+        runCheckpointTask(&dialog, "Creating Checkpoint",
+                          "Saving a checkpoint of “" + latest.name() + "”…",
+                          [&] {
+                            createdId = Checkpoints::create(latest, cpLabel).id;
+                          });
+        reloadList(createdId);
+      },
+      &dialog);
+  createBtn->setObjectName("createCheckpointButton");
+
+  auto restoreBtn = button(
+      "Restore…",
+      [&] {
+        if (engines.contains(machineId))
+          Model::fail("Shut down this Mac before restoring a checkpoint.");
+        const auto *e = currentEntry();
+        if (!e)
+          return;
+        const QString targetId = e->id;
+        const QString targetLabel = e->label;
+        if (!confirmAction(&dialog, "Restore Checkpoint",
+                           "Restore “" + initialMachine.name() +
+                               "” to checkpoint “" + targetLabel +
+                               "”?\n\nChanges made since this checkpoint will be "
+                               "replaced.",
+                           "Restore", "restoreCheckpointConfirmDialog"))
+          return;
+        if (engines.contains(machineId))
+          Model::fail("Shut down this Mac before restoring a checkpoint.");
+        const Model::Machine latest = Model::readMachine(machineFolder);
+        runCheckpointTask(&dialog, "Restoring Checkpoint",
+                          "Restoring “" + targetLabel + "”…", [&] {
+                            Checkpoints::restore(latest, targetId);
+                          });
+        try {
+          const Model::Machine updated = Model::readMachine(machineFolder);
+          for (auto &m : machines) {
+            if (m.id() == machineId || m.folder == machineFolder) {
+              m = updated;
+              break;
+            }
+          }
+          render();
+        } catch (const std::exception &) {
+        }
+        reloadList(targetId);
+      },
+      &dialog);
+  restoreBtn->setObjectName("restoreCheckpointButton");
+
+  auto deleteBtn = button(
+      "Delete",
+      [&] {
+        const auto *e = currentEntry();
+        if (!e)
+          return;
+        const QString targetId = e->id;
+        if (!confirmAction(&dialog, "Delete Checkpoint",
+                           "Delete checkpoint “" + e->label +
+                               "”?\n\nYour Mac's current disk and other "
+                               "checkpoints are not changed.",
+                           "Delete", "deleteCheckpointConfirmDialog"))
+          return;
+        Checkpoints::remove(machineFolder, targetId);
+        reloadList();
+      },
+      &dialog);
+  deleteBtn->setObjectName("deleteCheckpointButton");
+
+  auto actionsRow = new QHBoxLayout;
+  actionsRow->setSpacing(10);
+  actionsRow->addWidget(createBtn);
+  actionsRow->addWidget(restoreBtn);
+  actionsRow->addWidget(deleteBtn);
+  actionsRow->addStretch();
+  layout->addLayout(actionsRow);
+
+  auto syncButtons = [&] {
+    const bool running = engines.contains(machineId);
+    const bool hasSel = currentEntry() != nullptr;
+    createBtn->setEnabled(!running);
+    restoreBtn->setEnabled(!running && hasSel);
+    deleteBtn->setEnabled(!running && hasSel);
+    runningNote->setText(
+        running
+            ? "Shut down this Mac before creating, restoring, or deleting checkpoints."
+            : QString());
+  };
+
+  connect(cpList, &QListWidget::currentRowChanged, &dialog, [&](int) {
+    updateDetails();
+    syncButtons();
+  });
+
+  QTimer timer;
+  connect(&timer, &QTimer::timeout, &dialog, syncButtons);
+  timer.start(250);
+
+  reloadList();
+  syncButtons();
   buttonRow(layout, {button("Done", [&] { dialog.done(); }, &dialog, true)});
   dialog.exec();
 }
@@ -273,7 +536,9 @@ void App::showPowerActions(Engine *engine) {
   layout->addWidget(status);
   bool osx = target->machine.family() == "powerMacOSX";
   auto guidance = label(osx
-      ? "Choose Shut Down or Restart from the Apple menu inside your Mac."
+      ? "Shut Down asks Mac OS X to close its applications safely. Save your "
+        "work and answer any dialogs on the Mac's screen, or use the Apple "
+        "menu inside your Mac. Restart starts it again after shutdown."
       : "Shut Down asks Mac OS to close its applications safely. "
                          "Save your work and answer any dialogs on the Mac's "
                          "screen. Restart starts it again after shutdown.",
@@ -290,13 +555,8 @@ void App::showPowerActions(Engine *engine) {
       target->shutdown(true);
   }, &dialog);
   restart->setObjectName("powerRestart");
-  if (osx) {
-    shutDown->hide();
-    restart->hide();
-  } else {
-    normal->addWidget(shutDown);
-    normal->addWidget(restart);
-  }
+  normal->addWidget(shutDown);
+  normal->addWidget(restart);
   normal->addStretch();
   layout->addLayout(normal);
   layout->addWidget(label("Mac not responding? Force Stop turns off the "
@@ -328,9 +588,13 @@ void App::showPowerActions(Engine *engine) {
     restart->setEnabled(!target->stoppingRequested());
     force->setEnabled(!target->forcedStopRequested());
     if (target->stoppingRequested() && !target->forcedStopRequested())
-      guidance->setText("Mac OS has been asked to shut down. Use Back to Mac "
-                        "to save work or answer its dialogs. If it stays "
-                        "stuck, Force Stop is available below.");
+      guidance->setText(
+          osx ? "Mac OS X has been asked to shut down. Use Back to Mac "
+                "to save work or answer its dialogs. If it stays "
+                "stuck, Force Stop is available below."
+              : "Mac OS has been asked to shut down. Use Back to Mac "
+                "to save work or answer its dialogs. If it stays "
+                "stuck, Force Stop is available below.");
   };
   connect(engine, &Engine::changed, &dialog, refresh);
   connect(engine, &Engine::exited, &dialog, [&] { dialog.done(); });
@@ -402,19 +666,13 @@ bool App::requestQuit() {
     for (auto engine : values)
       targets.append(engine);
     for (auto engine : targets)
-      if (engine && engine->running && !engine->stoppingRequested() &&
-          engine->machine.family() != "powerMacOSX")
+      if (engine && engine->running && !engine->stoppingRequested())
         try {
           engine->shutdown();
         } catch (const std::exception &error) {
           failures.append(QString::fromUtf8(error.what()));
         }
-    const auto needsGuestShutdown = std::any_of(targets.begin(), targets.end(), [](const auto &engine) {
-      return engine && engine->running && engine->machine.family() == "powerMacOSX";
-    });
-    guidance->setText(needsGuestShutdown
-        ? "Choose Cancel to return to each Mac OS X screen and select Shut Down from its Apple menu."
-        : failures.isEmpty()
+    guidance->setText(failures.isEmpty()
         ? "Waiting for the Macs to shut down. Choose Cancel to return to "
           "their screens and save work. Force Stop All remains available "
           "if a Mac is stuck."
@@ -433,15 +691,10 @@ bool App::requestQuit() {
     bool canShutDown = false, canForce = false;
     for (auto engine : engines) {
       lines.append(engine->machine.name() + " — " + powerState(engine));
-      canShutDown |= !engine->stoppingRequested() && engine->machine.family() != "powerMacOSX";
+      canShutDown |= !engine->stoppingRequested();
       canForce |= !engine->forcedStopRequested();
     }
     states->setText(lines.join('\n'));
-    if (!canShutDown && !engines.isEmpty() &&
-        std::all_of(engines.begin(), engines.end(), [](const auto *engine) {
-          return engine->machine.family() == "powerMacOSX";
-        }))
-      guidance->setText("Choose Cancel to return to each Mac OS X screen and select Shut Down from its Apple menu.");
     shutDown->setEnabled(canShutDown);
     force->setEnabled(canForce);
   };
