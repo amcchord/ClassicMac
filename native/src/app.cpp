@@ -1,5 +1,6 @@
 #include "app.h"
 #include "display.h"
+#include "transfer_meter.h"
 #include <QDesktopServices>
 #include <QtConcurrent>
 #include <QtMath>
@@ -256,6 +257,11 @@ App::App() : PWindow("ClassicMac", {940, 700}) {
     if (machines.isEmpty() && qEnvironmentVariableIsEmpty("CLASSICMAC_QUALIFY"))
       showSetup();
   });
+  QTimer::singleShot(1500, this, [this] {
+    const auto settings = Updater::loadSettings();
+    if (Updater::shouldAutoCheck(settings))
+      checkForUpdates(false);
+  });
 }
 Model::Machine *App::current() {
   return selected >= 0 && selected < machines.size() ? &machines[selected]
@@ -313,6 +319,10 @@ void App::buildHome() {
   tools->addWidget(button("Library…", [this] { showLibrary(); }, toolbar));
   tools->addWidget(button("New Mac…", [this] { showEditor(true); }, toolbar));
   tools->addWidget(button("Open Mac…", [this] { importMachine(); }, toolbar));
+  auto checkUpdatesButton =
+      button("Check for Updates…", [this] { checkForUpdates(true); }, toolbar);
+  checkUpdatesButton->setObjectName("checkForUpdatesButton");
+  tools->addWidget(checkUpdatesButton);
   tools->addWidget(button("About…", [this] { showAbout(); }, toolbar));
   outer->addWidget(toolbar);
   home = new QWidget(body);
@@ -614,8 +624,328 @@ void App::showAbout() {
         }
       },
       &d);
-  buttonRow(v, {notices, button("Close", [&] { d.done(); }, &d, true)});
+  auto checkUpdates = button(
+      "Check for Updates…",
+      [&] {
+        d.done();
+        checkForUpdates(true);
+      },
+      &d);
+  checkUpdates->setObjectName("aboutCheckUpdates");
+  buttonRow(v, {notices, checkUpdates,
+                button("Close", [&] { d.done(); }, &d, true)});
   d.exec();
+}
+
+void App::checkForUpdates(bool manual) {
+  static bool checkInProgress = false;
+  if (checkInProgress)
+    return;
+  checkInProgress = true;
+  auto settings = Updater::loadSettings();
+  settings.lastUpdateCheckUtc =
+      QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+  try {
+    Updater::saveSettings(settings);
+  } catch (const std::exception &) {
+  }
+
+  struct CheckResult {
+    std::optional<Updater::ReleaseInfo> release;
+    QString error;
+  };
+
+  if (!manual) {
+    auto *watcher = new QFutureWatcher<CheckResult>(this);
+    connect(watcher, &QFutureWatcher<CheckResult>::finished, this,
+            [this, watcher, guard = QPointer<App>(this)] {
+              checkInProgress = false;
+              const auto res = watcher->result();
+              watcher->deleteLater();
+              if (!guard || !res.error.isEmpty() || !res.release)
+                return;
+              const auto curSettings = Updater::loadSettings();
+              if (res.release->version == curSettings.skippedUpdateVersion)
+                return;
+              if (QApplication::activeModalWidget() || settingUp)
+                return;
+              showUpdateDialog(*res.release, false);
+            });
+    watcher->setFuture(QtConcurrent::run([]() -> CheckResult {
+      try {
+        std::atomic_bool cancel = false;
+        return {Updater::checkLatest(cancel), {}};
+      } catch (const std::exception &e) {
+        return {std::nullopt, QString::fromUtf8(e.what())};
+      } catch (...) {
+        return {std::nullopt, QStringLiteral("Update check failed.")};
+      }
+    }));
+    return;
+  }
+
+  PDialog waitDlg("Software Update", {460, 170}, this);
+  waitDlg.setObjectName("updateCheckDialog");
+  auto lv = dialogLayout(&waitDlg);
+  lv->addWidget(label("Checking for updates…", &waitDlg, "regular", true));
+  auto bar = new PProgress(&waitDlg);
+  bar->setValue(-1);
+  lv->addWidget(bar);
+  lv->addStretch();
+  std::atomic_bool cancel = false;
+  bool finished = false;
+  auto cancelBtn = button("Cancel", [&] { cancel = true; }, &waitDlg);
+  buttonRow(lv, {cancelBtn});
+  waitDlg.canClose = [&] {
+    if (!finished)
+      cancel = true;
+    return finished;
+  };
+  QFutureWatcher<CheckResult> watcher;
+  connect(&watcher, &QFutureWatcher<CheckResult>::finished, &waitDlg, [&] {
+    finished = true;
+    waitDlg.done();
+  });
+  auto future = QtConcurrent::run([&cancel]() -> CheckResult {
+    try {
+      return {Updater::checkLatest(cancel), {}};
+    } catch (const std::exception &e) {
+      return {std::nullopt, QString::fromUtf8(e.what())};
+    } catch (...) {
+      return {std::nullopt, QStringLiteral("Could not check for updates.")};
+    }
+  });
+  watcher.setFuture(future);
+  waitDlg.exec();
+  if (!finished) {
+    cancel = true;
+    future.waitForFinished();
+  }
+  checkInProgress = false;
+  const CheckResult res = future.result();
+  if (cancel)
+    return;
+  if (!res.error.isEmpty()) {
+    problem(this, res.error);
+    return;
+  }
+  if (!res.release) {
+    PDialog upToDate("Software Update", {460, 180}, this);
+    upToDate.setObjectName("upToDateDialog");
+    auto uv = dialogLayout(&upToDate);
+    uv->addWidget(label("ClassicMac is up to date", &upToDate));
+    uv->addWidget(label(
+        "ClassicMac " CLASSICMAC_VERSION " is currently the newest version available.",
+        &upToDate, "regular", true));
+    uv->addStretch();
+    buttonRow(uv, {button("OK", [&] { upToDate.done(); }, &upToDate, true)});
+    upToDate.exec();
+    return;
+  }
+  showUpdateDialog(*res.release, true);
+}
+
+void App::showUpdateDialog(const Updater::ReleaseInfo &info, bool manual) {
+  PDialog d("Software Update", {540, info.notes.isEmpty() ? 270 : 420}, this);
+  d.setObjectName("updateAvailableDialog");
+  auto v = dialogLayout(&d);
+  v->addWidget(label("ClassicMac " + info.version + " is available", &d));
+  v->addWidget(label(
+      "You are currently running version " CLASSICMAC_VERSION ".",
+      &d, "small", true));
+  if (!info.notes.isEmpty()) {
+    auto notesView = new QPlainTextEdit(&d);
+    notesView->setReadOnly(true);
+    notesView->setFrameShape(QFrame::Box);
+    notesView->setLineWidth(2);
+    QFont bitmapFont("RetroBoot Regular");
+    bitmapFont.setPixelSize(12);
+    bitmapFont.setStyleStrategy(QFont::NoAntialias);
+    notesView->setFont(bitmapFont);
+    notesView->setPlainText(info.notes);
+    v->addWidget(notesView, 1);
+  } else {
+    v->addStretch();
+  }
+  auto settings = Updater::loadSettings();
+  auto autoCheck = new PButton("Automatically check for updates", &d);
+  autoCheck->toggleButton = true;
+  autoCheck->setCheckable(true);
+  autoCheck->setChecked(settings.autoCheckUpdates);
+  connect(autoCheck, &PButton::toggled, &d, [&](bool on) {
+    auto s = Updater::loadSettings();
+    s.autoCheckUpdates = on;
+    try {
+      Updater::saveSettings(s);
+    } catch (const std::exception &) {
+    }
+  });
+  v->addWidget(autoCheck);
+
+  const bool canInPlace = Updater::canInstallInPlace();
+  if (canInPlace && !engines.isEmpty())
+    v->addWidget(label(
+        "Shut down all running Macs before installing this update.",
+        &d, "small", true));
+
+  QList<QWidget *> actions;
+  if (!manual) {
+    auto skipBtn = button(
+        "Skip This Version",
+        [&] {
+          auto s = Updater::loadSettings();
+          s.skippedUpdateVersion = info.version;
+          try {
+            Updater::saveSettings(s);
+          } catch (const std::exception &) {
+          }
+          d.done(0);
+        },
+        &d);
+    skipBtn->setObjectName("skipUpdateButton");
+    actions << skipBtn;
+  }
+  actions << button("Later", [&] { d.done(0); }, &d);
+  if (canInPlace) {
+    auto installBtn = button(
+        "Install Update…",
+        [&] {
+          if (!engines.isEmpty()) {
+            problem(&d, "Shut down all running Macs before installing an update.");
+            return;
+          }
+          d.done(1);
+        },
+        &d, true);
+    installBtn->setObjectName("installUpdateButton");
+    actions << installBtn;
+  } else {
+    auto openBtn = button(
+        "Download Page…",
+        [&] {
+          QDesktopServices::openUrl(QUrl(info.htmlUrl));
+          d.done(0);
+        },
+        &d, true);
+    openBtn->setObjectName("downloadUpdatePageButton");
+    actions << openBtn;
+  }
+  buttonRow(v, actions);
+  if (d.exec() == 1 && canInPlace) {
+    performAction([this, info] { installUpdate(info); });
+  }
+}
+
+void App::installUpdate(const Updater::ReleaseInfo &info) {
+  if (!engines.isEmpty())
+    fail("Shut down all running Macs before installing an update.");
+  const QString targetPath = Updater::inPlaceTargetPath();
+  if (targetPath.isEmpty())
+    fail("In-place updates require a packaged AppImage or portable executable.");
+
+  PDialog d("Installing Update", {500, 240}, this);
+  d.setObjectName("updateProgressDialog");
+  auto v = dialogLayout(&d);
+  v->addWidget(label("ClassicMac " + info.version, &d, "system", true));
+  auto status = label("Connecting to GitHub…", &d, "regular", true);
+  auto bar = new PProgress(&d);
+  bar->setValue(-1);
+  auto amount = label("", &d, "small", true);
+  v->addWidget(status);
+  v->addWidget(bar);
+  v->addWidget(amount);
+  v->addStretch();
+  std::atomic_bool cancel = false;
+  bool finished = false;
+  auto cancelBtn = button("Cancel", [&] {
+    cancel = true;
+    status->setText("Canceling…");
+  }, &d);
+  buttonRow(v, {cancelBtn});
+  d.canClose = [&] {
+    if (!finished)
+      cancel = true;
+    return finished;
+  };
+
+  struct InstallResult {
+    QString tempPath;
+    QString error;
+  };
+  QFutureWatcher<InstallResult> watcher;
+  auto future = QtConcurrent::run([&]() -> InstallResult {
+    try {
+      QString lastPhase;
+      QElapsedTimer phaseClock;
+      phaseClock.start();
+      Transfer::Meter meter;
+      auto formatBytes = [](qint64 bytes) -> QString {
+        if (bytes >= 1048576)
+          return QString::number(double(bytes) / 1048576, 'f', 1) + " MB";
+        return QString::number(std::max<qint64>(0, bytes) / 1024) + " KB";
+      };
+      auto progress = [&](QString phase, qint64 complete, qint64 total) {
+        if (phase != lastPhase) {
+          phaseClock.restart();
+          meter.reset(total, complete);
+          lastPhase = phase;
+        }
+        double speedBps = 0.0;
+        double etaSec = -1.0;
+        meter.update(complete, phaseClock.elapsed() / 1000.0, speedBps, etaSec);
+        QString detail = total > 0
+                             ? formatBytes(complete) + " of " + formatBytes(total)
+                             : formatBytes(complete);
+        const QString speedText = Transfer::Meter::formatSpeed(speedBps);
+        if (!speedText.isEmpty())
+          detail += (detail.isEmpty() ? "" : " · ") + speedText;
+        const QString etaText = Transfer::Meter::formatEta(etaSec);
+        if (!etaText.isEmpty())
+          detail += (detail.isEmpty() ? "" : " · ") + etaText;
+        const QString phaseText = phase == "Checking download"
+                                      ? "Verifying SHA-256 checksum"
+                                      : "Downloading update";
+        QMetaObject::invokeMethod(
+            &d,
+            [=, &cancel] {
+              if (cancel)
+                return;
+              status->setText(
+                  phaseText +
+                  (total > 0 ? QString("… %1%").arg(complete * 100 / total)
+                             : "…"));
+              amount->setText(detail);
+              bar->setValue(total > 0 ? double(complete) / total : -1);
+            },
+            Qt::QueuedConnection);
+      };
+      return {Updater::downloadAndVerify(info, targetPath, cancel, progress), {}};
+    } catch (const std::exception &e) {
+      return {{}, QString::fromUtf8(e.what())};
+    } catch (...) {
+      return {{}, QStringLiteral("The update download failed.")};
+    }
+  });
+  QObject::connect(&watcher, &QFutureWatcher<InstallResult>::finished, &d, [&] {
+    finished = true;
+    d.done();
+  });
+  watcher.setFuture(future);
+  d.exec();
+  if (!finished) {
+    cancel = true;
+    future.waitForFinished();
+  }
+  const InstallResult res = future.result();
+  if (cancel)
+    return;
+  if (!res.error.isEmpty())
+    fail(res.error);
+  if (!engines.isEmpty()) {
+    QFile::remove(res.tempPath);
+    fail("A Mac was started while downloading. Shut down all Macs and try again.");
+  }
+  Updater::applyVerifiedUpdateAndRestart(res.tempPath, targetPath);
 }
 PWindow *App::guest(Engine *e) {
   if (guests.contains(e->machine.id()))
@@ -664,6 +994,8 @@ PWindow *App::guest(Engine *e) {
   auto screen = new GuestView(&e->vnc, w->body);
   screen->helpers = config["classicInputHelpers"].toBool();
   screen->swapAltCommand = config["swapAltCommand"].toBool();
+  screen->legacyMouse = config["legacyMouseTracking"].toBool();
+  screen->mouseDpi = config["mouseDPI"].toInt();
   screen->followsWindow = followsWindow;
   screen->widthAlignment = ppc ? 8 : 1;
   if (ppc && config["graphicsCard"].toString() == "atiRadeon" && !config["bootFromCD"].toBool()) {
@@ -976,7 +1308,7 @@ void App::showEditor(bool create) {
       fail("Shut down this Mac before changing its settings.");
   }
   const QString machineId = m ? m->id() : QString();
-  PDialog d(create ? "New Mac" : "Get Info", {590, create ? 340 : 640}, this);
+  PDialog d(create ? "New Mac" : "Get Info", {590, create ? 340 : 700}, this);
   if (create)
     newMacDialog = &d;
   else
@@ -1228,6 +1560,7 @@ void App::showEditor(bool create) {
     v->addWidget(label("Enhanced Quadra video changes the Mac's resolution with the window. Sharp Pixels keeps complete pixels; built-in video uses a fixed resolution.",
                        &d, "small", true));
   QMap<QString, PButton *> checks;
+  PEdit *mouseDpiEdit = nullptr;
   if (!create) {
     for (auto pair : QList<QPair<QString, QString>>{
              {"toolsCDInserted", "ClassicMac Tools CD"},
@@ -1236,6 +1569,7 @@ void App::showEditor(bool create) {
              {"sound", "Sound"},
              {"networking", "Networking"},
              {"tabletInput", "Tablet pointer"},
+             {"legacyMouseTracking", "Native classic mouse tracking"},
              {"classicInputHelpers",
               "Right click as Control-click; scroll as arrow keys"},
              {"swapAltCommand", "Swap Alt and Command keys"},
@@ -1254,6 +1588,26 @@ void App::showEditor(bool create) {
       }
       v->addWidget(check);
     }
+    auto dpiRow = new QHBoxLayout;
+    dpiRow->setSpacing(8);
+    dpiRow->addWidget(label("Mouse DPI:", &d));
+    mouseDpiEdit = new PEdit(
+        c["mouseDPI"].toInt() > 0 ? QString::number(c["mouseDPI"].toInt())
+                                   : QString(),
+        &d);
+    mouseDpiEdit->setObjectName("mouseDpiEdit");
+    mouseDpiEdit->setAccessibleName("Mouse DPI");
+    mouseDpiEdit->setPlaceholderText("Auto");
+    mouseDpiEdit->setMaximumWidth(100);
+    dpiRow->addWidget(mouseDpiEdit);
+    dpiRow->addWidget(label("Auto or 100–100000", &d, "small"));
+    dpiRow->addStretch();
+    v->addLayout(dpiRow);
+    v->addWidget(label(
+        "Turn off Tablet pointer for relative mouse input (games, or USB "
+        "Overdrive on Mac OS 8.5–9.2.2). Native classic mouse tracking scales "
+        "raw host motion using Mouse DPI.",
+        &d, "small", true));
     if (quadra && checks.contains("bootFromFloppy")) {
       checks["bootFromFloppy"]->setEnabled(
           !c["floppyImagePath"].toString().isEmpty());
@@ -1359,6 +1713,20 @@ void App::showEditor(bool create) {
                             graphics->currentData().toString();
                         for (auto it = checks.begin(); it != checks.end(); ++it)
                           next[it.key()] = it.value()->isChecked();
+                        if (mouseDpiEdit) {
+                          const QString dpiText = mouseDpiEdit->text().trimmed();
+                          if (dpiText.isEmpty() ||
+                              dpiText.compare("Auto", Qt::CaseInsensitive) == 0) {
+                            next.remove("mouseDPI");
+                          } else {
+                            bool okDpi = false;
+                            const int dpiVal = dpiText.toInt(&okDpi);
+                            if (!okDpi || dpiVal < 100 || dpiVal > 100000)
+                              fail("Enter a mouse DPI between 100 and 100000, "
+                                   "or leave blank for Auto.");
+                            next["mouseDPI"] = dpiVal;
+                          }
+                        }
                         if (Model::supportsHostSharing() && !osx && !copland) {
                           if (sharedPath.isEmpty())
                             next.remove("sharedFolderPath");

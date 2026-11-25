@@ -83,6 +83,7 @@ extract_error:
   Goto use_temp
 run_app:
   ClearErrors
+  System::Call 'Kernel32::SetEnvironmentVariable(t "CLASSICMAC_PORTABLE_EXE", t "$EXEPATH")'
   ExecWait '"$R5\classicmac.exe" $R0' $R2
   IfErrors failed
   SetErrorLevel $R2

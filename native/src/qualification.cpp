@@ -1,6 +1,14 @@
 #include "qualification.h"
 #include "app.h"
+#include "checkpoint.h"
+#include "transfer_meter.h"
+#include "updater.h"
+#include <QDirIterator>
+#include <QElapsedTimer>
+#include <QRegularExpression>
 #include <cstdio>
+#include <cstring>
+#include <type_traits>
 #include <zlib.h>
 using namespace Platinum;
 static void require(bool value, const QString &reason) {
@@ -540,6 +548,376 @@ int selfTest(const QString &fixtures, const QString &output) {
     require(child.waitForFinished(20000) && child.exitStatus() == QProcess::NormalExit && child.exitCode() == 0,
             "Fractional backing-store test failed at " + QString(scale) + ": " +
                 QString::fromUtf8(child.readAllStandardError()));
+  }
+
+  // OS X NVRAM validation and RTC base tests.
+  {
+    auto buildBank = [](quint32 generation) {
+      QByteArray bank(8192, '\0');
+      auto writePart = [&](int off, quint8 sig, quint16 units, const char *name) {
+        bank[off] = char(sig);
+        bank[off + 2] = char((units >> 8) & 0xff);
+        bank[off + 3] = char(units & 0xff);
+        std::memcpy(bank.data() + off + 4, name, 12);
+        quint32 sum = 0;
+        for (int i = 0; i < 16; ++i)
+          if (i != 1)
+            sum += quint8(bank[off + i]);
+        while (sum > 255)
+          sum = (sum & 255U) + (sum >> 8);
+        bank[off + 1] = char(sum & 0xff);
+      };
+      writePart(0, 0x5a, 2, "wwwwwwwwwwww");
+      bank[20] = char((generation >> 24) & 0xff);
+      bank[21] = char((generation >> 16) & 0xff);
+      bank[22] = char((generation >> 8) & 0xff);
+      bank[23] = char(generation & 0xff);
+      writePart(32, 0x70, 193, "common\0\0\0\0\0\0");
+      writePart(3120, 0xa0, 81, "APL,MacOS75\0");
+      writePart(4416, 0x7f, 236, "wwwwwwwwwwww");
+      const uLong crc = adler32(
+          1L, reinterpret_cast<const Bytef *>(bank.constData() + 20), 8192 - 20);
+      bank[16] = char((crc >> 24) & 0xff);
+      bank[17] = char((crc >> 16) & 0xff);
+      bank[18] = char((crc >> 8) & 0xff);
+      bank[19] = char(crc & 0xff);
+      return bank;
+    };
+    const QByteArray validNvram = buildBank(1) + buildBank(2);
+    QString nvramErr;
+    require(Model::validateOsxNvram(validNvram, &nvramErr),
+            "Valid OS X NVRAM rejected: " + nvramErr);
+    nvramErr.clear();
+    require(!Model::validateOsxNvram(QByteArray(8192, '\0'), &nvramErr) &&
+                !nvramErr.isEmpty(),
+            "Short OS X NVRAM accepted");
+    nvramErr.clear();
+    require(!Model::validateOsxNvram(QByteArray(16384, '\0'), &nvramErr) &&
+                !nvramErr.isEmpty(),
+            "Zeroed OS X NVRAM accepted");
+    QByteArray corruptNvram = validNvram;
+    corruptNvram[100] = char(corruptNvram[100] ^ 0x55);
+    corruptNvram[8192 + 100] = char(corruptNvram[8192 + 100] ^ 0x55);
+    nvramErr.clear();
+    require(!Model::validateOsxNvram(corruptNvram, &nvramErr) &&
+                !nvramErr.isEmpty(),
+            "Corrupted OS X NVRAM accepted");
+
+    const QString nvramPath = tmp.path() + "/test-nvram.img";
+    QFile nvf(nvramPath);
+    require(nvf.open(QFile::WriteOnly | QFile::Truncate) &&
+                nvf.write(validNvram) == validNvram.size(),
+            "Write test OS X NVRAM");
+    nvf.close();
+    const auto rtcA =
+        Model::osxRtcBase(tmp.path() + "/missing-nvram.img", 1700000000LL);
+    const auto rtcB =
+        Model::osxRtcBase(tmp.path() + "/missing-nvram.img", 1700003600LL);
+    require(rtcA != rtcB, "osxRtcBase must advance with nowUtcSeconds");
+    const auto rtcSeed1 = Model::osxRtcBase(nvramPath, 1700000000LL);
+    const auto rtcSeed2 = Model::osxRtcBase(nvramPath, 1700000000LL);
+    require(rtcSeed1 == rtcSeed2, "osxRtcBase must be deterministic");
+    if constexpr (std::is_same_v<decltype(rtcSeed1), QString>) {
+      require(!rtcSeed1.isEmpty(), "osxRtcBase string must not be empty");
+    }
+  }
+
+  // OS X UI state detection tests (menu open, selection move, confirmation dialog).
+  {
+    const int w = 1024, h = 768;
+    auto makeRgb = [&](quint8 r, quint8 g, quint8 b) {
+      QByteArray rgb(w * h * 3, '\0');
+      for (int i = 0; i < w * h; ++i) {
+        rgb[i * 3] = char(r);
+        rgb[i * 3 + 1] = char(g);
+        rgb[i * 3 + 2] = char(b);
+      }
+      return rgb;
+    };
+    auto paintRect = [&](QByteArray &rgb, int rx, int ry, int rw, int rh,
+                         quint8 r, quint8 g, quint8 b) {
+      for (int y = ry; y < ry + rh && y < h; ++y) {
+        for (int x = rx; x < rx + rw && x < w; ++x) {
+          const int off = (y * w + x) * 3;
+          rgb[off] = char(r);
+          rgb[off + 1] = char(g);
+          rgb[off + 2] = char(b);
+        }
+      }
+    };
+    QByteArray base = makeRgb(58, 110, 165);
+    paintRect(base, 0, 0, w, 22, 238, 238, 238);
+
+    QByteArray menuOpen = base;
+    paintRect(menuOpen, 6, 22, 210, 260, 248, 248, 248);
+    for (int y = 32; y <= 240; y += 22)
+      paintRect(menuOpen, 14, y, 140, 10, 30, 30, 30);
+    require(!Engine::detectOsxMenuOpened(w, h, base, base),
+            "Unchanged frame falsely triggered detectOsxMenuOpened");
+    require(!Engine::detectOsxMenuOpened(w, h, {}, {}),
+            "Empty frame falsely triggered detectOsxMenuOpened");
+    require(Engine::detectOsxMenuOpened(w, h, base, menuOpen),
+            "detectOsxMenuOpened failed to detect Apple menu dropdown");
+
+    QByteArray menuSel1 = menuOpen;
+    paintRect(menuSel1, 8, 180, 206, 20, 45, 115, 225);
+    QByteArray menuSel2 = menuOpen;
+    paintRect(menuSel2, 8, 202, 206, 20, 45, 115, 225);
+    require(!Engine::detectOsxMenuSelectionMoved(w, h, menuSel1, menuSel1),
+            "Unchanged menu selection falsely triggered");
+    require(Engine::detectOsxMenuSelectionMoved(w, h, menuSel1, menuSel2),
+            "detectOsxMenuSelectionMoved failed to detect selection change");
+
+    QByteArray confirmDlg = base;
+    paintRect(confirmDlg, 312, 240, 400, 180, 236, 236, 236);
+    paintRect(confirmDlg, 340, 270, 280, 14, 20, 20, 20);
+    paintRect(confirmDlg, 340, 296, 240, 12, 60, 60, 60);
+    paintRect(confirmDlg, 580, 376, 104, 24, 50, 125, 230);
+    require(!Engine::detectOsxConfirmationDialog(w, h, base, base),
+            "Unchanged frame falsely triggered detectOsxConfirmationDialog");
+    require(Engine::detectOsxConfirmationDialog(w, h, base, confirmDlg),
+            "detectOsxConfirmationDialog failed to detect centered dialog");
+  }
+
+  // Native relative mouse scaling tests.
+  {
+    double rx = 0.0, ry = 0.0;
+    int ox = 0, oy = 0;
+    GuestView::scaleNativeRelative(rx, ry, 0.0, 0.0, 800, 1.0, false, ox, oy);
+    require(ox == 0 && oy == 0, "Zero mouse delta must produce zero output");
+    GuestView::scaleNativeRelative(rx, ry, 16.0, -12.0, 800, 1.0, false, ox, oy);
+    require(ox > 0 && oy < 0, "Mouse delta sign must be preserved");
+    rx = 0.0;
+    ry = 0.0;
+    int totalSmallX = 0;
+    for (int i = 0; i < 16; ++i) {
+      GuestView::scaleNativeRelative(rx, ry, 0.25, 0.0, 800, 1.0, false, ox, oy);
+      totalSmallX += ox;
+    }
+    require(totalSmallX > 0, "Subpixel relative mouse deltas must accumulate");
+    rx = 0.0;
+    ry = 0.0;
+    GuestView::scaleNativeRelative(rx, ry, 12.0, 12.0, 1600, 1.0, true, ox, oy);
+    require(ox > 0 && oy > 0, "Legacy native mouse scaling must preserve movement");
+  }
+
+  // Transfer::Meter speed & ETA tests.
+  {
+    Transfer::Meter meter(10000, 0, 4.0);
+    double speed = 0.0, eta = -1.0;
+    meter.update(0, 0.0, speed, eta);
+    meter.update(2000, 1.0, speed, eta);
+    meter.update(4000, 2.0, speed, eta);
+    require(speed > 1500.0 && speed < 2500.0,
+            "Transfer::Meter speed estimate out of range");
+    require(eta > 2.0 && eta < 4.5,
+            "Transfer::Meter ETA estimate out of range");
+    require(!Transfer::Meter::formatSpeed(speed).isEmpty(),
+            "Transfer::Meter::formatSpeed returned empty");
+    require(!Transfer::Meter::formatEta(eta).isEmpty(),
+            "Transfer::Meter::formatEta returned empty");
+    meter.reset(20000, 5000);
+    meter.update(10000, 1.0, speed, eta);
+    require(speed > 0.0 && eta > 0.0, "Transfer::Meter reset failed");
+  }
+
+  // Checkpoints create/list/restore/remove & session state tests.
+  {
+    const QString cpFolder = tmp.path() + "/CheckpointTest.classic";
+    QDir().mkpath(cpFolder);
+    QJsonObject cpCfg = Model::freshConfig("Checkpoint Test", "powerMacG4");
+    cpCfg["diskSizeGB"] = 1;
+    cpCfg["ramMB"] = 512;
+    Model::writeJSON(cpFolder + "/config.json", cpCfg);
+    {
+      QFile disk(cpFolder + "/disk.img");
+      require(disk.open(QFile::WriteOnly | QFile::Truncate) &&
+                  disk.write(QByteArray(65536, 'A')) == 65536,
+              "Create test checkpoint disk");
+    }
+    const Model::Machine cpMachine = Model::readMachine(cpFolder);
+    require(Checkpoints::list(cpFolder).isEmpty(),
+            "Fresh machine must have no checkpoints");
+    const auto cpEntry = Checkpoints::create(cpMachine, "Initial", "manual");
+    require(!cpEntry.id.isEmpty() && cpEntry.label == "Initial" &&
+                cpEntry.kind == "manual",
+            "Checkpoint create metadata invalid");
+    const auto cpListed = Checkpoints::list(cpFolder);
+    require(cpListed.size() == 1 && cpListed[0].id == cpEntry.id,
+            "Checkpoint list did not return created entry");
+    {
+      QFile disk(cpFolder + "/disk.img");
+      require(disk.open(QFile::WriteOnly | QFile::Truncate) &&
+                  disk.write(QByteArray(65536, 'B')) == 65536,
+              "Mutate test checkpoint disk");
+    }
+    cpCfg["ramMB"] = 256;
+    Model::writeJSON(cpFolder + "/config.json", Model::validate(cpCfg));
+    Checkpoints::restore(cpMachine, cpEntry.id);
+    {
+      QFile disk(cpFolder + "/disk.img");
+      require(disk.open(QFile::ReadOnly) && disk.read(4) == QByteArray("AAAA"),
+              "Checkpoint restore did not restore disk contents");
+    }
+    require(Model::readMachine(cpFolder).config["ramMB"].toInt() == 512,
+            "Checkpoint restore did not restore config.json");
+    Checkpoints::markSessionState(cpFolder, false, "unclean");
+    require(!Checkpoints::lastSessionClean(cpFolder),
+            "markSessionState(false) failed");
+    Checkpoints::markSessionState(cpFolder, true);
+    require(Checkpoints::lastSessionClean(cpFolder),
+            "markSessionState(true) failed");
+    Checkpoints::remove(cpFolder, cpEntry.id);
+    require(Checkpoints::list(cpFolder).isEmpty(),
+            "Checkpoint remove did not delete checkpoint");
+  }
+
+  // Updater parsing & version comparison tests.
+  {
+    require(Updater::compareVersions("4.8.1", "4.8.2") < 0, "Version lt");
+    require(Updater::compareVersions("4.8.9", "4.8.10") < 0, "Version numeric");
+    require(Updater::compareVersions("v4.8.0", "4.8") == 0, "Version eq");
+    require(Updater::compareVersions("4.9.0", "4.8.1") > 0, "Version gt");
+
+    const QByteArray releaseJson = QJsonDocument(QJsonObject{
+        {"tag_name", "v99.1.0"},
+        {"body", "Bug fixes"},
+        {"html_url", "https://github.com/amcchord/ClassicMac/releases/tag/v99.1.0"},
+        {"draft", false},
+        {"prerelease", false},
+        {"assets", QJsonArray{
+            QJsonObject{
+                {"name", "ClassicMac-99.1.0-linux-x64.AppImage"},
+                {"browser_download_url",
+                 "https://github.com/amcchord/ClassicMac/releases/download/v99.1.0/ClassicMac-99.1.0-linux-x64.AppImage"}},
+            QJsonObject{
+                {"name", "ClassicMac-99.1.0-windows-x64.exe"},
+                {"browser_download_url",
+                 "https://objects.githubusercontent.com/amcchord/ClassicMac/ClassicMac-99.1.0-windows-x64.exe"}},
+            QJsonObject{
+                {"name", "SHA256SUMS"},
+                {"browser_download_url",
+                 "https://github.com/amcchord/ClassicMac/releases/download/v99.1.0/SHA256SUMS"}}}}})
+                                       .toJson();
+    const auto linuxRel =
+        Updater::parseLatestRelease(releaseJson, "4.8.1", "linux");
+    require(linuxRel.has_value() && linuxRel->version == "99.1.0" &&
+                linuxRel->assetName == "ClassicMac-99.1.0-linux-x64.AppImage" &&
+                !linuxRel->sumsUrl.isEmpty(),
+            "Updater parseLatestRelease linux");
+    const auto winRel =
+        Updater::parseLatestRelease(releaseJson, "4.8.1", "windows");
+    require(winRel.has_value() &&
+                winRel->assetName == "ClassicMac-99.1.0-windows-x64.exe",
+            "Updater parseLatestRelease windows");
+    require(!Updater::parseLatestRelease(releaseJson, "99.1.0", "linux").has_value(),
+            "Updater same version must return nullopt");
+
+    const QByteArray preJson = QJsonDocument(QJsonObject{
+        {"tag_name", "v99.2.0"},
+        {"prerelease", true},
+        {"assets", QJsonArray{}}})
+                                   .toJson();
+    require(!Updater::parseLatestRelease(preJson, "4.8.1", "linux").has_value(),
+            "Updater prerelease must be ignored");
+
+    const QByteArray evilJson = QJsonDocument(QJsonObject{
+        {"tag_name", "v99.2.0"},
+        {"assets", QJsonArray{
+            QJsonObject{
+                {"name", "ClassicMac-99.2.0-linux-x64.AppImage"},
+                {"browser_download_url", "https://evil.example.com/bad.AppImage"}},
+            QJsonObject{
+                {"name", "SHA256SUMS"},
+                {"browser_download_url", "https://github.com/amcchord/ClassicMac/SHA256SUMS"}}}}})
+                                    .toJson();
+    bool evilRejected = false;
+    try {
+      Updater::parseLatestRelease(evilJson, "4.8.1", "linux");
+    } catch (const std::exception &) {
+      evilRejected = true;
+    }
+    require(evilRejected, "Updater must reject disallowed asset hosts");
+
+    const QString sums =
+        "0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF  ClassicMac-99.1.0-linux-x64.AppImage\n"
+        "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210 *./ClassicMac-99.1.0-windows-x64.exe\n";
+    require(Updater::parseSha256Sums(sums, "ClassicMac-99.1.0-linux-x64.AppImage") ==
+                "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            "Updater parseSha256Sums linux");
+    require(Updater::parseSha256Sums(sums, "ClassicMac-99.1.0-windows-x64.exe") ==
+                "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
+            "Updater parseSha256Sums windows");
+    require(Updater::parseSha256Sums(sums, "missing.exe").isEmpty(),
+            "Updater parseSha256Sums missing");
+  }
+
+  // Library recommendedSettings tests (ATI Radeon + Tools CD per edition).
+  {
+    const auto oldTestHome = qgetenv("CLASSICMAC_TEST_HOME");
+    qputenv("CLASSICMAC_TEST_HOME", (tmp.path() + "/lib-home").toUtf8());
+    const auto restoreHome = qScopeGuard([&] {
+      if (oldTestHome.isNull())
+        qunsetenv("CLASSICMAC_TEST_HOME");
+      else
+        qputenv("CLASSICMAC_TEST_HOME", oldTestHome);
+    });
+    const QJsonObject tplCfg = Model::freshConfig("Template", "powerMacG4");
+    const QByteArray tplCfgBytes = QJsonDocument(tplCfg).toJson();
+    const QByteArray tplArchivePayload =
+        member("config.json", tplCfgBytes) +
+        member("disk.img", QByteArray(512, 0)) + QByteArray(1024, 0);
+    const QString tplGzPath = tmp.path() + "/lib-recommended.tar.gz";
+    {
+      auto gz = gzopen(QFile::encodeName(tplGzPath).constData(), "wb");
+      require(gz != nullptr, "Library test gzip open");
+      require(gzwrite(gz, tplArchivePayload.constData(),
+                      tplArchivePayload.size()) == tplArchivePayload.size(),
+              "Library test gzip write");
+      gzclose(gz);
+    }
+    QFile gzFile(tplGzPath);
+    require(gzFile.open(QFile::ReadOnly), "Read Library test archive");
+    const QByteArray gzBytes = gzFile.readAll();
+    const QString gzSha =
+        QString::fromLatin1(QCryptographicHash::hash(gzBytes, QCryptographicHash::Sha256).toHex());
+    auto makeEntry = [&](const QString &id) {
+      return QJsonObject{
+          {"id", id},
+          {"name", id},
+          {"summary", "Test summary"},
+          {"osVersion", "9.2.2"},
+          {"minimumAppVersion", "1.0.0"},
+          {"machineFamily", "powerMacG4"},
+          {"archiveURL", "https://mcchord.net/test.tar.gz"},
+          {"archiveBytes", gzBytes.size()},
+          {"installedBytes", tplCfgBytes.size() + 512},
+          {"diskCapacityBytes", 512},
+          {"sha256", gzSha}};
+    };
+    const QJsonObject atiEntry = makeEntry("os922-deluxe-v6");
+    const QJsonObject stdEntry = makeEntry("mac-os-8.6-base-v1");
+    const QString cachePath = Library::cacheFile(atiEntry);
+    require(!cachePath.isEmpty() &&
+                QDir().mkpath(QFileInfo(cachePath).absolutePath()),
+            "Create Library cache dir");
+    {
+      QFile cf(cachePath);
+      require(cf.open(QFile::WriteOnly | QFile::Truncate) &&
+                  cf.write(gzBytes) == gzBytes.size(),
+              "Write Library cache file");
+    }
+    const QString libDest = tmp.path() + "/lib-dest";
+    std::atomic_bool libCancel = false;
+    const Model::Machine atiMac = Library::install(
+        atiEntry, libDest, "ATI Edition", libCancel, [](QString, qint64, qint64) {});
+    require(atiMac.config["graphicsCard"].toString() == "atiRadeon" &&
+                atiMac.config["toolsCDInserted"].toBool(),
+            "Library ATI edition recommendedSettings");
+    const Model::Machine stdMac = Library::install(
+        stdEntry, libDest, "Base Edition", libCancel, [](QString, qint64, qint64) {});
+    require(stdMac.config["graphicsCard"].toString() == "standard",
+            "Library base edition recommendedSettings");
   }
   if (!output.isEmpty())
     Model::writeJSON(output + "/self-test.json",
