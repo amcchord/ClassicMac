@@ -1,0 +1,67 @@
+RetroBoot: usb-mouse/usb-tablet property wheel-per-report (default 127, QEMU's
+behaviour) bounds the wheel notches one HID report carries; the rest stay
+queued for the next poll. Classic Mac OS wheel drivers (USB Overdrive 1.4) act
+once per report whatever its size, so notches the host sends faster than the
+guest polls were lost (10 notches in one burst scrolled 3 lines instead of 30).
+hostd passes wheel-per-report=1 (apps/reports/mouse-2026-10-11.md).
+
+diff --git a/hw/input/hid.c b/hw/input/hid.c
+--- a/hw/input/hid.c
++++ b/hw/input/hid.c
+@@ -379,7 +379,13 @@ int hid_pointer_poll(HIDState *hs, uint8_t *buf, int len)
+         dx = e->xdx;
+         dy = e->ydy;
+     }
+-    dz = int_clamp(e->dz, -127, 127);
++    /*
++     * wheel-per-report (default 127) bounds the notches one report carries;
++     * the rest stay queued for the next poll.  Classic Mac OS wheel drivers
++     * (USB Overdrive) act once per report whatever its size, so with 1 every
++     * notch the host sent arrives as its own report.
++     */
++    dz = int_clamp(e->dz, -(int)hs->wheel_per_report, hs->wheel_per_report);
+     e->dz -= dz;
+ 
+     if (hs->n &&
+diff --git a/include/hw/input/hid.h b/include/hw/input/hid.h
+--- a/include/hw/input/hid.h
++++ b/include/hw/input/hid.h
+@@ -46,6 +46,7 @@ struct HIDState {
+     QEMUTimer *idle_timer;
+     HIDEventFunc event;
+     QemuInputHandlerState *s;
++    uint32_t wheel_per_report;  /* wheel notches per pointer report (1..127) */
+ };
+ 
+ void hid_init(HIDState *hs, int kind, HIDEventFunc event);
+diff --git a/hw/usb/dev-hid.c b/hw/usb/dev-hid.c
+--- a/hw/usb/dev-hid.c
++++ b/hw/usb/dev-hid.c
+@@ -700,6 +700,11 @@ static void usb_hid_initfn(USBDevice *dev, int kind,
+                            Error **errp)
+ {
+     USBHIDState *us = USB_HID(dev);
++    if (kind != HID_KEYBOARD &&
++        (us->hid.wheel_per_report < 1 || us->hid.wheel_per_report > 127)) {
++        error_setg(errp, "wheel-per-report must be between 1 and 127");
++        return;
++    }
+     switch (us->usb_version) {
+     case 1:
+         dev->usb_desc = usb1;
+@@ -795,6 +800,7 @@ static const TypeInfo usb_hid_type_info = {
+ 
+ static const Property usb_tablet_properties[] = {
+         DEFINE_PROP_UINT32("usb_version", USBHIDState, usb_version, 2),
++        DEFINE_PROP_UINT32("wheel-per-report", USBHIDState, hid.wheel_per_report, 127),
+         DEFINE_PROP_STRING("display", USBHIDState, display),
+         DEFINE_PROP_UINT32("head", USBHIDState, head, 0),
+ };
+@@ -819,6 +825,7 @@ static const TypeInfo usb_tablet_info = {
+ 
+ static const Property usb_mouse_properties[] = {
+         DEFINE_PROP_UINT32("usb_version", USBHIDState, usb_version, 2),
++        DEFINE_PROP_UINT32("wheel-per-report", USBHIDState, hid.wheel_per_report, 127),
+ };
+ 
+ static void usb_mouse_class_initfn(ObjectClass *klass, const void *data)

@@ -1,0 +1,64 @@
+diff --git a/hw/ide/core.c b/hw/ide/core.c
+index d7d6f0e..28075b0 100644
+--- a/hw/ide/core.c
++++ b/hw/ide/core.c
+@@ -1752,8 +1752,8 @@ static bool cmd_identify_packet(IDEState *s, uint8_t cmd)
+     return false;
+ }
+ 
+-/* EXECUTE DEVICE DIAGNOSTIC */
+-static bool cmd_exec_dev_diagnostic(IDEState *s, uint8_t cmd)
++/* The registers after EXECUTE DEVICE DIAGNOSTIC or a software reset */
++static void ide_set_diagnostic_result(IDEState *s)
+ {
+     /*
+      * Clear the device register per the ATA (v6) specification,
+@@ -1773,9 +1773,16 @@ static bool cmd_exec_dev_diagnostic(IDEState *s, uint8_t cmd)
+          * They are part of the regular output (this is why ERR_STAT isn't set)
+          * Device 0 passed, Device 1 passed or not present. */
+         s->error = 0x01;
+-        ide_bus_set_irq(s->bus);
+     }
++}
+ 
++/* EXECUTE DEVICE DIAGNOSTIC */
++static bool cmd_exec_dev_diagnostic(IDEState *s, uint8_t cmd)
++{
++    ide_set_diagnostic_result(s);
++    if (s->drive_kind != IDE_CD) {
++        ide_bus_set_irq(s->bus);
++    }
+     return false;
+ }
+ 
+@@ -2325,8 +2332,19 @@ static void ide_perform_srst(IDEState *s)
+     /* Cancel PIO callback, reset registers/signature, etc */
+     ide_reset(s);
+ 
+-    /* perform diagnostic */
+-    cmd_exec_dev_diagnostic(s, WIN_DIAGNOSE);
++    /*
++     * RetroBoot: the diagnostic's results, without its interrupt.  A software
++     * reset does not assert INTRQ (the host polls BSY; ATA/ATAPI-6 9.2); the
++     * EXECUTE DEVICE DIAGNOSTIC command does.  QEMU raised it here, so when
++     * the reset was carried out after the host had released SRST with nIEN
++     * clear (the bottom half running late on a busy host, or on the next
++     * access, srst-complete-on-access), INTRQ stayed asserted: Mac OS 9.2.2's
++     * ATA driver resets the bus at a wake from sleep, polls Alternate Status
++     * and never cleared it, and the level-sensitive interrupt kept the
++     * OpenPIC busy with source 0x0d, so nothing else at its priority (the
++     * PMU among them) was serviced again.
++     */
++    ide_set_diagnostic_result(s);
+ }
+ 
+ static void ide_bus_perform_srst(void *opaque)
+@@ -2343,6 +2361,8 @@ static void ide_bus_perform_srst(void *opaque)
+         s = &bus->ifs[i];
+         ide_perform_srst(s);
+     }
++    /* RetroBoot: and a reset negates INTRQ (see ide_perform_srst()) */
++    qemu_irq_lower(bus->irq);
+ 
+     bus->cmd &= ~IDE_CTRL_RESET;
+ }

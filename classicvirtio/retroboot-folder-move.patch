@@ -1,0 +1,50 @@
+diff --git a/device-9p.c b/device-9p.c
+index 6896166..1f81f5c 100644
+--- a/device-9p.c
++++ b/device-9p.c
+@@ -1370,12 +1370,18 @@ static OSErr fsRename(struct IOParam *pb) {
+ 		return noErr;
+ 	}
+ 
+-	// Reserve the new filename atomically
+-	if (Lcreate9(FID2, O_WRONLY|O_CREAT|O_EXCL, 0644, 0, newNameU, NULL, NULL)) {
++	// Reserve the new filename atomically.  RetroBoot: a folder reserves an empty
++	// folder, which rename(2) replaces with the folder; over a file it failed (ENOTDIR),
++	// so a folder could not be renamed and an empty file took its new name.
++	bool isdir = IsDir(cnid);
++	if (isdir ? Mkdir9(FID1, 0777, 0, newNameU, NULL)
++	          : Lcreate9(FID2, O_WRONLY|O_CREAT|O_EXCL, 0644, 0, newNameU, NULL, NULL)) {
+ 		return dupFNErr;
+ 	}
+ 	Clunk9(FID2);
+ 	if (MF.Move(FID1, name, FID1, newNameU)) {
++		// RetroBoot: give a folder's reserved name back while the folder is still where it was
++		if (isdir && !WalkPath9(FID1, FID3, name)) Unlinkat9(FID1, newNameU, 0x200 /*AT_REMOVEDIR*/);
+ 		return ioErr; // really should've worked!
+ 	}
+ 
+@@ -1407,9 +1413,12 @@ static OSErr fsCatMove(struct CMovePBRec *pb) {
+ 	if (IsErr(cnid2)) return cnid2;
+ 	if (!IsDir(cnid2)) return bdNamErr;
+ 
+-	// Do it exclusively
++	// Do it exclusively.  RetroBoot: a folder reserves an empty folder (see fsRename):
++	// moving a folder, also to the Trash, failed and left an empty file in its place.
++	bool isdir = IsDir(cnid1);
+ 	WalkPath9(FID2, FID3, "");
+-	switch (Lcreate9(FID3, O_WRONLY|O_CREAT|O_EXCL, 0666, 0, name, NULL, NULL)) {
++	switch (isdir ? Mkdir9(FID2, 0777, 0, name, NULL)
++	              : Lcreate9(FID3, O_WRONLY|O_CREAT|O_EXCL, 0666, 0, name, NULL, NULL)) {
+ 	case 0:
+ 		break;
+ 	case EEXIST:
+@@ -1423,6 +1432,9 @@ static OSErr fsCatMove(struct CMovePBRec *pb) {
+ 	WalkPath9(FID1, FID1, "..");
+ 
+ 	int lerr = MF.Move(FID1, name, FID2, name);
++	if (lerr && isdir && !WalkPath9(FID1, FID3, name)) {
++		Unlinkat9(FID2, name, 0x200 /*AT_REMOVEDIR*/); // still where it was: give the name back
++	}
+ 	if (lerr == EINVAL) return badMovErr;
+ 	else if (lerr) return ioErr;
+ 

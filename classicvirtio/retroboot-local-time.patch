@@ -1,0 +1,215 @@
+diff --git a/device-9p.c b/device-9p.c
+index 3e3d6a5..0d7d2d5 100644
+--- a/device-9p.c
++++ b/device-9p.c
+@@ -88,6 +88,7 @@ static struct VCB *findVol(short num);
+ static void pathSplitLeaf(const unsigned char *path, unsigned char *dir, unsigned char *name);
+ static bool visName(const char *name);
+ static int32_t mactime(int64_t unixtime);
++static int64_t unixtime(uint32_t mactime);
+ static long fsCall(void *pb, long selector);
+ static OSErr fsDispatch(void *pb, unsigned short selector);
+ 
+@@ -151,8 +152,7 @@ struct dirInfo {
+ 	uint32_t checked; // TickCount() when last compared with the host
+ 	uint32_t used; // TickCount() when last used, for replacement
+ 	bool local; // changed through this driver since last compared
+-	uint64_t msec, mnsec; // the host directory's modification time
+-	int32_t mdate; // the same as a Mac date
++	uint64_t msec, mnsec; // the host directory's modification time (UTC)
+ 	int16_t nall, nfiles; // visible children: all of them, files only
+ 	struct MFAttr attr;
+ 	char name[MAXNAME];
+@@ -646,7 +646,6 @@ static struct dirInfo *dirInfo(int32_t cnid, int32_t parent, const char *name, u
+ 	d->attr.unixtime = statOK ? (int64_t)stat.mtime_sec : 0;
+ 	d->msec = statOK ? stat.mtime_sec : 0;
+ 	d->mnsec = statOK ? stat.mtime_nsec : 0;
+-	d->mdate = mactime(d->attr.unixtime);
+ 	countDir(fid, &d->nall, &d->nfiles);
+ 	d->checked = d->used = TickCount();
+ 	d->local = false;
+@@ -692,7 +691,7 @@ static OSErr fsGetVolInfo(struct XVolumeParam *pb) {
+ 	char rootName[MAXNAME];
+ 	CatalogGet(2, rootName);
+ 	struct dirInfo *d = dirInfo(2, 1, rootName, ROOTFID);
+-	if (vcb.vcbLsMod == 0) vcb.vcbLsMod = d->mdate;
++	if (vcb.vcbLsMod == 0) vcb.vcbLsMod = mactime(d->attr.unixtime);
+ 	pb->ioVLsMod = vcb.vcbLsMod;
+ 
+ 	// Allow working directories to pretend to be disks
+@@ -811,7 +810,7 @@ static void fillDirPB(struct DirInfo *pb, const struct dirInfo *d) {
+ 	memcpy(&pb->ioDrUsrWds, d->attr.finfo, sizeof pb->ioDrUsrWds);
+ 	pb->ioDrDirID = d->cnid;
+ 	pb->ioDrNmFls = d->nall;
+-	pb->ioDrCrDat = pb->ioDrMdDat = d->mdate;
++	pb->ioDrCrDat = pb->ioDrMdDat = mactime(d->attr.unixtime);
+ 	memcpy(&pb->ioDrFndrInfo, d->attr.fxinfo, sizeof pb->ioDrFndrInfo);
+ 	pb->ioDrParID = d->parent;
+ }
+@@ -897,15 +896,33 @@ static OSErr fsSetFileInfo(struct HFileInfo *pb) {
+ 	dirLocalChange(parent);
+ 	if (IsDir(cnid)) dirLocalChange(cnid);
+ 
+-	// TODO: mtime setting
+ 	struct MFAttr attr = {};
+ 	memcpy(attr.finfo, &pb->ioFlFndrInfo, sizeof pb->ioFlFndrInfo); // same field as ioDrUsrWds
+ 	memcpy(attr.fxinfo, &pb->ioFlXFndrInfo, sizeof pb->ioFlXFndrInfo); // same field as ioDrFndrInfo
+ 
++	// RetroBoot: the modification date Mac OS sets (the Finder gives a copy its
++	// original's), as UTC on the host.  Only a date that differs from the one
++	// this driver reports is written, so the Finder's other SetCatInfo calls
++	// (Finder flags, window state) leave the host's times alone.
++	unsigned fields = MF_FINFO;
++	uint32_t want = pb->ioFlMdDat; // ioDrMdDat for a folder: same offset
++	if (want >= 0x80000000UL) { // dates before 1972 are reported as 0 (see mactime)
++		struct MFAttr now = {};
++		if (IsDir(cnid)) {
++			MF.DGetAttr(cnid, FID1, name, MF_TIME, &now);
++		} else {
++			MF.FGetAttr(cnid, FID1, name, MF_TIME, &now);
++		}
++		if ((uint32_t)mactime(now.unixtime) != want) {
++			attr.unixtime = unixtime(want);
++			fields |= MF_TIME;
++		}
++	}
++
+ 	if (IsDir(cnid)) {
+-		MF.DSetAttr(cnid, FID1, name, MF_FINFO, &attr);
++		MF.DSetAttr(cnid, FID1, name, fields, &attr);
+ 	} else {
+-		MF.FSetAttr(cnid, FID1, name, MF_FINFO, &attr);
++		MF.FSetAttr(cnid, FID1, name, fields, &attr);
+ 	}
+ 
+ 	return noErr;
+@@ -1562,15 +1579,87 @@ static bool visName(const char *name) {
+ 	return (name[0] != '.' && !MF.IsSidecar(name));
+ }
+ 
+-static int32_t mactime(int64_t unixtime) {
++// RetroBoot: Mac OS dates are local time, 9P's are UTC.  The offset is Mac OS's
++// own when it knows its time zone: ReadLocation's gmtDelta, whose low 24 bits
++// already include the daylight-saving hour (the Date & Time control panel moves
++// both the clock and gmtDelta by an hour and only flags DST in the high byte).
++// RetroBoot sets the Mac clock to local time (QEMU -rtc base=localtime with
++// TZ = system.timezone) but not Mac OS's time zone, which then reads as all
++// zeros; the offset is then the Mac clock's own, measured against the host's
++// clock through 9P.  Both are asked again at most once a second and once a
++// minute, so a change of time zone or clock is followed.
++enum {
++	MACEPOCH_TO_UNIX = 24107L*24*60*60, // 1904 to 1970
++	LOCATION_TICKS = 60,
++	CLOCK_TICKS = 60*60,
++};
++
++// The Mac clock's offset from the host's UTC clock, rounded to 15 minutes
++static bool clockOffset(int32_t *ret) {
++	static int32_t offset;
++	static uint32_t measured;
++	static bool valid;
++	if (valid && (uint32_t)(TickCount() - measured) < CLOCK_TICKS) {
++		*ret = offset;
++		return true;
++	}
++
++	// The host's time now: a scratch file's modification time set by the server
++	struct Stat9 stat = {};
++	bool ok = false;
++	if (WalkPath9(DOTDIRFID, FIDCOUNT, "clock") == 0 ||
++			(WalkPath9(DOTDIRFID, FIDCOUNT, "") == 0 &&
++			 Lcreate9(FIDCOUNT, O_WRONLY|O_CREAT, 0666, 0, "clock", NULL, NULL) == 0)) {
++		ok = Setattr9(FIDCOUNT, SET_MTIME, (struct Stat9){}) == 0 &&
++			Getattr9(FIDCOUNT, STAT_MTIME, &stat) == 0;
++		Clunk9(FIDCOUNT);
++	}
++	unsigned long mac = 0;
++	GetDateTime(&mac);
++	measured = TickCount();
++	if (!ok) return valid && (*ret = offset, true);
++
++	int64_t diff = (int64_t)mac - MACEPOCH_TO_UNIX - (int64_t)stat.mtime_sec;
++	offset = (int32_t)((diff + (diff >= 0 ? 450 : -450)) / 900 * 900);
++	valid = true;
++	*ret = offset;
++	return true;
++}
++
++// Seconds to add to UTC for the Mac's local time
++static int32_t utcOffset(void) {
++	static int32_t offset;
++	static uint32_t checked;
++	static bool valid;
++	if (valid && (uint32_t)(TickCount() - checked) < LOCATION_TICKS) return offset;
++
+ 	struct MachineLocation loc;
+ 	ReadLocation(&loc);
+ 	int32_t tz = loc.u.gmtDelta & 0xffffff;
+-	if (tz & 0x800000) tz -= 0x1000000; // sign-extend
++	if (tz & 0x800000) tz -= 0x1000000; // sign-extend; the DST hour is already in it
+ 
++	int32_t measured;
++	if (loc.latitude == 0 && loc.longitude == 0 && tz == 0 && clockOffset(&measured)) {
++		tz = measured; // Mac OS's time zone was never set
++	}
++	if (!valid || tz != offset) {
++		printf("UTC offset %ld s (%s)\n", (long)tz,
++			(loc.latitude == 0 && loc.longitude == 0 && (loc.u.gmtDelta & 0xffffff) == 0) ? "Mac clock" : "Mac OS time zone");
++	}
++	offset = tz;
++	checked = TickCount();
++	valid = true;
++	return offset;
++}
++
++static int64_t unixtime(uint32_t mactime) {
++	return (int64_t)mactime - MACEPOCH_TO_UNIX - utcOffset();
++}
++
++static int32_t mactime(int64_t unixtime) {
+ 	// Mac epoch = 1904, Unix epoch = 1970 (24107 days)
+-	// Mac time is TZ local
+-	uint64_t mactime = unixtime + (24107)*24*60*60 + tz;
++	// Mac time is local time
++	uint64_t mactime = unixtime + MACEPOCH_TO_UNIX + utcOffset();
+ 
+ 	// The time "epoch+0" (start of 1904) has special meaning to MPW ("file corrupt")
+ 	// Let's recast this as everything before MacE+0x80000000, which is only 2 years after the Unix epoch
+diff --git a/multifork-3.c b/multifork-3.c
+index 4f00895..d8f9be8 100644
+--- a/multifork-3.c
++++ b/multifork-3.c
+@@ -223,9 +223,18 @@ int fgetattr3(int32_t cnid, uint32_t fid, const char *name, unsigned fields, str
+ int fsetattr3(int32_t cnid, uint32_t fid, const char *name, unsigned fields, const struct MFAttr *attr) {
+ 	// (This function never needs to truncate/extend the file)
+ 
+-	// For now, let us not implement time-setting
+-	// (It might be possible to restrict it to the cases of Now and The Epoch, signalling a corrupt file in MPW)
++	// RetroBoot: the modification time (UTC) goes to the data fork and, when there
++	// is one, the resource fork's sidecar: the file's date is the later of the two
+ 	if (fields & MF_TIME) {
++		struct Stat9 when = {.mtime_sec = attr->unixtime};
++		Setattr9(fid, SET_MTIME|SET_MTIME_SET, when);
++
++		char rname[MAXNAME+12];
++		sprintf(rname, "../%s.rdump", name);
++		if (!WalkPath9(fid, FINFOFID, rname)) {
++			Setattr9(FINFOFID, SET_MTIME|SET_MTIME_SET, when);
++			Clunk9(FINFOFID);
++		}
+ 	}
+ 
+ 	if (fields & MF_FINFO) {
+@@ -264,7 +273,11 @@ int dgetattr3(int32_t cnid, uint32_t fid, const char *name, unsigned fields, str
+ }
+ 
+ int dsetattr3(int32_t cnid, uint32_t fid, const char *name, unsigned fields, const struct MFAttr *attr) {
+-	// Benignly unimplemented
++	// Folder Finder info is still benignly unimplemented; RetroBoot: the
++	// modification time (UTC) is set
++	if (fields & MF_TIME) {
++		Setattr9(fid, SET_MTIME|SET_MTIME_SET, (struct Stat9){.mtime_sec = attr->unixtime});
++	}
+ 	return 0;
+ }
+ 

@@ -35,7 +35,8 @@ fi
 
 log "Applying ClassicMac floppy, Power Mac, and input driver patches"
 git -C "$SOURCE_DIR" checkout "$CLASSICVIRTIO_COMMIT" -- \
-  device-block.c device-input.c device-9p.c multifork-3.c ndrvloader.c transport-ndrv.c paramblkprint.c Makefile
+  9p.c catalog.c catalog.h device-block.c device-input.c device-9p.c multifork-3.c \
+  ndrvloader.c sortdir.c transport-ndrv.c paramblkprint.c unicode.c unicode.h Makefile
 git -C "$SOURCE_DIR" apply "$PATCH_FILE"
 git -C "$SOURCE_DIR" apply "$POWER_MAC_PATCH_FILE"
 git -C "$SOURCE_DIR" apply "$TOOLS_MOUNT_PATCH_FILE"
@@ -44,6 +45,10 @@ git -C "$SOURCE_DIR" apply "$ROOT_DIR/classicvirtio/powermac-fixed-disks.patch"
 git -C "$SOURCE_DIR" apply "$ROOT_DIR/classicvirtio/display-control.patch"
 git -C "$SOURCE_DIR" apply "$ROOT_DIR/classicvirtio/retroboot-folder-dates.patch"
 git -C "$SOURCE_DIR" apply "$ROOT_DIR/classicvirtio/retroboot-share-cache.patch"
+git -C "$SOURCE_DIR" apply "$ROOT_DIR/classicvirtio/retroboot-local-time.patch"
+git -C "$SOURCE_DIR" apply "$ROOT_DIR/classicvirtio/retroboot-folder-finfo.patch"
+git -C "$SOURCE_DIR" apply "$ROOT_DIR/classicvirtio/retroboot-folder-move.patch"
+git -C "$SOURCE_DIR" apply "$ROOT_DIR/classicvirtio/retroboot-names.patch"
 git -C "$SOURCE_DIR" apply "$ROOT_DIR/classicvirtio/macos86-multi-virtio-and-9p.patch"
 cp "$ROOT_DIR/display/guest/device-display.c" "$SOURCE_DIR/device-display.c"
 
