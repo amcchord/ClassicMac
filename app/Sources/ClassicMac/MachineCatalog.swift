@@ -52,6 +52,30 @@ struct MachineCatalog: Codable {
     }
 }
 
+struct ThinArchive: Codable, Hashable {
+    let format: String
+    let archiveURL: URL
+    let archiveBytes: Int64
+    let sha256: String
+}
+
+struct RecommendedSettings: Codable, Hashable {
+    let ram_mb: Int?
+    let osx_ram_mb: Int?
+    let graphics: String?
+    let guest_adapter: String?
+    let cpu: String?
+
+    init(ram_mb: Int? = nil, osx_ram_mb: Int? = nil, graphics: String? = nil,
+         guest_adapter: String? = nil, cpu: String? = nil) {
+        self.ram_mb = ram_mb
+        self.osx_ram_mb = osx_ram_mb
+        self.graphics = graphics
+        self.guest_adapter = guest_adapter
+        self.cpu = cpu
+    }
+}
+
 struct DownloadableMachine: Codable, Identifiable, Hashable {
     let id: String
     let name: String
@@ -67,6 +91,10 @@ struct DownloadableMachine: Codable, Identifiable, Hashable {
     let diskCapacityBytes: Int64?
     let requiredStorageBytes: Int64?
     let machineFamily: MachineFamily?
+    let thinArchive: ThinArchive?
+    let tags: [String]?
+    let highlights: [String]?
+    let recommendedSettings: RecommendedSettings?
     var family: MachineFamily { machineFamily ?? .powerMacG4 }
     private var archiveFirmware: (bytes: Int64, files: Int64) {
         switch family {
@@ -80,14 +108,73 @@ struct DownloadableMachine: Codable, Identifiable, Hashable {
     init(id: String, name: String, summary: String, osVersion: String,
          minimumAppVersion: String, archiveURL: URL,
          archiveBytes: Int64, installedBytes: Int64, sha256: String,
-         diskCapacityBytes: Int64? = nil, requiredStorageBytes: Int64? = nil, machineFamily: MachineFamily? = nil) {
+         diskCapacityBytes: Int64? = nil, requiredStorageBytes: Int64? = nil, machineFamily: MachineFamily? = nil,
+         thinArchive: ThinArchive? = nil, tags: [String]? = nil,
+         highlights: [String]? = nil, recommendedSettings: RecommendedSettings? = nil) {
         self.id = id; self.name = name; self.summary = summary
         self.osVersion = osVersion
-        self.minimumAppVersion = minimumAppVersion; self.archiveURL = archiveURL
-        self.archiveBytes = archiveBytes; self.installedBytes = installedBytes
-        self.sha256 = sha256; self.diskCapacityBytes = diskCapacityBytes
+        self.minimumAppVersion = minimumAppVersion
+        let resolved = Self.resolvedArchive(archiveURL: archiveURL, archiveBytes: archiveBytes,
+                                            sha256: sha256, thinArchive: thinArchive)
+        self.archiveURL = resolved.archiveURL
+        self.archiveBytes = resolved.archiveBytes
+        self.installedBytes = installedBytes
+        self.sha256 = resolved.sha256
+        self.diskCapacityBytes = diskCapacityBytes
         self.requiredStorageBytes = requiredStorageBytes
         self.machineFamily = machineFamily
+        self.thinArchive = thinArchive
+        self.tags = tags
+        self.highlights = highlights
+        self.recommendedSettings = recommendedSettings
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, name, summary, osVersion, minimumAppVersion, archiveURL, archiveBytes
+        case installedBytes, sha256, diskCapacityBytes, requiredStorageBytes, machineFamily
+        case thinArchive, tags, highlights, recommendedSettings
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        name = try c.decode(String.self, forKey: .name)
+        summary = try c.decode(String.self, forKey: .summary)
+        osVersion = try c.decode(String.self, forKey: .osVersion)
+        minimumAppVersion = try c.decode(String.self, forKey: .minimumAppVersion)
+        let rawArchiveURL = try c.decode(URL.self, forKey: .archiveURL)
+        let rawArchiveBytes = try c.decode(Int64.self, forKey: .archiveBytes)
+        installedBytes = try c.decode(Int64.self, forKey: .installedBytes)
+        let rawSHA256 = try c.decode(String.self, forKey: .sha256)
+        diskCapacityBytes = try c.decodeIfPresent(Int64.self, forKey: .diskCapacityBytes)
+        requiredStorageBytes = try c.decodeIfPresent(Int64.self, forKey: .requiredStorageBytes)
+        machineFamily = try c.decodeIfPresent(MachineFamily.self, forKey: .machineFamily)
+        let thin = try? c.decodeIfPresent(ThinArchive.self, forKey: .thinArchive)
+        thinArchive = thin
+        tags = try c.decodeIfPresent([String].self, forKey: .tags)
+        highlights = try c.decodeIfPresent([String].self, forKey: .highlights)
+        recommendedSettings = try? c.decodeIfPresent(RecommendedSettings.self, forKey: .recommendedSettings)
+        let resolved = Self.resolvedArchive(archiveURL: rawArchiveURL, archiveBytes: rawArchiveBytes,
+                                            sha256: rawSHA256, thinArchive: thin)
+        archiveURL = resolved.archiveURL
+        archiveBytes = resolved.archiveBytes
+        sha256 = resolved.sha256
+    }
+
+    private static func resolvedArchive(archiveURL: URL, archiveBytes: Int64, sha256: String,
+                                        thinArchive: ThinArchive?) -> (archiveURL: URL, archiveBytes: Int64, sha256: String) {
+        if let thin = thinArchive,
+           thin.format == "retroboot-thin-1",
+           secureURL(thin.archiveURL),
+           (1...(140 * 1_073_741_824)).contains(thin.archiveBytes),
+           isValidSHA256(thin.sha256) {
+            return (thin.archiveURL, thin.archiveBytes, thin.sha256)
+        }
+        return (archiveURL, archiveBytes, sha256)
+    }
+
+    private static func isValidSHA256(_ value: String) -> Bool {
+        value.count == 64 && value.allSatisfy({ "0123456789abcdef".contains($0) })
     }
 
     func validate() throws {

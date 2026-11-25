@@ -58,7 +58,7 @@ struct LibraryEdition {
     static let all: [LibraryEdition] = [
         LibraryEdition(
             familyName: "os922-superdeluxe",
-            baselineVersion: 2,
+            baselineVersion: 7,
             title: "Mac OS 9.2.2 SuperDeluxe",
             osLabel: "Mac OS 9.2.2",
             tagline: "54 classic games, ClarisWorks and Home Page",
@@ -77,7 +77,7 @@ struct LibraryEdition {
                                     "Solitaire Till Dawn", "Spin Doctor", "Oxyd", "Jewelbox", "3 in Three",
                                     "The Fool's Errand", "Barrack", "Bubble Trouble", "Chiral", "Pipe Dream"]),
                 ("Productivity", ["ClarisWorks 5.0", "Claris Home Page 3"]),
-                ("Utilities", ["ACTION GoMac and Menus", "After Dark 4.94 (Flying Toasters)", "Audion 3",
+                ("Utilities", ["ACTION GoMac", "After Dark 4.94 (Flying Toasters)", "Audion 3",
                                "SoundJam MP", "Transmit", "Speedometer 4.02", "MacBench 5.0", "Gauge PRO",
                                "USB Overdrive", "Internet Explorer 5.1.7"]),
             ],
@@ -92,15 +92,14 @@ struct LibraryEdition {
         ),
         LibraryEdition(
             familyName: "os922-mega-deluxe",
-            baselineVersion: 4,
+            baselineVersion: 6,
             title: "Mac OS 9.2.2 Mega Deluxe",
             osLabel: "Mac OS 9.2.2",
-            tagline: "111 classic games and creative activities",
-            description: "The largest Classic Mac collection: 111 games and creative activities in Launcher and ACTION GoMac, expanding SuperDeluxe with 21 additional games and educational titles. Ready for the ATI Radeon card, so 3D games run accelerated.",
+            tagline: "146 classic games, creative apps, and utilities across 8 Launcher tabs",
+            description: "The largest Classic Mac collection: 146 classic games, creative apps, and utilities across 8 Launcher tabs and ACTION GoMac. Ready for the ATI Radeon card, so 3D games run accelerated.",
             contents: [
-                ("Games & Activities", ["111 classic games and creative activities in Launcher and ACTION GoMac",
-                                        "21 additional games and educational titles beyond SuperDeluxe"]),
-                ("Utilities & 3D", ["Launcher", "ACTION GoMac and Menus", "ATI Radeon 3D drivers"]),
+                ("Games & Activities", ["146 classic games, creative apps, and utilities across 8 Launcher tabs"]),
+                ("Utilities & 3D", ["Launcher", "ACTION GoMac", "ATI Radeon 3D drivers"]),
             ],
             notes: [
                 "Games and creative activities launch from Launcher and Start → Games in the ACTION GoMac bar.",
@@ -112,7 +111,7 @@ struct LibraryEdition {
         ),
         LibraryEdition(
             familyName: "os922-deluxe",
-            baselineVersion: 6,
+            baselineVersion: 10,
             title: "Mac OS 9.2.2 Deluxe",
             osLabel: "Mac OS 9.2.2",
             tagline: "16 classic games, After Dark, music and benchmarks",
@@ -123,12 +122,12 @@ struct LibraryEdition {
                                           "Prince of Persia"]),
                 ("Building & Strategy", ["SimCity Classic", "SimCity 2000", "Bolo"]),
                 ("Adventure & 3D", ["Myst", "Marathon 2", "Quake", "Quake III Arena Demo"]),
-                ("Utilities", ["ACTION GoMac and Menus", "After Dark 4.94 (Flying Toasters)", "Audion 3",
+                ("Utilities", ["ACTION GoMac", "After Dark 4.94 (Flying Toasters)", "Audion 3",
                                "SoundJam MP", "Transmit", "Speedometer 4.02", "MacBench 5.0", "Gauge PRO",
                                "USB Overdrive", "Internet Explorer 5.1.7"]),
             ],
             notes: [
-                "Open Deluxe Read Me on the desktop. Games are in Macintosh HD:Games and in Start → Games.",
+                "Games are in Macintosh HD:Games and in Start → Games.",
                 "Choose 256 colors in Monitors before Prince of Persia. Myst runs at any depth.",
                 "Original shareware and demo limits remain.",
             ],
@@ -303,6 +302,12 @@ struct LibraryEntry: Identifiable, Hashable {
         if let edition {
             haystack.append(contentsOf: edition.contents.map(\.category))
             haystack.append(contentsOf: edition.contents.flatMap(\.items))
+        }
+        if let highlights = machine.highlights {
+            haystack.append(contentsOf: highlights)
+        }
+        if let tags = machine.tags {
+            haystack.append(contentsOf: tags)
         }
         return haystack.contains { $0.localizedCaseInsensitiveContains(trimmed) }
     }

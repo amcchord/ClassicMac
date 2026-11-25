@@ -53,7 +53,7 @@ final class LibraryTests: XCTestCase {
     }
 
     func testNewCatalogRevisionsMatchByFamilyAndKeepLiveCatalogDescriptions() {
-        for id in ["os922-deluxe-v9", "os922-superdeluxe-v6", "mac-os-9.2.1-ati-32gb-v5"] {
+        for id in ["os922-deluxe-v11", "os922-superdeluxe-v8", "os922-mega-deluxe-v7", "mac-os-9.2.1-ati-32gb-v5"] {
             let entry = LibraryEntry(machine: machine(id), edition: LibraryEdition.edition(for: id))
             XCTAssertNotNil(entry.edition)
             XCTAssertEqual(entry.description, "Summary of \(id)")
@@ -61,5 +61,44 @@ final class LibraryTests: XCTestCase {
         }
         let clean921 = LibraryEdition.edition(for: "mac-os-9.2.1-ati-32gb-v4")!
         XCTAssertTrue(clean921.notes.contains { $0.contains("1920 × 1440") && $0.contains("live window resizing") })
+    }
+
+    func testRetroBoot320EditionsCopyAndBaselines() {
+        let deluxe = LibraryEdition.edition(for: "os922-deluxe-v10")!
+        XCTAssertEqual(deluxe.baselineVersion, 10)
+        XCTAssertFalse(deluxe.notes.joined(separator: "\n").contains("Deluxe Read Me"))
+        XCTAssertFalse(deluxe.contents.flatMap(\.items).contains("ACTION GoMac and Menus"))
+        XCTAssertTrue(deluxe.contents.flatMap(\.items).contains("ACTION GoMac"))
+        let deluxeEntry = LibraryEntry(machine: machine("os922-deluxe-v10"), edition: deluxe)
+        XCTAssertEqual(deluxeEntry.description, deluxe.description)
+
+        let superDeluxe = LibraryEdition.edition(for: "os922-superdeluxe-v7")!
+        XCTAssertEqual(superDeluxe.baselineVersion, 7)
+        XCTAssertFalse(superDeluxe.contents.flatMap(\.items).contains("ACTION GoMac and Menus"))
+        XCTAssertTrue(superDeluxe.contents.flatMap(\.items).contains("ACTION GoMac"))
+        let superEntry = LibraryEntry(machine: machine("os922-superdeluxe-v7"), edition: superDeluxe)
+        XCTAssertEqual(superEntry.description, superDeluxe.description)
+
+        let mega = LibraryEdition.edition(for: "os922-mega-deluxe-v6")!
+        XCTAssertEqual(mega.baselineVersion, 6)
+        XCTAssertTrue(mega.tagline.contains("146 classic games, creative apps, and utilities across 8 Launcher tabs"))
+        XCTAssertTrue(mega.description.contains("146 classic games, creative apps, and utilities across 8 Launcher tabs"))
+        XCTAssertFalse(mega.description.contains("111"))
+        XCTAssertFalse(mega.contents.flatMap(\.items).contains("ACTION GoMac and Menus"))
+        XCTAssertTrue(mega.contents.flatMap(\.items).contains("ACTION GoMac"))
+        let megaEntry = LibraryEntry(machine: machine("os922-mega-deluxe-v6"), edition: mega)
+        XCTAssertEqual(megaEntry.tagline, mega.tagline)
+
+        let highlighted = DownloadableMachine(
+            id: "custom-edition-v1", name: "Custom Edition", summary: "A custom edition.",
+            osVersion: "9.2.2", minimumAppVersion: "4.8.1",
+            archiveURL: URL(string: "https://example.com/custom.tar.gz")!,
+            archiveBytes: 1_000, installedBytes: 2_000,
+            sha256: String(repeating: "a", count: 64),
+            tags: ["productivity"], highlights: ["Includes AppleWorks 6"]
+        )
+        let customEntry = LibraryEntry(machine: highlighted, edition: nil)
+        XCTAssertTrue(customEntry.matches(query: "AppleWorks", category: .macOS9))
+        XCTAssertTrue(customEntry.matches(query: "productivity", category: .macOS9))
     }
 }

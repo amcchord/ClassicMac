@@ -13,6 +13,8 @@ final class MachineDownloadTransfer: NSObject, URLSessionDataDelegate, @unchecke
     private let maximumBytes: Int64
     private let progress: (Int64) -> Void
     private let configuration: URLSessionConfiguration
+    private let requestTimeout: TimeInterval
+    private let resourceTimeout: TimeInterval
     private let lock = NSLock()
     private var continuation: CheckedContinuation<URL, Error>?
     private var session: URLSession?
@@ -27,12 +29,16 @@ final class MachineDownloadTransfer: NSObject, URLSessionDataDelegate, @unchecke
 
     init(source: URL, destination: URL, expectedBytes: Int64?, maximumBytes: Int64,
          configuration: URLSessionConfiguration = .ephemeral,
+         requestTimeout: TimeInterval = 45,
+         resourceTimeout: TimeInterval = 24 * 60 * 60,
          progress: @escaping (Int64) -> Void = { _ in }) {
         self.source = source
         self.destination = destination
         self.expectedBytes = expectedBytes
         self.maximumBytes = maximumBytes
         self.configuration = configuration
+        self.requestTimeout = requestTimeout
+        self.resourceTimeout = resourceTimeout
         self.progress = progress
     }
 
@@ -53,8 +59,8 @@ final class MachineDownloadTransfer: NSObject, URLSessionDataDelegate, @unchecke
                 queue.maxConcurrentOperationCount = 1
                 configuration.urlCache = nil
                 configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
-                configuration.timeoutIntervalForRequest = 45
-                configuration.timeoutIntervalForResource = 24 * 60 * 60
+                configuration.timeoutIntervalForRequest = requestTimeout
+                configuration.timeoutIntervalForResource = resourceTimeout
                 let session = URLSession(configuration: configuration, delegate: self, delegateQueue: queue)
                 self.session = session
                 var request = URLRequest(url: source)

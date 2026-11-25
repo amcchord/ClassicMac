@@ -10,6 +10,8 @@ final class MachineDownloadModel: ObservableObject {
     @Published private(set) var phase: Phase = .idle
     @Published private(set) var completedBytes: Int64 = 0
     @Published private(set) var totalBytes: Int64 = 0
+    @Published private(set) var bytesPerSecond: Double?
+    @Published private(set) var etaSeconds: Double?
     @Published private(set) var errorMessage: String?
     @Published private(set) var partialCatalogWarning: String?
     @Published private(set) var isCancelling = false
@@ -17,6 +19,7 @@ final class MachineDownloadModel: ObservableObject {
     private let catalogURLs: [URL]
     private let cacheDirectory: URL
     private let transferConfiguration: URLSessionConfiguration
+    private var transferMeter = TransferMeter()
     private var operation: Task<Void, Never>?
     private var cancellation = MachineDownloadCancellation()
     private var operationID = UUID()
@@ -91,7 +94,9 @@ final class MachineDownloadModel: ObservableObject {
         let transfer = MachineDownloadTransfer(
             source: url, destination: file, expectedBytes: nil,
             maximumBytes: MachineCatalog.maximumCatalogBytes,
-            configuration: transferConfiguration
+            configuration: transferConfiguration,
+            requestTimeout: 15,
+            resourceTimeout: 30
         )
         _ = try await transfer.run()
         return try MachineCatalog.decode(Data(contentsOf: file))
@@ -153,6 +158,7 @@ final class MachineDownloadModel: ObservableObject {
         phase = .downloading
         totalBytes = machine.archiveBytes
         completedBytes = 0
+        resetTransferMeter(totalBytes: machine.archiveBytes)
         operation = Task {
             do {
                 try machine.validate()
@@ -188,6 +194,8 @@ final class MachineDownloadModel: ObservableObject {
                 try Task.checkCancellation()
                 phase = .verifying
                 completedBytes = 0
+                totalBytes = machine.archiveBytes
+                resetTransferMeter(totalBytes: machine.archiveBytes)
                 let verificationReporter = reporter(for: id, phase: .verifying)
                 do {
                     try await Task.detached(priority: .utility) {
@@ -205,6 +213,7 @@ final class MachineDownloadModel: ObservableObject {
                 phase = .installing
                 completedBytes = 0
                 totalBytes = machine.installedBytes
+                resetTransferMeter(totalBytes: machine.installedBytes)
                 let installReporter = reporter(for: id, phase: .installing)
                 let destination = try await Task.detached(priority: .utility) {
                     try MachineTemplateInstaller.installVerifiedArchive(
@@ -216,15 +225,18 @@ final class MachineDownloadModel: ObservableObject {
                 // Once the atomic move succeeds, report the installed Mac even
                 // if cancellation arrived at the end of that operation.
                 phase = .complete
+                resetTransferMeter()
                 try? FileManager.default.removeItem(at: file)
                 onInstall(destination)
             } catch is CancellationError {
+                resetTransferMeter()
                 if phase == .downloading, savedArchiveBytes(machine) > 0 {
                     phase = .paused
                 } else {
                     phase = .idle
                 }
             } catch {
+                resetTransferMeter()
                 errorMessage = error.localizedDescription
                 phase = .idle
             }
@@ -265,11 +277,20 @@ final class MachineDownloadModel: ObservableObject {
         cacheDirectory.appendingPathComponent(machine.sha256 + ".tar.gz.part")
     }
 
+    private func resetTransferMeter(totalBytes: Int64 = 0) {
+        transferMeter.reset(totalBytes: totalBytes)
+        bytesPerSecond = nil
+        etaSeconds = nil
+    }
+
     private func reporter(for id: UUID, phase: Phase) -> MachineDownloadProgress {
         MachineDownloadProgress { [weak self] bytes in
             Task { @MainActor in
                 guard let self, self.operationID == id, self.phase == phase else { return }
                 self.completedBytes = bytes
+                self.transferMeter.record(done: bytes, total: self.totalBytes)
+                self.bytesPerSecond = self.transferMeter.bytesPerSecond
+                self.etaSeconds = self.transferMeter.etaSeconds
             }
         }
     }

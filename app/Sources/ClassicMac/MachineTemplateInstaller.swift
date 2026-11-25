@@ -121,11 +121,14 @@ enum MachineTemplateInstaller {
         if cancelled() { throw CancellationError() }
 
         let configURL = staging.appendingPathComponent("config.json")
+        let configData = try Data(contentsOf: configURL)
         let source: VMConfig
         let decoder = JSONDecoder()
         decoder.userInfo[VMConfig.importingTemplate] = true
-        do { source = try decoder.decode(VMConfig.self, from: Data(contentsOf: configURL)) }
+        do { source = try decoder.decode(VMConfig.self, from: configData) }
         catch { throw MachineDownloadError.unsafeArchive("The machine's settings are damaged.") }
+        let templateRecommended = (try? JSONDecoder().decode(TemplateRecommendedSettingsEnvelope.self, from: configData))?.recommendedSettings
+        let recommended = mergedRecommendedSettings(template: templateRecommended, catalog: machine.recommendedSettings)
         guard source.machineFamily == machine.family,
               source.diskImageName == "disk.img",
               source.pramImageName == "pram.img" else {
@@ -150,7 +153,7 @@ enum MachineTemplateInstaller {
             throw invalidArchive()
         }
         let diskSizeGB = max(1, Int((Int64(diskBytes) + 1_073_741_823) / 1_073_741_824))
-        let fresh = VMConfig(
+        var fresh = VMConfig(
             name: name, machineFamily: source.machineFamily, ramMB: source.ramMB,
             diskSizeGB: diskSizeGB, width: source.width, height: source.height,
             depth: source.depth, useEnhancedFramebuffer: false,
@@ -161,6 +164,9 @@ enum MachineTemplateInstaller {
             graphicsCard: source.graphicsCard, tabletInput: source.tabletInput,
             classicInputHelpers: source.classicInputHelpers
         )
+        if let recommended {
+            applyRecommendedSettings(recommended, to: &fresh)
+        }
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         try encoder.encode(fresh).write(to: configURL, options: .atomic)
@@ -189,6 +195,56 @@ enum MachineTemplateInstaller {
             throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
         }
         throw MachineDownloadError.unsafeArchive("There are too many machines with that name. Choose another name.")
+    }
+
+    private struct TemplateRecommendedSettingsEnvelope: Decodable {
+        let recommendedSettings: RecommendedSettings?
+    }
+
+    static func mergedRecommendedSettings(template: RecommendedSettings?, catalog: RecommendedSettings?) -> RecommendedSettings? {
+        guard template != nil || catalog != nil else { return nil }
+        return RecommendedSettings(
+            ram_mb: template?.ram_mb ?? catalog?.ram_mb,
+            osx_ram_mb: template?.osx_ram_mb ?? catalog?.osx_ram_mb,
+            graphics: template?.graphics ?? catalog?.graphics,
+            guest_adapter: template?.guest_adapter ?? catalog?.guest_adapter,
+            cpu: template?.cpu ?? catalog?.cpu
+        )
+    }
+
+    static func applyRecommendedSettings(_ settings: RecommendedSettings, to config: inout VMConfig,
+                                         physicalMemory: UInt64 = ProcessInfo.processInfo.physicalMemory) {
+        switch config.machineFamily {
+        case .powerMacOSX:
+            if let requested = settings.osx_ram_mb ?? settings.ram_mb {
+                let hostCap: Int
+                if physicalMemory >= 4 * 1_073_741_824 {
+                    hostCap = 2048
+                } else if physicalMemory >= 2 * 1_073_741_824 {
+                    hostCap = 1024
+                } else {
+                    hostCap = 512
+                }
+                config.ramMB = min(max(requested, 256), min(2048, hostCap))
+            }
+        case .powerMacG4:
+            if let requested = settings.ram_mb {
+                let minRAM = MachineFamily.powerMacG4.ramPresets.min() ?? 128
+                let maxRAM = MachineFamily.powerMacG4.ramPresets.max() ?? 896
+                config.ramMB = min(max(requested, minRAM), maxRAM)
+            }
+            if settings.cpu?.lowercased() == "g3" {
+                config.useG4CPU = false
+            }
+        case .quadra800:
+            if let requested = settings.ram_mb {
+                let minRAM = MachineFamily.quadra800.ramPresets.min() ?? 64
+                let maxRAM = MachineFamily.quadra800.ramPresets.max() ?? 1000
+                config.ramMB = min(max(requested, minRAM), maxRAM)
+            }
+        case .powerMac7500:
+            break
+        }
     }
 
     // Deliberately narrow tar reader: gzip + flat regular files only. No shell,

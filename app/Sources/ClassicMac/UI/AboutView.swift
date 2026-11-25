@@ -38,12 +38,17 @@ struct AboutView: View {
                 }
             }
             Spacer(minLength: 0)
-            HStack(alignment: .bottom, spacing: 12) {
+            VStack(alignment: .leading, spacing: 8) {
                 Text("© 2026 Austin McChord. Mac OS and Macintosh are trademarks of Apple Inc. See Third-Party Notices for licenses.")
                     .platinumText(.detail)
                     .fixedSize(horizontal: false, vertical: true)
-                Spacer(minLength: 0)
-                PlatinumButton("Third-Party Notices…", action: openThirdPartyNotices)
+                HStack(spacing: Platinum.buttonGap) {
+                    Spacer(minLength: 0)
+                    PlatinumButton("Check for Updates…") {
+                        NotificationCenter.default.post(name: .classicMacCheckForUpdates, object: nil)
+                    }
+                    PlatinumButton("Third-Party Notices…", action: openThirdPartyNotices)
+                }
             }
         }
         .padding(14)

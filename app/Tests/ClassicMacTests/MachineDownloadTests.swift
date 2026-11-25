@@ -887,7 +887,213 @@ final class MachineDownloadTests: XCTestCase {
         XCTAssertTrue(model.hasPartialDownload(emptyArchiveMachine))
 
         XCTAssertEqual(DownloadProgressView.speed(12_500_000), "12.5 MB/s")
-        XCTAssertEqual(DownloadProgressView.remaining(30), "Less than a minute remaining")
+        XCTAssertEqual(DownloadProgressView.remaining(30), "30 s left")
+    }
+
+    func testThinArchiveResolutionAndMetadataDecoding() throws {
+        let fullURL = URL(string: "https://downloads.example.test/full.tar.gz")!
+        let thinURL = URL(string: "https://downloads.example.test/thin.tar.gz")!
+        let fullSHA = String(repeating: "a", count: 64)
+        let thinSHA = String(repeating: "b", count: 64)
+
+        let payload: [String: Any] = [
+            "schemaVersion": 1,
+            "machines": [[
+                "id": "os922-thin-v1",
+                "name": "Mac OS 9.2.2",
+                "summary": "Thin archive test",
+                "osVersion": "9.2.2",
+                "minimumAppVersion": "4.8.1",
+                "archiveURL": fullURL.absoluteString,
+                "archiveBytes": 5_000_000,
+                "installedBytes": 10_000_000,
+                "sha256": fullSHA,
+                "tags": ["games", "3d"],
+                "highlights": ["Includes Quake", "ATI Radeon ready"],
+                "recommendedSettings": [
+                    "ram_mb": 768,
+                    "osx_ram_mb": 1536,
+                    "graphics": "ati",
+                    "guest_adapter": "ne2k",
+                    "cpu": "g3",
+                ],
+                "thinArchive": [
+                    "format": "retroboot-thin-1",
+                    "archiveURL": thinURL.absoluteString,
+                    "archiveBytes": 1_250_000,
+                    "sha256": thinSHA,
+                ],
+            ]]
+        ]
+        let decoded = try MachineCatalog.decode(JSONSerialization.data(withJSONObject: payload))
+        let machine = try XCTUnwrap(decoded.machines.first)
+        XCTAssertEqual(machine.archiveURL, thinURL)
+        XCTAssertEqual(machine.archiveBytes, 1_250_000)
+        XCTAssertEqual(machine.sha256, thinSHA)
+        XCTAssertEqual(machine.tags, ["games", "3d"])
+        XCTAssertEqual(machine.highlights, ["Includes Quake", "ATI Radeon ready"])
+        XCTAssertEqual(machine.recommendedSettings?.ram_mb, 768)
+        XCTAssertEqual(machine.recommendedSettings?.osx_ram_mb, 1536)
+        XCTAssertEqual(machine.recommendedSettings?.graphics, "ati")
+        XCTAssertEqual(machine.recommendedSettings?.guest_adapter, "ne2k")
+        XCTAssertEqual(machine.recommendedSettings?.cpu, "g3")
+
+        // Invalid thinArchive variants preserve the outer archive metadata.
+        for badThin: [String: Any] in [
+            ["format": "unknown-format", "archiveURL": thinURL.absoluteString, "archiveBytes": 1_250_000, "sha256": thinSHA],
+            ["format": "retroboot-thin-1", "archiveURL": "http://downloads.example.test/thin.tar.gz", "archiveBytes": 1_250_000, "sha256": thinSHA],
+            ["format": "retroboot-thin-1", "archiveURL": thinURL.absoluteString, "archiveBytes": 0, "sha256": thinSHA],
+            ["format": "retroboot-thin-1", "archiveURL": thinURL.absoluteString, "archiveBytes": 1_250_000, "sha256": String(repeating: "B", count: 64)],
+        ] {
+            var badPayload = payload
+            var machines = try XCTUnwrap(badPayload["machines"] as? [[String: Any]])
+            machines[0]["thinArchive"] = badThin
+            badPayload["machines"] = machines
+            let fallback = try XCTUnwrap(MachineCatalog.decode(JSONSerialization.data(withJSONObject: badPayload)).machines.first)
+            XCTAssertEqual(fallback.archiveURL, fullURL)
+            XCTAssertEqual(fallback.archiveBytes, 5_000_000)
+            XCTAssertEqual(fallback.sha256, fullSHA)
+        }
+    }
+
+    func testTransferRespectsBoundedResourceTimeout() async throws {
+        let file = directory.appendingPathComponent("stalled-catalog.json")
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [MachineDownloadURLProtocol.self]
+        MachineDownloadURLProtocol.handler = { _, _, _ in
+            // Intentionally stall with no response so resourceTimeout fires.
+        }
+        let start = Date()
+        let transfer = MachineDownloadTransfer(
+            source: URL(string: "https://downloads.example.test/stalled.json")!,
+            destination: file,
+            expectedBytes: nil,
+            maximumBytes: MachineCatalog.maximumCatalogBytes,
+            configuration: config,
+            requestTimeout: 0.2,
+            resourceTimeout: 0.35
+        )
+        do {
+            _ = try await transfer.run()
+            XCTFail("Expected timeout")
+        } catch {
+            let elapsed = Date().timeIntervalSince(start)
+            XCTAssertLessThan(elapsed, 5.0)
+        }
+    }
+
+    func testRecommendedSettingsAppliedOnImportAndClampedByHostRAM() throws {
+        // Test template config.json recommendedSettings overriding/applying on G4 (ram_mb + cpu == "g3").
+        let g4Source = VMConfig(name: "Template", machineFamily: .powerMacG4, ramMB: 512, useG4CPU: true)
+        var g4Dict = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(g4Source)) as? [String: Any])
+        g4Dict["recommendedSettings"] = ["ram_mb": 2048, "cpu": "g3"]
+        let g4ConfigData = try JSONSerialization.data(withJSONObject: g4Dict)
+        let g4Archive = try makeArchive([
+            Entry("config.json", data: g4ConfigData),
+            Entry("disk.img", data: Data(repeating: 0, count: 512)),
+        ])
+        let g4Machine = fixtureMachine(
+            bytes: try Data(contentsOf: g4Archive),
+            installedBytes: Int64(g4ConfigData.count + 512)
+        )
+        let g4Bundle = try MachineTemplateInstaller.installVerifiedArchive(
+            g4Archive, machine: g4Machine, name: "G3 Template", in: directory
+        )
+        let g4Imported = try JSONDecoder().decode(VMConfig.self, from: Data(contentsOf: g4Bundle.appendingPathComponent("config.json")))
+        XCTAssertEqual(g4Imported.ramMB, 896)
+        XCTAssertFalse(g4Imported.useG4CPU)
+
+        // Test catalog recommendedSettings on Quadra 800.
+        let quadraConfig = try JSONEncoder().encode(VMConfig(name: "Quadra", machineFamily: .quadra800, ramMB: 128))
+        let quadraArchive = try makeArchive([
+            Entry("config.json", data: quadraConfig),
+            Entry("disk.img", data: Data(repeating: 0, count: 512)),
+        ])
+        let quadraMachine = DownloadableMachine(
+            id: "quadra-rec-v1", name: "Quadra", summary: "Quadra", osVersion: "8.1",
+            minimumAppVersion: "4.8.1", archiveURL: source,
+            archiveBytes: Int64(try Data(contentsOf: quadraArchive).count),
+            installedBytes: Int64(quadraConfig.count + 512),
+            sha256: SHA256.hash(data: try Data(contentsOf: quadraArchive)).map { String(format: "%02x", $0) }.joined(),
+            machineFamily: .quadra800,
+            recommendedSettings: RecommendedSettings(ram_mb: 256)
+        )
+        let quadraBundle = try MachineTemplateInstaller.installVerifiedArchive(
+            quadraArchive, machine: quadraMachine, name: "Quadra Rec", in: directory
+        )
+        let quadraImported = try JSONDecoder().decode(VMConfig.self, from: Data(contentsOf: quadraBundle.appendingPathComponent("config.json")))
+        XCTAssertEqual(quadraImported.ramMB, 256)
+
+        // Test OS X host physical RAM caps (>= 4 GB -> 2048, >= 2 GB -> 1024, < 2 GB -> 512).
+        var osxConfig = VMConfig(name: "Tiger", machineFamily: .powerMacOSX, ramMB: 1024)
+        MachineTemplateInstaller.applyRecommendedSettings(
+            RecommendedSettings(osx_ram_mb: 4096),
+            to: &osxConfig,
+            physicalMemory: 8 * 1_073_741_824
+        )
+        XCTAssertEqual(osxConfig.ramMB, 2048)
+
+        MachineTemplateInstaller.applyRecommendedSettings(
+            RecommendedSettings(osx_ram_mb: 2048),
+            to: &osxConfig,
+            physicalMemory: 2 * 1_073_741_824
+        )
+        XCTAssertEqual(osxConfig.ramMB, 1024)
+
+        MachineTemplateInstaller.applyRecommendedSettings(
+            RecommendedSettings(osx_ram_mb: 2048),
+            to: &osxConfig,
+            physicalMemory: 1_073_741_824
+        )
+        XCTAssertEqual(osxConfig.ramMB, 512)
+
+        MachineTemplateInstaller.applyRecommendedSettings(
+            RecommendedSettings(ram_mb: 128),
+            to: &osxConfig,
+            physicalMemory: 8 * 1_073_741_824
+        )
+        XCTAssertEqual(osxConfig.ramMB, 256)
+    }
+
+    func testTransferMeterSlidingWindowResumeAndFormatting() {
+        var meter = TransferMeter()
+        let t0 = Date(timeIntervalSinceReferenceDate: 1_000)
+
+        // Resumed download starting at 100 MB: no rate until >= 0.15s elapsed.
+        meter.record(done: 100_000_000, total: 200_000_000, at: t0)
+        XCTAssertNil(meter.bytesPerSecond)
+        XCTAssertNil(meter.etaSeconds)
+
+        meter.record(done: 101_000_000, total: 200_000_000, at: t0.addingTimeInterval(0.10))
+        XCTAssertNil(meter.bytesPerSecond)
+
+        // At t0 + 1.0s: moved 10 MB over 1.0s from resumed anchor (not 110 MB).
+        meter.record(done: 110_000_000, total: 200_000_000, at: t0.addingTimeInterval(1.0))
+        XCTAssertEqual(try XCTUnwrap(meter.bytesPerSecond), 10_000_000, accuracy: 1.0)
+        XCTAssertEqual(try XCTUnwrap(meter.etaSeconds), 9.0, accuracy: 0.01)
+
+        // Advance beyond the 4-second window: samples older than 4s are pruned.
+        meter.record(done: 120_000_000, total: 200_000_000, at: t0.addingTimeInterval(3.0))
+        meter.record(done: 122_000_000, total: 200_000_000, at: t0.addingTimeInterval(5.5))
+        // Samples within 4s of 5.5s are at 3.0s (120 MB) and 5.5s (122 MB): 2 MB / 2.5 s = 800_000 B/s.
+        XCTAssertEqual(try XCTUnwrap(meter.bytesPerSecond), 800_000, accuracy: 1.0)
+
+        // Done < lastDone resets the window cleanly.
+        meter.record(done: 1_000_000, total: 200_000_000, at: t0.addingTimeInterval(6.0))
+        XCTAssertNil(meter.bytesPerSecond)
+        meter.record(done: 3_000_000, total: 200_000_000, at: t0.addingTimeInterval(7.0))
+        XCTAssertEqual(try XCTUnwrap(meter.bytesPerSecond), 2_000_000, accuracy: 1.0)
+
+        // Completed transfer clears ETA.
+        meter.record(done: 200_000_000, total: 200_000_000, at: t0.addingTimeInterval(8.0))
+        XCTAssertNil(meter.etaSeconds)
+
+        // Formatting checks.
+        XCTAssertEqual(TransferMeter.formatSpeed(12_500_000), "12.5 MB/s")
+        XCTAssertEqual(TransferMeter.formatSpeed(512_000), "512 KB/s")
+        XCTAssertEqual(TransferMeter.formatETA(14), "14 s left")
+        XCTAssertEqual(TransferMeter.formatETA(135), "2m 15s left")
+        XCTAssertEqual(TransferMeter.formatETA(3900), "1h 05m left")
     }
 
     private func fixtureMachine(bytes: Data, installedBytes: Int64 = 1024,
