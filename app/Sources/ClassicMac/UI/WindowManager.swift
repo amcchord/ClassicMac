@@ -142,6 +142,14 @@ final class WindowManager {
         }
     }
 
+    func presentCheckpoints(for id: UUID) {
+        guard let vm = VMStore.shared.vms.first(where: { $0.id == id }) else { return }
+        showMain()
+        presentDialog(title: "\(vm.name) Checkpoints", size: CheckpointsDialog.size) { handle in
+            CheckpointsDialog(vm: vm, handle: handle)
+        }
+    }
+
     func presentIconPacks() {
         showMain()
         presentDialog(title: "Iconfactory Icons", size: IconPacksDialog.size) { handle in
@@ -207,15 +215,11 @@ final class WindowManager {
         let name = vm.map { "\u{201C}\($0.name)\u{201D}" } ?? "this Mac"
         if vm?.machineFamily == .powerMacOSX {
             shutDownAlert?.close()
-            shutDownAlert = alert(.caution, "Power for \(name)",
-                informative: "Choose Shut Down or Restart from the Apple menu inside your Mac. Force Stop turns it off immediately and can lose unsaved work.",
+            shutDownAlert = alert(.caution, "Shut down \(name)?",
+                informative: "Mac OS X shuts down cleanly from the Apple menu so its disk stays healthy. Force Stop turns it off immediately and unsaved work may be lost.",
                 buttons: [
-                    PlatinumAlertButton("Show Mac", role: .default) {
-                        manager.cancelStop()
-                        if manager.isPaused(id) { manager.resume(id) }
-                        manager.activate(id)
-                    },
-                    PlatinumAlertButton("Force Stop") { manager.confirmStop() },
+                    PlatinumAlertButton("Shut Down", role: .default) { manager.confirmStop() },
+                    PlatinumAlertButton("Force Stop") { manager.confirmForceStop() },
                     PlatinumAlertButton("Cancel", role: .cancel) { manager.cancelStop() },
                 ])
             return

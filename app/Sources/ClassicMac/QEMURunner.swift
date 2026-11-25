@@ -102,6 +102,10 @@ final class QEMUManager: ObservableObject {
     private var bootClockHandoffs: [UUID: BootClockHandoff] = [:]
     private var forcedStopWorkItems: [UUID: DispatchWorkItem] = [:]
     private var intentionalForceStopIDs: Set<UUID> = []
+    private var osxRestartRequestedIDs: Set<UUID> = []
+    private var osxShutdownTasks: [UUID: Task<Void, Never>] = [:]
+    private var runningFamilies: [UUID: MachineFamily] = [:]
+    private var runningNames: [UUID: String] = [:]
 
     func isRunning(_ id: UUID) -> Bool {
         runningIDs.contains(id)
@@ -109,6 +113,13 @@ final class QEMUManager: ObservableObject {
 
     func isPaused(_ id: UUID) -> Bool {
         pausedIDs.contains(id)
+    }
+
+    private func isOSX(_ id: UUID) -> Bool {
+        if let family = runningFamilies[id] {
+            return family == .powerMacOSX
+        }
+        return VMStore.shared.vms.first(where: { $0.id == id })?.machineFamily == .powerMacOSX
     }
 
     static func monitorSocketURL(for id: UUID) -> URL {
@@ -152,6 +163,7 @@ final class QEMUManager: ObservableObject {
             lastError = preflightError
             return
         }
+        VMCheckpointStore.createPreRecoveryBackupIfNeeded(for: config)
         QEMUManager.applyQuadraBootPRAM(for: config)
 
         let displayServer: BrowserDisplayServer?
@@ -253,6 +265,10 @@ final class QEMUManager: ObservableObject {
                 self.coplandHaltedIDs.remove(config.id)
                 try? FileManager.default.removeItem(at: CoplandMachine.statusURL(for: config.id))
                 self.forcedStopWorkItems.removeValue(forKey: config.id)?.cancel()
+                self.osxShutdownTasks.removeValue(forKey: config.id)?.cancel()
+                self.runningFamilies.removeValue(forKey: config.id)
+                self.runningNames.removeValue(forKey: config.id)
+                let wasOSXRestartRequested = self.osxRestartRequestedIDs.remove(config.id) != nil
                 self.stopBootClockHandoff(for: config.id)
                 self.stopPreviewUpdates(for: config.id)
                 let wasIntentionalForceStop = self.intentionalForceStopIDs.remove(config.id) != nil
@@ -275,12 +291,15 @@ final class QEMUManager: ObservableObject {
                 if !wasIntentionalForceStop,
                    config.machineFamily == .powerMac7500,
                    proc.terminationReason == .exit, proc.terminationStatus == 75 {
+                    VMCheckpointStore.markStopped(in: config.folder, clean: true, reason: "copland-restart")
                     self.start(savedConfig, reusing: nil, openDisplay: true)
                     return
                 }
                 let failedExit = proc.terminationReason == .exit && proc.terminationStatus != 0
                 let crashedBySignal = proc.terminationReason == .uncaughtSignal && !wasIntentionalForceStop
                 if failedExit || crashedBySignal {
+                    let failReason = crashedBySignal ? "signal-\(proc.terminationStatus)" : "exit-\(proc.terminationStatus)"
+                    VMCheckpointStore.markStopped(in: config.folder, clean: false, reason: failReason)
                     monitor?.cancel()
                     self.stopBrowserDisplay(for: config.id)
                     GuestWindows.shared.machineStopped(config.id)
@@ -301,6 +320,7 @@ final class QEMUManager: ObservableObject {
                     return
                 }
                 if wasIntentionalForceStop {
+                    VMCheckpointStore.markStopped(in: config.folder, clean: false, reason: "force-stop")
                     monitor?.cancel()
                     self.stopBrowserDisplay(for: config.id)
                     GuestWindows.shared.machineStopped(config.id)
@@ -319,17 +339,17 @@ final class QEMUManager: ObservableObject {
                         _ = VMStore.shared.save(nextConfig)
                     }
                 }
-                guard let monitor = monitor else {
-                    self.stopBrowserDisplay(for: config.id)
-                    GuestWindows.shared.machineStopped(config.id)
-                    return
-                }
                 // A restart (from inside the guest or via the app's Restart
                 // command) exits QEMU cleanly with a reset reason; boot the
                 // machine right back up so it behaves like a real reboot.
-                let reason = await monitor.shutdownReasonAfterExit(timeout: 2)
-                monitor.cancel()
-                if let reason = reason, QEMUManager.relaunchReasons.contains(reason) {
+                let reason = await monitor?.shutdownReasonAfterExit(timeout: 2)
+                monitor?.cancel()
+                VMCheckpointStore.markStopped(
+                    in: config.folder,
+                    clean: true,
+                    reason: reason ?? (wasOSXRestartRequested ? "osx-restart" : "clean-exit")
+                )
+                if wasOSXRestartRequested || (reason != nil && QEMUManager.relaunchReasons.contains(reason!)) {
                     // Settings can change while the shutdown event arrives.
                     // Always restart with the latest saved media and options.
                     nextConfig = VMStore.shared.vms.first { $0.id == config.id } ?? nextConfig
@@ -365,6 +385,9 @@ final class QEMUManager: ObservableObject {
         }
 
         processes[config.id] = process
+        runningFamilies[config.id] = config.machineFamily
+        runningNames[config.id] = config.name
+        VMCheckpointStore.markStarted(in: config.folder)
         if let displayServer {
             browserServers[config.id] = displayServer
             browserURLs[config.id] = displayServer.url
@@ -602,6 +625,8 @@ final class QEMUManager: ObservableObject {
     @MainActor
     func forceStop(_ id: UUID) {
         intentionalForceStopIDs.insert(id)
+        osxRestartRequestedIDs.remove(id)
+        osxShutdownTasks.removeValue(forKey: id)?.cancel()
         forcedStopWorkItems.removeValue(forKey: id)?.cancel()
         guard let process = processes[id] else { return }
         let pid = process.processIdentifier
@@ -660,15 +685,25 @@ final class QEMUManager: ObservableObject {
     func confirmStop() {
         guard let id = pendingStopID else { return }
         pendingStopID = nil
-        if VMStore.shared.vms.first(where: { $0.id == id })?.machineFamily == .powerMacOSX {
-            forceStop(id)
+        if isOSX(id) {
+            stopOSX(id, action: .shutDown, interactive: true)
         } else {
             stop(id)
         }
     }
 
+    func confirmForceStop() {
+        guard let id = pendingStopID else { return }
+        pendingStopID = nil
+        forceStop(id)
+    }
+
     private func stop(_ id: UUID) {
         guard let process = processes[id] else { return }
+        if isOSX(id) {
+            stopOSX(id, action: .shutDown, interactive: false)
+            return
+        }
         if coplandControls[id] != nil {
             // Copland does not implement the ADB power-key dialog. Its own
             // Spaz > Shut Down command is the graceful path; the host command
@@ -728,6 +763,56 @@ final class QEMUManager: ObservableObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + 15, execute: fallback)
     }
 
+    private func stopOSX(_ id: UUID, action: OSXShutdownController.Action, interactive: Bool) {
+        guard processes[id] != nil else { return }
+        let wasPaused = pausedIDs.remove(id) != nil
+        let socketPath = QEMUManager.monitorSocketURL(for: id).path
+        let machineName = runningNames[id]
+            ?? VMStore.shared.vms.first(where: { $0.id == id })?.name
+            ?? "Mac OS X"
+        let transport = OSXShutdownController.Transport.qemu(
+            vmID: id,
+            socketPath: socketPath,
+            sessionProvider: { await MainActor.run { GuestWindows.shared.session(for: id) } }
+        )
+        osxShutdownTasks.removeValue(forKey: id)?.cancel()
+        osxShutdownTasks[id] = Task { @MainActor [weak self] in
+            let outcome = await OSXShutdownController.perform(
+                action: action,
+                wasPaused: wasPaused,
+                transport: transport
+            )
+            guard let self else { return }
+            self.osxShutdownTasks.removeValue(forKey: id)
+            guard self.runningIDs.contains(id) else { return }
+            switch outcome {
+            case .confirmed:
+                break
+            case .unverified(let detail):
+                if action == .restart {
+                    self.osxRestartRequestedIDs.remove(id)
+                }
+                if interactive {
+                    let verb = action == .restart ? "Restart" : "Shut Down"
+                    self.lastError = AppError(
+                        "Couldn't \(verb) \u{201C}\(machineName)\u{201D} Automatically",
+                        "\(detail) Show the Mac window to \(verb.lowercased()) from the Apple menu, or choose Shut Down \u{2192} Force Stop."
+                    )
+                }
+            case .monitorFailed:
+                if action == .restart {
+                    self.osxRestartRequestedIDs.remove(id)
+                }
+                if interactive {
+                    self.lastError = AppError(
+                        "Couldn't Control \u{201C}\(machineName)\u{201D}",
+                        "The running Mac did not respond. If it stays unresponsive, choose Shut Down \u{2192} Force Stop."
+                    )
+                }
+            }
+        }
+    }
+
     func pause(_ id: UUID) {
         guard runningIDs.contains(id) else { return }
         pausedIDs.insert(id)
@@ -749,8 +834,9 @@ final class QEMUManager: ObservableObject {
 
     func reboot(_ id: UUID) {
         guard runningIDs.contains(id) else { return }
-        if VMStore.shared.vms.first(where: { $0.id == id })?.machineFamily == .powerMacOSX {
-            requestStop(id)
+        if isOSX(id) {
+            osxRestartRequestedIDs.insert(id)
+            stopOSX(id, action: .restart, interactive: true)
             return
         }
         pausedIDs.remove(id)
@@ -846,6 +932,12 @@ final class QEMUManager: ObservableObject {
             guard values?.isRegularFile == true, values?.isSymbolicLink == false, values?.fileSize == 16_384 else {
                 return AppError(title, "The Mac OS X startup memory must be a 16 KB file named nvram.img.")
             }
+            do {
+                let nvramData = try OSXNVRAM.validate(at: flash)
+                _ = try OSXNVRAM.rtcOffset(data: nvramData)
+            } catch {
+                return AppError(title, error.localizedDescription)
+            }
         }
 
         if config.machineFamily.usesPRAMImage && !fm.fileExists(atPath: config.pramImageURL.path) {
@@ -930,7 +1022,9 @@ final class QEMUManager: ObservableObject {
         let firmware = AppPaths.osxFirmwareDir
         let name = qemuEscape(config.name)
         let disk = qemuEscape(config.diskImageURL.path)
-        let flash = qemuEscape(config.folder.appendingPathComponent("nvram.img").path)
+        let flashURL = config.folder.appendingPathComponent("nvram.img")
+        let flash = qemuEscape(flashURL.path)
+        let rtcBase = OSXNVRAM.rtcBase(at: flashURL)
         let width = config.width / 8 * 8
         let height = config.height
         let bootCD = config.bootFromCD && config.cdImagePath?.isEmpty == false
@@ -938,12 +1032,13 @@ final class QEMUManager: ObservableObject {
         if let path = config.cdImagePath, !path.isEmpty {
             cd += ",file=\(qemuEscape(path)),format=raw"
         }
-        return [
+        var args = [
             "-L", firmware.path, "-bios", firmware.appendingPathComponent("openbios-ppc-osx").path,
             "-name", name, "-accel", "tcg,tb-size=512", "-cpu", "7400",
             "-m", String(config.ramMB),
             "-M", "mac99,via=pmu,usb=off,audiodev=snd0",
             "-audiodev", config.sound ? "coreaudio,id=snd0,out.buffer-length=50000" : "none,id=snd0",
+            "-rtc", rtcBase,
             "-global", "macio-nvram.osx-flash=on",
             "-drive", "if=none,id=osxnv,file=\(flash),format=raw",
             "-global", "macio-nvram.drive=osxnv",
@@ -959,7 +1054,16 @@ final class QEMUManager: ObservableObject {
             "-serial", "none", "-action", "reboot=shutdown",
             "-monitor", "unix:\(qemuEscape(monitorSocketURL(for: config.id).path)),server=on,wait=off",
             "-qmp", "unix:\(qemuEscape(qmpSocketURL(for: config.id).path)),server=on,wait=off",
-        ] + displayArguments(for: config, browser: display)
+        ]
+        if !bootCD {
+            args += ["-global", "screamer.osx-codec=on"]
+            args += ["-global", "screamer.dma-lead-us=0"]
+            let osVersion = VMTemplateMetadata.load(from: config.folder)?.osVersion
+            if !(osVersion?.hasPrefix("10.2") ?? false) {
+                args += ["-global", "via-pmu.osx-sleep=on"]
+            }
+        }
+        return args + displayArguments(for: config, browser: display)
     }
 
     private static func displayArguments(
@@ -1134,7 +1238,12 @@ final class QEMUManager: ObservableObject {
         if legacy {
             args += ["-nodefaults", "-global", "cuda.idle-irq-ms=50"]
         } else {
-            args += ["-device", "usb-mouse,id=classicmac-game-mouse"]
+            args += [
+                "-device",
+                config.classicInputHelpers
+                    ? "usb-mouse,id=classicmac-game-mouse"
+                    : "usb-mouse,id=classicmac-game-mouse,wheel-per-report=1"
+            ]
         }
 
         // Input configuration. QEMU treats whichever pointing device the guest

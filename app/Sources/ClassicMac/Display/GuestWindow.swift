@@ -288,6 +288,8 @@ final class GuestWindows: ObservableObject {
         screen.useBlackBackground = true
         screen.scaleMode = scaleMode(for: id)
         screen.inputHelpers = config?.classicInputHelpers ?? true
+        screen.legacyMouseTracking = config?.legacyMouseTracking ?? true
+        screen.mouseDPI = config?.mouseDPI
         screen.isPaused = QEMUManager.shared.isPaused(id)
         screen.onToggleFullScreen = { [weak self] in self?.toggleFullScreen(id) }
 
@@ -481,6 +483,8 @@ struct GuestWindowContent: View {
             ZStack {
                 GuestScreen(session: session,
                             inputHelpers: config?.classicInputHelpers ?? true,
+                            legacyMouseTracking: config?.legacyMouseTracking ?? true,
+                            mouseDPI: config?.mouseDPI,
                             scaleMode: windows.scaleMode(for: vmID),
                             isPaused: paused,
                             onToggleFullScreen: { GuestWindows.shared.toggleFullScreen(vmID) },
@@ -519,16 +523,10 @@ struct GuestWindowContent: View {
 
     private func toolbarButtons(compact: Bool) -> some View {
         HStack(spacing: 6) {
-            if config?.machineFamily == .powerMacOSX {
-                PlatinumBevelButton(compact ? nil : "Power…", icon: "power") { manager.requestStop(vmID) }
-                    .help("Power…")
-                    .accessibilityLabel("Power…")
-            } else {
-                PlatinumBevelButton(compact ? nil : "Shut Down…", icon: "power") { manager.requestStop(vmID) }
-                    .help("Shut Down…")
-                    .accessibilityLabel("Shut Down…")
-                PlatinumBevelButton("Restart") { manager.reboot(vmID) }
-            }
+            PlatinumBevelButton(compact ? nil : "Shut Down…", icon: "power") { manager.requestStop(vmID) }
+                .help("Shut Down…")
+                .accessibilityLabel("Shut Down…")
+            PlatinumBevelButton("Restart") { manager.reboot(vmID) }
             PlatinumBevelButton(paused ? "Resume" : "Pause") {
                 if paused { manager.resume(vmID) } else { manager.pause(vmID) }
             }

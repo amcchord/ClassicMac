@@ -32,6 +32,8 @@ enum GuestDisplayScale: String, CaseIterable, Hashable {
 final class GuestScreenNSView: NSView {
     let session: GuestDisplaySession
     var inputHelpers = true
+    var legacyMouseTracking = true
+    var mouseDPI: Int? = nil
     var scaleMode: GuestDisplayScale = .sharp {
         didSet {
             if scaleMode != oldValue {
@@ -305,7 +307,13 @@ final class GuestScreenNSView: NSView {
     private func move(_ event: NSEvent) {
         guard !isPaused else { return }
         if captured {
-            let delta = motion.take(dx: event.deltaX, dy: event.deltaY, scale: scale)
+            let delta = motion.take(
+                dx: event.deltaX,
+                dy: event.deltaY,
+                scale: scale,
+                legacyNative: legacyMouseTracking,
+                dpi: mouseDPI
+            )
             session.pointerDelta(dx: delta.x, dy: delta.y)
         } else if !relative, let (x, y) = guestPoint(event) {
             session.pointer(x: x, y: y)
@@ -586,6 +594,8 @@ final class GuestScreenContainerView: NSScrollView {
 struct GuestScreen: NSViewRepresentable {
     let session: GuestDisplaySession
     let inputHelpers: Bool
+    var legacyMouseTracking: Bool = true
+    var mouseDPI: Int? = nil
     let scaleMode: GuestDisplayScale
     let isPaused: Bool
     let onToggleFullScreen: () -> Void
@@ -595,6 +605,8 @@ struct GuestScreen: NSViewRepresentable {
         let container = GuestScreenContainerView(session: session)
         let view = container.screenView
         view.inputHelpers = inputHelpers
+        view.legacyMouseTracking = legacyMouseTracking
+        view.mouseDPI = mouseDPI
         view.scaleMode = scaleMode
         view.isPaused = isPaused
         view.onToggleFullScreen = onToggleFullScreen
@@ -606,6 +618,8 @@ struct GuestScreen: NSViewRepresentable {
     func updateNSView(_ container: GuestScreenContainerView, context: Context) {
         let view = container.screenView
         view.inputHelpers = inputHelpers
+        view.legacyMouseTracking = legacyMouseTracking
+        view.mouseDPI = mouseDPI
         view.scaleMode = scaleMode
         view.isPaused = isPaused
         view.onToggleFullScreen = onToggleFullScreen

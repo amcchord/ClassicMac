@@ -488,4 +488,26 @@ final class VMConfigTests: XCTestCase {
         )
         XCTAssertFalse(nonQuadra.bootFromFloppy)
     }
+
+    func testLegacyMouseTrackingAndMouseDPIDefaultsAndClamping() throws {
+        let defaults = VMConfig(name: "Mouse Defaults", machineFamily: .powerMacG4)
+        XCTAssertTrue(defaults.legacyMouseTracking)
+        XCTAssertNil(defaults.mouseDPI)
+
+        let clampedLow = VMConfig(name: "Low", machineFamily: .quadra800, legacyMouseTracking: false, mouseDPI: 25)
+        XCTAssertFalse(clampedLow.legacyMouseTracking)
+        XCTAssertEqual(clampedLow.mouseDPI, 100)
+
+        let clampedHigh = VMConfig(name: "High", machineFamily: .powerMacG4, mouseDPI: 250_000)
+        XCTAssertEqual(clampedHigh.mouseDPI, 100_000)
+
+        // Older config JSON missing legacyMouseTracking/mouseDPI migrates cleanly.
+        let encoded = try JSONEncoder().encode(clampedLow)
+        var obj = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+        obj.removeValue(forKey: "legacyMouseTracking")
+        obj.removeValue(forKey: "mouseDPI")
+        let decoded = try JSONDecoder().decode(VMConfig.self, from: JSONSerialization.data(withJSONObject: obj))
+        XCTAssertTrue(decoded.legacyMouseTracking)
+        XCTAssertNil(decoded.mouseDPI)
+    }
 }

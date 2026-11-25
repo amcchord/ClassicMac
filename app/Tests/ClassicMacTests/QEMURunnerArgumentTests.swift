@@ -45,15 +45,54 @@ final class QEMURunnerArgumentTests: XCTestCase {
         let args = QEMUManager.buildArguments(for: vm)
         XCTAssertEqual(optionValues("-M", in: args), ["mac99,via=pmu,usb=off,audiodev=snd0"])
         XCTAssertEqual(optionValues("-boot", in: args), ["d"])
+        XCTAssertEqual(optionValues("-rtc", in: args), ["base=utc"])
         XCTAssertEqual(optionValues("-g", in: args), ["1024x768x32"])
         XCTAssertEqual(optionValues("-device", in: args),
                        ["pci-ohci,id=osx-usb", "usb-kbd,bus=osx-usb.0", "usb-mouse,bus=osx-usb.0"])
         XCTAssertTrue(optionValues("-bios", in: args).first?.hasSuffix("/openbios-ppc-osx") == true)
         XCTAssertTrue(optionValues("-drive", in: args).contains { $0.contains("Tiger,, retail.img") })
         XCTAssertTrue(optionValues("-drive", in: args).contains { $0.contains("/nvram.img") })
+        XCTAssertFalse(optionValues("-global", in: args).contains("screamer.osx-codec=on"))
+        XCTAssertFalse(optionValues("-global", in: args).contains("via-pmu.osx-sleep=on"))
         XCTAssertFalse(args.contains("-icount"))
         XCTAssertFalse(args.contains("-fsdev"))
         XCTAssertFalse(vm.toolsCDInserted)
+    }
+
+    func testOSXHardDiskBootAddsAudioSleepAndRTCOffsetAndSkipsSleepForJaguar() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("osx-args-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let nvram = OSXReliabilityTests.makeNVRAMData(gen0: 1, offset0: 0, gen1: 2, offset1: 3600)
+        try nvram.write(to: root.appendingPathComponent("nvram.img"))
+
+        let tiger = VMConfig(name: "Tiger", machineFamily: .powerMacOSX, bootFromCD: false, bundleURL: root)
+        let tigerArgs = QEMUManager.buildArguments(for: tiger)
+        let globals = optionValues("-global", in: tigerArgs)
+        XCTAssertTrue(globals.contains("screamer.osx-codec=on"))
+        XCTAssertTrue(globals.contains("screamer.dma-lead-us=0"))
+        XCTAssertTrue(globals.contains("via-pmu.osx-sleep=on"))
+        XCTAssertTrue(optionValues("-rtc", in: tigerArgs).first?.hasPrefix("base=") == true)
+        XCTAssertNotEqual(optionValues("-rtc", in: tigerArgs).first, "base=utc")
+
+        // Jaguar 10.2 omits via-pmu.osx-sleep=on
+        let jaguarMachine = DownloadableMachine(
+            id: "osx-10.2", name: "Mac OS X 10.2", summary: "Jaguar",
+            osVersion: "10.2.8", minimumAppVersion: "4.8.0",
+            archiveURL: URL(string: "https://example.com/jaguar.tar.gz")!,
+            archiveBytes: 100, installedBytes: 1000,
+            sha256: String(repeating: "a", count: 64),
+            machineFamily: .powerMacOSX
+        )
+        try JSONEncoder().encode(VMTemplateMetadata(machine: jaguarMachine))
+            .write(to: root.appendingPathComponent(VMTemplateMetadata.fileName))
+        let jaguarArgs = QEMUManager.buildArguments(for: tiger)
+        let jaguarGlobals = optionValues("-global", in: jaguarArgs)
+        XCTAssertTrue(jaguarGlobals.contains("screamer.osx-codec=on"))
+        XCTAssertTrue(jaguarGlobals.contains("screamer.dma-lead-us=0"))
+        XCTAssertFalse(jaguarGlobals.contains("via-pmu.osx-sleep=on"))
     }
 
     func testVirtioStartupAndCompatibilityCDHaveSelectedBootDeviceFirst() {
@@ -110,6 +149,8 @@ final class QEMURunnerArgumentTests: XCTestCase {
             let args = QEMUManager.buildArguments(for: config(tabletInput: tablet))
             XCTAssertTrue(optionValues("-device", in: args).contains("usb-mouse,id=classicmac-game-mouse"))
         }
+        let overdriveArgs = QEMUManager.buildArguments(for: config(classicInputHelpers: false))
+        XCTAssertTrue(optionValues("-device", in: overdriveArgs).contains("usb-mouse,id=classicmac-game-mouse,wheel-per-report=1"))
         let quadra = QEMUManager.buildArguments(for: config(family: .quadra800))
         XCTAssertFalse(quadra.contains("usb-mouse,id=classicmac-game-mouse"))
     }
@@ -1003,7 +1044,7 @@ final class QEMURunnerArgumentTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: root) }
 
         try Data().write(to: osxFirmware.appendingPathComponent("openbios-ppc-osx"))
-        try Data(repeating: 0, count: 16_384).write(to: osxFirmware.appendingPathComponent("macosx-flash-seed.img"))
+        try OSXReliabilityTests.makeNVRAMData().write(to: osxFirmware.appendingPathComponent("macosx-flash-seed.img"))
         try Data().write(to: osxFirmware.appendingPathComponent("qemu_vga.ndrv"))
 
         let fakeQemu = osxBinDir.appendingPathComponent("qemu-system-ppc")
@@ -1093,5 +1134,42 @@ final class QEMURunnerArgumentTests: XCTestCase {
         let fd = VMConfig(name: "Q", machineFamily: .quadra800, cdImagePath: "/tmp/cd.iso", bootFromCD: false, floppyImagePath: "/tmp/fd.img", bootFromFloppy: true, bundleURL: dir)
         QEMUManager.applyQuadraBootPRAM(for: fd)
         XCTAssertEqual(try Data(contentsOf: pramURL)[0x78..<0x7C], Data([0x00, 0x00, 0x0c, 0xa0]))
+    }
+
+    func testOSXPreflightRejectsDamagedNVRAMWithRecoverySuggestion() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("osx-preflight-\(UUID().uuidString)", isDirectory: true)
+        let osxFirmware = root.appendingPathComponent("osx/firmware", isDirectory: true)
+        let osxBinDir = root.appendingPathComponent("vendor/qemu-osx/build", isDirectory: true)
+        let bundle = root.appendingPathComponent("DamagedNVRAM.classic", isDirectory: true)
+        try FileManager.default.createDirectory(at: osxFirmware, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: osxBinDir, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: bundle, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        try Data().write(to: osxFirmware.appendingPathComponent("openbios-ppc-osx"))
+        try OSXReliabilityTests.makeNVRAMData().write(to: osxFirmware.appendingPathComponent("macosx-flash-seed.img"))
+        try Data().write(to: osxFirmware.appendingPathComponent("qemu_vga.ndrv"))
+
+        let fakeQemu = osxBinDir.appendingPathComponent("qemu-system-ppc")
+        try "#!/bin/sh\nexit 0\n".write(to: fakeQemu, atomically: true, encoding: .utf8)
+        chmod(fakeQemu.path, 0o755)
+
+        let prevRepo = ProcessInfo.processInfo.environment["CLASSICMAC_REPO"]
+        setenv("CLASSICMAC_REPO", root.path, 1)
+        defer {
+            if let prevRepo { setenv("CLASSICMAC_REPO", prevRepo, 1) }
+            else { unsetenv("CLASSICMAC_REPO") }
+        }
+
+        let vm = VMConfig(name: "Damaged Tiger", machineFamily: .powerMacOSX, bundleURL: bundle)
+        try Data(repeating: 0, count: 1024).write(to: vm.diskImageURL)
+        try Data(repeating: 0, count: OSXNVRAM.byteCount).write(to: bundle.appendingPathComponent("nvram.img"))
+
+        let manager = QEMUManager()
+        manager.start(vm)
+        XCTAssertFalse(manager.isRunning(vm.id))
+        let err = try XCTUnwrap(manager.lastError)
+        XCTAssertTrue(err.message.contains("checkpoint"))
     }
 }

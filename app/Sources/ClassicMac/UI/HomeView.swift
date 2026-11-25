@@ -124,6 +124,10 @@ struct HomeView: View {
                             store.selectedID = vm.id
                             WindowManager.shared.presentSettings(for: vm.id)
                         }
+                        Button("Checkpoints…") {
+                            store.selectedID = vm.id
+                            WindowManager.shared.presentCheckpoints(for: vm.id)
+                        }
                         Button("Media…") {
                             store.selectedID = vm.id
                             MediaController.shared.present(for: vm.id)
@@ -286,6 +290,7 @@ struct MachinePanel: View {
                 Spacer(minLength: 0)
                 VStack(alignment: .trailing, spacing: 10) {
                     PlatinumButton("Get Info…", minWidth: 86) { WindowManager.shared.presentSettings(for: vm.id) }
+                    PlatinumButton("Checkpoints…", minWidth: 86) { WindowManager.shared.presentCheckpoints(for: vm.id) }
                     if !copland {
                         PlatinumButton("Media…", minWidth: 86) { MediaController.shared.present(for: vm.id) }
                     }
@@ -405,12 +410,8 @@ struct MachinePanel: View {
                 PlatinumButton(paused ? "Resume" : "Pause") {
                     if paused { manager.resume(vm.id) } else { manager.pause(vm.id) }
                 }
-                if vm.machineFamily == .powerMacOSX {
-                    PlatinumButton("Power…") { manager.requestStop(vm.id) }
-                } else {
-                    PlatinumButton("Restart") { manager.reboot(vm.id) }
-                    PlatinumButton("Shut Down…") { manager.requestStop(vm.id) }
-                }
+                PlatinumButton("Restart") { manager.reboot(vm.id) }
+                PlatinumButton("Shut Down…") { manager.requestStop(vm.id) }
                 Spacer(minLength: 0)
                 PlatinumButton(vm.useBrowserDisplay ? "Open in Browser" : "Show Mac", role: .default, minWidth: 90) {
                     if paused { manager.resume(vm.id) }
