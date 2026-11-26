@@ -115,6 +115,10 @@ enum DebugSnapshots {
                 print("display-socket:", GuestDisplaySession.socketPath(for: id))
             }
         case "settings": if let id = store.selectedID { manager.presentSettings(for: id) }
+        case "checkpoints": if let id = store.selectedID { manager.presentCheckpoints(for: id) }
+        case "update": manager.showUpdateChecker(interactive: true)
+        case "paste": if let id = store.selectedID { PasteTextController.shared.present(for: id) }
+        case "delete": if let id = store.selectedID, let vm = store.vms.first(where: { $0.id == id }) { manager.confirmRemove(vm) }
         case "media": if let id = store.selectedID { MediaController.shared.present(for: id) }
         case "shutdown": if let id = store.selectedID { QEMUManager.shared.requestStop(id) }
         case "alert":

@@ -73,7 +73,12 @@ final class PasteTextSession: ObservableObject {
         self.id = id
         self.name = name
         // Reading is on demand, once, after an explicit Paste Text action.
-        text = NSPasteboard.general.string(forType: .string) ?? ""
+        let env = ProcessInfo.processInfo.environment
+        if env["CLASSICMAC_UI_SNAPSHOTS"] != nil, let sample = env["CLASSICMAC_UI_PASTE_SAMPLE"] {
+            text = sample
+        } else {
+            text = NSPasteboard.general.string(forType: .string) ?? ""
+        }
         stateObserver = QEMUManager.shared.$runningIDs.combineLatest(QEMUManager.shared.$pausedIDs)
             .sink { [weak self] running, paused in
                 // A stop/restart boundary must end this job even if the same

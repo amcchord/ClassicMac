@@ -21,12 +21,12 @@
 ---
 
 <p align="center">
-  <img src="docs/screenshots/platinum/running-ati.png" width="720" alt="ClassicMac 4.2 in the Apple Platinum appearance, with Mac OS 9.2.2 Deluxe running on the emulated ATI Radeon">
+  <img src="docs/screenshots/platinum/running-ati.png" width="720" alt="ClassicMac 4.10.0 in the Apple Platinum appearance, with Mac OS 9.2.2 Mega Deluxe running on the emulated ATI Radeon">
 </p>
 
 <p align="center">
   <img src="docs/screenshots/quadra800-macos81.png" width="410" alt="Mac OS 8.1 on the emulated Quadra 800">
-  <img src="docs/screenshots/powermacg4-macos92.png" width="410" alt="Mac OS 9.2 on the emulated Power Mac G4">
+  <img src="docs/screenshots/powermacg4-macos92.png" width="410" alt="Mac OS 9.2.2 Mega Deluxe on the emulated Power Mac G4">
 </p>
 
 ## Download ClassicMac 4.10.0
@@ -40,6 +40,22 @@
 [Release notes, checksums and engine sources](https://github.com/amcchord/ClassicMac/releases/tag/v4.10.0).
 Windows runs directly. Drag the Mac app to Applications. On Linux, mark the
 AppImage executable; use `--appimage-extract-and-run` if FUSE is unavailable.
+
+## Related project: RetroBoot
+
+ClassicMac is a sister project to **[RetroBoot](https://github.com/amcchord/RetroBoot)** — the two are very similar and share much of the same custom QEMU classic Mac emulation stack, guest drivers, Apple Platinum UI, and ready-to-run Mac OS image library.
+
+- **Choose ClassicMac** if you want to run classic Mac OS in a window on your everyday **Apple Silicon Mac, Windows 11 PC, or Linux desktop** (or **iPad** via the beta) alongside modern apps, keep portable `.classic` machine files, or try experimental **Copland** on macOS.
+- **Choose RetroBoot** if you want to turn a **spare PC, Intel Mac, Raspberry Pi, or Planet Computers Gemini PDA** into a dedicated, boot-straight-to-Mac-OS appliance with a startup chime and no host desktop — ideal for kids, families, or a standalone retro machine with gamepad support, plug-and-play USB drives, and phone/browser management over your local network.
+
+## User Manual & Complete Documentation
+
+See the full **[ClassicMac 4.10.0 User Manual](docs/manual/README.md)** (12 chapters with architecture diagrams, configuration schemas, and screenshots):
+
+- **Getting started & requirements:** [System Requirements](docs/manual/01-system-requirements.md) · [Architecture & How It Works](docs/manual/02-architecture-how-it-works.md) · [Installation & First Run](docs/manual/03-installation-and-first-run.md)
+- **Operating systems:** [Mac OS Library & Editions](docs/manual/04-mac-os-library-and-editions.md) · [Creating Custom Macs & Manual OS Installs](docs/manual/05-installing-your-own-mac-os.md) · [Everyday Use & Input](docs/manual/06-everyday-use-and-input.md)
+- **Devices & I/O:** [Display, 3D Graphics & Sound](docs/manual/07-display-3d-graphics-and-sound.md) · [Media Drawer, Tools CD & Shared Folders](docs/manual/08-media-tools-and-sharing.md) · [Networking & Virtual Printing](docs/manual/09-networking-and-virtual-printing.md)
+- **Hosting & reference:** [Creating & Serving Custom Images](docs/manual/10-creating-and-serving-images.md) · [Checkpoints, Updates & Troubleshooting](docs/manual/11-checkpoints-updates-and-troubleshooting.md) · [Configuration, Bundles & Env Reference](docs/manual/12-configuration-and-cli-reference.md)
 
 ## New in ClassicMac 4.10.0
 
@@ -307,7 +323,12 @@ See the [desktop build and platform support guide](desktop/README.md).
   and lets you add more collections from your own copies.
 
 <p align="center">
-  <img src="docs/screenshots/platinum/guest-window.png" width="720" alt="Mac OS 9.2.2 Deluxe in ClassicMac's Platinum window with the toolbar along the bottom">
+  <img src="docs/screenshots/platinum/guest-window.png" width="720" alt="Mac OS 9.2.2 Mega Deluxe in ClassicMac 4.10.0's Platinum window with the toolbar along the bottom">
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/platinum/main-window.png" width="410" alt="ClassicMac 4.10.0 Home window with Apple Platinum chrome">
+  <img src="docs/screenshots/manual/guest-osx-tiger.png" width="410" alt="Mac OS X 10.4.11 Tiger running inside ClassicMac 4.10.0">
 </p>
 
 <p align="center">
@@ -441,7 +462,7 @@ ClassicMac exists because of years of brilliant work by other engineers. The pat
 
 ## Getting started
 
-1. Grab **ClassicMac.dmg** from the [latest release](../../releases/latest), drag ClassicMac to Applications, and launch it.
+1. Grab **ClassicMac.dmg** from the [latest release](https://github.com/amcchord/ClassicMac/releases/latest), drag ClassicMac to Applications, and launch it.
 2. The first-run wizard starts with a reminder: this is 30-year-old software,
    and you are responsible for having the right licenses. Acknowledge it,
    then choose **Download a pre-installed Mac** or **Install my own copy of
@@ -561,6 +582,8 @@ The guest-side binaries are committed, so a normal build needs no cross toolchai
 ```
 ClassicMac/
   VERSION                   # canonical release version shared by app, CMake and packagers
+  AGENTS.md                 # contributor & AI agent workflow and doc-maintenance contract
+  CLAUDE.md                 # concise agent project instructions
   app/                      # macOS SwiftUI app and PlatinumKit (SwiftPM package)
   native/                   # cross-platform C++17/Qt desktop app and Windows/Linux packagers
   desktop/                  # Windows/Linux QEMU build & runtime staging scripts and shared UI assets
@@ -591,7 +614,7 @@ ClassicMac/
   ide/                      # PPC MacIO IDE/DBDMA timing fix + tracepoints
   guestcd/                  # Tools CD manifest + HFS copy tooling + ClassicMac Display guest extension
   ios/                      # iPad build patch, ExportOptions and TestFlight documentation
-  docs/                     # architecture notes, validation reports, release evidence and operations
+  docs/                     # architecture notes, User Manual (docs/manual/), screenshots and operations
   scripts/                  # build-qemu, bundle-qemu, build-guest-cd, make-dmg, notarize, verify-release...
 ```
 
