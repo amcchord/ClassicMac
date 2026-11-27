@@ -1,6 +1,6 @@
-# ClassicMac 4.10.0 User Manual
+# ClassicMac 4.10.1 User Manual
 
-Welcome to the complete **ClassicMac User Manual** for **ClassicMac 4.10.0**. ClassicMac runs genuine 68k Macintosh (Quadra 800), PowerPC Macintosh (Power Mac G3 / G4 with optional ATI 3D OpenGL acceleration and Copland D11E4), and early PowerPC Mac OS X (10.4.11 Tiger) machines inside a classic Apple Platinum interface across **macOS**, **Windows**, **Linux**, and **iPadOS (beta)**.
+Welcome to the complete **ClassicMac User Manual** for **ClassicMac 4.10.1**. ClassicMac runs genuine 68k Macintosh (Quadra 800), PowerPC Macintosh (Power Mac G3 / G4 with optional ATI 3D OpenGL acceleration and Copland D11E4), and early PowerPC Mac OS X (10.4.11 Tiger) machines inside a classic Apple Platinum interface across **macOS**, **Windows**, **Linux**, and **iPadOS (beta)**.
 
 <p align="center">
   <img src="../screenshots/manual/main-home-410.png" width="400" alt="ClassicMac 4.10.0 Platinum Home window showing installed classic Macs and screen preview">

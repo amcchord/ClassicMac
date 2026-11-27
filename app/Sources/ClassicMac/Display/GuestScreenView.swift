@@ -55,11 +55,20 @@ final class GuestScreenNSView: NSView {
             }
         }
     }
+    var isSuspended = false {
+        didSet {
+            if isSuspended != oldValue {
+                updateDisplayLinkState()
+            }
+        }
+    }
     var onToggleFullScreen: (() -> Void)?
     var onCaptureChanged: ((Bool) -> Void)?
 
     private let imageLayer = CALayer()
     private nonisolated(unsafe) var displayLinkRef: CADisplayLink?
+    private var lastPresentedGeneration: UInt64 = 0
+    private var lastCursorScale: CGFloat = 0
     private var subscriptions: Set<AnyCancellable> = []
     private var imageRect = CGRect.zero
     private var scale: CGFloat = 1
@@ -105,6 +114,7 @@ final class GuestScreenNSView: NSView {
         // Around a screen smaller than the window: the classic gray dither,
         // never black.
         layer?.backgroundColor = Self.checkerboard.cgColor
+        imageLayer.isOpaque = true
         imageLayer.contentsGravity = .resize
         imageLayer.magnificationFilter = .nearest
         imageLayer.minificationFilter = .trilinear
@@ -150,8 +160,18 @@ final class GuestScreenNSView: NSView {
                 self?.updateGuestCursor(image, hotSpot: hot)
             }.store(in: &subscriptions)
         state.$bootCount.sink { [weak self] _ in
+            self?.lastPresentedGeneration = 0
             self?.imageLayer.contents = nil
         }.store(in: &subscriptions)
+    }
+
+    var isDisplayActive: Bool {
+        guard let window, !isSuspended else { return false }
+        return window.occlusionState.contains(.visible)
+    }
+
+    func updateDisplayLinkState() {
+        displayLinkRef?.isPaused = !isDisplayActive
     }
 
     override func viewDidMoveToWindow() {
@@ -167,12 +187,13 @@ final class GuestScreenNSView: NSView {
         let link = displayLink(target: self, selector: #selector(tick))
         link.add(to: .main, forMode: .common)
         displayLinkRef = link
-        if let image = session.takeFrame(force: true) { imageLayer.contents = image }
+        updateDisplayLinkState()
+        if isDisplayActive { drawLatestFrame() }
         NotificationCenter.default.addObserver(self, selector: #selector(windowResigned),
                                                name: NSWindow.didResignKeyNotification, object: window)
-        // The display link pauses while the window is hidden or the display
-        // sleeps; draw the latest frame the moment it can be seen again.
-        NotificationCenter.default.addObserver(self, selector: #selector(drawLatestFrame),
+        // Pause display updates when the window is occluded or suspended by
+        // full screen, and draw the latest frame the moment it is visible.
+        NotificationCenter.default.addObserver(self, selector: #selector(occlusionChanged),
                                                name: NSWindow.didChangeOcclusionStateNotification, object: window)
         NotificationCenter.default.addObserver(self, selector: #selector(drawLatestFrame),
                                                name: Self.refreshNotification, object: nil)
@@ -181,19 +202,25 @@ final class GuestScreenNSView: NSView {
     /// Posted to make every guest screen draw its latest frame now.
     static let refreshNotification = Notification.Name("com.classicmac.guest-screen.refresh")
 
+    @objc private func occlusionChanged() {
+        updateDisplayLinkState()
+        if isDisplayActive { drawLatestFrame() }
+    }
+
     @objc func drawLatestFrame() {
-        guard let image = session.takeFrame(force: true) else { return }
+        guard let contents = session.presentFrame(lastGeneration: &lastPresentedGeneration, force: true) else { return }
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        imageLayer.contents = image
+        imageLayer.contents = contents
         CATransaction.commit()
     }
 
     @objc private func tick() {
-        if let image = session.takeFrame() {
+        guard isDisplayActive else { return }
+        if let contents = session.presentFrame(lastGeneration: &lastPresentedGeneration) {
             CATransaction.begin()
             CATransaction.setDisableActions(true)
-            imageLayer.contents = image
+            imageLayer.contents = contents
             CATransaction.commit()
         }
     }
@@ -246,7 +273,9 @@ final class GuestScreenNSView: NSView {
         imageLayer.frame = imageRect
         CATransaction.commit()
         window?.invalidateCursorRects(for: self)
-        updateGuestCursor(session.state.cursorImage, hotSpot: session.state.cursorHotSpot)
+        if scale != lastCursorScale {
+            updateGuestCursor(session.state.cursorImage, hotSpot: session.state.cursorHotSpot)
+        }
     }
 
     /// Size the Mac's screen asks for, in points, at whole-number scale `n`.
@@ -255,13 +284,14 @@ final class GuestScreenNSView: NSView {
     // MARK: Cursor
 
     func updateGuestCursor(_ image: CGImage?, hotSpot: CGPoint) {
+        let factor = scale > 0 ? scale : 1
+        lastCursorScale = factor
         guard let image else {
             guestCursor = nil
             window?.invalidateCursorRects(for: self)
             return
         }
         // Scale the cursor with the screen, pixel for pixel (including < 1x fit).
-        let factor = scale > 0 ? scale : 1
         let size = NSSize(width: max(1, (CGFloat(image.width) * factor).rounded()),
                           height: max(1, (CGFloat(image.height) * factor).rounded()))
         let nsImage = NSImage(size: size, flipped: false) { rect in
@@ -598,6 +628,7 @@ struct GuestScreen: NSViewRepresentable {
     var mouseDPI: Int? = nil
     let scaleMode: GuestDisplayScale
     let isPaused: Bool
+    var isSuspended: Bool = false
     let onToggleFullScreen: () -> Void
     let onCaptureChanged: (Bool) -> Void
 
@@ -609,6 +640,7 @@ struct GuestScreen: NSViewRepresentable {
         view.mouseDPI = mouseDPI
         view.scaleMode = scaleMode
         view.isPaused = isPaused
+        view.isSuspended = isSuspended
         view.onToggleFullScreen = onToggleFullScreen
         view.onCaptureChanged = onCaptureChanged
         DispatchQueue.main.async { container.window?.makeFirstResponder(view) }
@@ -622,8 +654,8 @@ struct GuestScreen: NSViewRepresentable {
         view.mouseDPI = mouseDPI
         view.scaleMode = scaleMode
         view.isPaused = isPaused
+        view.isSuspended = isSuspended
         view.onToggleFullScreen = onToggleFullScreen
         view.onCaptureChanged = onCaptureChanged
-        container.needsLayout = true
     }
 }

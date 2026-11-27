@@ -366,6 +366,8 @@ $ICON_NAME_PLIST
 	<string>public.app-category.utilities</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>NSAppSleepDisabled</key>
+	<true/>
 	<key>CFBundleDocumentTypes</key>
 	<array>
 		<dict>
@@ -445,6 +447,8 @@ write_helper_plist() {
 	<false/>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>NSAppSleepDisabled</key>
+	<true/>
 </dict>
 </plist>
 PLIST

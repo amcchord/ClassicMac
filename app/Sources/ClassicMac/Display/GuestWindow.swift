@@ -13,12 +13,16 @@ final class GuestWindows: ObservableObject {
     static let toolbarHeight: CGFloat = 30
 
     @Published private(set) var scaleModes: [UUID: GuestDisplayScale] = [:]
+    @Published private(set) var fullScreenIDs: Set<UUID> = []
+
+    func isFullScreen(_ id: UUID) -> Bool { fullScreenIDs.contains(id) }
 
     private final class Entry {
         let session: GuestDisplaySession
         var window: PlatinumWindow?
         var fullScreen: FullScreenWindow?
         var fullScreenContainer: GuestScreenContainerView?
+        var fullScreenScreenObserver: NSObjectProtocol?
         var started = Date()
         var lastRequestedSize: CGSize?
         var resizeWork: DispatchWorkItem?
@@ -97,8 +101,12 @@ final class GuestWindows: ObservableObject {
 
     /// The emulator stopped for good (not a restart): close the window.
     func machineStopped(_ id: UUID) {
+        fullScreenIDs.remove(id)
         guard let entry = entries.removeValue(forKey: id) else { return }
         for observer in entry.observers { NotificationCenter.default.removeObserver(observer) }
+        if let observer = entry.fullScreenScreenObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
         entry.fullScreen?.onDidExitFullScreen = nil
         entry.fullScreen?.close()
         entry.window?.shouldClose = nil
@@ -133,10 +141,18 @@ final class GuestWindows: ObservableObject {
         }
     }
 
-    /// Match QEMU's frame interval to the display (8 ms on a 120 Hz screen).
+    /// Match QEMU's frame interval to the display (8 ms on 120 Hz for ATI;
+    /// capped at 60 Hz / 16 ms for Standard VGA, Quadra, and OS X).
     private func updateRefreshRate(_ id: UUID) {
         guard let entry = entries[id] else { return }
-        let fps = max(30, (entry.window?.screen ?? NSScreen.main)?.maximumFramesPerSecond ?? 60)
+        let config = VMStore.shared.vms.first { $0.id == id }
+        let isATI = config.map { QEMUManager.effectiveGraphicsCard(for: $0) == .atiRadeon } ?? false
+        guard isATI else {
+            entry.session.refreshInterval = 16
+            return
+        }
+        let screen = entry.fullScreen?.screen ?? entry.window?.screen ?? NSScreen.main
+        let fps = max(30, screen?.maximumFramesPerSecond ?? 60)
         entry.session.refreshInterval = UInt32(max(8, min(16, 1000 / fps)))
     }
 
@@ -265,9 +281,15 @@ final class GuestWindows: ObservableObject {
             if full.styleMask.contains(.fullScreen) {
                 full.toggleFullScreen(nil)
             } else {
+                if let observer = entry.fullScreenScreenObserver {
+                    NotificationCenter.default.removeObserver(observer)
+                    entry.fullScreenScreenObserver = nil
+                }
+                fullScreenIDs.remove(id)
                 entry.fullScreen = nil
                 entry.fullScreenContainer = nil
                 full.close()
+                updateRefreshRate(id)
                 entry.window?.makeKeyAndOrderFront(nil)
             }
             return
@@ -299,7 +321,7 @@ final class GuestWindows: ObservableObject {
         }
         window.contentView = host
         window.onFullScreenResize = { [weak self] screenSize in
-            guard let self, let entry = self.entries[id], self.followsWindow(id) else { return }
+            guard let self, let entry = self.entries[id], self.autoResizesGuest(id) else { return }
             if let wanted = self.wantedGuestSize(for: id, viewSize: screenSize),
                wanted != entry.session.state.surfaceSize {
                 entry.session.resize(width: Int(wanted.width), height: Int(wanted.height))
@@ -307,14 +329,26 @@ final class GuestWindows: ObservableObject {
         }
         window.onDidExitFullScreen = { [weak self] in
             guard let self, let entry = self.entries[id], entry.fullScreen === window else { return }
+            if let observer = entry.fullScreenScreenObserver {
+                NotificationCenter.default.removeObserver(observer)
+                entry.fullScreenScreenObserver = nil
+            }
+            self.fullScreenIDs.remove(id)
             entry.fullScreen = nil
             entry.fullScreenContainer = nil
             window.close()
+            self.updateRefreshRate(id)
             entry.window?.makeKeyAndOrderFront(nil)
             self.windowResized(id)
         }
+        entry.fullScreenScreenObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.didChangeScreenNotification, object: window, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.updateRefreshRate(id) }
+            }
         entry.fullScreen = window
         entry.fullScreenContainer = container
+        fullScreenIDs.insert(id)
+        updateRefreshRate(id)
         window.makeKeyAndOrderFront(nil)
         window.makeFirstResponder(screen)
         window.toggleFullScreen(nil)
@@ -329,6 +363,7 @@ private final class FullScreenWindow: NSWindow, NSWindowDelegate {
     override init(contentRect: NSRect, styleMask style: NSWindow.StyleMask,
                   backing backingStoreType: NSWindow.BackingStoreType, defer flag: Bool) {
         super.init(contentRect: contentRect, styleMask: style, backing: backingStoreType, defer: flag)
+        acceptsMouseMovedEvents = true
         delegate = self
     }
 
@@ -487,6 +522,7 @@ struct GuestWindowContent: View {
                             mouseDPI: config?.mouseDPI,
                             scaleMode: windows.scaleMode(for: vmID),
                             isPaused: paused,
+                            isSuspended: windows.isFullScreen(vmID),
                             onToggleFullScreen: { GuestWindows.shared.toggleFullScreen(vmID) },
                             onCaptureChanged: { captured = $0 })
                 if !state.revealed {

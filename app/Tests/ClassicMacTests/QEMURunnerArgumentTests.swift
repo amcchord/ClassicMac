@@ -229,6 +229,35 @@ final class QEMURunnerArgumentTests: XCTestCase {
             .contains("virtio-tablet-pci"))
     }
 
+    func testATIMacSeparatesSharedFolderFromSungemAndStandardVGAUsesIdleIRQ() throws {
+        let resources = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ClassicMac-argument-pci-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: resources, withIntermediateDirectories: true)
+        try Data().write(to: resources.appendingPathComponent("ClassicMacTools.iso"))
+        let previous = ProcessInfo.processInfo.environment["CLASSICMAC_RESOURCES"]
+        setenv("CLASSICMAC_RESOURCES", resources.path, 1)
+        defer {
+            if let previous { setenv("CLASSICMAC_RESOURCES", previous, 1) }
+            else { unsetenv("CLASSICMAC_RESOURCES") }
+            try? FileManager.default.removeItem(at: resources)
+        }
+
+        var atiWithPrint = config(cdImagePath: nil, bootFromCD: false, networking: false, sharedFolderPath: "/tmp/ShareTest")
+        atiWithPrint.graphicsCard = .atiRadeon
+        atiWithPrint.printingEnabled = true
+        let atiArgs = QEMUManager.buildArguments(
+            for: atiWithPrint,
+            printerPorts: .init(lpd: 5150, ipp: 6310, raw: 9100)
+        )
+        let atiDevices = optionValues("-device", in: atiArgs)
+        XCTAssertTrue(atiDevices.contains("virtio-tablet-pci,addr=0x13"))
+        XCTAssertTrue(atiDevices.contains("virtio-9p-pci,addr=0x14,fsdev=share0,mount_tag=ShareTest"))
+        XCTAssertFalse(optionValues("-global", in: atiArgs).contains("cuda.idle-irq-ms=50"))
+
+        let stdArgs = QEMUManager.buildArguments(for: config(cdImagePath: nil, bootFromCD: false))
+        XCTAssertTrue(optionValues("-global", in: stdArgs).contains("cuda.idle-irq-ms=50"))
+    }
+
     func testATIRendererNameFromMonitorReply() {
         XCTAssertEqual(ATIDisplay.rendererName(fromHMP: "\"CGL; GL 4.1 Metal - 91.7; Apple M5 Max\"\r\n"), "Apple M5 Max")
         XCTAssertEqual(ATIDisplay.rendererName(fromHMP: "\"\"\r\n"), "")

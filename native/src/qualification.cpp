@@ -915,6 +915,7 @@ int selfTest(const QString &fixtures, const QString &output) {
           {"sha256", gzSha}};
     };
     const QJsonObject atiEntry = makeEntry("os922-deluxe-v6");
+    const QJsonObject full921Entry = makeEntry("os921-full-v5");
     QJsonObject stdEntry = makeEntry("mac-os-8.6-base-v1");
     stdEntry["recommendedSettings"] = QJsonObject{{"ram_mb", 384}, {"cpu", "g3"}};
     const QString cachePath = Library::cacheFile(atiEntry);
@@ -927,6 +928,10 @@ int selfTest(const QString &fixtures, const QString &output) {
                   cf.write(gzBytes) == gzBytes.size(),
               "Write Library cache file");
     }
+    const QString full921CachePath = Library::cacheFile(full921Entry);
+    require(QFile::copy(cachePath, full921CachePath) ||
+                QFileInfo::exists(full921CachePath),
+            "Copy cache for os921-full");
     const QString libDest = tmp.path() + "/lib-dest";
     std::atomic_bool libCancel = false;
     const Model::Machine atiMac = Library::install(
@@ -934,6 +939,10 @@ int selfTest(const QString &fixtures, const QString &output) {
     require(atiMac.config["graphicsCard"].toString() == "atiRadeon" &&
                 atiMac.config["toolsCDInserted"].toBool(),
             "Library ATI edition recommendedSettings");
+    const Model::Machine full921Mac = Library::install(
+        full921Entry, libDest, "OS 9.2.1 Full", libCancel, [](QString, qint64, qint64) {});
+    require(full921Mac.config["graphicsCard"].toString() == "atiRadeon",
+            "Library os921-full ATI default");
     const Model::Machine stdMac = Library::install(
         stdEntry, libDest, "Base Edition", libCancel, [](QString, qint64, qint64) {});
     require(stdMac.config["graphicsCard"].toString() == "standard" &&
@@ -1002,6 +1011,21 @@ int selfTest(const QString &fixtures, const QString &output) {
                 nicVal.contains("guestfwd=tcp:10.0.2.4:631-cmd:/tmp/cm-bridge-test --tcp-bridge 127.0.0.1 6310") &&
                 nicVal.contains("guestfwd=tcp:10.0.2.4:9100-cmd:/tmp/cm-bridge-test --tcp-bridge 127.0.0.1 9101"),
             "Printing on with networking off must emit restrict=on and 515/631/9100 guestfwd rules");
+    require(argsOn.contains("cuda.idle-irq-ms=50"),
+            "Standard VGA Power Mac must pass cuda.idle-irq-ms=50");
+
+    if (Model::supportsHostSharing()) {
+      auto atiPrintCfg = pOnCfg;
+      atiPrintCfg["graphicsCard"] = "atiRadeon";
+      atiPrintCfg["toolsCDInserted"] = true;
+      atiPrintCfg["sharedFolderPath"] = "/tmp/ShareTest";
+      const Model::Machine atiPrintMac{"/fixture/ATIPrint.classic", atiPrintCfg};
+      const auto atiPrintArgs = Model::qemuArguments(atiPrintMac, 6000, QStringLiteral("none"), ports);
+      require(atiPrintArgs.contains("virtio-tablet-pci,addr=0x13") &&
+                  atiPrintArgs.contains("virtio-9p-pci,addr=0x14,fsdev=share0,mount_tag=ShareTest") &&
+                  !atiPrintArgs.contains("cuda.idle-irq-ms=50"),
+              "ATI with printing + sharing must isolate virtio PCI slots and omit cuda.idle-irq-ms");
+    }
 
     const QByteArray testPs =
         Printer::generateTestPostScript("LaserWriter", "9.9.9");

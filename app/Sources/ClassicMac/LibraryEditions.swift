@@ -196,6 +196,7 @@ struct LibraryEntry: Identifiable, Hashable {
         "os922-superdeluxe",
         "os922-mega-deluxe",
         "os922-full",
+        "os921-full",
         "mac-os-9.2.1-ati-32gb",
     ]
 

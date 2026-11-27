@@ -64,7 +64,8 @@ Video hardware and resizing rules differ by machine family:
 On **macOS**, ClassicMac draws the guest screen inside its own Platinum document window (`GuestWindow`) using a custom QEMU backend (`-display classicmac,socket=...`):
 
 - QEMU allocates a POSIX shared-memory framebuffer (`shm_open` + `mmap`) and hands its file descriptor to the ClassicMac app over a Unix stream socket (`/tmp/ClassicMac/<UUID>.display.sock`) using `SCM_RIGHTS`.
-- QEMU compares dirty regions in `64 × 16` tiles against the shared buffer and emits coalesced `DAMAGE` events, engaging an `idle-refresh` backoff (`100 ms`) when the guest screen is static.
+- QEMU compares dirty regions in `64 × 16` tiles against the shared buffer (using a direct byte-swapped `bswap32` compare/copy fast path for 32-bit big-endian `PIXMAN_b8g8r8x8` guest surfaces) and emits coalesced `DAMAGE` events, engaging an `idle-refresh` backoff (`100 ms`) when the guest screen is static.
+- ClassicMac copies only accumulated `DAMAGE` rectangles into double-buffered `IOSurface` layers, avoids redundant full-frame preview copies when the Home window is occluded, pauses background/occluded `CADisplayLink` callbacks, and caps Standard VGA/Quadra/OS X refresh polling at `16 ms` (`60 Hz`) while allowing ATI Radeon to match up to `120 Hz` (`8 ms`) ProMotion displays.
 - When **Standard** VGA uses `-global VGA.untracked-vram=on`, QEMU avoids expensive page-fault write tracking during QuickDraw `BitBlt` operations.
 - The guest window toolbar includes a scale pop-up (`GuestDisplayScale`): **Sharp Pixels** (default on resizable Macs; auto-fits at integer scaling and resizes the guest desktop to match the window), **1×**, **2×**, and **Fit Window**.
 

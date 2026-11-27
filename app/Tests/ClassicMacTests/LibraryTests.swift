@@ -34,6 +34,10 @@ final class LibraryTests: XCTestCase {
         XCTAssertEqual(deluxe.graphicsCard, .atiRadeon)
         XCTAssertEqual(deluxe.edition?.contents.flatMap(\.items).filter { !$0.contains("After Dark") }.count ?? 0 >= 16, true)
 
+        let full921 = LibraryEntry(machine: machine("os921-full-v5", osVersion: "9.2.1"), edition: nil)
+        XCTAssertEqual(full921.title, "Mac OS 9.2.1 (Full)")
+        XCTAssertEqual(full921.graphicsCard, .atiRadeon)
+
         let unknown = LibraryEntry(machine: machine("future-edition", name: "A Future Mac"), edition: nil)
         XCTAssertEqual(unknown.title, "A Future Mac")
         XCTAssertEqual(unknown.osLabel, "Mac OS 9.2.2")

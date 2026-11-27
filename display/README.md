@@ -68,9 +68,13 @@ source keeps the RetroBoot copyright line and adds ClassicMac's.
   `dpy_mouse_set`.
 - **Damage reduced to what changed**: damaged areas are compared with the
   shared buffer in 64 x 16 tiles and only differing tiles are copied and
-  announced. std-VGA's untracked shared scanout (`VGA.untracked-vram=on`)
-  reports the whole frame on every refresh; without this the app would
-  re-upload every frame and the idle refresh would never engage.
+  announced. On little-endian hosts, 32-bit big-endian surfaces
+  (`PIXMAN_b8g8r8x8` / `PIXMAN_b8g8r8a8`) use a direct byte-swapped `bswap32`
+  compare/copy fast path straight into the shared buffer, skipping
+  `pixman_image_composite32` and the staging buffer. std-VGA's untracked
+  shared scanout (`VGA.untracked-vram=on`) reports the whole frame on every
+  refresh; without this the app would re-upload every frame and the idle
+  refresh would never engage.
 - A full-surface `DAMAGE` follows every `SURFACE`.
 - Env `CLASSICMAC_SESSION` (instead of `RETROBOOT_SESSION`) fills HELLO.
 

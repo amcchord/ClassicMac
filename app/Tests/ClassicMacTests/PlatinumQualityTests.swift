@@ -1,5 +1,7 @@
 import XCTest
 import AppKit
+import Darwin
+import IOSurface
 import SwiftUI
 @testable import ClassicMac
 @testable import PlatinumKit
@@ -195,7 +197,164 @@ final class PlatinumQualityTests: XCTestCase {
                 }
             }
         }
+        session.refreshInterval = 12
         XCTAssertTrue((8...16).contains(session.refreshInterval))
+    }
+
+    func testGuestDisplaySessionDamageRectParsingAndPartialIOSurfaceUpdates() async throws {
+        // 1. parseDamageRects clamping and invalid fallback behavior.
+        func le32(_ v: Int32) -> [UInt8] {
+            let u = UInt32(bitPattern: v)
+            return [UInt8(u & 0xff), UInt8((u >> 8) & 0xff), UInt8((u >> 16) & 0xff), UInt8((u >> 24) & 0xff)]
+        }
+        var payload = le32(1) + le32(2) // seq=1, count=2
+        payload += le32(-5) + le32(4) + le32(15) + le32(10)   // clamped to x:0,y:4,w:10,h:10
+        payload += le32(25) + le32(20) + le32(20) + le32(15) // clamped to x:25,y:20,w:7,h:4 for 32x24
+        let parsed = GuestDisplaySession.parseDamageRects(payload, width: 32, height: 24)
+        XCTAssertEqual(parsed, [DamageRect(x: 0, y: 4, w: 10, h: 10), DamageRect(x: 25, y: 20, w: 7, h: 4)])
+        XCTAssertNil(GuestDisplaySession.parseDamageRects(le32(1) + le32(0), width: 32, height: 24))
+        XCTAssertNil(GuestDisplaySession.parseDamageRects([1, 2, 3], width: 32, height: 24))
+
+        // 2. End-to-end surface handoff, independent generations, partial copy, and non-destructive snapshotImage.
+        let session = GuestDisplaySession(vmID: UUID(), family: .powerMacG4)
+        try session.start()
+        defer { session.stop() }
+
+        let clientFD = Darwin.socket(AF_UNIX, SOCK_STREAM, 0)
+        XCTAssertGreaterThanOrEqual(clientFD, 0)
+        defer { if clientFD >= 0 { Darwin.close(clientFD) } }
+
+        var addr = sockaddr_un()
+        addr.sun_family = sa_family_t(AF_UNIX)
+        let maxLen = MemoryLayout.size(ofValue: addr.sun_path) - 1
+        _ = withUnsafeMutablePointer(to: &addr.sun_path) {
+            $0.withMemoryRebound(to: CChar.self, capacity: maxLen + 1) { dst in
+                session.socketPath.withCString { src in strncpy(dst, src, maxLen) }
+            }
+        }
+        let connRC = withUnsafePointer(to: &addr) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                Darwin.connect(clientFD, $0, socklen_t(MemoryLayout<sockaddr_un>.size))
+            }
+        }
+        XCTAssertEqual(connRC, 0)
+
+        let shmDir = FileManager.default.temporaryDirectory
+        let shmPath = shmDir.appendingPathComponent("cm-surf-\(UUID().uuidString).shm").path
+        let w = 32, h = 24, strideBytes = w * 4
+        let size = max(16_384, strideBytes * h)
+        let shmFD = Darwin.open(shmPath, O_RDWR | O_CREAT | O_EXCL, 0o600)
+        XCTAssertGreaterThanOrEqual(shmFD, 0)
+        Darwin.unlink(shmPath)
+        XCTAssertEqual(Darwin.ftruncate(shmFD, off_t(size)), 0)
+        defer { Darwin.close(shmFD) }
+
+        let ptr = Darwin.mmap(nil, size, PROT_READ | PROT_WRITE, MAP_SHARED, shmFD, 0)
+        XCTAssertNotEqual(ptr, MAP_FAILED)
+        defer { Darwin.munmap(ptr, size) }
+        let pixels = ptr!.assumingMemoryBound(to: UInt32.self)
+        for i in 0..<(w * h) { pixels[i] = 0x00112233 }
+
+        // Send SURFACE message with shmFD via SCM_RIGHTS.
+        var surfPayload = le32(Int32(w)) + le32(Int32(h)) + le32(Int32(strideBytes)) + le32(0x34325258)
+        surfPayload += le32(Int32(size)) + le32(0)
+        var surfMsg = le32(2) + le32(Int32(surfPayload.count)) + surfPayload
+        surfMsg.withUnsafeMutableBytes { buf in
+            var iov = iovec(iov_base: buf.baseAddress, iov_len: buf.count)
+            let cmsgSpace = 64
+            let cbuf = UnsafeMutableRawPointer.allocate(byteCount: cmsgSpace, alignment: MemoryLayout<cmsghdr>.alignment)
+            defer { cbuf.deallocate() }
+            memset(cbuf, 0, cmsgSpace)
+            var msg = msghdr()
+            msg.msg_iov = withUnsafeMutablePointer(to: &iov) { $0 }
+            msg.msg_iovlen = 1
+            msg.msg_control = cbuf
+            msg.msg_controllen = socklen_t(MemoryLayout<cmsghdr>.size + MemoryLayout<Int32>.size)
+            let chdr = cbuf.assumingMemoryBound(to: cmsghdr.self)
+            chdr.pointee.cmsg_len = socklen_t(MemoryLayout<cmsghdr>.size + MemoryLayout<Int32>.size)
+            chdr.pointee.cmsg_level = SOL_SOCKET
+            chdr.pointee.cmsg_type = SCM_RIGHTS
+            cbuf.advanced(by: MemoryLayout<cmsghdr>.size).assumingMemoryBound(to: Int32.self).pointee = shmFD
+            XCTAssertGreaterThan(Darwin.sendmsg(clientFD, &msg, 0), 0)
+        }
+
+        for _ in 0..<50 where session.currentFrameGeneration == 0 {
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+        XCTAssertGreaterThan(session.currentFrameGeneration, 0)
+
+        var genA: UInt64 = 0
+        var genB: UInt64 = 0
+        let rawA = try XCTUnwrap(session.presentFrame(lastGeneration: &genA))
+        let rawB = try XCTUnwrap(session.presentFrame(lastGeneration: &genB))
+        XCTAssertEqual(CFGetTypeID(rawA), IOSurfaceGetTypeID())
+        XCTAssertEqual(CFGetTypeID(rawB), IOSurfaceGetTypeID())
+        XCTAssertTrue(rawA === rawB, "Second viewer for same generation should reuse front IOSurface")
+        XCTAssertNil(session.presentFrame(lastGeneration: &genA))
+
+        // snapshotImage() must not affect viewer presentation generation.
+        XCTAssertNotNil(session.snapshotImage())
+        XCTAssertNil(session.presentFrame(lastGeneration: &genB))
+
+        // Paint a partial damage rectangle and send DAMAGE; double-buffered IOSurfaces
+        // keep both front & back updated and force alpha opaque even when X == 0.
+        pixels[5 * w + 7] = 0x00445566
+        let dmgPayload = le32(2) + le32(1) + le32(7) + le32(5) + le32(2) + le32(2)
+        let dmgMsg = le32(3) + le32(Int32(dmgPayload.count)) + dmgPayload
+        let prevGen = session.currentFrameGeneration
+        dmgMsg.withUnsafeBytes { buf in
+            XCTAssertEqual(Darwin.send(clientFD, buf.baseAddress, buf.count, 0), buf.count)
+        }
+        for _ in 0..<50 where session.currentFrameGeneration == prevGen {
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+        let rawNextA = try XCTUnwrap(session.presentFrame(lastGeneration: &genA))
+        XCTAssertEqual(CFGetTypeID(rawNextA), IOSurfaceGetTypeID())
+        let nextA = unsafeDowncast(rawNextA, to: IOSurfaceRef.self)
+        IOSurfaceLock(nextA, .readOnly, nil)
+        let rowStrideA = IOSurfaceGetBytesPerRow(nextA) / 4
+        let addrA = IOSurfaceGetBaseAddress(nextA).assumingMemoryBound(to: UInt32.self)
+        XCTAssertEqual(addrA[5 * rowStrideA + 7], 0xFF445566)
+        XCTAssertEqual(addrA[0], 0xFF112233)
+        IOSurfaceUnlock(nextA, .readOnly, nil)
+
+        // Verify AppKit's cacheDisplay composites the IOSurface opaquely over a contrasting backdrop.
+        _ = NSApplication.shared
+        let hostWin = NSWindow(contentRect: NSRect(x: 0, y: 0, width: w, height: h),
+                               styleMask: [.borderless], backing: .buffered, defer: false)
+        hostWin.isReleasedWhenClosed = false
+        let hostView = NSView(frame: NSRect(x: 0, y: 0, width: w, height: h))
+        hostView.wantsLayer = true
+        hostView.layer?.backgroundColor = NSColor.red.cgColor
+        let sub = CALayer()
+        sub.frame = hostView.bounds
+        sub.isOpaque = true
+        sub.contents = nextA
+        hostView.layer?.addSublayer(sub)
+        hostWin.contentView = hostView
+        let rep = try XCTUnwrap(hostView.bitmapImageRepForCachingDisplay(in: hostView.bounds))
+        hostView.cacheDisplay(in: hostView.bounds, to: rep)
+        let c = try XCTUnwrap(rep.colorAt(x: 1, y: 1))
+        XCTAssertLessThan(c.redComponent, 0.3, "Expected opaque IOSurface pixel rather than underlying red backdrop")
+        hostWin.contentView = nil
+        hostWin.close()
+    }
+
+    func testGuestScreenSuspendedPausesDisplayActive() {
+        _ = NSApplication.shared
+        let session = GuestDisplaySession(vmID: UUID(), family: .powerMacG4)
+        let view = GuestScreenNSView(session: session)
+        XCTAssertFalse(view.isDisplayActive)
+        let win = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 200, height: 150),
+                           styleMask: [.titled], backing: .buffered, defer: false)
+        win.isReleasedWhenClosed = false
+        win.contentView = view
+        let hostVisible = win.occlusionState.contains(.visible)
+        XCTAssertEqual(view.isDisplayActive, hostVisible)
+        view.isSuspended = true
+        XCTAssertFalse(view.isDisplayActive)
+        win.contentView = nil
+        win.close()
     }
 
     // MARK: - GuestScreenNSView pointer bounds, scale modes, cursor & pause

@@ -82,7 +82,9 @@ final class BootClockHandoff: @unchecked Sendable {
 final class QEMUManager: ObservableObject {
     static let shared = QEMUManager()
 
-    @Published private(set) var runningIDs: Set<UUID> = []
+    @Published private(set) var runningIDs: Set<UUID> = [] {
+        didSet { updateRunningActivity() }
+    }
     @Published private(set) var pausedIDs: Set<UUID> = []
     @Published private(set) var browserURLs: [UUID: URL] = [:]
     // The latest screen capture of each machine, refreshed while it runs and
@@ -100,6 +102,8 @@ final class QEMUManager: ObservableObject {
     private var printServers: [UUID: PrintServer] = [:]
     private var qmpMonitors: [UUID: QMPEventMonitor] = [:]
     private var previewTimers: [UUID: Timer] = [:]
+    private var lastPreviewGenerations: [UUID: UInt64] = [:]
+    private var runningActivity: NSObjectProtocol?
     private var bootClockHandoffs: [UUID: BootClockHandoff] = [:]
     private var forcedStopWorkItems: [UUID: DispatchWorkItem] = [:]
     private var intentionalForceStopIDs: Set<UUID> = []
@@ -107,6 +111,18 @@ final class QEMUManager: ObservableObject {
     private var osxShutdownTasks: [UUID: Task<Void, Never>] = [:]
     private var runningFamilies: [UUID: MachineFamily] = [:]
     private var runningNames: [UUID: String] = [:]
+
+    private func updateRunningActivity() {
+        if !runningIDs.isEmpty && runningActivity == nil {
+            runningActivity = ProcessInfo.processInfo.beginActivity(
+                options: [.userInitiated, .latencyCritical],
+                reason: "Running Classic Mac virtual machine"
+            )
+        } else if runningIDs.isEmpty, let activity = runningActivity {
+            ProcessInfo.processInfo.endActivity(activity)
+            runningActivity = nil
+        }
+    }
 
     func isRunning(_ id: UUID) -> Bool {
         runningIDs.contains(id)
@@ -309,6 +325,7 @@ final class QEMUManager: ObservableObject {
                 let wasOSXRestartRequested = self.osxRestartRequestedIDs.remove(config.id) != nil
                 self.stopBootClockHandoff(for: config.id)
                 self.stopPreviewUpdates(for: config.id)
+                self.lastPreviewGenerations.removeValue(forKey: config.id)
                 self.printServers.removeValue(forKey: config.id)?.stop()
                 let wasIntentionalForceStop = self.intentionalForceStopIDs.remove(config.id) != nil
                 if displayServer != nil {
@@ -317,7 +334,7 @@ final class QEMUManager: ObservableObject {
                     )
                 }
                 if let session = GuestWindows.shared.session(for: config.id),
-                   let cgImage = session.takeFrame(force: true) {
+                   let cgImage = session.snapshotImage() {
                     let finalImage = NSImage(
                         cgImage: cgImage,
                         size: NSSize(width: cgImage.width, height: cgImage.height)
@@ -610,14 +627,22 @@ final class QEMUManager: ObservableObject {
             else { coplandHaltedIDs.remove(config.id) }
             return
         }
-        let needsLivePreview = WindowManager.shared.mainWindow?.isVisible == true || previews[config.id] == nil
+        let mainVisible = WindowManager.shared.mainWindow.map {
+            $0.isVisible && $0.occlusionState.contains(.visible)
+        } ?? false
+        let needsLivePreview = mainVisible || previews[config.id] == nil
         if let session = GuestWindows.shared.session(for: config.id) {
             guard needsLivePreview else { return }
-            if let cgImage = session.takeFrame(force: true) {
+            let generation = session.currentFrameGeneration
+            if previews[config.id] != nil && lastPreviewGenerations[config.id] == generation {
+                return
+            }
+            if let cgImage = session.snapshotImage() {
                 previews[config.id] = NSImage(
                     cgImage: cgImage,
                     size: NSSize(width: cgImage.width, height: cgImage.height)
                 )
+                lastPreviewGenerations[config.id] = generation
             }
             return
         }
@@ -1332,11 +1357,17 @@ final class QEMUManager: ObservableObject {
         let needsNdrvLoader = sharing || tablet || bootingG3CompatibilityCD ||
             toolsViaVirtio || config.useVirtioDisk || effectiveGraphicsCard(for: config) == .atiRadeon
 
+        let ati = effectiveGraphicsCard(for: config) == .atiRadeon
         // InputSprocket needs a real HID mouse; the seamless Virtio tablet only
         // updates the classic cursor. The engine selects HID for 3D games.
+        // Standard VGA builds lack ATI's 60 Hz VBL interrupt, so pulse CUDA's
+        // idle interrupt every 50 ms to avoid lost main-task wakeups.
         if legacy {
             args += ["-nodefaults", "-global", "cuda.idle-irq-ms=50"]
         } else {
+            if !ati {
+                args += ["-global", "cuda.idle-irq-ms=50"]
+            }
             args += [
                 "-device",
                 config.classicInputHelpers
@@ -1360,7 +1391,6 @@ final class QEMUManager: ObservableObject {
         // 195 MB during a single arena; a 512 MB cache prevents translation
         // churn across longer sessions and multiple maps.
         args += ["-accel", "tcg,tb-size=512"]
-        let ati = effectiveGraphicsCard(for: config) == .atiRadeon
         if ati { args += ["-device", "classicmac-display-control"] }
         if !bootingFromUserCD && !ati && !legacy {
             // Mac OS 9 spends much of hard-disk startup polling timers for
@@ -1521,6 +1551,7 @@ final class QEMUManager: ObservableObject {
         if needsNdrvLoader {
             args += ["-device", "loader,addr=0x4000000,file=\(qemuEscape(AppPaths.ndrvLoader.path))"]
             args += ["-prom-env", "boot-command=init-program go"]
+            let hasSungem = config.networking || printerPorts != nil
             if tablet {
                 // Automatic slot 18 shares Sungem's interrupt when ATI and
                 // Tools are present. Mac OS 9 can stall during startup.
@@ -1529,7 +1560,7 @@ final class QEMUManager: ObservableObject {
                 let tabletDevice: String
                 if legacy {
                     tabletDevice = "virtio-tablet-pci,addr=0x14"
-                } else if ati && toolsViaVirtio && (config.networking || printerPorts != nil) {
+                } else if ati && toolsViaVirtio && hasSungem {
                     tabletDevice = "virtio-tablet-pci,addr=0x13"
                 } else {
                     tabletDevice = "virtio-tablet-pci"
@@ -1537,9 +1568,16 @@ final class QEMUManager: ObservableObject {
                 args += ["-device", tabletDevice]
             }
             if sharing {
-                let shareDevice = legacy
-                    ? "virtio-9p-pci,addr=0x13,fsdev=share0,mount_tag=\(qemuEscape(config.sharedVolumeName))"
-                    : "virtio-9p-pci,fsdev=share0,mount_tag=\(qemuEscape(config.sharedVolumeName))"
+                // Skip slot 18 (Sungem IRQ 29) on ATI when sharing is active too,
+                // pinning virtio-9p-pci to 0x14 (IRQ 27).
+                let shareDevice: String
+                if legacy {
+                    shareDevice = "virtio-9p-pci,addr=0x13,fsdev=share0,mount_tag=\(qemuEscape(config.sharedVolumeName))"
+                } else if ati && hasSungem {
+                    shareDevice = "virtio-9p-pci,addr=0x14,fsdev=share0,mount_tag=\(qemuEscape(config.sharedVolumeName))"
+                } else {
+                    shareDevice = "virtio-9p-pci,fsdev=share0,mount_tag=\(qemuEscape(config.sharedVolumeName))"
+                }
                 args += ["-device", shareDevice]
                 let escapedPath = qemuEscape(config.sharedFolderPath!)
                 args += ["-fsdev", "local,id=share0,security_model=none,path=\(escapedPath)"]

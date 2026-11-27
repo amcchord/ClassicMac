@@ -257,7 +257,7 @@ Configure your web server or CDN with these exact behaviors:
 
 ## 5. Testing a Custom Image Locally
 
-ClassicMac 4.10.0 **does not expose a `CLASSICMAC_CATALOG_URL` environment variable**—the public catalog URLs (`MachineCatalog.defaultURL` in `app/Sources/ClassicMac/MachineCatalog.swift` and `Library::url` in `native/src/catalog.h`) are compiled constants. To test custom images and catalogs before deploying to production:
+ClassicMac 4.10.1 **does not expose a `CLASSICMAC_CATALOG_URL` environment variable**—the public catalog URLs (`MachineCatalog.defaultURL` in `app/Sources/ClassicMac/MachineCatalog.swift` and `Library::url` in `native/src/catalog.h`) are compiled constants. To test custom images and catalogs before deploying to production:
 
 1. **Test the `.classic` bundle directly first:** Open your prepared `.classic` package with **File -> Open…** (or double-click it in Finder) and verify boot, display, sound, networking, and clean shutdown.
 2. **Verify archive packaging and schema bounds:** Run the repository's unit tests covering packaging and catalog decoding:

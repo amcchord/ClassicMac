@@ -84,7 +84,7 @@ As a result, a clean **Mac OS 9.2.1** download with a `32 GB` logical startup di
 
 ## Complete Guide to Available Editions
 
-The sections below list the downloadable editions served by ClassicMac 4.10.0's dual catalogs, grouped by OS category. Download sizes reflect the active `thinArchive` when provided.
+The sections below list the downloadable editions served by ClassicMac 4.10.1's dual catalogs, grouped by OS category. Download sizes reflect the active `thinArchive` when provided.
 
 ### System 7 (Quadra 800 · Motorola 68040)
 
@@ -126,7 +126,7 @@ All Mac OS 9 editions use a `32 GB` sparse virtual disk on the **Power Mac G4** 
 | Edition | Graphics | Catalog ID | Download | Free Space Needed (Sparse) | Highlights & Bundled Software |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **Mac OS 9.2.1 (Clean)** | ATI Radeon | `mac-os-9.2.1-ati-32gb-v4` | ~79.1 MiB | ~120 MiB + reserve | Fresh Mac OS 9.2.1 with Apple's ATI drivers on a 32 GB sparse disk—ideal as a blank slate for your own software. |
-| **Mac OS 9.2.1 (Full)** | Standard | `os921-full-v4` | ~196.3 MiB | ~498 MiB + reserve | Clean Mac OS 9.2.1 with QuickTime 5, AirPort 2.0.4 wireless & USB support, StuffIt, and classic internet browsers. |
+| **Mac OS 9.2.1 (Full)** | ATI Radeon | `os921-full-v5` | ~196.3 MiB | ~498 MiB + reserve | Clean Mac OS 9.2.1 with QuickTime 5, AirPort 2.0.4, USB Overdrive, RetroBoot Display, ATI Radeon 3D acceleration, and classic internet browsers. |
 | **Mac OS 9.2.2** | ATI Radeon | `os922-full-v5` | ~197.5 MiB | ~509 MiB + reserve | Clean Mac OS 9.2.2 with QuickTime 6, AirPort, Classilla & iCab browsers, Acrobat 5, ATI 3D acceleration, and RetroBoot Display. |
 | **Mac OS 9.2.2 Deluxe** | ATI Radeon | `os922-deluxe-v10` | ~967.4 MiB | ~1.58 GiB + reserve | 16 classic games (including *Quake*, *Quake III Arena Demo*, *Marathon 2*, *Myst*, *SimCity 2000*, *Escape Velocity*, *Glider PRO*, *Crystal Quest*), **ACTION GoMac** (2s bar delay), **After Dark 4.94** (*Flying Toasters*), **Audion 3** (with faces, visualizers & Groove Salad preset), **SoundJam MP**, **Transmit**, **Speedometer 4.02**, **MacBench 5.0**, **Gauge PRO**, **USB Overdrive**, **IE 5.1.7**, sample QuickTime movies, and on-demand *Myst* disc mounting. |
 | **Mac OS 9.2.2 SuperDeluxe** | ATI Radeon | `os922-superdeluxe-v7` | ~1.32 GiB | ~2.15 GiB + reserve | 59 classic games (including *Harry the Handsome Executive*, *Mighty Mike*, *Bub & Bob*, *Wolfenstein 3D*, *Angband*, *Nanosaur*, *Cro-Mag Rally*, *King's Quest VI*, *Civilization*, *SimTower*), **ClarisWorks 5.0**, **Claris Home Page 3**, **SoundEdit 16 2.0.7**, complete **After Dark** collection, **Audion 3**, **ACTION GoMac**, and classic utilities. |

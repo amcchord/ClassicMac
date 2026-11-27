@@ -129,6 +129,7 @@ flowchart TD
 ### 3. Slow Boot or Wrong Guest Clock
 
 - **Mac OS 9 boot speed:** Standard Power Mac G4 hard-disk boots launch with `-icount shift=4,sleep=off` and `-global VGA.classicmac-boot-handoff=on` so guest startup hardware-polling timers finish rapidly without sleeping on the host. Once Finder's menu bar appears in VRAM, QEMU atomically returns to real-time emulation. If an unusual desktop theme or startup dialog prevents automatic detection, `BootClockHandoff` forces the switch after **15 seconds** (`classicmac-boot-complete`). If the guest still feels sluggish after 15 s, check whether **ATI Radeon** or **Virtio Disk** is selected (neither uses `-icount`, so startup runs in real time from power-on).
+- **Mac OS 9 Standard VGA & ATI stability:** Standard VGA Power Mac G4 launches pass `-global cuda.idle-irq-ms=50` so Mac OS 9 does not lose main-task wakeups in the absence of a hardware VBL interrupt. When **ATI Radeon** is used alongside **Shared folders** and **Networking** or **Printing**, ClassicMac isolates `virtio-tablet-pci` (`addr=0x13`) and `virtio-9p-pci` (`addr=0x14`) onto non-colliding PCI slots so neither shares Sungem's interrupt line.
 - **Mac OS X Tiger clock:** ClassicMac reads the signed 24-bit PRAM time offset at `XPRAM[0xEC]` in `nvram.img` (valid range `±86,400` seconds) and passes `-rtc base=...` to QEMU. Set the date, time, and time zone inside **System Preferences -> Date & Time** and shut down cleanly so `nvram.img` flushes.
 
 ### 4. Mac OS X Tiger Shutdown Modal or Hung Guest

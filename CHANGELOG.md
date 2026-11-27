@@ -1,5 +1,21 @@
 # Changelog
 
+## 4.10.1 — Full-Screen Performance & Mac OS 9 Stability Fixes (2026-11-27)
+
+### Fixed
+
+- **macOS full-screen rendering, input responsiveness & App Nap:**
+  - Replace full-frame per-tick `CGImage` allocation and synchronous main-thread `vImage` conversion in `GuestDisplaySession` with double-buffered `'BGRA'` `IOSurface`s, partial dirty-rectangle copies (forcing opaque `0xFF` alpha for XRGB guest buffers via `cds_copy_xrgb_opaque`), and non-destructive `snapshotImage()` captures (#46).
+  - Pause the background windowed `GuestScreenNSView` while full screen is active (and pause `CADisplayLink` when occluded) so it no longer steals frames from the full-screen window, cache scaled cursor images across layout ticks, remove redundant `needsLayout` passes, and opt `FullScreenWindow` into `acceptsMouseMovedEvents` (#46).
+  - Replace blocking display socket writes with a non-blocking `DispatchSourceWrite` outbox that coalesces pointer motion ahead of button/key events, and prevent macOS App Nap throttling during active VMs via `NSAppSleepDisabled` and `.userInitiated`/`.latencyCritical` `ProcessInfo` activity (#46).
+  - Cap display refresh intervals at `16 ms` (`60 Hz`) for non-ATI backends while tracking the active `FullScreenWindow` screen for ATI Radeon (#46).
+- **Mac OS 9 startup & desktop freeze prevention:**
+  - Avoid PCI IRQ 29 sharing between `sungem` and `virtio-9p-pci` when ATI 3D, networking/printing, and shared folders are enabled together by pinning `virtio-9p-pci` to slot `0x14` (IRQ 27) (#46).
+  - Pass `-global cuda.idle-irq-ms=50` on non-ATI Power Mac G4 configs to guard against Mac OS 9 CUDA idle lost-wakeup stalls (#46).
+  - Include `os921-full` (`Mac OS 9.2.1 (Full)`) in the ATI 3D default edition set (`atiFamilies` and `catalog.cpp`) (#46).
+- **QEMU `classicmac-display` 32-bit scanout fast path:**
+  - Add a little-endian `bswap32` per-tile comparison/copy path for `PIXMAN_b8g8r8x8`/`a8` guest surfaces (`display/classicmac-display.patch`), bypassing `pixman_image_composite32` on 32-bit Standard VGA desktops.
+
 ## 4.10.0 — Streamlined Mac Deletion & RetroBoot Virtual Printing (2026-11-25)
 
 ### Added

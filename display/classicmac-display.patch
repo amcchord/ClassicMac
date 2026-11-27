@@ -75,7 +75,7 @@ new file mode 100644
 index 0000000..4cc136b
 --- /dev/null
 +++ b/ui/classicmac-display.c
-@@ -0,0 +1,1502 @@
+@@ -0,0 +1,1609 @@
 +/*
 + * ClassicMac display backend
 + *
@@ -813,6 +813,99 @@ index 0000000..4cc136b
 +    return true;
 +}
 +
++#if !HOST_BIG_ENDIAN
++static inline bool cmd_is_bswap32_format(pixman_format_code_t format)
++{
++    return format == PIXMAN_b8g8r8x8 || format == PIXMAN_b8g8r8a8;
++}
++
++static inline uint32_t cmd_read_be32_opaque(const uint8_t *p)
++{
++    uint32_t raw;
++
++    memcpy(&raw, p, sizeof(raw));
++    return __builtin_bswap32(raw) | 0xff000000u;
++}
++
++static void cmd_copy_full_bswap32(ClassicMacDisplay *cmd)
++{
++    const uint8_t *src = surface_data(cmd->surface);
++    size_t src_stride = surface_stride(cmd->surface);
++    uint8_t *dst = cmd->mem;
++    size_t dst_stride = cmd->mem_stride;
++    int width = cmd->mem_width;
++    int height = cmd->mem_height;
++
++    for (int y = 0; y < height; y++) {
++        const uint8_t *s = src + (size_t)y * src_stride;
++        uint32_t *d = (uint32_t *)(dst + (size_t)y * dst_stride);
++
++        for (int x = 0; x < width; x++) {
++            d[x] = cmd_read_be32_opaque(s + (size_t)x * 4);
++        }
++    }
++}
++
++static void cmd_publish_box_bswap32(ClassicMacDisplay *cmd,
++                                    const pixman_box32_t *box,
++                                    pixman_region32_t *changed)
++{
++    const uint8_t *src = surface_data(cmd->surface);
++    size_t src_stride = surface_stride(cmd->surface);
++    uint8_t *mem = cmd->mem;
++    size_t stride = cmd->mem_stride;
++    int x, y, x2, y2, r;
++
++    for (y = box->y1; y < box->y2; y = y2) {
++        int run = -1;
++
++        y2 = MIN(QEMU_ALIGN_DOWN(y, CMD_TILE_H) + CMD_TILE_H, box->y2);
++        for (x = box->x1; x < box->x2; x = x2) {
++            int cols;
++            bool differs = false;
++
++            x2 = MIN(QEMU_ALIGN_DOWN(x, CMD_TILE_W) + CMD_TILE_W, box->x2);
++            cols = x2 - x;
++            for (r = y; r < y2; r++) {
++                const uint8_t *s = src + (size_t)r * src_stride + (size_t)x * 4;
++                uint32_t *d = (uint32_t *)(mem + (size_t)r * stride + (size_t)x * 4);
++
++                if (differs) {
++                    for (int c = 0; c < cols; c++) {
++                        d[c] = cmd_read_be32_opaque(s + (size_t)c * 4);
++                    }
++                } else {
++                    for (int c = 0; c < cols; c++) {
++                        uint32_t px = cmd_read_be32_opaque(s + (size_t)c * 4);
++
++                        if (d[c] != px) {
++                            differs = true;
++                            for (int k = c; k < cols; k++) {
++                                d[k] = cmd_read_be32_opaque(s + (size_t)k * 4);
++                            }
++                            break;
++                        }
++                    }
++                }
++            }
++            if (differs) {
++                if (run < 0) {
++                    run = x;
++                }
++            } else if (run >= 0) {
++                pixman_region32_union_rect(changed, changed, run, y,
++                                           x - run, y2 - y);
++                run = -1;
++            }
++        }
++        if (run >= 0) {
++            pixman_region32_union_rect(changed, changed, run, y,
++                                       box->x2 - run, y2 - y);
++        }
++    }
++}
++#endif
++
 +static void cmd_copy_full(ClassicMacDisplay *cmd)
 +{
 +    if (surface_is_placeholder(cmd->surface)) {
@@ -820,6 +913,12 @@ index 0000000..4cc136b
 +        memset(cmd->mem, 0, cmd->mem_size);
 +        return;
 +    }
++#if !HOST_BIG_ENDIAN
++    if (cmd_is_bswap32_format(surface_format(cmd->surface))) {
++        cmd_copy_full_bswap32(cmd);
++        return;
++    }
++#endif
 +    pixman_image_composite32(PIXMAN_OP_SRC, cmd->surface->image, NULL,
 +                             cmd->mem_image, 0, 0, 0, 0, 0, 0,
 +                             cmd->mem_width, cmd->mem_height);
@@ -887,6 +986,14 @@ index 0000000..4cc136b
 +    int count, i;
 +
 +    boxes = pixman_region32_rectangles(region, &count);
++#if !HOST_BIG_ENDIAN
++    if (cmd_is_bswap32_format(format)) {
++        for (i = 0; i < count; i++) {
++            cmd_publish_box_bswap32(cmd, &boxes[i], changed);
++        }
++        return;
++    }
++#endif
 +    if (format == PIXMAN_x8r8g8b8 || format == PIXMAN_a8r8g8b8) {
 +        /* already the shared format: compare with the surface itself */
 +        src = surface_data(cmd->surface);

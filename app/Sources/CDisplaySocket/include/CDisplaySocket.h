@@ -24,10 +24,18 @@ ssize_t cds_recv(int fd, void *buf, size_t len, int *fds, int max_fds, int *nfds
  * small; QEMU reads them promptly). */
 ssize_t cds_send_all(int fd, const void *buf, size_t len);
 
+/* Non-blocking single write attempt. Returns bytes written (> 0), -EAGAIN when
+ * the socket buffer is full, or -errno on error. */
+ssize_t cds_send_nonblocking(int fd, const void *buf, size_t len);
+
 /* Maps a shared framebuffer read-only. Returns NULL on failure. */
 const void *cds_map(int fd, size_t size);
 void cds_unmap(const void *addr, size_t size);
 
 void cds_close(int fd);
+
+/* Copies an XRGB8888 region into a BGRA8888 destination buffer with the alpha
+ * byte forced opaque (0xFF), since guest XRGB pixels may leave byte 3 zero. */
+void cds_copy_xrgb_opaque(void *dst, size_t dst_stride, const void *src, size_t src_stride, size_t width, size_t height);
 
 #endif

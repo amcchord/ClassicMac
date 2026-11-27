@@ -29,15 +29,15 @@
   <img src="docs/screenshots/powermacg4-macos92.png" width="410" alt="Mac OS 9.2.2 Mega Deluxe on the emulated Power Mac G4">
 </p>
 
-## Download ClassicMac 4.10.0
+## Download ClassicMac 4.10.1
 
 | System | Download | Requirements |
 | --- | --- | --- |
-| Windows | [Portable EXE](https://github.com/amcchord/ClassicMac/releases/download/v4.10.0/ClassicMac-4.10.0-windows-x64.exe) | Windows 11 x64; unsigned. |
-| macOS | [DMG](https://github.com/amcchord/ClassicMac/releases/download/v4.10.0/ClassicMac-4.10.0.dmg) · [ZIP](https://github.com/amcchord/ClassicMac/releases/download/v4.10.0/ClassicMac-4.10.0.zip) | Apple Silicon, macOS 15+; signed and notarized. |
-| Linux | [AppImage](https://github.com/amcchord/ClassicMac/releases/download/v4.10.0/ClassicMac-4.10.0-linux-x64.AppImage) | x64, glibc 2.39+ and a desktop. |
+| Windows | [Portable EXE](https://github.com/amcchord/ClassicMac/releases/download/v4.10.1/ClassicMac-4.10.1-windows-x64.exe) | Windows 11 x64; unsigned. |
+| macOS | [DMG](https://github.com/amcchord/ClassicMac/releases/download/v4.10.1/ClassicMac-4.10.1.dmg) · [ZIP](https://github.com/amcchord/ClassicMac/releases/download/v4.10.1/ClassicMac-4.10.1.zip) | Apple Silicon, macOS 15+; signed and notarized. |
+| Linux | [AppImage](https://github.com/amcchord/ClassicMac/releases/download/v4.10.1/ClassicMac-4.10.1-linux-x64.AppImage) | x64, glibc 2.39+ and a desktop. |
 
-[Release notes, checksums and engine sources](https://github.com/amcchord/ClassicMac/releases/tag/v4.10.0).
+[Release notes, checksums and engine sources](https://github.com/amcchord/ClassicMac/releases/tag/v4.10.1).
 Windows runs directly. Drag the Mac app to Applications. On Linux, mark the
 AppImage executable; use `--appimage-extract-and-run` if FUSE is unavailable.
 
@@ -50,12 +50,19 @@ ClassicMac is a sister project to **[RetroBoot](https://github.com/amcchord/Retr
 
 ## User Manual & Complete Documentation
 
-See the full **[ClassicMac 4.10.0 User Manual](docs/manual/README.md)** (12 chapters with architecture diagrams, configuration schemas, and screenshots):
+See the full **[ClassicMac 4.10.1 User Manual](docs/manual/README.md)** (12 chapters with architecture diagrams, configuration schemas, and screenshots):
 
 - **Getting started & requirements:** [System Requirements](docs/manual/01-system-requirements.md) · [Architecture & How It Works](docs/manual/02-architecture-how-it-works.md) · [Installation & First Run](docs/manual/03-installation-and-first-run.md)
 - **Operating systems:** [Mac OS Library & Editions](docs/manual/04-mac-os-library-and-editions.md) · [Creating Custom Macs & Manual OS Installs](docs/manual/05-installing-your-own-mac-os.md) · [Everyday Use & Input](docs/manual/06-everyday-use-and-input.md)
 - **Devices & I/O:** [Display, 3D Graphics & Sound](docs/manual/07-display-3d-graphics-and-sound.md) · [Media Drawer, Tools CD & Shared Folders](docs/manual/08-media-tools-and-sharing.md) · [Networking & Virtual Printing](docs/manual/09-networking-and-virtual-printing.md)
 - **Hosting & reference:** [Creating & Serving Custom Images](docs/manual/10-creating-and-serving-images.md) · [Checkpoints, Updates & Troubleshooting](docs/manual/11-checkpoints-updates-and-troubleshooting.md) · [Configuration, Bundles & Env Reference](docs/manual/12-configuration-and-cli-reference.md)
+
+## New in ClassicMac 4.10.1
+
+- **Full-screen performance & mouse responsiveness (macOS):** Moves guest frame presentation to double-buffered `IOSurface`s with partial dirty-rectangle updates, suspends the background window view while full screen is active, pauses occluded display links, coalesces non-blocking mouse input, and prevents App Nap throttling (#46).
+- **Mac OS 9 startup & desktop freeze fixes:** Moves `virtio-9p-pci` to slot `0x14` (IRQ 27) when ATI 3D, networking/printing, and folder sharing run together, adds `cuda.idle-irq-ms=50` on non-ATI Power Mac G4 boots, defaults **Mac OS 9.2.1 (Full)** (`os921-full`) to ATI 3D acceleration, and adds a `bswap32` fast path for 32-bit `classicmac-display` frames (#46).
+
+## Download ClassicMac 4.10.0 (previous)
 
 ## New in ClassicMac 4.10.0
 

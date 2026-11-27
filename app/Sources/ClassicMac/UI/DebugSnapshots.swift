@@ -11,7 +11,7 @@ enum DebugSnapshots {
     /// Retain the first frame exposed by the startup fade during a UI tour.
     static func recordStartup(_ session: GuestDisplaySession) {
         guard let folder = ProcessInfo.processInfo.environment["CLASSICMAC_UI_SNAPSHOTS"],
-              let image = session.takeFrame(force: true) else { return }
+              let image = session.snapshotImage() else { return }
         let url = URL(fileURLWithPath: folder, isDirectory: true)
             .appendingPathComponent("startup-\(session.vmID.uuidString).png")
         let rep = NSBitmapImageRep(cgImage: image)
@@ -75,7 +75,7 @@ enum DebugSnapshots {
                 "connected": state.connected, "revealed": state.revealed,
                 "width": state.surfaceSize.width, "height": state.surfaceSize.height,
                 "classicDisplay": QEMUManager.usesClassicMacDisplay(vm)]
-            if let image = session.takeFrame(force: true) {
+            if let image = session.snapshotImage() {
                 let name = "\(prefix)-\(vm.id.uuidString)-raw.png"
                 let rep = NSBitmapImageRep(cgImage: image)
                 try? rep.representation(using: .png, properties: [:])?.write(to: out.appendingPathComponent(name))

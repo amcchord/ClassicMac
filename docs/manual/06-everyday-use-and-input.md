@@ -57,7 +57,7 @@ Along the bottom of each running guest window, the Platinum toolbar gives quick 
 | **Fit Window** | Default on fixed-resolution Macs (`Mac OS X`, non-enhanced `Quadra 800`, and `Copland`). Scales the guest framebuffer smoothly to fill the window without changing the guest's resolution. |
 
 - **Zoom Box:** Clicking the title bar's zoom box expands a `Sharp Pixels` resizable screen to fill your display, or snaps a fixed-resolution screen to the largest whole-number scale that fits.
-- **Full Screen:** Click **Full Screen** or press `Control-Command-F` on macOS (`Ctrl+Alt+F` or `Alt+Return` on Windows/Linux; `Control-F` on Copland). A brief status pill at the top reminds you how to exit full screen and how to release a captured mouse.
+- **Full Screen:** Click **Full Screen** or press `Control-Command-F` on macOS (`Ctrl+Alt+F` or `Alt+Return` on Windows/Linux; `Control-F` on Copland). In **Sharp Pixels** mode, resizable Macs automatically adjust the guest resolution to fill the display; **Fit Window**, **1×**, and **2×** keep the configured guest resolution and scale to fit without forcing a desktop resize. Background windowed display updates pause automatically while Full Screen is active, and a brief status pill at the top reminds you how to exit full screen and how to release a captured mouse.
 
 ---
 

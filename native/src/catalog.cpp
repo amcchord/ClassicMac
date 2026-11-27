@@ -917,7 +917,7 @@ Model::Machine install(QJsonObject entry, const QString &parent,
       source.value("toolsCDInserted").toBool(family == "powerMacG4");
   if (family == "powerMacG4" &&
       QRegularExpression(
-          "^(os922-(superdeluxe|deluxe|mega-deluxe|full)|mac-os-9\\.2\\.1-ati-32gb)-v\\d+$")
+          "^(os922-(superdeluxe|deluxe|mega-deluxe|full)|os921-full|mac-os-9\\.2\\.1-ati-32gb)-v\\d+$")
           .match(m["id"].toString())
           .hasMatch())
     c["graphicsCard"] = "atiRadeon";

@@ -659,11 +659,14 @@ QStringList qemuArguments(const Machine &m, int port,
   if (ppc) {
     if (legacy)
       a << "-nodefaults" << "-global" << "cuda.idle-irq-ms=50";
-    else
+    else {
+      if (!ati)
+        a << "-global" << "cuda.idle-irq-ms=50";
       a << "-device"
         << (b("classicInputHelpers")
                 ? "usb-mouse,id=classicmac-game-mouse"
                 : "usb-mouse,id=classicmac-game-mouse,wheel-per-report=1");
+    }
     a << "-accel" << "tcg,tb-size=512" << "-M"
       << (legacy ? "mac99,via=cuda,usb=off,audiodev=snd0"
                  : "mac99,via=cuda,audiodev=snd0")
@@ -729,6 +732,7 @@ QStringList qemuArguments(const Machine &m, int port,
     if (needsNdrvLoader)
       a << "-device" << "loader,addr=0x4000000,file=" + opt(r + "/ndrvloader")
         << "-prom-env" << "boot-command=init-program go";
+    const bool hasNic = b("networking") || b("printingEnabled");
     if (b("tabletInput")) {
       QString tablet = "virtio-tablet-pci";
       // With ATI, Sungem and Tools present, automatic allocation puts the
@@ -738,7 +742,7 @@ QStringList qemuArguments(const Machine &m, int port,
       // On legacy 8.5/8.6, skip slot 18 (rtl8139 IRQ 29) and pin to 0x14.
       if (legacy)
         tablet += ",addr=0x14";
-      else if (ati && tools && b("networking"))
+      else if (ati && tools && hasNic)
         tablet += ",addr=0x13";
       a << "-device" << tablet;
     }
@@ -817,7 +821,7 @@ QStringList qemuArguments(const Machine &m, int port,
                       : QStringLiteral("virtio-9p-device");
     if (ppc && legacy)
       dev += ",addr=0x13";
-    else if (ppc && ati && b("networking"))
+    else if (ppc && ati && (b("networking") || b("printingEnabled")))
       dev += ",addr=0x14";
     a << "-fsdev"
       << "local,id=share0,security_model=none,path=" +

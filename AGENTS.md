@@ -1,6 +1,6 @@
 # ClassicMac Repository Agent Guide
 
-ClassicMac (`VERSION`: `4.10.0`) runs classic 68k Macintosh (Quadra 800), PowerPC Macintosh (Power Mac G3/G4 with optional ATI 3D OpenGL acceleration and Copland D11E4), and early PowerPC Mac OS X (10.4.11 Tiger) inside a classic Apple Platinum desktop interface.
+ClassicMac (`VERSION`: `4.10.1`) runs classic 68k Macintosh (Quadra 800), PowerPC Macintosh (Power Mac G3/G4 with optional ATI 3D OpenGL acceleration and Copland D11E4), and early PowerPC Mac OS X (10.4.11 Tiger) inside a classic Apple Platinum desktop interface.
 
 ## Repository Architecture
 

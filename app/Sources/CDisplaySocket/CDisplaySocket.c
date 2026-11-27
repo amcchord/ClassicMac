@@ -3,6 +3,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <poll.h>
+#include <stdint.h>
 #include <string.h>
 #include <sys/mman.h>
 #include <sys/socket.h>
@@ -132,6 +133,26 @@ ssize_t cds_send_all(int fd, const void *buf, size_t len)
     return (ssize_t)len;
 }
 
+ssize_t cds_send_nonblocking(int fd, const void *buf, size_t len)
+{
+    if (len == 0) {
+        return 0;
+    }
+    for (;;) {
+        ssize_t n = send(fd, buf, len, 0);
+        if (n < 0) {
+            if (errno == EINTR) {
+                continue;
+            }
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                return -EAGAIN;
+            }
+            return -errno;
+        }
+        return n;
+    }
+}
+
 const void *cds_map(int fd, size_t size)
 {
     void *addr = mmap(NULL, size, PROT_READ, MAP_SHARED, fd, 0);
@@ -149,5 +170,26 @@ void cds_close(int fd)
 {
     if (fd >= 0) {
         close(fd);
+    }
+}
+
+void cds_copy_xrgb_opaque(void *dst, size_t dst_stride, const void *src, size_t src_stride, size_t width, size_t height)
+{
+    if (!dst || !src || width == 0 || height == 0) {
+        return;
+    }
+    uint8_t *restrict d_row = (uint8_t *)dst;
+    const uint8_t *restrict s_row = (const uint8_t *)src;
+    for (size_t y = 0; y < height; y++) {
+        uint8_t *restrict d = d_row;
+        const uint8_t *restrict s = s_row;
+        for (size_t x = 0; x < width; x++) {
+            uint32_t px;
+            memcpy(&px, s + x * 4, sizeof(px));
+            px |= 0xff000000u;
+            memcpy(d + x * 4, &px, sizeof(px));
+        }
+        d_row += dst_stride;
+        s_row += src_stride;
     }
 }
