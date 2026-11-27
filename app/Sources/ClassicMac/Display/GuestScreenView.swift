@@ -34,6 +34,15 @@ final class GuestScreenNSView: NSView {
     var inputHelpers = true
     var legacyMouseTracking = true
     var mouseDPI: Int? = nil
+    var pippinVMID: UUID? = nil
+    var pippinControls: PippinControlConfig? = nil {
+        didSet {
+            guard pippinControls != oldValue, let vmID = pippinVMID, let pippinControls else { return }
+            MainActor.assumeIsolated {
+                PippinControllerManager.shared.updateControls(pippinControls, for: vmID)
+            }
+        }
+    }
     var scaleMode: GuestDisplayScale = .sharp {
         didSet {
             if scaleMode != oldValue {
@@ -49,9 +58,16 @@ final class GuestScreenNSView: NSView {
     }
     var isPaused = false {
         didSet {
-            if isPaused && !oldValue {
-                releaseCapture()
-                releaseHeldInputs()
+            if isPaused != oldValue {
+                if let vmID = pippinVMID {
+                    MainActor.assumeIsolated {
+                        PippinControllerManager.shared.setPaused(isPaused, for: vmID)
+                    }
+                }
+                if isPaused {
+                    releaseCapture()
+                    releaseHeldInputs()
+                }
             }
         }
     }
@@ -59,6 +75,15 @@ final class GuestScreenNSView: NSView {
         didSet {
             if isSuspended != oldValue {
                 updateDisplayLinkState()
+                if isSuspended {
+                    releaseCapture()
+                    releaseHeldInputs()
+                    MainActor.assumeIsolated {
+                        PippinControllerManager.shared.detach(session: session)
+                    }
+                } else {
+                    attachPippinControllerIfKey()
+                }
             }
         }
     }
@@ -182,6 +207,9 @@ final class GuestScreenNSView: NSView {
         guard let window else {
             releaseCapture()
             releaseHeldInputs()
+            MainActor.assumeIsolated {
+                PippinControllerManager.shared.detach(session: session)
+            }
             return
         }
         let link = displayLink(target: self, selector: #selector(tick))
@@ -189,6 +217,9 @@ final class GuestScreenNSView: NSView {
         displayLinkRef = link
         updateDisplayLinkState()
         if isDisplayActive { drawLatestFrame() }
+        attachPippinControllerIfKey()
+        NotificationCenter.default.addObserver(self, selector: #selector(windowBecameKey),
+                                               name: NSWindow.didBecomeKeyNotification, object: window)
         NotificationCenter.default.addObserver(self, selector: #selector(windowResigned),
                                                name: NSWindow.didResignKeyNotification, object: window)
         // Pause display updates when the window is occluded or suspended by
@@ -225,9 +256,24 @@ final class GuestScreenNSView: NSView {
         }
     }
 
+    private func attachPippinControllerIfKey() {
+        guard !isSuspended, let window, window.isKeyWindow,
+              let vmID = pippinVMID, let controls = pippinControls else { return }
+        MainActor.assumeIsolated {
+            PippinControllerManager.shared.attach(vmID: vmID, session: session, controls: controls, isPaused: isPaused)
+        }
+    }
+
+    @objc private func windowBecameKey() {
+        attachPippinControllerIfKey()
+    }
+
     @objc private func windowResigned() {
         releaseCapture()
         releaseHeldInputs()
+        MainActor.assumeIsolated {
+            PippinControllerManager.shared.detach(session: session)
+        }
     }
 
     // MARK: Layout
@@ -474,12 +520,32 @@ final class GuestScreenNSView: NSView {
             onToggleFullScreen?()
             return
         }
-        guard !isPaused, !event.isARepeat, let code = GuestKeymap.qcodes[event.keyCode] else { return }
+        guard !isPaused, !event.isARepeat else { return }
+        if let vmID = pippinVMID,
+           let controls = pippinControls,
+           controls.keyboardMappingEnabled,
+           let mappedButton = controls.button(forKeyCode: event.keyCode) {
+            MainActor.assumeIsolated {
+                PippinControllerManager.shared.attach(vmID: vmID, session: session, controls: controls, isPaused: isPaused)
+                PippinControllerManager.shared.setKeyboardButton(mappedButton, down: true, for: session)
+            }
+            return
+        }
+        guard let code = GuestKeymap.qcodes[event.keyCode] else { return }
         session.key(code, down: true)
     }
 
     override func keyUp(with event: NSEvent) {
-        guard !isPaused, let code = GuestKeymap.qcodes[event.keyCode] else { return }
+        guard !isPaused else { return }
+        if let controls = pippinControls,
+           controls.keyboardMappingEnabled,
+           let mappedButton = controls.button(forKeyCode: event.keyCode) {
+            MainActor.assumeIsolated {
+                PippinControllerManager.shared.setKeyboardButton(mappedButton, down: false, for: session)
+            }
+            return
+        }
+        guard let code = GuestKeymap.qcodes[event.keyCode] else { return }
         session.key(code, down: false)
     }
 
@@ -533,6 +599,9 @@ final class GuestScreenNSView: NSView {
             session.key(GuestKeymap.ctrl, down: false)
         }
         heldModifiers.removeAll()
+        MainActor.assumeIsolated {
+            PippinControllerManager.shared.clearKeyboardButtons(for: session)
+        }
         session.releaseAll()
     }
 
@@ -626,6 +695,8 @@ struct GuestScreen: NSViewRepresentable {
     let inputHelpers: Bool
     var legacyMouseTracking: Bool = true
     var mouseDPI: Int? = nil
+    var pippinVMID: UUID? = nil
+    var pippinControls: PippinControlConfig? = nil
     let scaleMode: GuestDisplayScale
     let isPaused: Bool
     var isSuspended: Bool = false
@@ -638,6 +709,8 @@ struct GuestScreen: NSViewRepresentable {
         view.inputHelpers = inputHelpers
         view.legacyMouseTracking = legacyMouseTracking
         view.mouseDPI = mouseDPI
+        view.pippinVMID = pippinVMID
+        view.pippinControls = pippinControls
         view.scaleMode = scaleMode
         view.isPaused = isPaused
         view.isSuspended = isSuspended
@@ -652,6 +725,8 @@ struct GuestScreen: NSViewRepresentable {
         view.inputHelpers = inputHelpers
         view.legacyMouseTracking = legacyMouseTracking
         view.mouseDPI = mouseDPI
+        view.pippinVMID = pippinVMID
+        view.pippinControls = pippinControls
         view.scaleMode = scaleMode
         view.isPaused = isPaused
         view.isSuspended = isSuspended

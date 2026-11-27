@@ -158,6 +158,13 @@ PATCHED_FILES=(
   target/ppc/spr_common.h
   tcg/tcg-op-ldst.c
   hw/scsi/scsi-disk.c
+  hw/input/meson.build
+  hw/misc/macio/Kconfig
+  hw/misc/macio/meson.build
+  hw/ppc/meson.build
+  hw/scsi/Kconfig
+  hw/scsi/meson.build
+  target/ppc/tcg-excp_helper.c
 )
 # Untracked files created by patches (git apply refuses to create them again)
 # or copied by earlier releases; removed before the patches are applied.
@@ -188,12 +195,22 @@ UNTRACKED_PATCH_FILES=(
   hw/display/gxmetal_renderer.c
   hw/display/gxmetal_qemu.h
   hw/display/gxmetal_qemu.c
+  hw/display/pippin_taos.c
+  include/hw/display/pippin_taos.h
+  hw/scsi/mac_mesh.c
+  include/hw/scsi/mac_mesh.h
+  hw/misc/macio/grandcentral.c
+  include/hw/misc/macio/grandcentral.h
+  hw/ppc/mac_pippin.c
+  include/hw/ppc/mac_pippin.h
+  hw/input/adb-applejack.c
 )
 SCREAMER_DIR="$ROOT_DIR/screamer"
 PPCVID_DIR="$ROOT_DIR/ppcvid"
 AUDIO_DIR="$ROOT_DIR/audio"
 IDE_DIR="$ROOT_DIR/ide"
 VIRTIO_DIR="$ROOT_DIR/virtio"
+PIPPIN_DIR="$ROOT_DIR/pippin"
 
 log() { printf '\n==> %s\n' "$*"; }
 die() { printf '\nERROR: %s\n' "$*" >&2; exit 1; }
@@ -606,6 +623,24 @@ git -C "$QEMU_DIR" apply "$ATI_DIR/classicmac-host-resize.patch" || die "Failed 
 git -C "$QEMU_DIR" apply "$DISPLAY_DIR/host-resize-reassert.patch" || die "Failed to apply display resize retry patch"
 log "Installing the ClassicMac display backend (-display classicmac)"
 git -C "$QEMU_DIR" apply "$DISPLAY_DIR/classicmac-display.patch" || die "Failed to apply ClassicMac display backend patch"
+
+# ---------------------------------------------------------------------------
+# 3g. Apple / Bandai Pippin machine (-M pippin)
+# ---------------------------------------------------------------------------
+log "Installing Apple / Bandai Pippin machine (-M pippin)"
+cp "$PIPPIN_DIR/hw_display_pippin_taos.c" "$QEMU_DIR/hw/display/pippin_taos.c"
+cp "$PIPPIN_DIR/include_hw_display_pippin_taos.h" "$QEMU_DIR/include/hw/display/pippin_taos.h"
+cp "$PIPPIN_DIR/hw_scsi_mac_mesh.c" "$QEMU_DIR/hw/scsi/mac_mesh.c"
+cp "$PIPPIN_DIR/include_hw_scsi_mac_mesh.h" "$QEMU_DIR/include/hw/scsi/mac_mesh.h"
+cp "$PIPPIN_DIR/hw_misc_macio_grandcentral.c" "$QEMU_DIR/hw/misc/macio/grandcentral.c"
+cp "$PIPPIN_DIR/include_hw_misc_macio_grandcentral.h" "$QEMU_DIR/include/hw/misc/macio/grandcentral.h"
+cp "$PIPPIN_DIR/hw_ppc_mac_pippin.c" "$QEMU_DIR/hw/ppc/mac_pippin.c"
+cp "$PIPPIN_DIR/include_hw_ppc_mac_pippin.h" "$QEMU_DIR/include/hw/ppc/mac_pippin.h"
+cp "$PIPPIN_DIR/hw_input_adb-applejack.c" "$QEMU_DIR/hw/input/adb-applejack.c"
+git -C "$QEMU_DIR" apply "$PIPPIN_DIR/qemu-pippin-cuda.patch" || die "Failed to apply Pippin CUDA patch"
+git -C "$QEMU_DIR" apply "$PIPPIN_DIR/qemu-pippin-ppc603-rfi.patch" || die "Failed to apply Pippin PPC603 rfi patch"
+git -C "$QEMU_DIR" apply "$PIPPIN_DIR/qemu-pippin-scsi-cd.patch" || die "Failed to apply Pippin SCSI CD patch"
+git -C "$QEMU_DIR" apply "$PIPPIN_DIR/qemu-pippin-build.patch" || die "Failed to apply Pippin build patch"
 
 if [ -n "${CLASSICMAC_PREPARE_ONLY:-}" ]; then
   log "CLASSICMAC_PREPARE_ONLY set: sources prepared in $QEMU_DIR"

@@ -12,6 +12,8 @@ enum MachineFamily: String, Codable, CaseIterable, Identifiable {
     case powerMacOSX
     // Copland D11E4 on the DingusPPC Power Mac 7500 engine.
     case powerMac7500
+    // Apple / Bandai Pippin console (qemu-system-ppc -M pippin).
+    case pippin
 
     var id: String { rawValue }
 
@@ -20,6 +22,7 @@ enum MachineFamily: String, Codable, CaseIterable, Identifiable {
         case .quadra800: return "Quadra 800"
         case .powerMacG4, .powerMacOSX: return "Power Mac G4"
         case .powerMac7500: return "Power Mac 7500"
+        case .pippin: return "Apple Pippin"
         }
     }
 
@@ -28,6 +31,7 @@ enum MachineFamily: String, Codable, CaseIterable, Identifiable {
         case .quadra800: return "Motorola 68040"
         case .powerMacG4, .powerMacOSX: return "PowerPC G4"
         case .powerMac7500: return "PowerPC 601"
+        case .pippin: return "PowerPC 603"
         }
     }
 
@@ -36,6 +40,7 @@ enum MachineFamily: String, Codable, CaseIterable, Identifiable {
         case .quadra800: return "Macintosh Quadra 800 - Motorola 68040"
         case .powerMacG4, .powerMacOSX: return "Power Mac G4 - PowerPC"
         case .powerMac7500: return "Power Mac 7500 - PowerPC 601"
+        case .pippin: return "Apple / Bandai Pippin - PowerPC 603"
         }
     }
 
@@ -45,6 +50,7 @@ enum MachineFamily: String, Codable, CaseIterable, Identifiable {
         case .powerMacG4: return "Mac OS 8.5 - 9.2.2"
         case .powerMacOSX: return "Mac OS X (PowerPC)"
         case .powerMac7500: return "Copland D11E4 (experimental)"
+        case .pippin: return "Pippin OS"
         }
     }
 
@@ -54,6 +60,7 @@ enum MachineFamily: String, Codable, CaseIterable, Identifiable {
         case .powerMacG4: return "Mac OS 9.2"
         case .powerMacOSX: return "Mac OS X"
         case .powerMac7500: return "Copland D11E4"
+        case .pippin: return "Apple Pippin"
         }
     }
 
@@ -65,6 +72,7 @@ enum MachineFamily: String, Codable, CaseIterable, Identifiable {
         case .powerMacG4: return [128, 256, 512, 768, 896]
         case .powerMacOSX: return [256, 512, 768, 1024, 1536, 2048]
         case .powerMac7500: return [32]
+        case .pippin: return PippinMachine.ramPresets
         }
     }
 
@@ -74,6 +82,7 @@ enum MachineFamily: String, Codable, CaseIterable, Identifiable {
         case .powerMacG4: return 512
         case .powerMacOSX: return 1024
         case .powerMac7500: return 32
+        case .pippin: return PippinMachine.defaultRAMMB
         }
     }
 
@@ -82,6 +91,7 @@ enum MachineFamily: String, Codable, CaseIterable, Identifiable {
         case .quadra800: return [1, 2, 4, 8, 16, 32, 64, 120]
         case .powerMacG4, .powerMacOSX: return [2, 4, 8, 16, 32, 64, 120]
         case .powerMac7500: return [1]
+        case .pippin: return [0]
         }
     }
 
@@ -90,6 +100,7 @@ enum MachineFamily: String, Codable, CaseIterable, Identifiable {
         case .quadra800: return 2
         case .powerMacG4, .powerMacOSX: return 32
         case .powerMac7500: return 1
+        case .pippin: return 0
         }
     }
 
@@ -105,9 +116,10 @@ enum MachineFamily: String, Codable, CaseIterable, Identifiable {
     var supportsEnhancedFramebuffer: Bool { self == .quadra800 }
     var supportsSharedFolder: Bool { self == .quadra800 || self == .powerMacG4 }
     var supportsSound: Bool { self != .powerMac7500 }
-    var supportsPrinting: Bool { self != .powerMac7500 }
-    var supportsCustomResolution: Bool { self != .powerMac7500 }
+    var supportsPrinting: Bool { self != .powerMac7500 && self != .pippin }
+    var supportsCustomResolution: Bool { self != .powerMac7500 && self != .pippin }
     var supportsFloppyDisk: Bool { self == .quadra800 }
+    var supportsHardDisk: Bool { self != .pippin }
     var usesPRAMImage: Bool { self == .quadra800 }
 }
 
@@ -296,6 +308,12 @@ struct VMConfig: Codable, Identifiable, Hashable {
     // Host folder shared with the guest (appears on the Mac desktop). Optional.
     var sharedFolderPath: String?
 
+    // Apple / Bandai Pippin options. Optional so existing bundles omit them.
+    var pippinVideoOut: PippinVideoOut?
+    var flashImageName: String?
+    var pippinROMPath: String?
+    var pippinControls: PippinControlConfig?
+
     // The .classic package on disk that holds this VM. Runtime only: it is the
     // file's location, not part of the persisted config, so it is excluded from
     // Codable (see CodingKeys) and set when the VM is loaded, created, or opened.
@@ -310,6 +328,7 @@ struct VMConfig: Codable, Identifiable, Hashable {
         case networking, sound, printingEnabled, printerName, useG4CPU, useVirtioDisk, sharedFolderPath, graphicsCard
         case classicInputHelpers, legacyMouseTracking, mouseDPI, tabletInput, toolsCDInserted
         case toolsDeliveryVersion
+        case pippinVideoOut, flashImageName, pippinROMPath, pippinControls
     }
 
     init(id: UUID = UUID(),
@@ -340,6 +359,10 @@ struct VMConfig: Codable, Identifiable, Hashable {
          legacyMouseTracking: Bool = true,
          mouseDPI: Int? = nil,
          sharedFolderPath: String? = nil,
+         pippinVideoOut: PippinVideoOut? = nil,
+         flashImageName: String? = nil,
+         pippinROMPath: String? = nil,
+         pippinControls: PippinControlConfig? = nil,
          bundleURL: URL? = nil) {
         self.id = id
         self.name = name
@@ -372,6 +395,10 @@ struct VMConfig: Codable, Identifiable, Hashable {
         self.legacyMouseTracking = legacyMouseTracking
         self.mouseDPI = mouseDPI
         self.sharedFolderPath = sharedFolderPath
+        self.pippinVideoOut = pippinVideoOut
+        self.flashImageName = flashImageName
+        self.pippinROMPath = pippinROMPath
+        self.pippinControls = pippinControls
         self.bundleURL = bundleURL
         sanitize()
     }
@@ -465,6 +492,10 @@ struct VMConfig: Codable, Identifiable, Hashable {
         mouseDPI = try c.decodeIfPresent(Int.self, forKey: .mouseDPI)
         tabletInput = try c.decodeIfPresent(Bool.self, forKey: .tabletInput) ?? true
         sharedFolderPath = try c.decodeIfPresent(String.self, forKey: .sharedFolderPath)
+        pippinVideoOut = try? c.decodeIfPresent(PippinVideoOut.self, forKey: .pippinVideoOut)
+        flashImageName = try c.decodeIfPresent(String.self, forKey: .flashImageName)
+        pippinROMPath = try c.decodeIfPresent(String.self, forKey: .pippinROMPath)
+        pippinControls = try? c.decodeIfPresent(PippinControlConfig.self, forKey: .pippinControls)
         sanitize()
     }
 
@@ -551,6 +582,58 @@ struct VMConfig: Codable, Identifiable, Hashable {
             networking = false; sound = false
             tabletInput = false; classicInputHelpers = false
         }
+        if machineFamily == .pippin {
+            if ramMB < PippinMachine.minRAMMB || ramMB > PippinMachine.maxRAMMB {
+                ramMB = min(max(ramMB, PippinMachine.minRAMMB), PippinMachine.maxRAMMB)
+            }
+            if ramMB < PippinMachine.minRAMMB {
+                ramMB = PippinMachine.defaultRAMMB
+            }
+            let mode = pippinVideoOut ?? .ntsc
+            pippinVideoOut = mode
+            let dims = mode.dimensions
+            width = dims.width
+            height = dims.height
+            depth = ColorDepth.thousands.rawValue
+            diskSizeGB = 0
+            useEnhancedFramebuffer = false
+            customResolution = false
+            useG4CPU = false
+            useVirtioDisk = false
+            graphicsCard = .standard
+            toolsCDInserted = false
+            networking = false
+            printingEnabled = false
+            printerName = nil
+            tabletInput = false
+            classicInputHelpers = false
+            floppyImagePath = nil
+            bootFromFloppy = false
+            bootFromCD = cdImagePath?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+            if let trimmedFlash = flashImageName?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !trimmedFlash.isEmpty {
+                flashImageName = trimmedFlash
+            } else {
+                flashImageName = "flash.img"
+            }
+            if let trimmedROM = pippinROMPath?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !trimmedROM.isEmpty {
+                pippinROMPath = trimmedROM
+            } else {
+                pippinROMPath = nil
+            }
+            if let controls = pippinControls {
+                var clean = controls
+                clean.stickSensitivity = PippinControlConfig.clampedSensitivity(clean.stickSensitivity)
+                clean.stickDeadzone = PippinControlConfig.clampedDeadzone(clean.stickDeadzone)
+                pippinControls = clean
+            }
+        } else {
+            pippinVideoOut = nil
+            flashImageName = nil
+            pippinROMPath = nil
+            pippinControls = nil
+        }
         if let trimmedPrinter = printerName?.trimmingCharacters(in: .whitespacesAndNewlines),
            !trimmedPrinter.isEmpty {
             printerName = trimmedPrinter
@@ -561,7 +644,7 @@ struct VMConfig: Codable, Identifiable, Hashable {
             printingEnabled = false
             printerName = nil
         }
-        if ramMB < 8 {
+        if machineFamily != .pippin && ramMB < 8 {
             ramMB = machineFamily.defaultRAMMB
         }
         if let dpi = mouseDPI {
@@ -578,6 +661,10 @@ struct VMConfig: Codable, Identifiable, Hashable {
     var folder: URL { bundleURL ?? AppPaths.legacyVMDir(for: id) }
     var diskImageURL: URL { folder.appendingPathComponent(diskImageName) }
     var pramImageURL: URL { folder.appendingPathComponent(pramImageName) }
+    var flashImageURL: URL { folder.appendingPathComponent(flashImageName ?? "flash.img") }
+    var nvramImageURL: URL { folder.appendingPathComponent("nvram.img") }
+    var effectivePippinVideoOut: PippinVideoOut { pippinVideoOut ?? .ntsc }
+    var effectivePippinControls: PippinControlConfig { pippinControls ?? .defaultConfig }
     var configURL: URL { folder.appendingPathComponent("config.json") }
     // The machine's last captured screen, saved when it shuts down.
     var previewURL: URL { folder.appendingPathComponent("preview.png") }

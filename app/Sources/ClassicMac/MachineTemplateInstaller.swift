@@ -243,7 +243,7 @@ enum MachineTemplateInstaller {
                 let maxRAM = MachineFamily.quadra800.ramPresets.max() ?? 1000
                 config.ramMB = min(max(requested, minRAM), maxRAM)
             }
-        case .powerMac7500:
+        case .powerMac7500, .pippin:
             break
         }
     }

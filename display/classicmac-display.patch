@@ -75,7 +75,7 @@ new file mode 100644
 index 0000000..4cc136b
 --- /dev/null
 +++ b/ui/classicmac-display.c
-@@ -0,0 +1,1609 @@
+@@ -0,0 +1,1625 @@
 +/*
 + * ClassicMac display backend
 + *
@@ -176,6 +176,7 @@ index 0000000..4cc136b
 +    CMD_MSG_RELEASE_ALL = 20,
 +    CMD_MSG_REFRESH_RATE = 21,
 +    CMD_MSG_POINTER_REL = 22,
++    CMD_MSG_GAMEPAD = 23,
 +};
 +
 +typedef struct CMDHeader {
@@ -1139,6 +1140,16 @@ index 0000000..4cc136b
 +
 +/* Input ------------------------------------------------------------------ */
 +
++static void cmd_gamepad(ClassicMacDisplay *cmd, uint32_t mask)
++{
++    Object *aj = object_resolve_path("/machine/applejack", NULL);
++
++    if (!aj) {
++        return;
++    }
++    object_property_set_uint(aj, "buttons", mask, NULL);
++}
++
 +static void cmd_release_all(ClassicMacDisplay *cmd)
 +{
 +    QemuConsole *con = cmd->dcl.con;
@@ -1154,6 +1165,7 @@ index 0000000..4cc136b
 +        cmd->buttons_down = 0;
 +        qemu_input_event_sync();
 +    }
++    cmd_gamepad(cmd, 0);
 +}
 +
 +/*
@@ -1310,6 +1322,7 @@ index 0000000..4cc136b
 +        need = sizeof(pair);
 +        break;
 +    case CMD_MSG_REFRESH_RATE:
++    case CMD_MSG_GAMEPAD:
 +        need = sizeof(uint32_t);
 +        break;
 +    default:
@@ -1348,6 +1361,9 @@ index 0000000..4cc136b
 +        break;
 +    case CMD_MSG_POINTER_REL:
 +        cmd_pointer_rel(cmd, (int32_t)pair.a, (int32_t)pair.b);
++        break;
++    case CMD_MSG_GAMEPAD:
++        cmd_gamepad(cmd, pair.a);
 +        break;
 +    default:
 +        warn_report_once("classicmac-display: ignoring unknown app message "

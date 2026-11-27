@@ -1,9 +1,9 @@
 # Chapter 1: System Requirements & Supported Platforms
 
-ClassicMac 4.10.1 runs genuine Motorola 68040, PowerPC, and early PowerPC Mac OS X environments inside a self-contained desktop application styled in Apple's Mac OS 8/9 Platinum appearance. Every desktop build bundles its own emulation engines, firmware, guest drivers, and the `ClassicMacTools.iso` guest-additions image—no Homebrew installation, external QEMU setup, or guest-side setup is required for standard machines.
+ClassicMac 5.0.0 runs genuine Motorola 68040, PowerPC, Apple / Bandai Pippin, and early PowerPC Mac OS X environments inside a self-contained desktop application styled in Apple's Mac OS 8/9 Platinum appearance. Every desktop build bundles its own emulation engines, firmware, guest drivers, and the `ClassicMacTools.iso` guest-additions image—no Homebrew installation, external QEMU setup, or guest-side setup is required for standard machines.
 
 <p align="center">
-  <img src="../screenshots/manual/about-410.png" width="760" alt="About ClassicMac 4.10.0 window showing QEMU 11.0.2, QEMU 10.0.13, emulated ATI Radeon, OpenBIOS, and classicvirtio credits">
+  <img src="../screenshots/manual/about-410.png" width="760" alt="About ClassicMac window showing QEMU 11.0.2, QEMU 10.0.13, emulated ATI Radeon, OpenBIOS, and classicvirtio credits">
 </p>
 
 ---
@@ -14,9 +14,9 @@ ClassicMac ships native applications for **macOS**, **Windows**, and **Linux**, 
 
 | Host Platform | Release Artifact | Minimum OS / Runtime | Frontend Stack | Signing & Packaging | Platform-Specific Capabilities & Limits |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **macOS** | `ClassicMac-4.10.1.dmg`, `ClassicMac-4.10.1.zip` | Apple Silicon (`M1` or later, `arm64`), **macOS 15+** | Native SwiftUI + `PlatinumKit` + AppKit | Developer ID signed, notarized, and stapled | Full feature set: `-display classicmac`, optional loopback Browser Display (`noVNC`), `classicvirtio` folder sharing, auto-provisioned OS 9 printing, APFS `F_PUNCHHOLE` & `clonefile` checkpoints, and experimental Copland D11E4 |
-| **Windows** | `ClassicMac-4.10.1-windows-x64.exe` | **Windows 11 x64** (`_WIN32_WINNT=0x0A00`) | Compiled C++17 + Qt 6.4+ (`Widgets`, `Network`, `Concurrent`) | Unsigned single portable EXE (self-extracting via `$LOCALAPPDATA`) | Direct Qt RFB display with Per-Monitor V2 DPI whole-pixel zoom, ATI Radeon 3D via WGL, NTFS sparse virtual disks, virtual printing (LPD/IPP/JetDirect -> WinSpool or PDF). No `virtio-9p` folder sharing or Copland |
-| **Linux** | `ClassicMac-4.10.1-linux-x64.AppImage` | **x86-64**, `glibc 2.39+` (Ubuntu 24.04+ / Debian 13+), X11 or Wayland | Compiled C++17 + Qt 6.4+ (`Widgets`, `Network`, `Concurrent`) | Portable AppImage (`--appimage-extract-and-run` without FUSE) | Direct Qt RFB display, ATI Radeon 3D via EGL/GLES (`libEGL.so.1` / `libGLESv2.so.2`), `virtio-9p` folder sharing, `FICLONE` / `--reflink` checkpoints, virtual printing (CUPS `lp` / PDF). No Copland |
+| **macOS** | `ClassicMac-5.0.0.dmg`, `ClassicMac-5.0.0.zip` | Apple Silicon (`M1` or later, `arm64`), **macOS 15+** | Native SwiftUI + `PlatinumKit` + AppKit | Developer ID signed, notarized, and stapled | Full feature set: `-display classicmac`, Pippin key/gamepad mapping (`GameController`), optional loopback Browser Display (`noVNC`), `classicvirtio` folder sharing, auto-provisioned OS 9 printing, APFS `F_PUNCHHOLE` & `clonefile` checkpoints, and experimental Copland D11E4 |
+| **Windows** | `ClassicMac-5.0.0-windows-x64.exe` | **Windows 11 x64** (`_WIN32_WINNT=0x0A00`) | Compiled C++17 + Qt 6.4+ (`Widgets`, `Network`, `Concurrent`) | Unsigned single portable EXE (self-extracting via `$LOCALAPPDATA`) | Direct Qt RFB display with Per-Monitor V2 DPI whole-pixel zoom, ATI Radeon 3D via WGL, Pippin (`-M pippin`), NTFS sparse virtual disks, virtual printing (LPD/IPP/JetDirect -> WinSpool or PDF). No `virtio-9p` folder sharing or Copland |
+| **Linux** | `ClassicMac-5.0.0-linux-x64.AppImage` | **x86-64**, `glibc 2.39+` (Ubuntu 24.04+ / Debian 13+), X11 or Wayland | Compiled C++17 + Qt 6.4+ (`Widgets`, `Network`, `Concurrent`) | Portable AppImage (`--appimage-extract-and-run` without FUSE) | Direct Qt RFB display, ATI Radeon 3D via EGL/GLES (`libEGL.so.1` / `libGLESv2.so.2`), Pippin (`-M pippin`), `virtio-9p` folder sharing, `FICLONE` / `--reflink` checkpoints, virtual printing (CUPS `lp` / PDF). No Copland |
 | **iPadOS (Beta)** | TestFlight / Xcode (`ios/README.md`) | **iPadOS 14+** (iPad-only; `PlatinumKit` targets iOS 18) | SwiftUI + UTM SE frameworks | Unsigned archive or TestFlight IPA via `upload-ipad-testflight.sh` | Runs `m68k` and `ppc` engines using QEMU's threaded-code interpreter (no JIT). Uses upstream UTM display hardware: no `nubus-qfb` or emulated ATI Radeon 3D |
 
 <p align="center">
@@ -46,6 +46,7 @@ flowchart LR
         Q800["Quadra 800 (68040, System 7.1 - Mac OS 8.1)"]
         PMG4["Power Mac G4 (G3 / G4, Mac OS 8.5 - 9.2.2)"]
         OSX["Power Mac G4 - OS X (G4 7400, Mac OS X 10.4.11)"]
+        PIP["Apple / Bandai Pippin (PowerPC 603, Pippin OS)"]
         COP["Power Mac 7500 (PowerPC 601, Copland D11E4)"]
     end
 
@@ -58,6 +59,7 @@ flowchart LR
     MAC --> Q800
     MAC --> PMG4
     MAC --> OSX
+    MAC --> PIP
     MAC --> COP
     MAC --> ATI
     MAC --> SH
@@ -66,12 +68,14 @@ flowchart LR
     LIN --> Q800
     LIN --> PMG4
     LIN --> OSX
+    LIN --> PIP
     LIN --> ATI
     LIN --> SH
 
     WIN --> Q800
     WIN --> PMG4
     WIN --> OSX
+    WIN --> PIP
     WIN --> ATI
 
     IPAD --> Q800

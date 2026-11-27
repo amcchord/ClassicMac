@@ -19,6 +19,7 @@ QString familyName(const QJsonObject &entry) {
   return family == "quadra800"    ? "Quadra 800"
        : family == "powerMac7500" ? "Power Mac 7500"
        : family == "powerMacOSX"  ? "Power Mac G4 — Mac OS X"
+       : family == "pippin"       ? "Apple / Bandai Pippin"
                                   : "Power Mac G4";
 }
 QString systemName(const QJsonObject &entry) {
@@ -89,6 +90,7 @@ public:
     const auto family = entry.value("machineFamily").toString("powerMacG4");
     const auto icon = family == "quadra800"    ? "quadra_800"
                     : family == "powerMac7500" ? "powermac_7500"
+                    : family == "pippin"       ? "apple_pippin"
                                                : "powermac_g4";
     QPainter(&p.image).drawImage(7, 11,
                                  cachedIcon(":/" + QString(icon) + "-32.png"));

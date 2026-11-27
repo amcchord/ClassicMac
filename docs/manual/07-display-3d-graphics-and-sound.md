@@ -53,10 +53,15 @@ Video hardware and resizing rules differ by machine family:
 | **Power Mac G4 (`Standard`)** | QEMU `-vga std` + `qemu_vga.ndrv` (64 MB VRAM) | Thousands, Millions (plus 1/2/4/8-bit inside guest **Monitors**) | `512 × 384` to `3840 × 2160`; resizes live via `VGA.host-resize=on` |
 | **Power Mac G4 (`ATI Radeon`)** | Emulated ATI Radeon R100 (`ati-vga,model=r100`, 32 MB VRAM) | 256 Colors, Thousands, Millions (inside guest **Monitors**) | `640 × 480` to `1920 × 1440` (within 162 MHz EDID clock); resizes live via `classicmac-display-control` |
 | **Power Mac G4 (Mac OS X)** | QEMU `-vga std` (64 MB VRAM, `VGA.romfile=`) | Millions (`32`-bit fixed) | `512 × 384` to `3840 × 2160` at startup; fixed desktop size (does not live-resize) |
+| **Apple / Bandai Pippin** | Apple Taos framebuffer (`-M pippin,video-out=ntsc\|pal\|vga`) with dirty-scanline tracking | Thousands (`16`-bit fixed) | `640 × 480` (NTSC / VGA) or `640 × 512` (PAL); fixed console size |
 | **Power Mac 7500 (Copland)** | DingusPPC built-in video | 256 Colors (`8`-bit fixed) | Fixed `640 × 480`; use `Control-+` and `Control-−` to scale window |
 
 <p align="center">
   <img src="../screenshots/manual/guest-osx-tiger.png" width="760" alt="Mac OS X 10.4.11 Tiger running at 1024x768 Millions of colors inside the ClassicMac Platinum guest window">
+</p>
+
+<p align="center">
+  <img src="../screenshots/manual/guest-pippin-marathon.png" width="680" alt="Super Marathon running on the emulated Apple / Bandai Pippin Taos framebuffer inside ClassicMac">
 </p>
 
 ### Native Display Transport & Pixel Scaling

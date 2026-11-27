@@ -323,6 +323,9 @@ def main() -> int:
     parser.add_argument("--skip-tiger", action="store_true")
     parser.add_argument("--only-os9", action="store_true")
     parser.add_argument("--no-refresh-readme", action="store_true")
+    parser.add_argument("--pippin-rom", type=Path, default=None, help="Optional 4 MB Pippin boot ROM for Pippin captures")
+    parser.add_argument("--pippin-iso", type=Path, default=None, help="Optional Pippin CD image for Super Marathon capture")
+    parser.add_argument("--pippin-nav-iso", type=Path, default=None, help="Optional Pippin Navigator CD image")
     args = parser.parse_args()
 
     out = args.out
@@ -506,6 +509,67 @@ def main() -> int:
         shutil.copy2(out / "windowshade.png", PLATINUM_SHOTS_DIR / "windowshade.png")
         shutil.copy2(out / "guest-os81-quadra800.png", ROOT_SHOTS_DIR / "quadra800-macos81.png")
         shutil.copy2(out / "guest-os9-mega-deluxe.png", ROOT_SHOTS_DIR / "powermacg4-macos92.png")
+
+    if args.pippin_rom and args.pippin_rom.is_file():
+        pip_docs = SYNTH_HOME / "Documents/ClassicMac"
+        sup_dir = SYNTH_HOME / "Library/Application Support/ClassicMac"
+        roms_dir = sup_dir / "ROMs"
+        roms_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(args.pippin_rom, roms_dir / "pippin.rom")
+
+        def seed_pippin_bundle(name: str, uid: str, iso_path: Path | None) -> Path:
+            dst = pip_docs / f"{name}.classic"
+            dst.mkdir(parents=True, exist_ok=True)
+            for fname, size in [("disk.img", 1024 * 1024), ("pram.img", 256), ("nvram.img", 8192)]:
+                with open(dst / fname, "wb") as fh:
+                    fh.truncate(size)
+            (dst / "flash.img").write_bytes(b"\xff" * 131072)
+            cfg = {
+                "id": uid,
+                "name": name,
+                "machineFamily": "pippin",
+                "ramMB": 13,
+                "diskSizeGB": 1,
+                "diskImageName": "disk.img",
+                "pramImageName": "pram.img",
+                "flashImageName": "flash.img",
+                "pippinROMPath": str(roms_dir / "pippin.rom"),
+                "bootFromCD": iso_path is not None,
+                "pippinVideoOut": "ntsc",
+                "width": 640,
+                "height": 480,
+                "depth": 16,
+                "networking": False,
+                "sound": True,
+                "useG4CPU": False,
+                "classicInputHelpers": False,
+                "legacyMouseTracking": True,
+                "tabletInput": False,
+            }
+            if iso_path is not None:
+                cfg["cdImagePath"] = str(iso_path)
+            write_json(dst / "config.json", cfg)
+            return dst
+
+        pip_bundles = [seed_pippin_bundle("Apple Pippin", "33333333-3333-4333-8333-000000000001", args.pippin_iso)]
+        if args.pippin_nav_iso and args.pippin_nav_iso.is_file():
+            pip_bundles.append(seed_pippin_bundle("Pippin Navigator", "33333333-3333-4333-8333-000000000002", args.pippin_nav_iso))
+        write_json(sup_dir / "library.json", [str(b) for b in pip_bundles])
+
+        run_tour(args.app, "newmac,wait:1,shot:pnew", raw_dir / "tp-newmac", extra_env={"CLASSICMAC_UI_NEWMAC_FAMILY": "pippin"})
+        shutil.copy2(find_shot(raw_dir / "tp-newmac", "pnew", "New Mac"), out / "pippin-new-mac-dialog.png")
+        run_tour(args.app, "select:0,settings,wait:1,shot:pgen", raw_dir / "tp-gen", extra_env={"CLASSICMAC_UI_SETTINGS_PANE": "general"})
+        shutil.copy2(find_shot(raw_dir / "tp-gen", "pgen", "Info"), out / "pippin-get-info-general.png")
+        run_tour(args.app, "select:0,settings,wait:1,shot:pctl", raw_dir / "tp-ctl", extra_env={"CLASSICMAC_UI_SETTINGS_PANE": "controls"})
+        shutil.copy2(find_shot(raw_dir / "tp-ctl", "pctl", "Info"), out / "pippin-get-info-controls.png")
+        if args.pippin_iso and args.pippin_iso.is_file():
+            run_tour(args.app, "select:0,start,wait:23,guest-activate,wait:2,shot:pmarathon,stop", raw_dir / "tp-marathon", timeout=120)
+            shutil.copy2(find_shot(raw_dir / "tp-marathon", "pmarathon", "Apple Pippin"), out / "guest-pippin-marathon.png")
+            if not args.no_refresh_readme:
+                shutil.copy2(out / "guest-pippin-marathon.png", ROOT_SHOTS_DIR / "pippin-super-marathon.png")
+        if args.pippin_nav_iso and args.pippin_nav_iso.is_file():
+            run_tour(args.app, "select:1,start,wait:24,guest-activate,wait:2,shot:pnav,stop", raw_dir / "tp-nav", timeout=120)
+            shutil.copy2(find_shot(raw_dir / "tp-nav", "pnav", "Pippin Navigator"), out / "guest-pippin-navigator.png")
 
     print(f"\nCaptured screenshots in {out}:")
     for p in sorted(out.glob("*.png")):

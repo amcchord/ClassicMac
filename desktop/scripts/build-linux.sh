@@ -13,3 +13,4 @@ cd "$ROOT_DIR/vendor/qemu/build-linux"
 ninja -j "${CLASSICMAC_BUILD_JOBS:-4}" qemu-system-m68k qemu-system-ppc qemu-img
 PYTHON_BIN=python3 bash "$ROOT_DIR/scripts/build-osx-qemu.sh"
 python3 "$ROOT_DIR/desktop/scripts/stage-linux.py" "$PWD" "$ROOT_DIR/output/desktop/runtime"
+"$ROOT_DIR/output/desktop/runtime/bin/qemu-system-ppc" -M help | grep -q '^pippin '

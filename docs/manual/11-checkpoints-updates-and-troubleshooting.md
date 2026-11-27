@@ -35,9 +35,9 @@ My Mac.classic/
 └── Checkpoints/
     └── 20261125T143000Z/
         ├── checkpoint.json    # id, label, kind, createdAt, diskBytes, allocatedBytes, method
-        ├── disk.img           # Cloned/sparse raw disk snapshot
-        ├── pram.img           # Cloned Quadra 800 PRAM (if quadra800)
-        └── nvram.img          # Cloned & Adler-32-validated OS X flash NVRAM (if powerMacOSX)
+        ├── disk.img           # Cloned/sparse raw disk snapshot (or flash.img on pippin)
+        ├── pram.img           # Cloned Quadra 800 / Pippin PRAM
+        └── nvram.img          # Cloned OS X or Pippin NVRAM (Adler-32 validated on powerMacOSX)
 ```
 
 ClassicMac creates three automatic checkpoint `kind` values alongside your `"manual"` checkpoints:

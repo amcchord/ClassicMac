@@ -5,22 +5,24 @@ enum GuestBootFrame {
     static func isReady(_ base: UnsafeRawPointer, width: Int, height: Int,
                         stride: Int, family: MachineFamily) -> Bool {
         guard width >= 2, height >= 2, stride >= width * 4 else { return false }
-        var macLike = 0, samples = 0
-        for gy in 1...9 {
-            for gx in 1...12 {
-                let x = width * gx / 13, y = height * gy / 10
-                let px = base.advanced(by: y * stride + x * 4)
-                let b = Int(px.load(fromByteOffset: 0, as: UInt8.self))
-                let g = Int(px.load(fromByteOffset: 1, as: UInt8.self))
-                let r = Int(px.load(fromByteOffset: 2, as: UInt8.self))
-                samples += 1
-                let black = r < 24 && g < 24 && b < 24
-                let white = r > 240 && g > 240 && b > 240
-                let firmwareYellow = r > 230 && g > 230 && b > 150 && b < 235
-                if family == .quadra800 ? !black : !(black || white || firmwareYellow) { macLike += 1 }
+        if family != .pippin {
+            var macLike = 0, samples = 0
+            for gy in 1...9 {
+                for gx in 1...12 {
+                    let x = width * gx / 13, y = height * gy / 10
+                    let px = base.advanced(by: y * stride + x * 4)
+                    let b = Int(px.load(fromByteOffset: 0, as: UInt8.self))
+                    let g = Int(px.load(fromByteOffset: 1, as: UInt8.self))
+                    let r = Int(px.load(fromByteOffset: 2, as: UInt8.self))
+                    samples += 1
+                    let black = r < 24 && g < 24 && b < 24
+                    let white = r > 240 && g > 240 && b > 240
+                    let firmwareYellow = r > 230 && g > 230 && b > 150 && b < 235
+                    if family == .quadra800 ? !black : !(black || white || firmwareYellow) { macLike += 1 }
+                }
             }
+            guard macLike * 10 >= samples * 3 else { return false }
         }
-        guard macLike * 10 >= samples * 3 else { return false }
 
         // A white/gray clear is not a boot screen. Average adjacent pixels so
         // the ROM's empty checkerboard also stays covered. A denser grid sees

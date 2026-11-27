@@ -1,0 +1,277 @@
+--- a/hw/misc/macio/cuda.c
++++ b/hw/misc/macio/cuda.c
+@@ -26,6 +26,7 @@
+ #include "qemu/osdep.h"
+ #include "hw/core/irq.h"
+ #include "hw/core/qdev-properties.h"
++#include "system/block-backend.h"
+ #include "migration/vmstate.h"
+ #include "hw/misc/macio/cuda.h"
+ #include "qemu/timer.h"
+@@ -162,6 +163,11 @@
+                 ms->b = (ms->b | TREQ);
+             } else {
+                 ms->b = (ms->b & ~TREQ);
++                /* Entering sync clears any stale queued packet state */
++                s->data_in_size = 0;
++                s->data_in_index = 0;
++                s->data_out_index = 0;
++                adb_autopoll_unblock(adb_bus);
+             }
+             cuda_delay_set_sr_int(s);
+             s->sr_int_sync = true;
+@@ -169,6 +175,13 @@
+         } else {
+             if (!(s->last_b & TIP)) {
+                 /* handle end of host to cuda transfer */
++                if (!packet_received && !(ms->acr & SR_OUT) &&
++                    s->data_in_size > 0 && s->data_in_index > 0 &&
++                    s->data_in_index < s->data_in_size) {
++                    /* Host terminated open-ended transfer by negating TIP */
++                    s->data_in_size = 0;
++                    s->data_in_index = 0;
++                }
+                 packet_received = (s->data_out_index > 0);
+                 /* always an IRQ at the end of transfer */
+                 cuda_delay_set_sr_int(s);
+@@ -266,6 +279,18 @@
+                     uint8_t *out_args, int *out_len);
+ } CudaCommand;
+ 
++static bool cuda_cmd_warm_start(CUDAState *s,
++                                const uint8_t *in_data, int in_len,
++                                uint8_t *out_data, int *out_len)
++{
++    if (in_len != 0) {
++        return false;
++    }
++    adb_set_autopoll_enabled(&s->adb_bus, false);
++    s->one_second_mode = 0;
++    return true;
++}
++
+ static bool cuda_cmd_autopoll(CUDAState *s,
+                               const uint8_t *in_data, int in_len,
+                               uint8_t *out_data, int *out_len)
+@@ -423,16 +448,184 @@
+     return true;
+ }
+ 
++static bool cuda_cmd_get_6805_addr(CUDAState *s,
++                                   const uint8_t *in_data, int in_len,
++                                   uint8_t *out_data, int *out_len)
++{
++    uint16_t addr;
++
++    if (in_len != 2) {
++        return false;
++    }
++    addr = (((uint16_t)in_data[0]) << 8) | in_data[1];
++    if (addr >= 0x100 && addr <= 0x1FF) {
++        int start = addr - 0x100;
++        int n = 256 - start;
++        memcpy(out_data, &s->pram[start], n);
++        *out_len = n;
++    } else if (addr >= 0xF00) {
++        out_data[0] = 0;
++        out_data[1] = 0x00;
++        out_data[2] = 0x19;
++        out_data[3] = 0x00;
++        out_data[4] = 0x02;
++        out_data[5] = 0x00;
++        out_data[6] = 0x29;
++        *out_len = 7;
++    } else {
++        out_data[0] = 0;
++        *out_len = 1;
++    }
++    return true;
++}
++
++static bool cuda_cmd_set_6805_addr(CUDAState *s,
++                                   const uint8_t *in_data, int in_len,
++                                   uint8_t *out_data, int *out_len)
++{
++    uint16_t addr;
++
++    if (in_len < 2) {
++        return false;
++    }
++    addr = (((uint16_t)in_data[0]) << 8) | in_data[1];
++    if (addr >= 0x100 && addr <= 0x1FF) {
++        int start = addr - 0x100;
++        for (int i = 0; i < in_len - 2; i++) {
++            uint8_t idx = (start + i) & 0xFF;
++            s->pram[idx] = in_data[2 + i];
++            if (s->pram_blk) {
++                if (blk_pwrite(s->pram_blk, idx, 1, &s->pram[idx], 0) < 0) {
++                    qemu_log_mask(LOG_GUEST_ERROR, "CUDA: PRAM write failed\n");
++                }
++            }
++        }
++    }
++    return true;
++}
++
++static bool cuda_cmd_get_pram(CUDAState *s,
++                              const uint8_t *in_data, int in_len,
++                              uint8_t *out_data, int *out_len)
++{
++    uint16_t addr;
++
++    if (in_len != 2) {
++        return false;
++    }
++    addr = (((uint16_t)in_data[0]) << 8) | in_data[1];
++    if (addr > 0xFF) {
++        return false;
++    }
++    int n = 256 - addr;
++    memcpy(out_data, &s->pram[addr], n);
++    *out_len = n;
++    return true;
++}
++
++static bool cuda_cmd_set_pram(CUDAState *s,
++                              const uint8_t *in_data, int in_len,
++                              uint8_t *out_data, int *out_len)
++{
++    uint16_t addr;
++
++    if (in_len < 2) {
++        return false;
++    }
++    addr = (((uint16_t)in_data[0]) << 8) | in_data[1];
++    if (addr > 0xFF) {
++        return false;
++    }
++    for (int i = 0; i < in_len - 2; i++) {
++        uint8_t idx = (addr + i) & 0xFF;
++        s->pram[idx] = in_data[2 + i];
++        if (s->pram_blk) {
++            if (blk_pwrite(s->pram_blk, idx, 1, &s->pram[idx], 0) < 0) {
++                qemu_log_mask(LOG_GUEST_ERROR, "CUDA: PRAM write failed\n");
++            }
++        }
++    }
++    return true;
++}
++
++static bool cuda_cmd_get_auto_rate(CUDAState *s,
++                                   const uint8_t *in_data, int in_len,
++                                   uint8_t *out_data, int *out_len)
++{
++    out_data[0] = s->adb_bus.autopoll_rate_ms;
++    *out_len = 1;
++    return true;
++}
++
++static bool cuda_cmd_get_device_list(CUDAState *s,
++                                     const uint8_t *in_data, int in_len,
++                                     uint8_t *out_data, int *out_len)
++{
++    out_data[0] = s->adb_bus.autopoll_mask >> 8;
++    out_data[1] = s->adb_bus.autopoll_mask & 0xFF;
++    *out_len = 2;
++    return true;
++}
++
++static bool cuda_cmd_noop_ok(CUDAState *s,
++                             const uint8_t *in_data, int in_len,
++                             uint8_t *out_data, int *out_len)
++{
++    return true;
++}
++
++static bool cuda_cmd_get_set_iic(CUDAState *s,
++                                 const uint8_t *in_data, int in_len,
++                                 uint8_t *out_data, int *out_len)
++{
++    if (in_len < 1 || !s->i2c_cmd) {
++        return false;
++    }
++    return s->i2c_cmd(s->i2c_opaque, in_data[0] >> 1, false, 0,
++                      in_data + 1, in_len - 1, !!(in_data[0] & 1),
++                      out_data, out_len);
++}
++
++static bool cuda_cmd_combined_iic(CUDAState *s,
++                                  const uint8_t *in_data, int in_len,
++                                  uint8_t *out_data, int *out_len)
++{
++    if (in_len < 3 || !s->i2c_cmd) {
++        return false;
++    }
++    if ((in_data[0] & 0xFE) != (in_data[2] & 0xFE)) {
++        return false;
++    }
++    return s->i2c_cmd(s->i2c_opaque, in_data[0] >> 1, true, in_data[1],
++                      in_data + 3, in_len - 3, !!(in_data[2] & 1),
++                      out_data, out_len);
++}
++
+ static const CudaCommand handlers[] = {
++    { CUDA_WARM_START, "WARM_START", cuda_cmd_warm_start },
+     { CUDA_AUTOPOLL, "AUTOPOLL", cuda_cmd_autopoll },
++    { CUDA_GET_6805_ADDR, "GET_6805_ADDR", cuda_cmd_get_6805_addr },
++    { CUDA_GET_PRAM, "GET_PRAM", cuda_cmd_get_pram },
++    { CUDA_SET_6805_ADDR, "SET_6805_ADDR", cuda_cmd_set_6805_addr },
++    { CUDA_POWERUP_TIME, "POWERUP_TIME", cuda_cmd_noop_ok },
++    { CUDA_SET_PRAM, "SET_PRAM", cuda_cmd_set_pram },
++    { CUDA_MS_RESET, "MS_RESET", cuda_cmd_noop_ok },
++    { CUDA_BATTERY_SWAP_SENSE, "BATTERY_SWAP_SENSE", cuda_cmd_noop_ok },
+     { CUDA_SET_AUTO_RATE, "SET_AUTO_RATE",  cuda_cmd_set_autorate },
++    { CUDA_GET_AUTO_RATE, "GET_AUTO_RATE", cuda_cmd_get_auto_rate },
+     { CUDA_SET_DEVICE_LIST, "SET_DEVICE_LIST", cuda_cmd_set_device_list },
++    { CUDA_GET_DEVICE_LIST, "GET_DEVICE_LIST", cuda_cmd_get_device_list },
+     { CUDA_POWERDOWN, "POWERDOWN", cuda_cmd_powerdown },
+     { CUDA_RESET_SYSTEM, "RESET_SYSTEM", cuda_cmd_reset_system },
+     { CUDA_FILE_SERVER_FLAG, "FILE_SERVER_FLAG",
+       cuda_cmd_set_file_server_flag },
+     { CUDA_SET_POWER_MESSAGES, "SET_POWER_MESSAGES",
+       cuda_cmd_set_power_message },
++    { CUDA_GET_SET_IIC, "GET_SET_IIC", cuda_cmd_get_set_iic },
++    { CUDA_WAKEUP, "WAKEUP", cuda_cmd_noop_ok },
++    { CUDA_TIMER_TICKLE, "TIMER_TICKLE", cuda_cmd_noop_ok },
++    { CUDA_COMBINED_FORMAT_IIC, "COMBINED_FORMAT_IIC", cuda_cmd_combined_iic },
++    { CUDA_OUT_PB0, "OUT_PB0", cuda_cmd_noop_ok },
+     { CUDA_SET_ONE_SECOND_MODE, "SET_ONE_SECOND_MODE",
+       cuda_cmd_one_second_mode },
+     { CUDA_GET_TIME, "GET_TIME", cuda_cmd_get_time },
+@@ -442,7 +635,7 @@
+ static void cuda_receive_packet(CUDAState *s,
+                                 const uint8_t *data, int len)
+ {
+-    uint8_t obuf[16] = { CUDA_PACKET, 0, data[0] };
++    uint8_t obuf[280] = { CUDA_PACKET, 0, data[0] };
+     int i, out_len = 0;
+ 
+     for (i = 0; i < ARRAY_SIZE(handlers); i++) {
+--- a/include/hw/misc/macio/cuda.h
++++ b/include/hw/misc/macio/cuda.h
+@@ -57,6 +57,7 @@
+ #define CUDA_WAKEUP                    0x23
+ #define CUDA_TIMER_TICKLE              0x24
+ #define CUDA_COMBINED_FORMAT_IIC       0x25
++#define CUDA_OUT_PB0                   0x26
+ 
+ 
+ /* MOS6522 CUDA */
+@@ -110,8 +111,15 @@
+     int data_out_index;
+ 
+     qemu_irq irq;
+-    uint8_t data_in[128];
+-    uint8_t data_out[16];
++    uint8_t data_in[280];
++    uint8_t data_out[280];
++
++    uint8_t pram[256];
++    BlockBackend *pram_blk;
++    bool (*i2c_cmd)(void *opaque, uint8_t dev_addr, bool has_subaddr,
++                    uint8_t subaddr, const uint8_t *tx, int tx_len,
++                    bool is_read, uint8_t *rx, int *rx_len);
++    void *i2c_opaque;
+ };
+ 
+ #endif /* CUDA_H */

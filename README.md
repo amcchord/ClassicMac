@@ -7,7 +7,7 @@
 <p align="center">
   <strong>The classic Mac OS era on macOS, Windows and Linux.</strong><br>
   A self-contained desktop app that emulates a Motorola 68040 Quadra 800, PowerPC Power Mac G4<br>
-  (Mac OS 8/9 and Mac OS X Tiger), and experimental Power Mac 7500 (Copland on macOS) with the Apple Platinum appearance.
+  (Mac OS 8/9 and Mac OS X Tiger), Apple / Bandai Pippin, and experimental Power Mac 7500 (Copland on macOS) with the Apple Platinum appearance.
 </p>
 
 <p align="center">
@@ -21,7 +21,7 @@
 ---
 
 <p align="center">
-  <img src="docs/screenshots/platinum/running-ati.png" width="720" alt="ClassicMac 4.10.0 in the Apple Platinum appearance, with Mac OS 9.2.2 Mega Deluxe running on the emulated ATI Radeon">
+  <img src="docs/screenshots/platinum/running-ati.png" width="720" alt="ClassicMac 5.0.0 in the Apple Platinum appearance, with Mac OS 9.2.2 Mega Deluxe running on the emulated ATI Radeon">
 </p>
 
 <p align="center">
@@ -29,15 +29,15 @@
   <img src="docs/screenshots/powermacg4-macos92.png" width="410" alt="Mac OS 9.2.2 Mega Deluxe on the emulated Power Mac G4">
 </p>
 
-## Download ClassicMac 4.10.1
+## Download ClassicMac 5.0
 
 | System | Download | Requirements |
 | --- | --- | --- |
-| Windows | [Portable EXE](https://github.com/amcchord/ClassicMac/releases/download/v4.10.1/ClassicMac-4.10.1-windows-x64.exe) | Windows 11 x64; unsigned. |
-| macOS | [DMG](https://github.com/amcchord/ClassicMac/releases/download/v4.10.1/ClassicMac-4.10.1.dmg) · [ZIP](https://github.com/amcchord/ClassicMac/releases/download/v4.10.1/ClassicMac-4.10.1.zip) | Apple Silicon, macOS 15+; signed and notarized. |
-| Linux | [AppImage](https://github.com/amcchord/ClassicMac/releases/download/v4.10.1/ClassicMac-4.10.1-linux-x64.AppImage) | x64, glibc 2.39+ and a desktop. |
+| Windows | [Portable EXE](https://github.com/amcchord/ClassicMac/releases/download/v5.0.0/ClassicMac-5.0.0-windows-x64.exe) | Windows 11 x64; unsigned. |
+| macOS | [DMG](https://github.com/amcchord/ClassicMac/releases/download/v5.0.0/ClassicMac-5.0.0.dmg) · [ZIP](https://github.com/amcchord/ClassicMac/releases/download/v5.0.0/ClassicMac-5.0.0.zip) | Apple Silicon, macOS 15+; signed and notarized. |
+| Linux | [AppImage](https://github.com/amcchord/ClassicMac/releases/download/v5.0.0/ClassicMac-5.0.0-linux-x64.AppImage) | x64, glibc 2.39+ and a desktop. |
 
-[Release notes, checksums and engine sources](https://github.com/amcchord/ClassicMac/releases/tag/v4.10.1).
+[Release notes, checksums and engine sources](https://github.com/amcchord/ClassicMac/releases/tag/v5.0.0).
 Windows runs directly. Drag the Mac app to Applications. On Linux, mark the
 AppImage executable; use `--appimage-extract-and-run` if FUSE is unavailable.
 
@@ -50,12 +50,26 @@ ClassicMac is a sister project to **[RetroBoot](https://github.com/amcchord/Retr
 
 ## User Manual & Complete Documentation
 
-See the full **[ClassicMac 4.10.1 User Manual](docs/manual/README.md)** (12 chapters with architecture diagrams, configuration schemas, and screenshots):
+See the full **[ClassicMac 5.0 User Manual](docs/manual/README.md)** (12 chapters with architecture diagrams, configuration schemas, and screenshots):
 
 - **Getting started & requirements:** [System Requirements](docs/manual/01-system-requirements.md) · [Architecture & How It Works](docs/manual/02-architecture-how-it-works.md) · [Installation & First Run](docs/manual/03-installation-and-first-run.md)
 - **Operating systems:** [Mac OS Library & Editions](docs/manual/04-mac-os-library-and-editions.md) · [Creating Custom Macs & Manual OS Installs](docs/manual/05-installing-your-own-mac-os.md) · [Everyday Use & Input](docs/manual/06-everyday-use-and-input.md)
 - **Devices & I/O:** [Display, 3D Graphics & Sound](docs/manual/07-display-3d-graphics-and-sound.md) · [Media Drawer, Tools CD & Shared Folders](docs/manual/08-media-tools-and-sharing.md) · [Networking & Virtual Printing](docs/manual/09-networking-and-virtual-printing.md)
 - **Hosting & reference:** [Creating & Serving Custom Images](docs/manual/10-creating-and-serving-images.md) · [Checkpoints, Updates & Troubleshooting](docs/manual/11-checkpoints-updates-and-troubleshooting.md) · [Configuration, Bundles & Env Reference](docs/manual/12-configuration-and-cli-reference.md)
+
+## New in ClassicMac 5.0
+
+- **Native Apple / Bandai Pippin emulation (`-M pippin`):** Boots Pippin OS and retail/homebrew Pippin discs directly inside QEMU (`PowerPC 603 @ 66 MHz`, Aspen + GrandCentral MacIO, Screamer audio, MESH SCSI with Apple CD-ROM quirks, persistent 128 KiB Save Flash + 8 KiB NVRAM + 256 B CUDA PRAM, automatic 2352-byte `.bin`/`.cue` to `.iso` conversion, and NTSC/PAL/VGA Taos video with dirty-scanline optimization).
+- **AppleJack Key Mapping & Game Controller support (macOS):** Configure custom keyboard bindings and physical game controllers (Xbox, PlayStation, Switch Pro, MFi via Apple `GameController`) for all 13 AppleJack controller buttons and analog stick-to-trackball/D-pad modes in **Get Info → Controls** (even live while running).
+- **Custom Platinum Pippin Artwork:** Adds dedicated 16 px and 32 px MIT-licensed Apple / Bandai Pippin @World & AppleJack icons across macOS and Windows/Linux.
+
+## Download ClassicMac 4.10.1 (previous)
+
+| System | Download | Requirements |
+| --- | --- | --- |
+| Windows | [Portable EXE](https://github.com/amcchord/ClassicMac/releases/download/v4.10.1/ClassicMac-4.10.1-windows-x64.exe) | Windows 11 x64; unsigned. |
+| macOS | [DMG](https://github.com/amcchord/ClassicMac/releases/download/v4.10.1/ClassicMac-4.10.1.dmg) · [ZIP](https://github.com/amcchord/ClassicMac/releases/download/v4.10.1/ClassicMac-4.10.1.zip) | Apple Silicon, macOS 15+; signed and notarized. |
+| Linux | [AppImage](https://github.com/amcchord/ClassicMac/releases/download/v4.10.1/ClassicMac-4.10.1-linux-x64.AppImage) | x64, glibc 2.39+ and a desktop. |
 
 ## New in ClassicMac 4.10.1
 
@@ -330,12 +344,17 @@ See the [desktop build and platform support guide](desktop/README.md).
   and lets you add more collections from your own copies.
 
 <p align="center">
-  <img src="docs/screenshots/platinum/guest-window.png" width="720" alt="Mac OS 9.2.2 Mega Deluxe in ClassicMac 4.10.0's Platinum window with the toolbar along the bottom">
+  <img src="docs/screenshots/platinum/guest-window.png" width="720" alt="Mac OS 9.2.2 Mega Deluxe in ClassicMac 5.0.0's Platinum window with the toolbar along the bottom">
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/platinum/main-window.png" width="410" alt="ClassicMac 4.10.0 Home window with Apple Platinum chrome">
-  <img src="docs/screenshots/manual/guest-osx-tiger.png" width="410" alt="Mac OS X 10.4.11 Tiger running inside ClassicMac 4.10.0">
+  <img src="docs/screenshots/platinum/main-window.png" width="410" alt="ClassicMac 5.0.0 Home window with Apple Platinum chrome">
+  <img src="docs/screenshots/manual/guest-osx-tiger.png" width="410" alt="Mac OS X 10.4.11 Tiger running inside ClassicMac 5.0.0">
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/pippin-super-marathon.png" width="410" alt="Super Marathon running on the emulated Apple / Bandai Pippin in ClassicMac 5.0.0">
+  <img src="docs/screenshots/manual/pippin-get-info-controls.png" width="410" alt="Pippin Get Info Controls pane for keyboard and game controller mapping">
 </p>
 
 <p align="center">

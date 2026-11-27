@@ -202,7 +202,7 @@ final class GuestWindows: ObservableObject {
         switch config.machineFamily {
         case .powerMacG4: return true
         case .quadra800: return config.useEnhancedFramebuffer
-        case .powerMacOSX, .powerMac7500: return false
+        case .powerMacOSX, .powerMac7500, .pippin: return false
         }
     }
 
@@ -312,6 +312,8 @@ final class GuestWindows: ObservableObject {
         screen.inputHelpers = config?.classicInputHelpers ?? true
         screen.legacyMouseTracking = config?.legacyMouseTracking ?? true
         screen.mouseDPI = config?.mouseDPI
+        screen.pippinVMID = config?.machineFamily == .pippin ? config?.id : nil
+        screen.pippinControls = config?.machineFamily == .pippin ? config?.effectivePippinControls : nil
         screen.isPaused = QEMUManager.shared.isPaused(id)
         screen.onToggleFullScreen = { [weak self] in self?.toggleFullScreen(id) }
 
@@ -520,6 +522,8 @@ struct GuestWindowContent: View {
                             inputHelpers: config?.classicInputHelpers ?? true,
                             legacyMouseTracking: config?.legacyMouseTracking ?? true,
                             mouseDPI: config?.mouseDPI,
+                            pippinVMID: config?.machineFamily == .pippin ? vmID : nil,
+                            pippinControls: config?.machineFamily == .pippin ? config?.effectivePippinControls : nil,
                             scaleMode: windows.scaleMode(for: vmID),
                             isPaused: paused,
                             isSuspended: windows.isFullScreen(vmID),
@@ -565,6 +569,13 @@ struct GuestWindowContent: View {
             PlatinumBevelButton("Restart") { manager.reboot(vmID) }
             PlatinumBevelButton(paused ? "Resume" : "Pause") {
                 if paused { manager.resume(vmID) } else { manager.pause(vmID) }
+            }
+            if config?.machineFamily == .pippin {
+                PlatinumBevelButton(compact ? nil : "Controls…", icon: "preferences") {
+                    WindowManager.shared.presentSettings(for: vmID, initialPane: .controls)
+                }
+                .help("Controls…")
+                .accessibilityLabel("Controls…")
             }
             if config?.machineFamily != .powerMac7500 {
                 PlatinumBevelButton(compact ? nil : "Media…", icon: "cd") { MediaController.shared.present(for: vmID) }

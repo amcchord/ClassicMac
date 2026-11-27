@@ -257,10 +257,178 @@ def library_16() -> Grid:
     return g
 
 
+def pippin_32() -> Grid:
+    """Apple / Bandai Pippin: sculpted console behind the iconic AppleJack controller."""
+    g = Grid(32)
+    # 1. Sculpted charcoal/graphite Pippin console chassis (y = 2..16).
+    for row_idx, (x0, x1) in enumerate([
+        (9, 22),   # y = 2 top outline
+        (8, 23),   # y = 3
+        (7, 24),   # y = 4
+        (6, 25),   # y = 5
+        (5, 26),   # y = 6
+        (4, 27),   # y = 7
+    ]):
+        y = 2 + row_idx
+        if row_idx == 0:
+            g.hline(x0, y, x1 - x0 + 1, "K")
+        else:
+            g.hline(x0, y, x1 - x0 + 1, "8")
+            g.set(x0, y, "K")
+            g.set(x1, y, "K")
+            g.set(x0 + 1, y, "B")
+            g.set(x1 - 1, y, "5")
+            if row_idx == 1:
+                g.hline(x0 + 2, y, x1 - x0 - 3, "B")
+            elif row_idx >= 3:
+                # Top-loading CD-ROM recessed platter inset
+                g.hline(10, y, 12, "5")
+                g.set(10, y, "9")
+                g.set(21, y, "4")
+    g.hline(11, 4, 10, "K")
+    g.hline(11, 6, 10, "4")
+
+    # Main slanted front console body (y = 8..16)
+    g.rect(3, 8, 26, 9, "7")
+    g.frame(3, 8, 26, 9, "K")
+    g.hline(4, 8, 24, "A")
+    g.vline(4, 9, 7, "9")
+    g.vline(27, 9, 7, "5")
+    # Recessed front panel band with ADB port, emerald power LED, & louver vents
+    g.rect(5, 10, 22, 5, "5")
+    g.hline(6, 10, 20, "8")
+    g.hline(5, 11, 22, "4")
+    g.rect(6, 12, 3, 2, "3")
+    g.set(6, 12, "K")
+    g.set(10, 13, "g")
+    g.set(11, 13, "G")
+    for gx in range(15, 25, 2):
+        g.set(gx, 12, "4")
+        g.set(gx, 13, "4")
+    g.hline(4, 15, 24, "5")
+    g.hline(5, 16, 22, "K")
+
+    # 2. Iconic boomerang AppleJack gamepad foreground (y = 17..30).
+    controller_spans = [
+        (17, [(8, 23)]),
+        (18, [(6, 25)]),
+        (19, [(4, 27)]),
+        (20, [(3, 28)]),
+        (21, [(3, 28)]),
+        (22, [(3, 28)]),
+        (23, [(3, 28)]),
+        (24, [(3, 28)]),
+        (25, [(3, 12), (19, 28)]),
+        (26, [(3, 11), (20, 28)]),
+        (27, [(4, 10), (21, 27)]),
+        (28, [(5, 9), (22, 26)]),
+    ]
+    g.hline(12, 26, 8, "x")
+    for y, spans in controller_spans:
+        for sx, ex in spans:
+            g.hline(sx, y, ex - sx + 1, "E")
+            g.set(sx, y, "K")
+            g.set(ex, y, "K")
+    # Crisp controller outline + top highlight
+    g.hline(8, 17, 16, "K")
+    g.hline(6, 18, 3, "K")
+    g.hline(23, 18, 3, "K")
+    g.hline(4, 19, 3, "K")
+    g.hline(25, 19, 3, "K")
+    g.hline(9, 18, 14, "W")
+    g.hline(7, 19, 18, "W")
+    g.hline(4, 20, 4, "W")
+    g.hline(24, 20, 4, "W")
+    # Inner saddle & grip shading
+    g.hline(12, 24, 8, "B")
+    g.hline(12, 25, 8, "K")
+    g.set(11, 25, "K")
+    g.set(20, 25, "K")
+    g.set(10, 26, "K")
+    g.set(21, 26, "K")
+    g.hline(5, 28, 5, "B")
+    g.hline(22, 28, 5, "B")
+    g.hline(5, 29, 4, "K")
+    g.hline(23, 29, 4, "K")
+
+    # Left: D-Pad cross (x=6..8, y=21..23)
+    g.hline(6, 22, 3, "3")
+    g.vline(7, 21, 3, "3")
+    g.set(7, 22, "1")
+
+    # Center: Glossy trackball (x=14..17, y=19..22) + Start/Select pips
+    g.rect(14, 19, 4, 4, "4")
+    g.frame(14, 19, 4, 4, "K")
+    g.rect(15, 20, 2, 2, "6")
+    g.set(15, 20, "W")
+    g.set(12, 21, "7")
+    g.set(19, 21, "7")
+
+    # Right: Signature 4-color Pippin button diamond (Blue N, Yellow W, Green E, Red S)
+    g.set(24, 20, "b")
+    g.set(22, 22, "y")
+    g.set(26, 22, "g")
+    g.set(24, 24, "r")
+    g.set(24, 21, "L")
+    g.set(23, 22, "O")
+    g.set(25, 22, "g")
+    g.set(24, 23, "r")
+    return g
+
+
+def pippin_16() -> Grid:
+    """16x16 Apple / Bandai Pippin console + AppleJack controller with 4-color diamond."""
+    g = Grid(16)
+    # Console behind (y = 0..7)
+    g.hline(4, 0, 8, "K")
+    g.hline(3, 1, 10, "8")
+    g.set(3, 1, "K")
+    g.set(12, 1, "K")
+    g.hline(5, 1, 6, "B")
+    g.rect(2, 2, 12, 6, "7")
+    g.frame(2, 2, 12, 6, "K")
+    g.hline(3, 3, 10, "9")
+    g.hline(3, 4, 10, "5")
+    g.set(4, 5, "g")  # emerald LED
+    g.hline(7, 5, 5, "4")
+    g.hline(3, 6, 10, "6")
+    # AppleJack boomerang controller foreground (y = 8..15)
+    g.hline(4, 8, 8, "K")
+    for y, x0, x1 in [
+        (9, 2, 13),
+        (10, 1, 14),
+        (11, 1, 14),
+        (12, 1, 14),
+    ]:
+        g.hline(x0, y, x1 - x0 + 1, "E")
+        g.set(x0, y, "K")
+        g.set(x1, y, "K")
+    g.hline(3, 9, 10, "W")
+    g.rect(1, 13, 4, 2, "K")
+    g.hline(2, 13, 2, "B")
+    g.rect(11, 13, 4, 2, "K")
+    g.hline(12, 13, 2, "B")
+    g.hline(5, 13, 6, "K")
+    # D-Pad left
+    g.hline(2, 11, 3, "3")
+    g.vline(3, 10, 3, "3")
+    g.set(3, 11, "1")
+    # Trackball center
+    g.rect(7, 10, 2, 2, "4")
+    g.set(7, 10, "A")
+    # 4-color button diamond right
+    g.set(12, 9, "b")   # Blue
+    g.set(11, 11, "y")  # Yellow
+    g.set(13, 11, "g")  # Green
+    g.set(12, 12, "r")  # Red
+    return g
+
+
 ICONS = [
     ("powermac_g4", g4_32, g4_16, "Power Mac G4 (Graphite) tower"),
     ("quadra_800", quadra_32, quadra_16, "Macintosh Quadra 800 mini tower"),
     ("powermac_7500", pm7500_32, pm7500_16, "Power Macintosh 7500 desktop with monitor"),
+    ("apple_pippin", pippin_32, pippin_16, "Apple / Bandai Pippin @World console and AppleJack controller"),
     ("library", library_32, library_16, "The Mac OS Library: a CD with a download arrow"),
 ]
 

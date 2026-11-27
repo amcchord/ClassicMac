@@ -5,7 +5,7 @@ import PlatinumKit
 /// About ClassicMac, as a Platinum window.
 struct AboutView: View {
     private var version: String {
-        let short = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "4.10.1"
+        let short = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "5.0.0"
         let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
         return build.map { $0 == short ? "Version \(short)" : "Version \(short) (\($0))" } ?? "Version \(short)"
     }
@@ -20,7 +20,7 @@ struct AboutView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("ClassicMac").platinumText(.large)
                     Text(version).platinumText(.emphasis)
-                    Text("The whole classic Mac OS era, from System 7 through Mac OS 9, Mac OS X Tiger, and Copland, on this computer.")
+                    Text("The whole classic Mac OS era, from System 7 through Mac OS 9, Mac OS X Tiger, Apple Pippin, and Copland, on this computer.")
                         .platinumText(.body)
                         .fixedSize(horizontal: false, vertical: true)
                 }

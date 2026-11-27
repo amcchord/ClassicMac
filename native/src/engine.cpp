@@ -557,6 +557,28 @@ void Engine::start() {
     QString nvErr;
     if (!Model::validateOsxNvram(nvFile.readAll(), &nvErr))
       fail(nvErr);
+  } else if (family == "pippin") {
+    const QString flash = machine.folder + "/" +
+                          Model::localName(machine.config["flashImageName"],
+                                           QStringLiteral("flash.img"));
+    if (!QFileInfo::exists(flash)) {
+      QFile f(flash);
+      if (!f.open(QFile::WriteOnly))
+        fail("Cannot prepare Pippin Save Flash storage.");
+      f.write(QByteArray(131072, char(0xff)));
+    }
+    const QString nvram = machine.folder + "/nvram.img";
+    if (!QFileInfo::exists(nvram)) {
+      QFile f(nvram);
+      if (f.open(QFile::WriteOnly))
+        f.write(QByteArray(8192, char(0x00)));
+    }
+    const QString pram = machine.folder + "/pram.img";
+    if (!QFileInfo::exists(pram)) {
+      QFile f(pram);
+      if (f.open(QFile::WriteOnly))
+        f.write(QByteArray(256, char(0x00)));
+    }
   } else {
     requireRuntimeFile("qemu/pc-bios/openbios-ppc");
     requireRuntimeFile("qemu/pc-bios/vgabios-stdvga.bin");

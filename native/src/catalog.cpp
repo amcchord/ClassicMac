@@ -186,8 +186,9 @@ QJsonArray parse(const QByteArray &data) {
     if (m["installedBytes"].toDouble() < 512)
       fail("Invalid installed size.");
     auto family = m.value("machineFamily").toString("powerMacG4");
-    if (!QStringList{"powerMacG4", "quadra800", "powerMac7500", "powerMacOSX"}.contains(
-            family))
+    if (!QStringList{"powerMacG4", "quadra800", "powerMac7500", "powerMacOSX",
+                     "pippin"}
+             .contains(family))
       fail("Unknown Library Mac model.");
     const auto installed = m["installedBytes"].toDouble();
     const auto capacity = m["diskCapacityBytes"].toDouble();

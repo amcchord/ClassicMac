@@ -1,5 +1,22 @@
 # Changelog
 
+## 5.0.0 — Apple / Bandai Pippin Emulation, Controller Mapping & Performance (2026-11-27)
+
+### Added
+
+- **Native Apple / Bandai Pippin emulation (`qemu-system-ppc -M pippin`):**
+  - Implements full Pippin console hardware directly inside QEMU 11.0.2 (`pippin/`): PowerPC 603 @ 66 MHz (`CONFIG_PPC603` + `qemu-pippin-ppc603-rfi.patch`), Aspen memory/PCI bridge, GrandCentral I/O controller, CUDA VIA with 256-byte PRAM + I2C clock/encoder/audio hooks (`0x29`/`0x44`/`0x45`), Screamer/AWACS 44.1 kHz audio, MESH SCSI controller with Apple Sony CDU-8003A quirks (`qemu-pippin-scsi-cd.patch`), Apple Taos framebuffer (`640 × 480` NTSC/VGA and `640 × 512` PAL), 128 KiB Save Flash (`if=pflash`), 8 KiB board NVRAM, and `adb-applejack` controller/trackball emulation across macOS, Windows, and Linux.
+  - Adds `.pippin` (`"machineFamily": "pippin"`) creation, Kinka 4 MB ROM validation/resolution, automatic 2352-byte Mode 1/2 `.bin`/`.cue` -> 2048-byte `.iso` disc conversion (`PippinMachine`), Get Info settings, live Media Drawer CD switching, and Pippin boot screen reveal detection.
+- **Pippin key mapping & physical game controller support (macOS):**
+  - Adds `-display classicmac` protocol message `CMD_MSG_GAMEPAD = 23` routing 18-bit hardware-accurate AppleJack button bitmasks to QOM `/machine/applejack`.
+  - Adds `PippinControllerManager` using Apple's `GameController` framework (`GCController`) for automatic discovery of Xbox, PlayStation, Switch, and MFi gamepads with configurable button mapping across all 13 AppleJack buttons and analog stick-to-trackball/D-pad modes with sensitivity and deadzone tuning.
+  - Adds per-VM `pippinControls` configuration, interactive keyboard/gamepad capture in **Get Info → Controls** (editable live while the Pippin is running via the toolbar **Controls…** button), and coexisting keyboard-to-controller mapping alongside `adb-keyboard`.
+- **Custom Platinum Pippin artwork:** Adds custom MIT-licensed `16 × 16` and `32 × 32` Apple / Bandai Pippin console + AppleJack icons in `platinum/tools/draw_machine_icons.py`, `PlatinumAssets.swift`, and desktop Qt resources (`desktop/ui/apple_pippin-*.png`).
+
+### Improved
+
+- **Pippin emulation performance:** Removes unconditional 120 Hz `graphic_hw_update()` polling from `taos_vbl_tick()`, adds `DIRTY_MEMORY_VGA` scanline tracking and RGB555 LUT decoding in `pippin_taos.c`, and configures `-accel tcg,tb-size=512` for smooth gameplay across Pippin games.
+
 ## 4.10.1 — Full-Screen Performance & Mac OS 9 Stability Fixes (2026-11-27)
 
 ### Fixed

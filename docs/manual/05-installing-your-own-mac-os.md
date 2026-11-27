@@ -19,6 +19,7 @@ flowchart TD
     Q1 -->|"Mac OS 8.5 or 8.6 (PowerPC)"| PM86["Select Power Mac G4 (mac99) + Turn Off G4 CPU in Get Info"]
     Q1 -->|"Mac OS 9.0 to 9.2.2 (PowerPC)"| PM9["Select Power Mac G4 (mac99, Default 512 MB RAM, 32 GB Disk, G4 CPU On)"]
     Q1 -->|"Mac OS X 10.2 to 10.4 (PowerPC)"| PMX["Select Power Mac G4 - Mac OS X (QEMU 10, Default 1024 MB RAM, 32 GB Disk)"]
+    Q1 -->|"Apple / Bandai Pippin OS & Games"| PIP["Select Apple / Bandai Pippin (PowerPC 603, 13 MB RAM, 128 KB Save Flash, Kinka ROM)"]
     Q1 -->|"Copland D11E4"| COP["Download from Mac OS Library (macOS Power Mac 7500 Only)"]
 
     Q800 --> QBOOT{"Boot Media"}
@@ -37,10 +38,11 @@ flowchart TD
 
 Open **File → New Mac…** (`Command-N` / `Ctrl+N`) or click **New Mac…** in the Home window:
 
-1. **Model:** Choose one of three hardware profiles:
+1. **Model:** Choose one of four hardware profiles:
    - **Power Mac G4 — Mac OS 8.5 to 9.2.2** (`powerMacG4`): OpenBIOS `mac99` PowerPC machine. No Apple ROM file is required.
    - **Power Mac G4 — Mac OS X** (`powerMacOSX`): Dedicated QEMU 10.0.13 `mac99,via=pmu` machine with Core99 `16 KiB` flash NVRAM (`nvram.img`).
    - **Quadra 800 — System 7.1 to Mac OS 8.1** (`quadra800`): Motorola `68040` machine using ClassicMac's bundled Quadra 800 ROM and a per-machine `pram.img`.
+   - **Apple / Bandai Pippin — Pippin OS** (`pippin`): `qemu-system-ppc -M pippin` PowerPC `603` console (`5–16 MB` RAM, default `13 MB`; `128 KB` Save Flash `flash.img`, `8 KB` `nvram.img`, and `256 B` `pram.img`; requires a user-supplied 4 MB Kinka boot ROM such as Kinka 1.3). Accepts `.iso`, `.toast`, `.cdr`, `.img`, and raw 2352-byte `.bin`/`.cue` Pippin discs (auto-converted to `.iso`).
 2. **Name:** Enter up to 100 characters. ClassicMac creates `<Name>.classic` (appending a number if a bundle with that name already exists).
 3. **Memory & Hard disk:**
    - **Quadra 800:** RAM presets `64`, `128` (default), `256`, `512`, `1000 MB`; disk presets `1`, `2` (default), `4`, `8`, `16`, `32`, `64`, `120 GB`.
@@ -135,6 +137,27 @@ Copland D11E4 cannot be installed from a blank disk in **New Mac…**—it must 
 - `copland-rtc.bin` (persistent RTC checkpoint created beside `disk.img` so restarts never rewind file dates—Copland refuses to boot if directory creation dates appear newer than modification dates)
 
 During startup, the engine holds `Caps Lock` for `500 ms` (until your first real keypress) so the ROM selects Copland instead of System 7.5.3. Sound, networking, shared folders, removable media, ATI acceleration, Paste Text, and Browser Display are unavailable, and developer assertions pause the preview with a **Continue Copland** button in the Home window. Always use **Spaz → Shut Down** inside Copland for a clean exit.
+
+### 5. Apple / Bandai Pippin Console (Pippin OS & Games)
+
+ClassicMac 5.0.0 emulates the PowerPC 603 **Apple / Bandai Pippin** (`qemu-system-ppc -M pippin`) directly inside QEMU with Apple Taos 16-bit graphics (`ntsc`, `pal`, `vga`), AppleJack trackball/gamepad ADB input, Save Flash storage (`128 KB` `flash.img`), `8 KB` NVRAM (`nvram.img`), `256 B` PRAM (`pram.img`), and genuine Sony/Apple SCSI CD-ROM timing.
+
+<p align="center">
+  <img src="../screenshots/manual/pippin-new-mac-dialog.png" width="500" alt="New Mac dialog configured for Apple / Bandai Pippin with NTSC video output and Boot ROM selected">
+</p>
+
+1. **Supply a Pippin Boot ROM:** Select **Apple / Bandai Pippin — Pippin OS** in **New Mac…** and click **Choose…** next to **Boot ROM** to pick a valid 4 MB Pippin ROM image (such as *Kinka 1.3*), or place it at `~/Library/Application Support/ClassicMac/ROMs/pippin.rom` so ClassicMac finds it automatically.
+2. **Choose Video Output & Media:** Select **NTSC** (`640 × 480`), **PAL** (`640 × 512`), or **VGA** (`640 × 480`), optionally adjust **Memory** (`5–16 MB`, `13 MB` default) and **Save Flash** (`128 KB`) in **Get Info… → General Information**, and attach a Pippin disc image (`.iso`, `.toast`, `.cdr`, `.img`, or raw 2352-byte `.bin`/`.cue`).
+
+<p align="center">
+  <img src="../screenshots/manual/pippin-get-info-general.png" width="520" alt="Get Info General Information pane for Apple / Bandai Pippin showing Memory, Save Flash, sound toggle, and Kinka 1.3 Boot ROM">
+</p>
+
+3. **Start & Swap Discs:** Pippin discs self-boot directly from the CD-ROM; without a disc inserted, the console displays its animated *Insert CD* prompt. You can eject or swap Pippin discs live in **Media…**.
+
+<p align="center">
+  <img src="../screenshots/manual/guest-pippin-navigator.png" width="680" alt="Pippin Navigator 1.1 booted inside ClassicMac 5.0.0's Platinum window">
+</p>
 
 ---
 

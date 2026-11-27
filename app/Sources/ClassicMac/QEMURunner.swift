@@ -507,7 +507,8 @@ final class QEMUManager: ObservableObject {
         savedConfiguration: VMConfig? = nil
     ) -> VMConfig {
         let saved = savedConfiguration ?? config
-        guard config.bootFromCD,
+        guard saved.machineFamily != .pippin,
+              config.bootFromCD,
               config.cdImagePath?.isEmpty == false,
               saved.bootFromCD == config.bootFromCD,
               saved.cdImagePath == config.cdImagePath,
@@ -1002,6 +1003,17 @@ final class QEMUManager: ObservableObject {
             do { try CoplandMachine.validateFirmware(in: config.folder) }
             catch { return AppError(title, error.localizedDescription) }
         }
+        if config.machineFamily == .pippin {
+            guard let romURL = PippinMachine.resolveROMURL(for: config) else {
+                return AppError(title, PippinError.missingROM.localizedDescription)
+            }
+            do {
+                _ = try PippinMachine.validateROM(at: romURL)
+                try PippinMachine.ensurePersistenceImages(for: config)
+            } catch {
+                return AppError(title, error.localizedDescription)
+            }
+        }
         let missing = AppPaths.missingFirmware(for: config.machineFamily)
         if !missing.isEmpty {
             return AppError(
@@ -1012,11 +1024,13 @@ final class QEMUManager: ObservableObject {
             )
         }
 
-        guard fm.fileExists(atPath: config.diskImageURL.path) else {
-            return AppError(
-                title,
-                "The machine's hard disk is missing from \u{201C}\(config.folder.lastPathComponent)\u{201D}. If you moved or edited the machine file, restore its disk image."
-            )
+        if config.machineFamily.supportsHardDisk {
+            guard fm.fileExists(atPath: config.diskImageURL.path) else {
+                return AppError(
+                    title,
+                    "The machine's hard disk is missing from \u{201C}\(config.folder.lastPathComponent)\u{201D}. If you moved or edited the machine file, restore its disk image."
+                )
+            }
         }
 
         if config.machineFamily == .powerMacOSX {
@@ -1134,6 +1148,16 @@ final class QEMUManager: ObservableObject {
             return buildOSXArguments(for: config, display: display, printerPorts: printerPorts)
         case .powerMac7500:
             return CoplandMachine.arguments(for: config)
+        case .pippin:
+            let romURL = PippinMachine.resolveROMURL(for: config)
+                ?? config.folder.appendingPathComponent("pippin.rom")
+            return PippinMachine.arguments(
+                for: config,
+                romURL: romURL,
+                displayArguments: displayArguments(for: config, browser: display),
+                monitorSocketURL: QEMUManager.monitorSocketURL(for: config.id),
+                qmpSocketURL: QEMUManager.qmpSocketURL(for: config.id)
+            )
         }
     }
 

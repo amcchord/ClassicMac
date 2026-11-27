@@ -144,6 +144,7 @@ final class MediaController: NSObject, ObservableObject, NSWindowDelegate {
     @Published private(set) var busyIDs: Set<UUID> = []
     @Published private(set) var messages: [UUID: String] = [:]
     @Published private(set) var errors: [UUID: String] = [:]
+    private(set) var resolvedPaths: [UUID: String?] = [:]
     private var refreshingIDs: Set<UUID> = []
     private var windows: [UUID: NSWindow] = [:]
     private var listening = false
@@ -217,18 +218,35 @@ final class MediaController: NSObject, ObservableObject, NSWindowDelegate {
         messages[id] = nil
         defer { busyIDs.remove(id) }
         do {
-            if let path { try MediaCommand.validateImage(path, device: device) }
+            var resolvedPath = path
+            if let sourcePath = path {
+                try MediaCommand.validateImage(sourcePath, device: device)
+                if config.machineFamily == .pippin && device == .disc {
+                    let sourceURL = URL(fileURLWithPath: sourcePath)
+                    let ext = sourceURL.pathExtension.lowercased()
+                    if ext == "bin" || ext == "cue" || PippinMachine.isRaw2352CDImage(at: sourceURL) {
+                        let baseName = sourceURL.deletingPathExtension().lastPathComponent
+                        let discsDir = config.folder.appendingPathComponent("Discs", isDirectory: true)
+                        let isoURL = VMStore.uniqueFileURL(in: discsDir, suggestedName: "\(baseName).iso")
+                        messages[id] = "Converting raw Pippin disc image…"
+                        try await Task.detached(priority: .userInitiated) {
+                            try PippinMachine.convertRawBinToISO(from: sourceURL, to: isoURL)
+                        }.value
+                        resolvedPath = isoURL.path
+                    }
+                }
+            }
             if running && config.machineFamily == .quadra800 {
                 guard !paused else { throw MediaError("Resume the Mac before changing its media so it can safely finish disk activity.") }
                 let current = try await request("classicmac-media status", id: id)
                 guard current.liveChanges, current[device] != nil else { throw MediaError("This drive does not support changes while the Mac is running. Shut down the Mac first.") }
                 // The writable floppy must finish its guest-side eject before
                 // insertion. Never force-replace a mounted writable image.
-                if device == .floppy, current[device]?.inserted == true, path != nil {
+                if device == .floppy, current[device]?.inserted == true, resolvedPath != nil {
                     throw MediaError("Eject the floppy disk first, then insert the replacement after the Mac finishes using it.")
                 }
-                var result = try await request(MediaCommand.change(device, path: path), id: id)
-                if device == .floppy && path == nil {
+                var result = try await request(MediaCommand.change(device, path: resolvedPath), id: id)
+                if device == .floppy && resolvedPath == nil {
                     messages[id] = "Waiting for the Mac to finish using the floppy disk…"
                     let deadline = Date().addingTimeInterval(12)
                     while result[device]?.inserted == true && Date() < deadline {
@@ -240,10 +258,10 @@ final class MediaController: NSObject, ObservableObject, NSWindowDelegate {
                     }
                 }
                 snapshots[id] = result
-                guard let drive = result[device], drive.inserted == (path != nil), path == nil || drive.path == path else {
+                guard let drive = result[device], drive.inserted == (resolvedPath != nil), resolvedPath == nil || drive.path == resolvedPath else {
                     throw MediaError(device == .floppy ? "The Mac is still using the floppy. Eject it from the Mac desktop, then try again. Nothing was forced out." : "The media change could not be confirmed. Wait a moment, then try again.")
                 }
-                if path == nil {
+                if resolvedPath == nil {
                     messages[id] = "\(device.label) ejected."
                 } else if device == .floppy {
                     messages[id] = "Floppy disk inserted."
@@ -253,7 +271,18 @@ final class MediaController: NSObject, ObservableObject, NSWindowDelegate {
             } else {
                 messages[id] = running ? "Saved for the next startup. Shut down and start the Mac to apply this change." : "Media saved."
             }
-            if let path { recentMedia.remember(path, device: device) }
+            let latest = VMStore.shared.vms.first(where: { $0.id == id }) ?? config
+            var updated = device.setting(path: resolvedPath, in: latest)
+            if updated.machineFamily == .pippin && device == .disc {
+                updated.bootFromCD = resolvedPath?.isEmpty == false
+            }
+            resolvedPaths[id] = resolvedPath
+            if config.bundleURL != nil || VMStore.shared.vms.contains(where: { $0.id == id }) {
+                if !VMStore.shared.save(updated) {
+                    throw MediaError(VMStore.shared.lastError?.message ?? "The media choice could not be saved.")
+                }
+            }
+            if let resolvedPath { recentMedia.remember(resolvedPath, device: device) }
             return true
         } catch {
             messages[id] = nil

@@ -227,6 +227,7 @@ struct FirstMacSetupView: View {
                 (MachineFamily.powerMacG4, "Power Mac G4 — Mac OS 8.5 to 9.2.2"),
                 (MachineFamily.powerMacOSX, "Power Mac G4 — Mac OS X"),
                 (MachineFamily.quadra800, "Quadra 800 — System 7.1 to Mac OS 8.1"),
+                (MachineFamily.pippin, "Apple / Bandai Pippin — Pippin OS"),
             ], width: 360)
             HStack(spacing: 8) {
                 PlatinumIcon("cd", size: 16)
@@ -275,6 +276,8 @@ struct FirstMacSetupView: View {
                      ? "1. In the installer, open Disk Utility and format the blank disk with Apple Partition Map and Mac OS Extended.\n2. Install Mac OS X on that disk.\n3. If the installer opens again, shut down, choose the hard disk as the startup disk in ClassicMac, and start your Mac."
                      : targetFamily == .powerMacG4
                      ? "1. Open Utilities → Drive Setup on the CD and initialize the blank hard disk.\n2. Open Installer. In Options…, turn off Update Apple Hard Disk Drivers, then install Mac OS.\n3. Restart when installation finishes. Your Mac will start from its hard disk."
+                     : targetFamily == .pippin
+                     ? "1. Ensure your 4 MB Kinka boot ROM is configured in Get Info or placed as pippin.rom inside ClassicMac's ROMs folder.\n2. Start your Pippin to boot straight from the selected disc.\n3. Saved games and settings persist automatically in Save Flash (128 KB)."
                      : "1. Use the disk utility on your CD to initialize the blank hard disk.\n2. Run the Mac OS installer and follow its instructions.\n3. Shut down when finished, eject the CD from Media, then start your Mac.")
                     .platinumText(.small).fixedSize(horizontal: false, vertical: true)
             } else {
@@ -335,8 +338,11 @@ struct FirstMacSetupView: View {
 
     private func chooseCD() {
         let panel = NSOpenPanel()
-        panel.allowedContentTypes = ["iso", "toast", "cdr"].compactMap { UTType(filenameExtension: $0) } + [.diskImage]
-        panel.message = "Choose your Mac OS installation CD image"
+        let exts = family == .pippin ? ["iso", "bin", "cue", "toast", "cdr"] : ["iso", "toast", "cdr"]
+        panel.allowedContentTypes = exts.compactMap { UTType(filenameExtension: $0) } + [.diskImage]
+        panel.message = family == .pippin
+            ? "Choose a Pippin CD disc image (.iso, .bin, .cue, .toast or .cdr)"
+            : "Choose your Mac OS installation CD image"
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
         if panel.runModal() == .OK { cd = panel.url }
@@ -369,20 +375,33 @@ struct FirstMacSetupView: View {
     private func createInstallerMac() {
         guard let cd else { return }
         working = true
-        let destination = VMStore.uniqueFileURL(in: AppPaths.mediaDir, suggestedName: cd.lastPathComponent)
+        let needsRawConvert = family == .pippin && (
+            cd.pathExtension.lowercased() == "bin" ||
+            cd.pathExtension.lowercased() == "cue" ||
+            PippinMachine.isRaw2352CDImage(at: cd)
+        )
+        let suggested = needsRawConvert ? "\(cd.deletingPathExtension().lastPathComponent).iso" : cd.lastPathComponent
+        let destination = VMStore.uniqueFileURL(in: AppPaths.mediaDir, suggestedName: suggested)
         Task {
             do {
                 try await Task.detached(priority: .userInitiated) {
-                    try FileManager.default.copyItem(at: cd, to: destination)
+                    if needsRawConvert {
+                        try PippinMachine.convertRawBinToISO(from: cd, to: destination)
+                    } else {
+                        try FileManager.default.copyItem(at: cd, to: destination)
+                    }
                 }.value
                 let preset = ResolutionPreset.recommended
                 let trimmed = try MachineTemplateInstaller.normalizedName(name)
+                let dims = family == .pippin ? PippinVideoOut.ntsc.dimensions : (preset.width, preset.height)
                 let config = VMConfig(name: trimmed, machineFamily: family,
                     ramMB: family.defaultRAMMB, diskSizeGB: family.defaultDiskSizeGB,
-                    width: preset.width, height: preset.height, depth: ColorDepth.thousands.rawValue,
+                    width: dims.0, height: dims.1, depth: ColorDepth.thousands.rawValue,
                     useEnhancedFramebuffer: family.supportsEnhancedFramebuffer,
-                    cdImagePath: destination.path, bootFromCD: true, networking: true,
+                    cdImagePath: destination.path, bootFromCD: true, networking: family != .pippin,
                     sound: family.supportsSound, useG4CPU: family == .powerMacG4,
+                    pippinVideoOut: family == .pippin ? .ntsc : nil,
+                    flashImageName: family == .pippin ? "flash.img" : nil,
                     bundleURL: VMStore.shared.uniqueBundleURL(in: directory, name: trimmed))
                 if let vm = VMStore.shared.createVM(config) {
                     created = vm

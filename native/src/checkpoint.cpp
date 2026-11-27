@@ -212,7 +212,8 @@ QList<Entry> list(const QString &machineFolder) {
     if (cpInfo.isSymLink() || !cpInfo.isDir())
       continue;
     if (!QFileInfo(cpPath + QStringLiteral("/checkpoint.json")).isFile() ||
-        !QFileInfo(cpPath + QStringLiteral("/disk.img")).isFile())
+        (!QFileInfo(cpPath + QStringLiteral("/disk.img")).isFile() &&
+         !QFileInfo(cpPath + QStringLiteral("/flash.img")).isFile()))
       continue;
     try {
       const QJsonObject meta =
@@ -248,8 +249,13 @@ static Entry createImpl(const Model::Machine &machine, const QString &label,
   if (!QDir().mkpath(root))
     Model::fail(QStringLiteral("Cannot create the Checkpoints folder."));
 
-  const QString diskPath = Model::machineFile(
-      machine.folder, machine.config[QStringLiteral("diskImageName")].toString());
+  const bool isPippin = machine.family() == QLatin1String("pippin");
+  const QString primaryName =
+      isPippin ? Model::localName(machine.config[QStringLiteral("flashImageName")],
+                                  QStringLiteral("flash.img"))
+               : Model::localName(machine.config[QStringLiteral("diskImageName")],
+                                  QStringLiteral("disk.img"));
+  const QString diskPath = Model::machineFile(machine.folder, primaryName);
   const qint64 diskAlloc = allocatedBytesForFile(diskPath);
 
   const QString baseId =
@@ -272,16 +278,18 @@ static Entry createImpl(const Model::Machine &machine, const QString &label,
       QDir(staging).removeRecursively();
   });
 
-  const QString dstDisk = staging + QStringLiteral("/disk.img");
+  const QString dstDisk = staging + QLatin1Char('/') +
+                          (isPippin ? QStringLiteral("flash.img") : QStringLiteral("disk.img"));
   const QString method = copyFileCoW(
       diskPath, dstDisk, requireSpaceForFallback, diskAlloc + 256LL * 1048576);
 
-  if (machine.family() == QLatin1String("powerMacOSX")) {
+  if (machine.family() == QLatin1String("powerMacOSX") || isPippin) {
     const QString nvramPath =
         QFileInfo(machine.folder).canonicalFilePath() + QStringLiteral("/nvram.img");
     if (QFileInfo(nvramPath).isFile() && !QFileInfo(nvramPath).isSymLink())
       copyFileCoW(nvramPath, staging + QStringLiteral("/nvram.img"));
-  } else if (machine.family() == QLatin1String("quadra800")) {
+  }
+  if (machine.family() == QLatin1String("quadra800") || isPippin) {
     const QString pramName = Model::localName(
         machine.config[QStringLiteral("pramImageName")], QStringLiteral("pram.img"));
     const QString pramPath =
@@ -358,7 +366,9 @@ void restore(const Model::Machine &machine, const QString &checkpointId) {
   const QFileInfo cpInfo(cpDir);
   if (!cpInfo.exists() || cpInfo.isSymLink() || !cpInfo.isDir())
     Model::fail(QStringLiteral("That checkpoint does not exist."));
-  const QString cpDisk = cpDir + QStringLiteral("/disk.img");
+  const bool isPippin = machine.family() == QLatin1String("pippin");
+  const QString cpDisk =
+      cpDir + (isPippin ? QStringLiteral("/flash.img") : QStringLiteral("/disk.img"));
   if (!QFileInfo(cpDir + QStringLiteral("/checkpoint.json")).isFile() ||
       !QFileInfo(cpDisk).isFile())
     Model::fail(QStringLiteral("The checkpoint is incomplete."));
@@ -375,8 +385,11 @@ void restore(const Model::Machine &machine, const QString &checkpointId) {
       Model::fail(err);
   }
 
-  const QString diskName = Model::localName(
-      machine.config[QStringLiteral("diskImageName")], QStringLiteral("disk.img"));
+  const QString diskName =
+      isPippin ? Model::localName(machine.config[QStringLiteral("flashImageName")],
+                                  QStringLiteral("flash.img"))
+               : Model::localName(machine.config[QStringLiteral("diskImageName")],
+                                  QStringLiteral("disk.img"));
   const QString liveDisk = Model::machineFile(machine.folder, diskName);
 
   // Back up the current state before replacing live files.
@@ -400,14 +413,14 @@ void restore(const Model::Machine &machine, const QString &checkpointId) {
 
   copyFileCoW(cpDisk, tmpDisk);
   bool hasNvramRestore = false;
-  if (machine.family() == QLatin1String("powerMacOSX") &&
+  if ((machine.family() == QLatin1String("powerMacOSX") || isPippin) &&
       QFileInfo(cpNvram).isFile()) {
     copyFileCoW(cpNvram, tmpNvram);
     hasNvramRestore = true;
   }
   const QString cpPram = cpDir + QStringLiteral("/pram.img");
   bool hasPramRestore = false;
-  if (machine.family() == QLatin1String("quadra800") &&
+  if ((machine.family() == QLatin1String("quadra800") || isPippin) &&
       QFileInfo(cpPram).isFile()) {
     copyFileCoW(cpPram, tmpPram);
     hasPramRestore = true;

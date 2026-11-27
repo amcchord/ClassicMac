@@ -143,7 +143,7 @@ enum VMCheckpointStore {
               !state.clean,
               state.recoveryPrompted != true,
               !list(in: config.folder).isEmpty,
-              FileManager.default.fileExists(atPath: config.diskImageURL.path) else {
+              FileManager.default.fileExists(atPath: (config.machineFamily == .pippin ? config.flashImageURL : config.diskImageURL).path) else {
             return nil
         }
         state.recoveryPrompted = true
@@ -169,7 +169,8 @@ enum VMCheckpointStore {
             guard isValidCheckpointID(id) else { continue }
             let metaURL = dir.appendingPathComponent(metadataFileName)
             let diskURL = dir.appendingPathComponent("disk.img")
-            guard fm.fileExists(atPath: diskURL.path),
+            let flashURL = dir.appendingPathComponent("flash.img")
+            guard fm.fileExists(atPath: diskURL.path) || fm.fileExists(atPath: flashURL.path),
                   let data = try? Data(contentsOf: metaURL),
                   let checkpoint = try? decoder.decode(VMCheckpoint.self, from: data),
                   checkpoint.id == id else {
@@ -194,10 +195,12 @@ enum VMCheckpointStore {
         kind: CheckpointKind = .manual,
         now: Date = Date()
     ) throws -> VMCheckpoint {
-        try create(
+        let isPippin = config.machineFamily == .pippin
+        return try create(
             in: config.folder,
-            diskURL: config.diskImageURL,
-            pramURL: config.machineFamily.usesPRAMImage ? config.pramImageURL : nil,
+            diskURL: isPippin ? config.flashImageURL : config.diskImageURL,
+            primaryFileName: isPippin ? config.flashImageURL.lastPathComponent : "disk.img",
+            pramURL: (config.machineFamily.usesPRAMImage || isPippin) ? config.pramImageURL : nil,
             isOSX: config.machineFamily == .powerMacOSX,
             label: label,
             kind: kind,
@@ -215,6 +218,7 @@ enum VMCheckpointStore {
         _ = try? create(
             in: bundleURL,
             diskURL: diskURL,
+            primaryFileName: "disk.img",
             pramURL: fm.fileExists(atPath: pramURL.path) ? pramURL : nil,
             isOSX: fm.fileExists(atPath: nvramURL.path),
             label: "Fresh install",
@@ -228,6 +232,7 @@ enum VMCheckpointStore {
     private static func create(
         in bundleURL: URL,
         diskURL: URL,
+        primaryFileName: String = "disk.img",
         pramURL: URL?,
         isOSX: Bool,
         label: String,
@@ -253,7 +258,7 @@ enum VMCheckpointStore {
             }
         }
 
-        let stagedDisk = staging.appendingPathComponent("disk.img")
+        let stagedDisk = staging.appendingPathComponent(primaryFileName)
         let method = try cloneOrCopy(from: diskURL, to: stagedDisk)
 
         let nvramURL = bundleURL.appendingPathComponent("nvram.img")
@@ -300,13 +305,18 @@ enum VMCheckpointStore {
         }
         let fm = FileManager.default
         let cpDir = checkpointsDirectory(in: config.folder).appendingPathComponent(checkpointID, isDirectory: true)
-        let cpDisk = cpDir.appendingPathComponent("disk.img")
+        let isPippin = config.machineFamily == .pippin
+        let primaryFileName = isPippin ? config.flashImageURL.lastPathComponent : "disk.img"
+        let livePrimaryURL = isPippin ? config.flashImageURL : config.diskImageURL
+        let cpDisk = cpDir.appendingPathComponent(primaryFileName)
         let cpMeta = cpDir.appendingPathComponent(metadataFileName)
         guard fm.fileExists(atPath: cpDir.path), fm.fileExists(atPath: cpMeta.path) else {
             throw VMCheckpointError.notFound
         }
         guard fm.fileExists(atPath: cpDisk.path) else {
-            throw VMCheckpointError.invalidCheckpoint("This checkpoint's disk image is missing.")
+            throw VMCheckpointError.invalidCheckpoint(isPippin
+                ? "This checkpoint's Save Flash image is missing."
+                : "This checkpoint's disk image is missing.")
         }
 
         let cpNVRAM = cpDir.appendingPathComponent("nvram.img")
@@ -314,11 +324,11 @@ enum VMCheckpointStore {
             _ = try OSXNVRAM.validate(at: cpNVRAM)
         }
 
-        if createBackup, fm.fileExists(atPath: config.diskImageURL.path) {
+        if createBackup, fm.fileExists(atPath: livePrimaryURL.path) {
             _ = try create(for: config, label: "Pre-restore backup", kind: .preRestore)
         }
 
-        let tempDisk = config.folder.appendingPathComponent(".disk.img.restore.\(UUID().uuidString)")
+        let tempDisk = config.folder.appendingPathComponent(".\(primaryFileName).restore.\(UUID().uuidString)")
         defer { try? fm.removeItem(at: tempDisk) }
         let method = try cloneOrCopy(from: cpDisk, to: tempDisk)
 
@@ -335,13 +345,13 @@ enum VMCheckpointStore {
             _ = try cloneOrCopy(from: cpNVRAM, to: staged)
             tempNVRAM = staged
         }
-        if config.machineFamily.usesPRAMImage, fm.fileExists(atPath: cpPRAM.path) {
+        if (config.machineFamily.usesPRAMImage || isPippin), fm.fileExists(atPath: cpPRAM.path) {
             let staged = config.folder.appendingPathComponent(".pram.img.restore.\(UUID().uuidString)")
             _ = try cloneOrCopy(from: cpPRAM, to: staged)
             tempPRAM = staged
         }
 
-        guard Darwin.rename(tempDisk.path, config.diskImageURL.path) == 0 else {
+        guard Darwin.rename(tempDisk.path, livePrimaryURL.path) == 0 else {
             let err = String(cString: strerror(errno))
             throw VMCheckpointError.copyFailed(err)
         }

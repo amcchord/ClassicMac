@@ -83,6 +83,7 @@ flowchart TD
 
 By default, **Seamless mouse: move in and out freely** (`tabletInput`) is enabled in **Get Info… → General Information**:
 - ClassicMac attaches a virtual absolute pointing device (`virtio-tablet-device` on Quadra 800, `virtio-tablet-pci` on Power Mac G4, `usb-tablet` on Mac OS X), letting your cursor glide seamlessly between your host desktop and the classic Mac without clicking to capture.
+- **Apple / Bandai Pippin (`adb-applejack`):** Uses the ADB AppleJack relative pointer/controller profile; clicking inside the window captures relative motion (`Control-Option` releases the cursor).
 - When you launch a 3D game that switches the guest into relative pointer mode (`pointerRelative`), or if you uncheck **Seamless mouse** (for example, to use **USB Overdrive** or a relative USB mouse on Mac OS X), clicking the guest screen captures and hides the host cursor.
 - **Release Captured Mouse:**
   - **macOS:** Press **Control-Option** (`⌃⌥`).
@@ -103,6 +104,19 @@ When **Right-click and scroll wheel in classic apps** (`classicInputHelpers`, on
 
 - **On macOS:** While a guest screen has focus, `GuestScreenNSView` forwards every key—including `Command` (`⌘`) shortcuts such as `Command-Q`, `Command-W`, `Command-C`, and `Command-V`—directly to the guest Mac instead of ClassicMac's own menus (the one reserved host shortcut is `Control-Command-F` for full screen). `Caps Lock` tracks the guest keyboard's locking state.
 - **On Windows & Linux:** In **Get Info…**, toggle **Swap Alt and Command keys** (`swapAltCommand`, off by default) if you prefer pressing your PC keyboard's `Alt` key as the Macintosh `Command` (`⌘`) key instead of the `Windows` / `Super` key.
+
+### Pippin Key Mapping & Game Controllers (`Get Info → Controls`)
+
+For **Apple / Bandai Pippin** (`machineFamily == "pippin"`) on macOS, ClassicMac supports both custom **keyboard-to-AppleJack** bindings and physical **game controllers** (Xbox, PlayStation DualSense / DualShock, Nintendo Switch Pro, and MFi controllers via Apple `GameController`):
+
+- Open **Get Info… → Controls** (or click **Controls…** right in the running Pippin window toolbar—this pane can be edited live without shutting down).
+- **Keyboard Mapping (`keyboardMappingEnabled`):** Maps keys (defaults: `Arrows` = D-Pad, `W/A/S/D` = Blue/Yellow/Red/Green diamond buttons, `Z/X/C` = Square/Circle/Triangle, `Q/E` = Left/Right Triggers) to AppleJack controller buttons. Any unmapped key continues typing normally through `adb-keyboard`.
+- **Game Controllers (`gamepadEnabled`):** Automatically detects connected controllers and merges controller inputs with keyboard bindings over `-display classicmac` (`CMD_MSG_GAMEPAD = 23` -> `/machine/applejack`). Click **Set** next to any button to capture a physical controller input directly.
+- **Analog Sticks (`stickMode`, `stickSensitivity`, `stickDeadzone`):** Drives the AppleJack relative trackball (`POINTER_REL`) from either or both thumbsticks (or maps Left Stick to D-Pad and Right Stick to Trackball) with configurable speed (`0.5×–2.5×`).
+
+<p align="center">
+  <img src="../screenshots/manual/pippin-get-info-controls.png" width="540" alt="Get Info Controls pane for Apple / Bandai Pippin showing keyboard-to-AppleJack bindings, game controller mapping, and analog stick mode">
+</p>
 
 ---
 

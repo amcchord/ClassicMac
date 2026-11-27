@@ -88,7 +88,8 @@ flowchart TD
     B --> TPL["template-info.json (Catalog osVersion & provenance)"]
     B --> SES[".session-state.json (Clean/unclean shutdown state)"]
 
-    B --> QPRAM["pram.img (Quadra 800 only: PRAM & DefStartRec)"]
+    B --> QPRAM["pram.img (Quadra 800 PRAM & DefStartRec / Pippin 256 B CUDA PRAM)"]
+    B --> PFL["flash.img + nvram.img (Pippin only: 128 KiB Save Flash + 8 KiB NVRAM)"]
     B --> OXNV["nvram.img (OS X only: 16 KiB dual-bank Adler-32 flash)"]
     B --> COPF["bootrom.bin + nvram.bin + copland-rtc.bin (Copland only)"]
 
@@ -102,9 +103,10 @@ flowchart TD
 | File / Folder | Present On | Purpose |
 | :--- | :--- | :--- |
 | `config.json` | All machines | Persists `id`, `name`, `machineFamily`, `ramMB`, `diskSizeGB`, display size/depth, graphics card, media paths, input flags, sharing, and printing settings |
-| `disk.img` | All machines | Raw sparse disk image (`preallocation=off`). Directly mountable via `hdiutil` on macOS and compatible with classic Mac OS Apple Hard Disk drivers |
-| `pram.img` | Quadra 800 | 256/512-byte parameter RAM seeded from `pram-seed.img`; pre-launch writes `DefStartRec` (`0x78..0x7B`) to select SCSI ID 0 (HD), SCSI ID 3 (CD), or NuBus `0x0C/0xA0` (Floppy) |
-| `nvram.img` | Power Mac G4 — OS X | 16 KiB (`16,384` bytes) Core99 flash NVRAM containing two alternating 8,192-byte banks (`macosx-flash-seed.img`) |
+| `disk.img` | All disk-based Macs | Raw sparse disk image (`preallocation=off`). Directly mountable via `hdiutil` on macOS and compatible with classic Mac OS Apple Hard Disk drivers (omitted on `pippin`) |
+| `flash.img` | Apple / Bandai Pippin | 128 KiB (`131,072` bytes) raw Save Flash initialized to `0xFF` (`if=pflash`), persisting Pippin Navigator settings and game saves |
+| `pram.img` | Quadra 800 / Pippin | 256/512-byte parameter RAM (`pram-seed.img` on Quadra; 256 B CUDA PRAM on `if=mtd,index=1` on Pippin) |
+| `nvram.img` | Power Mac G4 — OS X / Pippin | 16 KiB Core99 dual-bank flash NVRAM (`macosx-flash-seed.img`) on OS X, or 8 KiB (`8,192` bytes, `if=mtd,index=0`) on Pippin |
 | `bootrom.bin`, `nvram.bin`, `copland-rtc.bin` | Copland D11E4 | Matched 4 MiB Power Mac 7500 ROM, 8,209-byte NVRAM (`DINGUSPPCNVRAM`), and persistent RTC checkpoint preventing date-rewind assertions |
 | `preview.png` | All machines | Last useful screen capture saved on shutdown (`MachinePreviewQuality.isUseful` filters blank/neutral boot frames) |
 | `.session-state.json` | All machines | Records `clean`, `lastExitReason`, `lastStartedAt`, `lastStoppedAt`, and `recoveryPrompted` so crashes can trigger an automatic `Pre-recovery backup` checkpoint |

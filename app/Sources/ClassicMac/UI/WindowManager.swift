@@ -153,11 +153,11 @@ final class WindowManager {
         return window
     }
 
-    func presentSettings(for id: UUID) {
+    func presentSettings(for id: UUID, initialPane: SettingsDialog.Pane? = nil) {
         guard let vm = VMStore.shared.vms.first(where: { $0.id == id }) else { return }
         showMain()
         presentDialog(title: "\(vm.name) Info", size: SettingsDialog.size) { handle in
-            SettingsDialog(original: vm, handle: handle)
+            SettingsDialog(original: vm, handle: handle, initialPane: initialPane)
         }
     }
 

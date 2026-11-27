@@ -1,0 +1,15 @@
+--- a/target/ppc/tcg-excp_helper.c
++++ b/target/ppc/tcg-excp_helper.c
+@@ -503,6 +503,12 @@
+         msr &= ~(1ULL << MSR_TGPR);
+     }
+ 
++    /*
++     * Bits 10..15 of SRR1 carry exception status (notably 603 DSTLB bit 15
++     * Store/Load at 1 << 16, which overlaps MSR:ILE); rfi does not update ILE.
++     */
++    msr = (msr & ~(1ULL << MSR_ILE)) | (env->msr & (1ULL << MSR_ILE));
++
+ #ifdef TARGET_PPC64
+     /* Switching to 32-bit ? Crop the nip */
+     if (!msr_is_64bit(env, msr)) {

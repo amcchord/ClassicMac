@@ -1,6 +1,6 @@
 # ClassicMac Repository Agent Guide
 
-ClassicMac (`VERSION`: `4.10.1`) runs classic 68k Macintosh (Quadra 800), PowerPC Macintosh (Power Mac G3/G4 with optional ATI 3D OpenGL acceleration and Copland D11E4), and early PowerPC Mac OS X (10.4.11 Tiger) inside a classic Apple Platinum desktop interface.
+ClassicMac (`VERSION`: `5.0.0`) runs classic 68k Macintosh (Quadra 800), PowerPC Macintosh (Power Mac G3/G4 with optional ATI 3D OpenGL acceleration and Copland D11E4), Apple / Bandai Pippin (`-M pippin`), and early PowerPC Mac OS X (10.4.11 Tiger) inside a classic Apple Platinum desktop interface.
 
 ## Repository Architecture
 
@@ -8,6 +8,7 @@ ClassicMac (`VERSION`: `4.10.1`) runs classic 68k Macintosh (Quadra 800), PowerP
 - `native/` — Shared C++/Qt6 native host runtime for Windows and Linux (`desktop/` builds Windows `.exe` / portable and Linux `.AppImage` / `.tar.gz`).
 - `ios/` — iPadOS / iOS beta host frontend.
 - `ati/` — ATI Rage 128 Pro & Radeon 7500/9200 (`qemu-system-ppc-ati`) FCode ROMs, OpenGL pass-through, and QEMU integration.
+- `pippin/` — Native QEMU Apple / Bandai Pippin (`-M pippin`) device models (`taos`, `grandcentral`, `mac_mesh`, `adb-applejack`, Save Flash / NVRAM) and Apple SCSI CD-ROM quirk patches applied to `qemu-system-ppc`.
 - `browser/` & `display/` — Optional loopback HTTP + WebSocket noVNC Browser Display (`BrowserDisplayServer`) and enhanced framebuffer notes.
 - `copland/` & `osx/` — Dedicated Copland D11E4 QEMU support (`qemu-system-ppc-copland`) and PowerPC Mac OS X (Tiger) NVRAM / shutdown / VirtIO docs.
 - `guestcd/` — Source manifest (`manifest.tsv`) and builder assets for `ClassicMac Tools.iso`.

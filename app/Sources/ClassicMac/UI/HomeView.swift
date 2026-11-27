@@ -9,6 +9,7 @@ extension MachineFamily {
         case .quadra800: return "quadra_800"
         case .powerMacG4, .powerMacOSX: return "powermac_g4"
         case .powerMac7500: return "powermac_7500"
+        case .pippin: return "apple_pippin"
         }
     }
 }
@@ -285,13 +286,20 @@ struct MachinePanel: View {
                     infoRow("Model:", vm.machineFamily.hardwareLabel)
                     infoRow("Mac OS:", osText)
                     infoRow("Memory:", "\(vm.ramMB) MB")
-                    infoRow("Hard disk:", diskText)
-                    infoRow("Screen:", screenText)
+                    if vm.machineFamily == .pippin {
+                        infoRow("Save Flash:", "128 KB")
+                        infoRow("Video:", vm.effectivePippinVideoOut.label)
+                    } else {
+                        infoRow("Hard disk:", diskText)
+                        infoRow("Screen:", screenText)
+                    }
                     if vm.machineFamily == .powerMacG4 {
                         infoRow("Graphics:", graphicsText)
                     }
-                    infoRow("Sharing:", sharingText)
-                    infoRow("Printing:", printingText)
+                    if vm.machineFamily != .pippin {
+                        infoRow("Sharing:", sharingText)
+                        infoRow("Printing:", printingText)
+                    }
                 }
                 Spacer(minLength: 0)
                 VStack(alignment: .trailing, spacing: 10) {
@@ -408,6 +416,13 @@ struct MachinePanel: View {
                     InstallStep(number: 2, text: "In Installer, open Options… and turn off Update Apple Hard Disk Drivers, then install.")
                     InstallStep(number: 3, text: "Restart. Once Mac OS is installed, the Mac starts from its hard disk by itself.")
                 }
+            }
+        } else if vm.machineFamily == .pippin && !running && PippinMachine.resolveROMURL(for: vm) == nil {
+            HStack(alignment: .top, spacing: 8) {
+                PlatinumIcon("caution", size: 16)
+                Text("Select a 4 MB Pippin Kinka boot ROM in Get Info… (or place pippin.rom inside this bundle) before starting.")
+                    .platinumText(.detail)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         } else if copland {
             Text("Control-G captures or releases the mouse. Control-+ and Control-− scale the window; Control-F toggles full screen.")

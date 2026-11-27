@@ -1,0 +1,91 @@
+diff --git a/hw/scsi/scsi-disk.c b/hw/scsi/scsi-disk.c
+--- a/hw/scsi/scsi-disk.c
++++ b/hw/scsi/scsi-disk.c
+@@ -1139,6 +1139,7 @@ static int mode_sense_page(SCSIDiskState *s, int page, uint8_t **p_outbuf,
+         [MODE_PAGE_AUDIO_CTL]              = (1 << TYPE_ROM),
+         [MODE_PAGE_CAPABILITIES]           = (1 << TYPE_ROM),
+         [MODE_PAGE_APPLE_VENDOR]           = (1 << TYPE_DISK) | (1 << TYPE_ROM),
++        [0x31]                             = (1 << TYPE_ROM),
+     };
+ 
+     uint8_t *p = *p_outbuf + 2;
+@@ -1301,6 +1302,20 @@ static int mode_sense_page(SCSIDiskState *s, int page, uint8_t **p_outbuf,
+             return -1;
+         }
+ 
++    case 0x31: /* Apple Features page */
++        if (s->qdev.type == TYPE_ROM &&
++            (s->quirks & (1 << SCSI_DISK_QUIRK_MODE_PAGE_APPLE_VENDOR))) {
++            length = 6;
++            if (page_control == 1) { /* Changeable Values */
++                break;
++            }
++            memset(p, 0, length);
++            memcpy(p, ".App", 4);
++            break;
++        } else {
++            return -1;
++        }
++
+     case MODE_PAGE_VENDOR_SPECIFIC:
+         if (s->qdev.type == TYPE_DISK && (s->quirks &
+             (1 << SCSI_DISK_QUIRK_MODE_PAGE_VENDOR_SPECIFIC_APPLE))) {
+@@ -1453,6 +1468,9 @@ static int scsi_disk_emulate_read_toc(SCSIRequest *req, uint8_t *outbuf)
+ 
+     msf = req->cmd.buf[1] & 2;
+     format = req->cmd.buf[2] & 0xf;
++    if (format == 0 && (s->quirks & (1 << SCSI_DISK_QUIRK_MODE_PAGE_APPLE_VENDOR))) {
++        format = (req->cmd.buf[9] >> 6) & 0x3;
++    }
+     start_track = req->cmd.buf[6];
+     blk_get_geometry(s->qdev.conf.blk, &nb_sectors);
+     trace_scsi_disk_emulate_read_toc(start_track, format, msf >> 1);
+@@ -1468,6 +1486,15 @@ static int scsi_disk_emulate_read_toc(SCSIRequest *req, uint8_t *outbuf)
+         outbuf[1] = 0x0a;
+         outbuf[2] = 0x01;
+         outbuf[3] = 0x01;
++        if (s->quirks & (1 << SCSI_DISK_QUIRK_MODE_PAGE_APPLE_VENDOR)) {
++            outbuf[5] = 0x14;
++            outbuf[6] = 0x01;
++            if (msf) {
++                outbuf[9] = 0;
++                outbuf[10] = 2;
++                outbuf[11] = 0;
++            }
++        }
+         break;
+     case 2:
+         toclen = cdrom_read_toc_raw(nb_sectors, outbuf, msf, start_track);
+@@ -1698,6 +1725,12 @@ static void scsi_disk_emulate_mode_select(SCSIDiskReq *r, uint8_t *inbuf)
+     len -= bd_len;
+     p += bd_len;
+ 
++    if (s->qdev.type == TYPE_ROM &&
++        (s->quirks & (1 << SCSI_DISK_QUIRK_MODE_PAGE_VENDOR_SPECIFIC_APPLE))) {
++        scsi_req_complete(&r->req, GOOD);
++        return;
++    }
++
+     /* Ensure no change is made if there is an error!  */
+     for (pass = 0; pass < 2; pass++) {
+         if (mode_select_pages(r, p, len, pass == 1) < 0) {
+@@ -2270,6 +2303,11 @@ static int32_t scsi_disk_emulate_command(SCSIRequest *req, uint8_t *buf)
+     case FORMAT_UNIT:
+         trace_scsi_disk_emulate_command_FORMAT_UNIT(r->req.cmd.xfer);
+         break;
++    case SET_CD_SPEED:
++        if (s->qdev.type != TYPE_ROM) {
++            goto illegal_request;
++        }
++        break;
+     default:
+         trace_scsi_disk_emulate_command_UNKNOWN(buf[0],
+                                                 scsi_command_name(buf[0]));
+@@ -2684,6 +2722,7 @@ static const SCSIReqOps *const scsi_disk_reqops_dispatch[256] = {
+     [ALLOW_MEDIUM_REMOVAL]            = &scsi_disk_emulate_reqops,
+     [READ_CAPACITY_10]                = &scsi_disk_emulate_reqops,
+     [READ_TOC]                        = &scsi_disk_emulate_reqops,
++    [SET_CD_SPEED]                    = &scsi_disk_emulate_reqops,
+     [READ_DVD_STRUCTURE]              = &scsi_disk_emulate_reqops,
+     [READ_DISC_INFORMATION]           = &scsi_disk_emulate_reqops,
+     [GET_CONFIGURATION]               = &scsi_disk_emulate_reqops,

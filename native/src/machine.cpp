@@ -94,7 +94,8 @@ QJsonObject validate(QJsonObject c) {
                              ? QStringLiteral("quadra800")
                              : QStringLiteral("powerMacG4");
   auto family = c["machineFamily"].toString();
-  if (!QStringList{"powerMacG4", "quadra800", "powerMac7500", "powerMacOSX"}
+  if (!QStringList{"powerMacG4", "quadra800", "powerMac7500", "powerMacOSX",
+                   "pippin"}
            .contains(family))
     fail("Unknown Mac model.");
   auto name = c["name"].toString().trimmed();
@@ -103,17 +104,19 @@ QJsonObject validate(QJsonObject c) {
     fail("Give your Mac a name of up to 100 characters.");
   c["name"] = name;
   bool quad = family == "quadra800", copland = family == "powerMac7500";
-  bool osx = family == "powerMacOSX";
+  bool osx = family == "powerMacOSX", pippin = family == "pippin";
   const int defaultRam = quad      ? 128
                          : copland ? 32
                          : osx     ? 1024
+                         : pippin  ? 13
                                    : 512;
-  const int minRam = quad ? 16 : osx ? 256 : 32;
+  const int minRam = quad ? 16 : osx ? 256 : pippin ? 5 : 32;
   const int maxRam = quad      ? 1000
                      : copland ? 32
                      : osx     ? 2048
+                     : pippin  ? 16
                                : 896;
-  int ram = integer(c, "ramMB", defaultRam, 8, 65536);
+  int ram = integer(c, "ramMB", defaultRam, 5, 65536);
   c["ramMB"] = std::clamp(ram, minRam, maxRam);
   int width = integer(c, "width", 1024, 480, 3840);
   int height = integer(c, "height", 768, 384, 2160);
@@ -122,6 +125,29 @@ QJsonObject validate(QJsonObject c) {
     fail("Unsupported color depth.");
   c["diskImageName"] = localName(c["diskImageName"], "disk.img");
   c["pramImageName"] = localName(c["pramImageName"], "pram.img");
+  if (pippin) {
+    QString videoOut =
+        c.contains("pippinVideoOut") && c["pippinVideoOut"].isString()
+            ? c["pippinVideoOut"].toString()
+            : QStringLiteral("ntsc");
+    if (!QStringList{"ntsc", "pal", "vga"}.contains(videoOut))
+      videoOut = QStringLiteral("ntsc");
+    c["pippinVideoOut"] = videoOut;
+    c["flashImageName"] = localName(c["flashImageName"], "flash.img");
+    if (c.contains("pippinROMPath") && !c["pippinROMPath"].isNull()) {
+      if (!c["pippinROMPath"].isString() ||
+          c["pippinROMPath"].toString().contains(QChar(0)))
+        fail("Invalid pippinROMPath option.");
+      const QString trimmedRom = c["pippinROMPath"].toString().trimmed();
+      if (trimmedRom.isEmpty())
+        c.remove("pippinROMPath");
+      else
+        c["pippinROMPath"] = trimmedRom;
+    }
+    if (c.contains("pippinControls") && !c["pippinControls"].isNull() &&
+        !c["pippinControls"].isObject())
+      fail("Invalid pippinControls option.");
+  }
   if (!c.contains("graphicsCard") || c["graphicsCard"].isNull())
     c["graphicsCard"] = "standard";
   if (!QStringList{"standard", "atiRadeon"}.contains(
@@ -202,13 +228,30 @@ QJsonObject validate(QJsonObject c) {
     c["classicInputHelpers"] = false;
     c["toolsCDInserted"] = false;
   }
+  if (pippin) {
+    const QString videoOut = c["pippinVideoOut"].toString("ntsc");
+    c["width"] = 640;
+    c["height"] = videoOut == "pal" ? 512 : 480;
+    c["depth"] = 16;
+    c["diskSizeGB"] = 0;
+    c["graphicsCard"] = "standard";
+    c["networking"] = false;
+    c["printingEnabled"] = false;
+    c.remove("printerName");
+    c["tabletInput"] = false;
+    c["classicInputHelpers"] = false;
+    c["toolsCDInserted"] = false;
+  }
   for (auto key : {"cdImagePath", "floppyImagePath", "sharedFolderPath"})
     if (c.contains(key) && !c[key].isNull() &&
         (!c[key].isString() || c[key].toString().contains(QChar(0))))
       fail("Invalid media path.");
-  if (osx) {
+  if (osx || pippin) {
     c.remove("sharedFolderPath");
     c.remove("floppyImagePath");
+  }
+  if (pippin) {
+    c["bootFromCD"] = !c["cdImagePath"].toString().trimmed().isEmpty();
   }
   if (!quad || c["floppyImagePath"].toString().isEmpty() ||
       c["bootFromCD"].toBool()) {
@@ -220,7 +263,10 @@ QJsonObject freshConfig(QString name, QString family) {
   return validate({{"id", QUuid::createUuid().toString(QUuid::WithoutBraces)},
                    {"name", name},
                    {"machineFamily", family},
-                   {"diskSizeGB", family == "quadra800" ? 2 : 32}});
+                   {"diskSizeGB",
+                    family == "quadra800" ? 2
+                    : family == "pippin"  ? 0
+                                          : 32}});
 }
 Machine readMachine(const QString &folder) {
   auto raw = readJSON(machineFile(folder, "config.json"));
@@ -241,7 +287,10 @@ Machine readMachine(const QString &folder) {
         hasPram ? QStringLiteral("quadra800") : QStringLiteral("powerMacG4");
   }
   auto c = validate(raw);
-  machineFile(folder, c["diskImageName"].toString());
+  if (c["machineFamily"].toString() == "pippin")
+    machineFile(folder, c["flashImageName"].toString("flash.img"));
+  else
+    machineFile(folder, c["diskImageName"].toString());
   return {QFileInfo(folder).canonicalFilePath(), c};
 }
 QString uniqueFolder(const QString &parent, const QString &name) {
@@ -291,22 +340,42 @@ QString binary(const QString &name) {
 }
 Machine createMachine(QString name, QString family, int size,
                       const QString &parent, const QString &cd) {
-  if (!QStringList{"powerMacG4", "quadra800", "powerMacOSX"}.contains(family) ||
-      !QList<int>{1, 2, 4, 8, 16, 32, 64, 120}.contains(size))
+  const bool pippin = family == "pippin";
+  if (!QStringList{"powerMacG4", "quadra800", "powerMacOSX", "pippin"}.contains(
+          family) ||
+      (!pippin && !QList<int>{1, 2, 4, 8, 16, 32, 64, 120}.contains(size)))
     fail("Choose a supported Mac model and disk capacity.");
   auto c = freshConfig(name, family);
-  c["diskSizeGB"] = size;
+  c["diskSizeGB"] = pippin ? 0 : size;
   QString folder = uniqueFolder(parent, name);
   bool complete = false;
   auto cleanup = qScopeGuard([&] {
     if (!complete)
       QDir(folder).removeRecursively();
   });
-  QFile disk(folder + "/disk.img");
-  if (!disk.open(QFile::WriteOnly | QFile::NewOnly) || !makeSparse(disk) ||
-      !disk.resize(qint64(size) * 1073741824))
-    fail("Could not create a sparse hard disk.");
-  disk.close();
+  if (pippin) {
+    QFile flash(folder + "/" + c["flashImageName"].toString("flash.img"));
+    if (!flash.open(QFile::WriteOnly | QFile::NewOnly))
+      fail("Could not create Pippin Save Flash storage.");
+    flash.write(QByteArray(131072, char(0xff)));
+    flash.close();
+    QFile nvram(folder + "/nvram.img");
+    if (nvram.open(QFile::WriteOnly | QFile::NewOnly)) {
+      nvram.write(QByteArray(8192, char(0x00)));
+      nvram.close();
+    }
+    QFile pram(folder + "/pram.img");
+    if (pram.open(QFile::WriteOnly | QFile::NewOnly)) {
+      pram.write(QByteArray(256, char(0x00)));
+      pram.close();
+    }
+  } else {
+    QFile disk(folder + "/disk.img");
+    if (!disk.open(QFile::WriteOnly | QFile::NewOnly) || !makeSparse(disk) ||
+        !disk.resize(qint64(size) * 1073741824))
+      fail("Could not create a sparse hard disk.");
+    disk.close();
+  }
   if (family == "quadra800") {
     const QString pram = folder + "/pram.img";
     if (!QFile::copy(runtime() + "/pram-seed.img", pram))
@@ -536,10 +605,12 @@ QStringList qemuArguments(const Machine &m, int port,
   auto s = [&](const char *k) { return c[k].toString(); };
   auto b = [&](const char *k) { return c[k].toBool(); };
   auto opt = [](QString v) { return v.replace(",", ",,"); };
-  auto disk = opt(m.folder + "/" + s("diskImageName"));
   auto r = runtime();
   if (m.family() == "powerMac7500")
     fail("Copland requires the macOS edition.");
+  auto disk = m.family() == "pippin"
+                  ? opt(m.folder + "/" + s("flashImageName"))
+                  : opt(m.folder + "/" + s("diskImageName"));
 #ifdef Q_OS_WIN
   if (!s("sharedFolderPath").isEmpty())
     fail("Host folder sharing requires Linux or macOS. Turn it off in Media "
@@ -613,6 +684,45 @@ QStringList qemuArguments(const Machine &m, int port,
                    "none",
                    "-action",
                    "reboot=shutdown"};
+  if (m.family() == "pippin") {
+    const QString videoOut =
+        c["pippinVideoOut"].toString(QStringLiteral("ntsc"));
+    QString romPath = s("pippinROMPath");
+    if (romPath.isEmpty()) {
+      for (const QString &candidate :
+           {m.folder + "/pippin.rom", m.folder + "/kinka13.rom",
+            r + "/pippin.rom"}) {
+        if (QFileInfo::exists(candidate)) {
+          romPath = candidate;
+          break;
+        }
+      }
+      if (romPath.isEmpty())
+        romPath = m.folder + "/pippin.rom";
+    }
+    const QString nvramPath = opt(m.folder + "/nvram.img");
+    const QString pramPath = opt(m.folder + "/pram.img");
+    a << "-accel" << "tcg,tb-size=512"
+      << "-M" << QString("pippin,video-out=%1,audiodev=snd0").arg(videoOut)
+      << "-bios" << romPath << "-drive"
+      << "file=" + disk + ",if=pflash,format=raw" << "-drive"
+      << "file=" + nvramPath + ",if=mtd,index=0,format=raw" << "-drive"
+      << "file=" + pramPath + ",if=mtd,index=1,format=raw";
+    if (!s("cdImagePath").isEmpty())
+      a << "-drive"
+        << "file=" + opt(s("cdImagePath")) +
+               ",if=none,id=cd0,media=cdrom,readonly=on,format=raw";
+    else
+      a << "-drive" << "if=none,id=cd0,media=cdrom,readonly=on";
+    a << "-device"
+      << "scsi-cd,bus=mesh-scsi.0,scsi-id=3,drive=cd0,"
+         "vendor=SONY    ,product=CD-ROM CDU-8003A,ver=1.9a,"
+         "quirk_mode_page_apple_vendor=on,"
+         "quirk_mode_sense_rom_use_dbd=on,"
+         "quirk_mode_page_vendor_specific_apple=on,"
+         "quirk_mode_page_truncated=on";
+    return a;
+  }
   if (m.family() == "powerMacOSX") {
     const auto width = c["width"].toInt() / 8 * 8;
     const auto height = c["height"].toInt();

@@ -55,7 +55,7 @@ struct MediaDrawerView: View {
                 }
                 status
                 PlatinumGroupBox("CD") { drive(.disc, icon: "cd") }
-                if config.machineFamily != .powerMacOSX {
+                if config.machineFamily != .powerMacOSX && config.machineFamily != .pippin {
                     PlatinumGroupBox("ClassicMac Tools") {
                         VStack(alignment: .leading, spacing: 6) {
                             drive(.tools, icon: "cd")
@@ -75,23 +75,25 @@ struct MediaDrawerView: View {
                         }
                     }
                 }
-                HStack(alignment: .top, spacing: 10) {
-                    Text("Start up from:").platinumText(.emphasis)
-                    if config.machineFamily == .quadra800 {
-                        PlatinumRadioGroup(selection: startupSelection, options: [
-                            (.hardDisk, "Hard disk", true),
-                            (.cd, "CD", config.cdImagePath?.isEmpty == false),
-                            (.floppy, "Floppy", config.floppyImagePath?.isEmpty == false),
-                        ])
-                        .disabled(busy)
-                    } else {
-                        PlatinumRadioGroup(selection: $config.bootFromCD, options: [
-                            (false, "Hard disk", true),
-                            (true, "CD", config.cdImagePath?.isEmpty == false),
-                        ])
-                        .disabled(busy)
+                if config.machineFamily.supportsHardDisk {
+                    HStack(alignment: .top, spacing: 10) {
+                        Text("Start up from:").platinumText(.emphasis)
+                        if config.machineFamily == .quadra800 {
+                            PlatinumRadioGroup(selection: startupSelection, options: [
+                                (.hardDisk, "Hard disk", true),
+                                (.cd, "CD", config.cdImagePath?.isEmpty == false),
+                                (.floppy, "Floppy", config.floppyImagePath?.isEmpty == false),
+                            ])
+                            .disabled(busy)
+                        } else {
+                            PlatinumRadioGroup(selection: $config.bootFromCD, options: [
+                                (false, "Hard disk", true),
+                                (true, "CD", config.cdImagePath?.isEmpty == false),
+                            ])
+                            .disabled(busy)
+                        }
+                        Spacer(minLength: 0)
                     }
-                    Spacer(minLength: 0)
                 }
                 if !visibleRecents.isEmpty {
                     recentsSection
@@ -103,7 +105,7 @@ struct MediaDrawerView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(Platinum.face.color)
         .task(id: "\(config.id):\(isRunning)") {
-            guard config.machineFamily != .powerMacOSX else { return }
+            guard config.machineFamily == .quadra800 || config.machineFamily == .powerMacG4 else { return }
             while !Task.isCancelled {
                 await controller.refresh(config.id, running: isRunning)
                 do { try await Task.sleep(nanoseconds: 2_000_000_000) } catch { return }
@@ -130,7 +132,7 @@ struct MediaDrawerView: View {
 
     private var visibleRecents: [RecentMedia] {
         recents.items.filter {
-            if config.machineFamily == .powerMacOSX { return $0.device == .disc }
+            if config.machineFamily == .powerMacOSX || config.machineFamily == .pippin { return $0.device == .disc }
             return $0.device != .floppy || config.machineFamily.supportsFloppyDisk
         }
     }
@@ -188,8 +190,8 @@ struct MediaDrawerView: View {
         let savedPath = device.path(in: config)
         let runningDrive = snapshot?[device]
         let runningPath = runningDrive?.inserted == true ? runningDrive?.path : nil
-        let checking = isRunning && snapshot == nil && config.machineFamily != .powerMacOSX
-        let displayedPath = isRunning && config.machineFamily != .powerMacOSX ? runningPath : savedPath
+        let checking = isRunning && snapshot == nil && config.machineFamily != .powerMacOSX && config.machineFamily != .pippin
+        let displayedPath = isRunning && config.machineFamily != .powerMacOSX && config.machineFamily != .pippin ? runningPath : savedPath
         let available = displayedPath.map { FileManager.default.isReadableFile(atPath: $0) } ?? true
         let liveBlocked = live && (isPaused || snapshot == nil)
         HStack(alignment: .center, spacing: 10) {
@@ -200,7 +202,7 @@ struct MediaDrawerView: View {
                     .platinumText(displayedPath == nil ? .disabled : .emphasis)
                     .lineLimit(1).truncationMode(.middle)
                     .help(displayedPath ?? "")
-                if isRunning && (config.machineFamily == .powerMacG4 || config.machineFamily == .powerMacOSX || (live && runningPath != savedPath && snapshot != nil)) {
+                if isRunning && (config.machineFamily == .powerMacG4 || config.machineFamily == .powerMacOSX || config.machineFamily == .pippin || (live && runningPath != savedPath && snapshot != nil)) {
                     Text("Next startup: \(savedPath.map { URL(fileURLWithPath: $0).lastPathComponent } ?? "nothing")")
                         .platinumText(.detail).lineLimit(1).truncationMode(.middle)
                 }
@@ -226,11 +228,15 @@ struct MediaDrawerView: View {
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = false
         panel.prompt = isRunning && !live ? "Use Next Startup" : "Insert"
-        let extensions = device == .floppy ? ["img", "dsk", "ima", "raw"] : ["iso", "toast", "cdr", "img", "raw"]
+        let extensions = device == .floppy
+            ? ["img", "dsk", "ima", "raw"]
+            : (config.machineFamily == .pippin ? ["iso", "bin", "cue", "toast", "cdr", "img", "raw"] : ["iso", "toast", "cdr", "img", "raw"])
         panel.allowedContentTypes = extensions.compactMap { UTType(filenameExtension: $0) }
         panel.message = device == .floppy
             ? "Choose a writable raw floppy image (.img, .dsk, .ima or .raw)."
-            : "Choose an uncompressed CD image (.iso, .toast, .cdr or .img)."
+            : (config.machineFamily == .pippin
+               ? "Choose a Pippin disc image (.iso, .bin, .cue, .toast, .cdr or .img)."
+               : "Choose an uncompressed CD image (.iso, .toast, .cdr or .img).")
         if let replacingRecent { panel.nameFieldStringValue = replacingRecent.name }
         guard panel.runModal() == .OK, let url = panel.url else { return }
         change(device, path: url.path, replacingRecent: replacingRecent)
@@ -241,8 +247,13 @@ struct MediaDrawerView: View {
         let fallback = config
         Task {
             if await controller.change(device, path: path, config: fallback, running: isRunning, paused: isPaused) {
+                let effectivePath = controller.resolvedPaths[vmID] ?? path
                 let latest = VMStore.shared.vms.first(where: { $0.id == vmID }) ?? fallback
-                config = device.setting(path: path, in: latest)
+                var updated = device.setting(path: effectivePath, in: latest)
+                if updated.machineFamily == .pippin && device == .disc {
+                    updated.bootFromCD = effectivePath?.isEmpty == false
+                }
+                config = updated
                 if let replacingRecent { recents.forget(replacingRecent) }
             }
         }

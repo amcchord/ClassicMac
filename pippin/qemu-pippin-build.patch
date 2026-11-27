@@ -1,0 +1,125 @@
+diff --git a/hw/display/Kconfig b/hw/display/Kconfig
+index 1111111..2222222 100644
+--- a/hw/display/Kconfig
++++ b/hw/display/Kconfig
+@@ -136,6 +136,10 @@ config MAC_QFB
+     bool
+     select FRAMEBUFFER
+     depends on NUBUS
++
++config PIPPIN_TAOS
++    bool
++    select FRAMEBUFFER
+ 
+ config XLNX_DISPLAYPORT
+     bool
+diff --git a/hw/display/meson.build b/hw/display/meson.build
+index 1111111..2222222 100644
+--- a/hw/display/meson.build
++++ b/hw/display/meson.build
+@@ -32,6 +32,7 @@ system_ss.add(when: 'CONFIG_TCX', if_true: files('tcx.c'))
+ system_ss.add(when: 'CONFIG_CG3', if_true: files('cg3.c'))
+ system_ss.add(when: 'CONFIG_MACFB', if_true: files('macfb.c'))
+ system_ss.add(when: 'CONFIG_MAC_QFB', if_true: files('mac_qfb.c'))
++system_ss.add(when: 'CONFIG_PIPPIN_TAOS', if_true: files('pippin_taos.c'))
+ system_ss.add(when: 'CONFIG_NEXTCUBE', if_true: files('next-fb.c'))
+ 
+ system_ss.add(when: 'CONFIG_VGA', if_true: files('vga.c'))
+diff --git a/hw/input/meson.build b/hw/input/meson.build
+index 1111111..2222222 100644
+--- a/hw/input/meson.build
++++ b/hw/input/meson.build
+@@ -1,5 +1,5 @@
+ system_ss.add(files('hid.c'))
+-system_ss.add(when: 'CONFIG_ADB', if_true: files('adb.c', 'adb-mouse.c', 'adb-kbd.c'))
++system_ss.add(when: 'CONFIG_ADB', if_true: files('adb.c', 'adb-mouse.c', 'adb-kbd.c', 'adb-applejack.c'))
+ system_ss.add(when: 'CONFIG_PCKBD', if_true: files('pckbd.c'))
+ system_ss.add(when: 'CONFIG_PL050', if_true: files('pl050.c'))
+ system_ss.add(when: 'CONFIG_PS2', if_true: files('ps2.c'))
+diff --git a/hw/misc/macio/Kconfig b/hw/misc/macio/Kconfig
+index 1111111..2222222 100644
+--- a/hw/misc/macio/Kconfig
++++ b/hw/misc/macio/Kconfig
+@@ -9,3 +9,6 @@ config MAC_DBDMA
+ 
+ config MACIO_GPIO
+     bool
++
++config GRANDCENTRAL
++    bool
+diff --git a/hw/misc/macio/meson.build b/hw/misc/macio/meson.build
+index 1111111..2222222 100644
+--- a/hw/misc/macio/meson.build
++++ b/hw/misc/macio/meson.build
+@@ -4,5 +4,6 @@ macio_ss.add(when: 'CONFIG_CUDA', if_true: files('cuda.c'))
+ macio_ss.add(when: 'CONFIG_MACIO_GPIO', if_true: files('gpio.c'))
+ macio_ss.add(when: 'CONFIG_MAC_DBDMA', if_true: files('mac_dbdma.c'))
+ macio_ss.add(when: 'CONFIG_MAC_PMU', if_true: files('pmu.c'))
++macio_ss.add(when: 'CONFIG_GRANDCENTRAL', if_true: files('grandcentral.c'))
+ 
+ system_ss.add_all(when: 'CONFIG_MACIO', if_true: macio_ss)
+diff --git a/hw/ppc/Kconfig b/hw/ppc/Kconfig
+index 1111111..2222222 100644
+--- a/hw/ppc/Kconfig
++++ b/hw/ppc/Kconfig
+@@ -135,6 +135,20 @@ config MAC_OLDWORLD
+     select FW_CFG_PPC
+     select SCREAMER
+ 
++config MAC_PIPPIN
++    bool
++    default y
++    depends on PPC
++    select ADB
++    select MACIO
++    select CUDA
++    select MAC_DBDMA
++    select ESCC
++    select SCREAMER
++    select MAC_MESH
++    select PIPPIN_TAOS
++    select GRANDCENTRAL
++
+ config MAC_NEWWORLD
+     bool
+     default y
+diff --git a/hw/ppc/meson.build b/hw/ppc/meson.build
+index 1111111..2222222 100644
+--- a/hw/ppc/meson.build
++++ b/hw/ppc/meson.build
+@@ -73,6 +73,8 @@ ppc_ss.add(when: 'CONFIG_PREP', if_true: files('prep_systemio.c'))
+ ppc_ss.add(when: 'CONFIG_RS6000_MC', if_true: files('rs6000_mc.c'))
+ # OldWorld PowerMac
+ ppc_ss.add(when: 'CONFIG_MAC_OLDWORLD', if_true: files('mac_oldworld.c'))
++# Apple / Bandai Pippin
++ppc_ss.add(when: 'CONFIG_MAC_PIPPIN', if_true: files('mac_pippin.c'))
+ # NewWorld PowerMac
+ ppc_ss.add(when: 'CONFIG_MAC_NEWWORLD', if_true: files('mac_newworld.c'))
+ # e500
+diff --git a/hw/scsi/Kconfig b/hw/scsi/Kconfig
+index 1111111..2222222 100644
+--- a/hw/scsi/Kconfig
++++ b/hw/scsi/Kconfig
+@@ -34,6 +34,10 @@ config ESP
+     bool
+     select SCSI
+ 
++config MAC_MESH
++    bool
++    select SCSI
++
+ config ESP_PCI
+     bool
+     default y if PCI_DEVICES
+diff --git a/hw/scsi/meson.build b/hw/scsi/meson.build
+index 1111111..2222222 100644
+--- a/hw/scsi/meson.build
++++ b/hw/scsi/meson.build
+@@ -9,6 +9,7 @@ scsi_ss.add(files(
+   'scsi-generic.c',
+ ))
+ scsi_ss.add(when: 'CONFIG_ESP', if_true: files('esp.c'))
++scsi_ss.add(when: 'CONFIG_MAC_MESH', if_true: files('mac_mesh.c'))
+ scsi_ss.add(when: 'CONFIG_ESP_PCI', if_true: files('esp-pci.c'))
+ scsi_ss.add(when: 'CONFIG_LSI_SCSI_PCI', if_true: files('lsi53c895a.c'))
+ scsi_ss.add(when: 'CONFIG_NCR710_SCSI', if_true: files('ncr53c710.c', 'lasi_ncr710.c'))

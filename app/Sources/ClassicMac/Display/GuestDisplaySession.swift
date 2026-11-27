@@ -7,7 +7,7 @@ import CDisplaySocket
 enum DisplayMessage: UInt32 {
     case hello = 1, surface = 2, damage = 3, guestEvent = 4, cursor = 5, mouse = 6
     case key = 16, pointerAbsolute = 17, button = 18, resize = 19, releaseAll = 20
-    case refreshRate = 21, pointerRelative = 22
+    case refreshRate = 21, pointerRelative = 22, gamepad = 23
 }
 
 struct DamageRect: Equatable {
@@ -506,7 +506,7 @@ final class GuestDisplaySession: @unchecked Sendable {
     func send(_ type: DisplayMessage, _ words: [UInt32] = []) {
         queue.async { [weak self] in
             guard let self, self.connectionFD >= 0 else { return }
-            if type == .button || type == .key || type == .releaseAll {
+            if type == .button || type == .key || type == .gamepad || type == .releaseAll {
                 self.enqueuePendingMotion()
             }
             self.enqueueMessage(type, words)
@@ -515,6 +515,7 @@ final class GuestDisplaySession: @unchecked Sendable {
     }
 
     func key(_ qcode: UInt32, down: Bool) { send(.key, [qcode, down ? 1 : 0]) }
+    func gamepad(buttons: UInt32) { send(.gamepad, [buttons]) }
 
     func pointer(x: Int, y: Int) {
         let px = UInt32(max(0, x))

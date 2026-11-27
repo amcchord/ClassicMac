@@ -46,12 +46,14 @@ static void performAction(const std::function<void()> &action) {
 static QString iconName(const QString &f) {
   return f == "quadra800"      ? "quadra_800"
          : f == "powerMac7500" ? "powermac_7500"
+         : f == "pippin"       ? "apple_pippin"
                                : "powermac_g4";
 }
 static QString modelName(const QString &f) {
   return f == "quadra800"      ? "Quadra 800"
          : f == "powerMac7500" ? "Power Mac 7500"
          : f == "powerMacOSX"  ? "Power Mac G4 — Mac OS X"
+         : f == "pippin"       ? "Apple / Bandai Pippin"
                                : "Power Mac G4";
 }
 class MachineDelegate : public QStyledItemDelegate {

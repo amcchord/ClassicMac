@@ -84,7 +84,7 @@ As a result, a clean **Mac OS 9.2.1** download with a `32 GB` logical startup di
 
 ## Complete Guide to Available Editions
 
-The sections below list the downloadable editions served by ClassicMac 4.10.1's dual catalogs, grouped by OS category. Download sizes reflect the active `thinArchive` when provided.
+The sections below list the downloadable editions served by ClassicMac 5.0.0's dual catalogs, grouped by OS category. Download sizes reflect the active `thinArchive` when provided.
 
 ### System 7 (Quadra 800 · Motorola 68040)
 

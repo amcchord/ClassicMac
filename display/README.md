@@ -109,6 +109,7 @@ struct { uint32_t type; uint32_t len; };   /* then len payload bytes */
 | 20 | `RELEASE_ALL` | none; releases every key and button QEMU believes held |
 | 21 | `REFRESH_RATE` | `u32 interval_ms` (clamped 4..1000; 16 by default while connected, 500 while disconnected) |
 | 22 | `POINTER_REL` | `i32 dx; i32 dy` (clamped to +-32767), for the USB/ADB relative mouse |
+| 23 | `GAMEPAD` | `u32 buttons`: active-high Pippin AppleJack button bitmask (`0x3FF07`), routed to `/machine/applejack` |
 
 Messages from the app with more payload than listed are accepted (extra
 bytes ignored); shorter ones are ignored; a payload over 256 bytes ends the

@@ -8,19 +8,16 @@ import PlatinumKit
 struct SettingsDialog: View {
     static let size = NSSize(width: 520, height: 475)
 
-    enum Pane: Hashable { case general, display, sharing, printing }
+    enum Pane: Hashable { case general, display, controls, sharing, printing }
 
     let original: VMConfig
     let handle: DialogHandle
     @State private var config: VMConfig
-    @State private var pane: Pane = {
-        switch ProcessInfo.processInfo.environment["CLASSICMAC_UI_SETTINGS_PANE"] {
-        case "display": return .display
-        case "sharing": return .sharing
-        case "printing": return .printing
-        default: return .general
-        }
-    }()
+    @State private var pane: Pane
+    @State private var capturingKeyButton: PippinButton?
+    @State private var capturingGamepadButton: PippinButton?
+    @State private var keyMonitor: Any?
+    @ObservedObject private var controllerManager = PippinControllerManager.shared
     @State private var widthText: String
     @State private var heightText: String
     @State private var mouseDPIText: String
@@ -32,10 +29,20 @@ struct SettingsDialog: View {
     @State private var isPrintingTestPage = false
     @ObservedObject private var manager = QEMUManager.shared
 
-    init(original: VMConfig, handle: DialogHandle) {
+    init(original: VMConfig, handle: DialogHandle, initialPane: Pane? = nil) {
         self.original = original
         self.handle = handle
         _config = State(initialValue: original)
+        let resolvedPane: Pane = initialPane ?? {
+            switch ProcessInfo.processInfo.environment["CLASSICMAC_UI_SETTINGS_PANE"] {
+            case "display": return .display
+            case "controls": return original.machineFamily == .pippin ? .controls : .general
+            case "sharing": return .sharing
+            case "printing": return .printing
+            default: return .general
+            }
+        }()
+        _pane = State(initialValue: resolvedPane)
         _widthText = State(initialValue: String(original.width))
         _heightText = State(initialValue: String(original.height))
         _mouseDPIText = State(initialValue: original.mouseDPI.map(String.init) ?? "")
@@ -43,6 +50,24 @@ struct SettingsDialog: View {
 
     private var running: Bool { manager.isRunning(original.id) }
     private var copland: Bool { config.machineFamily == .powerMac7500 }
+    private var pippin: Bool { config.machineFamily == .pippin }
+    private var canEditCurrentPane: Bool { !running || (pippin && pane == .controls) }
+
+    private var paneOptions: [(Pane, String)] {
+        if pippin {
+            return [
+                (Pane.general, "General Information"),
+                (Pane.display, "Display"),
+                (Pane.controls, "Controls"),
+            ]
+        }
+        return [
+            (Pane.general, "General Information"),
+            (Pane.display, "Display"),
+            (Pane.sharing, "Sharing"),
+            (Pane.printing, "Printing"),
+        ]
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -56,12 +81,7 @@ struct SettingsDialog: View {
             }
             HStack(spacing: 8) {
                 Text("Show:").platinumText(.emphasis)
-                PlatinumPopUp(selection: $pane, options: [
-                    (Pane.general, "General Information"),
-                    (Pane.display, "Display"),
-                    (Pane.sharing, "Sharing"),
-                    (Pane.printing, "Printing"),
-                ], width: 190)
+                PlatinumPopUp(selection: $pane, options: paneOptions, width: 190)
                 Spacer()
             }
             PlatinumSeparator()
@@ -69,13 +89,14 @@ struct SettingsDialog: View {
                 switch pane {
                 case .general: generalPane
                 case .display: displayPane
+                case .controls: controlsPane
                 case .sharing: sharingPane
                 case .printing: printingPane
                 }
             }
-            .disabled(running)
+            .disabled(!canEditCurrentPane)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            if running {
+            if !canEditCurrentPane {
                 HStack(spacing: 8) {
                     PlatinumIcon("lock", size: 16)
                     Text("Shut down this Mac to change its settings.").platinumText(.small)
@@ -90,10 +111,13 @@ struct SettingsDialog: View {
             }
             HStack(spacing: Platinum.buttonGap) {
                 Spacer()
-                if running {
+                if !canEditCurrentPane {
                     PlatinumButton("OK", role: .default) { handle.close() }
                 } else {
-                    PlatinumButton("Cancel", role: .cancel) { handle.close() }
+                    PlatinumButton("Cancel", role: .cancel) {
+                        stopAllCaptures()
+                        handle.close()
+                    }
                     PlatinumButton("OK", role: .default, action: save)
                 }
             }
@@ -105,10 +129,23 @@ struct SettingsDialog: View {
             coerceDepth()
             refreshPrinters()
         }
+        .onDisappear { stopAllCaptures() }
+        .onChange(of: pane) { _, _ in stopAllCaptures() }
         .onChange(of: config.name) { _, _ in errorMessage = nil }
     }
 
     private func save() {
+        stopAllCaptures()
+        if running && pippin {
+            var updated = VMStore.shared.vms.first(where: { $0.id == original.id }) ?? original
+            updated.pippinControls = config.pippinControls
+            if updated != original {
+                if !VMStore.shared.save(updated) { return }
+            }
+            PippinControllerManager.shared.updateControls(updated.effectivePippinControls, for: updated.id)
+            handle.close()
+            return
+        }
         do {
             config.name = try MachineTemplateInstaller.normalizedName(config.name)
             errorMessage = nil
@@ -121,7 +158,7 @@ struct SettingsDialog: View {
             config.width = VMConfig.clampedWidth(Int(widthText) ?? config.width)
             config.height = VMConfig.clampedHeight(Int(heightText) ?? config.height)
         }
-        if !copland {
+        if !copland && !pippin {
             let trimmedDPI = mouseDPIText.trimmingCharacters(in: .whitespacesAndNewlines)
             if trimmedDPI.isEmpty || trimmedDPI.caseInsensitiveCompare("auto") == .orderedSame {
                 config.mouseDPI = nil
@@ -155,11 +192,38 @@ struct SettingsDialog: View {
                 } else {
                     PlatinumPopUp(selection: $config.ramMB,
                                   options: memoryChoices.map { ($0, "\($0) MB") }, width: 110)
-                    Text("Hard disk:").platinumText(.emphasis).padding(.leading, 12)
-                    Text("\(config.diskSizeGB) GB").platinumText(.body)
+                    if pippin {
+                        Text("Save Flash:").platinumText(.emphasis).padding(.leading, 12)
+                        Text("128 KB").platinumText(.body)
+                    } else {
+                        Text("Hard disk:").platinumText(.emphasis).padding(.leading, 12)
+                        Text("\(config.diskSizeGB) GB").platinumText(.body)
+                    }
                 }
             }
-            if !copland {
+            if pippin {
+                VStack(alignment: .leading, spacing: 9) {
+                    PlatinumCheckbox("Play the Pippin's sound", isOn: $config.sound)
+                        .padding(.leading, 92)
+                    HStack(spacing: 10) {
+                        Text("Boot ROM:").platinumText(.emphasis).frame(width: 82, alignment: .trailing)
+                        let resolved = PippinMachine.resolveROMURL(for: config)
+                        Text(resolved?.lastPathComponent ?? "Not configured (pippin.rom)")
+                            .platinumText(resolved == nil ? .detail : .body)
+                            .lineLimit(1).truncationMode(.middle)
+                            .frame(maxWidth: 230, alignment: .leading)
+                        PlatinumButton("Choose…", action: choosePippinROM)
+                        if config.pippinROMPath?.isEmpty == false {
+                            PlatinumButton("Clear") { config.pippinROMPath = nil }
+                        }
+                    }
+                    if let romURL = PippinMachine.resolveROMURL(for: config),
+                       let label = try? PippinMachine.validateROM(at: romURL) {
+                        Text(label).platinumText(.detail).padding(.leading, 92)
+                    }
+                }
+                .padding(.top, 4)
+            } else if !copland && !pippin {
                 VStack(alignment: .leading, spacing: 7) {
                     PlatinumCheckbox("Use this computer's Internet connection", isOn: $config.networking)
                     PlatinumCheckbox("Play the Mac's sound", isOn: $config.sound)
@@ -192,6 +256,36 @@ struct SettingsDialog: View {
         }
     }
 
+    private var pippinVideoBinding: Binding<PippinVideoOut> {
+        Binding(
+            get: { config.effectivePippinVideoOut },
+            set: { mode in
+                config.pippinVideoOut = mode
+                let dims = mode.dimensions
+                config.width = dims.width
+                config.height = dims.height
+            }
+        )
+    }
+
+    private func choosePippinROM() {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.message = "Choose a 4 MB Apple / Bandai Pippin Kinka boot ROM"
+        panel.prompt = "Choose"
+        if panel.runModal() == .OK, let url = panel.url {
+            do {
+                _ = try PippinMachine.validateROM(at: url)
+                errorMessage = nil
+                config.pippinROMPath = url.path
+            } catch {
+                errorMessage = error.localizedDescription
+                NSSound.beep()
+            }
+        }
+    }
+
     private var memoryChoices: [Int] {
         var choices = config.machineFamily.ramPresets
         if !choices.contains(config.ramMB) { choices.append(config.ramMB); choices.sort() }
@@ -206,6 +300,19 @@ struct SettingsDialog: View {
             Text("Copland runs at 640 × 480 with 256 colors in its own window. Use Control-+ and Control-− to scale it.")
                 .platinumText(.body)
                 .fixedSize(horizontal: false, vertical: true)
+        } else if pippin {
+            Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 9) {
+                GridRow {
+                    Text("Video output:").platinumText(.emphasis).gridColumnAlignment(.trailing)
+                    PlatinumPopUp(selection: pippinVideoBinding,
+                                  options: PippinVideoOut.allCases.map { ($0, $0.label) },
+                                  width: 210)
+                }
+                GridRow {
+                    Color.clear.frame(width: 1, height: 1)
+                    PlatinumCheckbox("Show the Pippin in a web browser", isOn: $config.useBrowserDisplay)
+                }
+            }
         } else {
             Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 9) {
                 if config.machineFamily == .powerMacG4 {
@@ -389,6 +496,211 @@ struct SettingsDialog: View {
         }
     }
 
+    // MARK: Controls (Pippin)
+
+    private var controlsBinding: Binding<PippinControlConfig> {
+        Binding(
+            get: { config.effectivePippinControls },
+            set: { config.pippinControls = $0 }
+        )
+    }
+
+    private static let sensitivityOptions: [(Double, String)] = [
+        (0.5,  "0.5× (Slow)"),
+        (0.75, "0.75×"),
+        (1.0,  "1.0× (Default)"),
+        (1.5,  "1.5×"),
+        (2.0,  "2.0× (Fast)"),
+        (2.5,  "2.5×"),
+    ]
+
+    private var stickSensitivityBinding: Binding<Double> {
+        Binding(
+            get: {
+                let current = config.effectivePippinControls.stickSensitivity
+                return Self.sensitivityOptions.min(by: { abs($0.0 - current) < abs($1.0 - current) })?.0 ?? 1.0
+            },
+            set: { value in
+                var updated = config.effectivePippinControls
+                updated.stickSensitivity = value
+                config.pippinControls = updated
+            }
+        )
+    }
+
+    @ViewBuilder
+    private var controlsPane: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 12) {
+                PlatinumCheckbox("Map keyboard keys", isOn: controlsBinding.keyboardMappingEnabled)
+                PlatinumCheckbox("Enable game controller", isOn: controlsBinding.gamepadEnabled)
+            }
+            HStack(spacing: 8) {
+                Text("Controller:").platinumText(.small)
+                Text(controllerManager.connectedControllerNames.isEmpty
+                     ? "No game controller connected (pair via Bluetooth or USB)"
+                     : controllerManager.connectedControllerNames.joined(separator: ", "))
+                    .platinumText(.detail)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+            HStack(spacing: 8) {
+                Text("Sticks:").platinumText(.small)
+                PlatinumPopUp(selection: controlsBinding.stickMode,
+                              options: PippinStickMode.allCases.map { ($0, $0.label) },
+                              width: 230)
+                Text("Speed:").platinumText(.small)
+                PlatinumPopUp(selection: stickSensitivityBinding,
+                              options: Self.sensitivityOptions,
+                              width: 118)
+            }
+
+            HStack(spacing: 8) {
+                Text("AppleJack Button").platinumText(.small).frame(width: 128, alignment: .leading)
+                Text("Keyboard Key").platinumText(.small).frame(width: 126, alignment: .leading)
+                Text("Game Controller").platinumText(.small)
+                Spacer()
+            }
+            .foregroundStyle(Platinum.dimText.color)
+            .padding(.top, 2)
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 5) {
+                    ForEach(PippinButton.allCases) { button in
+                        controlMappingRow(for: button)
+                    }
+                }
+                .padding(.vertical, 2)
+            }
+            .frame(maxHeight: .infinity)
+            .padding(6)
+            .background(Color.white)
+            .overlay(Rectangle().stroke(Platinum.gray94.color, lineWidth: 1))
+
+            HStack {
+                Text("Mapped keys send AppleJack controller buttons; unmapped keys type normally.")
+                    .platinumText(.detail)
+                    .lineLimit(1)
+                Spacer()
+                PlatinumButton("Reset Defaults") {
+                    stopAllCaptures()
+                    config.pippinControls = .defaultConfig
+                }
+            }
+        }
+    }
+
+    private func controlMappingRow(for button: PippinButton) -> some View {
+        let controls = config.effectivePippinControls
+        let isCapturingKey = capturingKeyButton == button
+        let isCapturingGamepad = capturingGamepadButton == button
+        let currentKeyLabel = controls.keyCode(for: button).map(PippinControlConfig.keyLabel(for:)) ?? "None"
+        let gamepadBinding = Binding<PippinGamepadInput?>(
+            get: { config.effectivePippinControls.gamepadInput(for: button) },
+            set: { next in
+                var updated = config.effectivePippinControls
+                updated.setGamepadInput(next, for: button)
+                config.pippinControls = updated
+            }
+        )
+        let gamepadOptions: [(PippinGamepadInput?, String)] =
+            [(nil, "None")] + PippinGamepadInput.allCases.map { ($0, $0.label) }
+
+        return HStack(spacing: 6) {
+            HStack(spacing: 5) {
+                if let rgb = button.accentRGB {
+                    Circle()
+                        .fill(Color(red: Double((rgb >> 16) & 0xFF) / 255.0,
+                                    green: Double((rgb >> 8) & 0xFF) / 255.0,
+                                    blue: Double(rgb & 0xFF) / 255.0))
+                        .frame(width: 8, height: 8)
+                        .overlay(Circle().stroke(Color.black.opacity(0.45), lineWidth: 0.75))
+                } else {
+                    Color.clear.frame(width: 8, height: 8)
+                }
+                Text(button.label).platinumText(.small).lineLimit(1)
+            }
+            .frame(width: 124, alignment: .leading)
+
+            HStack(spacing: 4) {
+                PlatinumButton(isCapturingKey ? "Press key…" : currentKeyLabel, minWidth: 94) {
+                    if isCapturingKey {
+                        stopKeyCapture()
+                    } else {
+                        startKeyCapture(for: button)
+                    }
+                }
+                .frame(width: 94, alignment: .leading)
+                if controls.keyCode(for: button) != nil {
+                    PlatinumButton("×", minWidth: 24) {
+                        var updated = config.effectivePippinControls
+                        updated.setKeyCode(nil, for: button)
+                        config.pippinControls = updated
+                    }
+                }
+            }
+            .frame(width: 126, alignment: .leading)
+
+            PlatinumPopUp(selection: gamepadBinding, options: gamepadOptions, width: 150)
+
+            if !controllerManager.connectedControllerNames.isEmpty {
+                PlatinumButton(isCapturingGamepad ? "Press…" : "Set", minWidth: 44) {
+                    if isCapturingGamepad {
+                        stopGamepadCapture()
+                    } else {
+                        startGamepadCapture(for: button)
+                    }
+                }
+            }
+            Spacer(minLength: 0)
+        }
+    }
+
+    private func startKeyCapture(for button: PippinButton) {
+        stopAllCaptures()
+        capturingKeyButton = button
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            if event.keyCode == 53 { // Esc cancels without binding
+                stopKeyCapture()
+                return nil
+            }
+            var updated = config.effectivePippinControls
+            updated.setKeyCode(event.keyCode, for: button)
+            config.pippinControls = updated
+            stopKeyCapture()
+            return nil
+        }
+    }
+
+    private func stopKeyCapture() {
+        capturingKeyButton = nil
+        if let monitor = keyMonitor {
+            NSEvent.removeMonitor(monitor)
+            keyMonitor = nil
+        }
+    }
+
+    private func startGamepadCapture(for button: PippinButton) {
+        stopAllCaptures()
+        capturingGamepadButton = button
+        controllerManager.beginGamepadCapture { capturedInput in
+            var updated = config.effectivePippinControls
+            updated.setGamepadInput(capturedInput, for: button)
+            config.pippinControls = updated
+            capturingGamepadButton = nil
+        }
+    }
+
+    private func stopGamepadCapture() {
+        capturingGamepadButton = nil
+        controllerManager.cancelGamepadCapture()
+    }
+
+    private func stopAllCaptures() {
+        stopKeyCapture()
+        stopGamepadCapture()
+    }
+
     // MARK: Sharing
 
     @ViewBuilder
@@ -396,7 +708,8 @@ struct SettingsDialog: View {
         if !config.machineFamily.supportsSharedFolder {
             let message = config.machineFamily == .powerMacOSX
                 ? "Shared folders are unavailable for Mac OS X."
-                : "Shared folders are unavailable for Copland."
+                : (pippin ? "Shared folders are unavailable for Apple Pippin."
+                          : "Shared folders are unavailable for Copland.")
             Text(message).platinumText(.body)
         } else {
             VStack(alignment: .leading, spacing: 10) {
@@ -449,7 +762,7 @@ struct SettingsDialog: View {
     @ViewBuilder
     private var printingPane: some View {
         if !config.machineFamily.supportsPrinting {
-            Text("Printing is unavailable for Copland.")
+            Text(pippin ? "Printing is unavailable for Apple Pippin." : "Printing is unavailable for Copland.")
                 .platinumText(.body)
         } else {
             VStack(alignment: .leading, spacing: 10) {

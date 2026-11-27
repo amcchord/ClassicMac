@@ -13,6 +13,7 @@ flowchart TD
     FAM -- "quadra800" --> Q800["qemu-system-m68k -M q800 + Quadra800.rom + pram.img + nubus-virtio-mmio / qfb"]
     FAM -- "powerMacG4" --> PMAC["qemu-system-ppc -M mac99,via=cuda + OpenBIOS + VGA or ati-vga + ndrvloader"]
     FAM -- "powerMacOSX" --> OSX["qemu-system-ppc -M mac99,via=pmu + openbios-ppc-osx + 16 KiB nvram.img RTC"]
+    FAM -- "pippin" --> PIP["qemu-system-ppc -M pippin + Kinka ROM + Taos Video + 128 KiB Save Flash"]
     FAM -- "powerMac7500" --> COP["dingusppc -m pm7500 + bootrom.bin + nvram.bin (macOS only)"]
     Q800 --> IO["Attach Media (cd0/tools0/fd0), 9P Share, SLIRP + Print guestfwd (10.0.2.4)"]
     PMAC --> IO
@@ -35,11 +36,13 @@ Every virtual machine stores its settings in `<Machine>.classic/config.json`. Al
 | :--- | :--- | :--- | :--- | :--- |
 | `id` | String (UUID) | Generated `UUID` | Standard 36-char UUID; regenerated on template import or duplicate `.classic` open. | Identifies runtime sockets (`/tmp/ClassicMac-<uid>/<id>.*`). |
 | `name` | String | Family default (`"Mac OS 8.1"`, `"Mac OS 9.2"`, `"Mac OS X"`, `"Copland D11E4"`) | Non-empty trimmed string (`1–100` chars on Qt, no control chars). | Window title and `-name` argument. |
-| `machineFamily` | String | `"quadra800"` (legacy decode fallback) / `"powerMacG4"` | `"quadra800"`, `"powerMacG4"`, `"powerMacOSX"`, `"powerMac7500"`. | Selects emulator binary; `powerMac7500` is macOS-only. |
-| `ramMB` | Int | `128` (Quadra), `512` (G4), `1024` (OS X), `32` (Copland) | `quadra800`: `16–1000` (presets `64, 128, 256, 512, 1000`); `powerMacG4`: `32–896` (presets `128–896`, capped at `896` for OS 9 stability); `powerMacOSX`: `256–2048`; `powerMac7500`: fixed `32`. | Passed as `-m <ramMB>` (or `--rambank1_size 32` for Copland). Must stop VM to change. |
-| `diskImageName` | String | `"disk.img"` | Local filename inside the `.classic` bundle (no `/`, `\`, `:`, or `..`). | Copland requires `"disk.img"`. |
-| `pramImageName` | String | `"pram.img"` | Local filename inside the `.classic` bundle. | Used only when `machineFamily == "quadra800"`. |
-| `diskSizeGB` | Int | `2` (Quadra), `32` (G4/OS X), `1` (Copland) | Presets `1, 2, 4, 8, 16, 32, 64, 120`. | Metadata for initial disk creation; `disk.img` actual size governs capacity. |
+| `machineFamily` | String | `"quadra800"` (legacy decode fallback) / `"powerMacG4"` | `"quadra800"`, `"powerMacG4"`, `"powerMacOSX"`, `"pippin"`, `"powerMac7500"`. | Selects emulator binary (`pippin` reuses `qemu-system-ppc`); `powerMac7500` is macOS-only. |
+| `ramMB` | Int | `128` (Quadra), `512` (G4), `1024` (OS X), `13` (Pippin), `32` (Copland) | `quadra800`: `16–1000` (presets `64, 128, 256, 512, 1000`); `powerMacG4`: `32–896` (presets `128–896`, capped at `896` for OS 9 stability); `powerMacOSX`: `256–2048`; `pippin`: `5–16` (`13` default); `powerMac7500`: fixed `32`. | Passed as `-m <ramMB>` (or `--rambank1_size 32` for Copland). Must stop VM to change. |
+| `diskImageName` | String | `"disk.img"` | Local filename inside the `.classic` bundle (no `/`, `\`, `:`, or `..`). | Unused on `pippin`; Copland requires `"disk.img"`. |
+| `pramImageName` | String | `"pram.img"` | Local filename inside the `.classic` bundle. | Used for `quadra800` PRAM and `pippin` CUDA 256-byte PRAM (`if=mtd,index=1`). |
+| `flashImageName` | String? | `null` (`"flash.img"` on `pippin`) | Local filename inside the `.classic` bundle (`pippin` only; `null` for other families). | 128 KiB Save Flash (`0xFF`-initialized, `if=pflash`) storing Pippin settings and saves. |
+| `pippinROMPath` | String? | `null` | Absolute path to a 4 MiB Pippin Kinka boot ROM (`pippin` only; `null` falls back to bundle `pippin.rom` / `kinka13.rom` or `~/Library/Application Support/ClassicMac/ROMs/pippin.rom`). | Passed via `-bios` on `pippin`. Must stop VM to change. |
+| `diskSizeGB` | Int | `2` (Quadra), `32` (G4/OS X), `0` (Pippin), `1` (Copland) | Presets `1, 2, 4, 8, 16, 32, 64, 120` (`0` on `pippin`). | Metadata for initial disk creation; `disk.img` actual size governs capacity. |
 | `useG4CPU` | Bool | `true` (`init`) / `false` (decoded legacy) | `true` (`-cpu 7400`) or `false` (`-cpu g3`). Forced `false` outside `powerMacG4`. | Set `false` for retail Mac OS 8.5 / 8.6. Must stop VM to change. |
 | `useVirtioDisk` | Bool | `false` | `true` boots `disk.img` via `virtio-blk-pci` (`addr=0xf`); `false` uses MacIO IDE. Forced `false` outside `powerMacG4`. | Used for Mac OS 8.5/8.6; disables `-icount` boot handoff when `true`. |
 
@@ -54,6 +57,7 @@ Every virtual machine stores its settings in `<Machine>.classic/config.json`. Al
 | `useEnhancedFramebuffer` | Bool | `true` (Quadra) / `false` (others) | `true` uses `nubus-qfb`; `false` uses built-in `macfb`. Forced `false` outside `quadra800`. | When `false` on Quadra, `width`/`height` snap to `640x480`, `800x600`, or `1152x870`. |
 | `customResolution` | Bool | `false` | `true` preserves arbitrary `width` × `height`; `false` snaps to nearest `ResolutionPreset` (`640x480`, `800x600`, `1024x768`, `1152x870`, `1280x1024`, `1440x900`). | Forced `false` on Copland and non-enhanced Quadra; auto-synced for ATI modes. |
 | `useBrowserDisplay` | Bool | `false` | `true` launches private loopback VNC/WebSocket + bundled noVNC page; `false` uses Platinum window (or native Qt/Cocoa window). | macOS option (forced `false` on `powerMac7500`). Must stop VM to change. |
+| `pippinVideoOut` | String? | `null` (`"ntsc"` on `pippin`) | `"ntsc"` (`640 × 480`), `"pal"` (`640 × 512`), or `"vga"` (`640 × 480`) when `machineFamily == "pippin"`; `null` otherwise. | Selects Apple Taos video output mode (`-M pippin,video-out=...`). |
 
 ### Media, Boot & Shared Folders
 
@@ -80,6 +84,7 @@ Every virtual machine stores its settings in `<Machine>.classic/config.json`. Al
 | `classicInputHelpers` | Bool | `true` | `true` maps right-click to `Control+click` and scroll wheel to arrow keys. Forced `false` on `powerMacOSX` and `powerMac7500`. | Turn off if using USB Overdrive inside the guest. |
 | `legacyMouseTracking` | Bool | `true` | `true` normalizes relative captured mouse motion to classic 200 DPI baseline; `false` passes raw host deltas. | Applies to captured relative mouse mode. |
 | `mouseDPI` | Int? | `null` (`0` in Qt) | `null` (`0`) = Auto (`1000` DPI); explicit values clamped to `100–100,000`. | Used when `legacyMouseTracking == true`. |
+| `pippinControls` | Object? | `null` (defaults apply on `pippin`) | `PippinControlConfig` (`keyboardMappingEnabled`, `keyboardBindings`, `gamepadEnabled`, `gamepadBindings`, `stickMode`, `stickSensitivity` `0.25–3.0`, `stickDeadzone` `0.05–0.50`) on `pippin`; `null` otherwise. | Maps keyboard keys & `GCController` inputs to Pippin AppleJack buttons and analog stick trackball motion; editable live in **Get Info → Controls** (`pippin`). |
 | `swapAltCommand` | Bool | `false` | `true` swaps Alt and Windows/Super keys when mapping to Mac Option/Command on Windows and Linux hosts (`native/src/machine.cpp` & `vnc.cpp`). | Windows/Linux Qt desktop edition setting. |
 
 ---
@@ -165,7 +170,7 @@ Used with an isolated `HOME` and `CFFIXED_USER_HOME` (see `docs/manual/scripts/c
 | `CLASSICMAC_UI_SNAPSHOTS=<folder>` | Enables automated UI tour mode, saves window PNGs (and `*-displays.json` / raw frames) into `<folder>`, and quits when finished. *(Also set `CLASSICMAC_UI_SNAPSHOT=1` or `CLASSICMAC_DISABLE_UPDATE_CHECK=1` to suppress update prompts.)* |
 | `CLASSICMAC_UI_TOUR=<steps>` | Comma-separated actions: `library`, `about`, `newmac`, `icons`, `guestwindow`, `settings`, `checkpoints`, `update`, `paste`, `delete`, `media`, `shutdown`, `alert`, `start`, `collapse`, `stop`, `addicons`, `wait:<seconds>`, `shot:<prefix>`, `select:<index>`, `guest-size:<WxH>`, `guest-activate`. |
 | `CLASSICMAC_UI_STAY=1` | Keeps the app running after the tour instead of stopping VMs and terminating. |
-| `CLASSICMAC_UI_SETTINGS_PANE` | Pre-selects a Get Info tab: `general`, `display`, `sharing`, or `printing`. |
+| `CLASSICMAC_UI_SETTINGS_PANE` | Pre-selects a Get Info tab: `general`, `display`, `controls` (`pippin`), `sharing`, or `printing`. |
 | `CLASSICMAC_UI_PASTE_SAMPLE` | Pre-fills the **Paste Text** dialog text box during snapshot tours. |
 | `CLASSICMAC_UI_ICON_SOURCES` | Pipe-separated (`\|`) paths imported when the `addicons` tour step runs. |
 

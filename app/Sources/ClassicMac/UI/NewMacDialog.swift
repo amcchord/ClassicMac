@@ -5,7 +5,7 @@ import PlatinumKit
 
 /// Create a Mac to install Mac OS on from your own CD image.
 struct NewMacDialog: View {
-    static let size = NSSize(width: 500, height: 372)
+    static let size = NSSize(width: 500, height: 396)
 
     private final class CloseGuard: ObservableObject {
         var canClose = true
@@ -14,18 +14,42 @@ struct NewMacDialog: View {
     let handle: DialogHandle
     @ObservedObject private var store = VMStore.shared
     @StateObject private var closeGuard = CloseGuard()
-    @State private var family: MachineFamily = .powerMacG4
-    @State private var name = MachineFamily.powerMacG4.defaultName
-    @State private var ramMB = MachineFamily.powerMacG4.defaultRAMMB
-    @State private var diskSizeGB = MachineFamily.powerMacG4.defaultDiskSizeGB
+    @State private var family: MachineFamily
+    @State private var name: String
+    @State private var ramMB: Int
+    @State private var diskSizeGB: Int
+    @State private var pippinVideoOut: PippinVideoOut = .ntsc
+    @State private var pippinROMURL: URL?
     @State private var isoURL: URL?
     @State private var copyISO = true
     @State private var saveFolder = AppPaths.defaultLibraryDir
     @State private var working = false
     @State private var errorMessage: String?
 
+    init(handle: DialogHandle) {
+        self.handle = handle
+        let initialFamily: MachineFamily = switch ProcessInfo.processInfo.environment["CLASSICMAC_UI_NEWMAC_FAMILY"] {
+        case "pippin": .pippin
+        case "quadra800": .quadra800
+        case "powerMacOSX": .powerMacOSX
+        default: .powerMacG4
+        }
+        _family = State(initialValue: initialFamily)
+        _name = State(initialValue: initialFamily.defaultName)
+        _ramMB = State(initialValue: initialFamily.defaultRAMMB)
+        _diskSizeGB = State(initialValue: initialFamily.defaultDiskSizeGB)
+    }
+
     private var validName: Bool {
         (try? MachineTemplateInstaller.normalizedName(name)) != nil
+    }
+
+    private var pippinROMFound: URL? {
+        if let pippinROMURL { return pippinROMURL }
+        if FileManager.default.isReadableFile(atPath: AppPaths.pippinROM.path) {
+            return AppPaths.pippinROM
+        }
+        return nil
     }
 
     var body: some View {
@@ -33,7 +57,9 @@ struct NewMacDialog: View {
             HStack(alignment: .top, spacing: 12) {
                 PlatinumIcon(family.iconName, size: 32)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("Create a Mac and install Mac OS from your own CD image.").platinumText(.emphasis)
+                    Text(family == .pippin
+                         ? "Create an Apple Pippin console from a boot ROM and Pippin CD."
+                         : "Create a Mac and install Mac OS from your own CD image.").platinumText(.emphasis)
                     Text("For a ready-to-run Mac, use the Mac OS Library instead.").platinumText(.detail)
                 }
             }
@@ -45,6 +71,7 @@ struct NewMacDialog: View {
                         (MachineFamily.powerMacG4, "Power Mac G4 — Mac OS 8.5 to 9.2.2"),
                         (MachineFamily.powerMacOSX, "Power Mac G4 — Mac OS X"),
                         (MachineFamily.quadra800, "Quadra 800 — System 7.1 to Mac OS 8.1"),
+                        (MachineFamily.pippin, "Apple / Bandai Pippin — Pippin OS"),
                     ], width: 300)
                 }
                 GridRow {
@@ -55,13 +82,32 @@ struct NewMacDialog: View {
                     Text("Memory:").platinumText(.emphasis)
                     HStack(spacing: 16) {
                         PlatinumPopUp(selection: $ramMB, options: family.ramPresets.map { ($0, "\($0) MB") }, width: 104)
-                        Text("Hard disk:").platinumText(.emphasis)
-                        PlatinumPopUp(selection: $diskSizeGB,
-                                      options: family.diskSizePresets.map { ($0, "\($0) GB") }, width: 90)
+                        if family == .pippin {
+                            Text("Video:").platinumText(.emphasis)
+                            PlatinumPopUp(selection: $pippinVideoOut,
+                                          options: PippinVideoOut.allCases.map { ($0, $0.shortLabel) }, width: 90)
+                        } else {
+                            Text("Hard disk:").platinumText(.emphasis)
+                            PlatinumPopUp(selection: $diskSizeGB,
+                                          options: family.diskSizePresets.map { ($0, "\($0) GB") }, width: 90)
+                        }
+                    }
+                }
+                if family == .pippin {
+                    GridRow {
+                        Text("Boot ROM:").platinumText(.emphasis)
+                        HStack(spacing: 8) {
+                            PlatinumIcon("wrench", size: 16, dimmed: pippinROMFound == nil)
+                            Text(pippinROMFound?.lastPathComponent ?? "None chosen (pippin.rom)")
+                                .platinumText(pippinROMFound == nil ? .detail : .body)
+                                .lineLimit(1).truncationMode(.middle)
+                                .frame(maxWidth: 200, alignment: .leading)
+                            PlatinumButton("Choose…", action: choosePippinROM)
+                        }
                     }
                 }
                 GridRow(alignment: .top) {
-                    Text("Install CD:").platinumText(.emphasis)
+                    Text(family == .pippin ? "Pippin CD:" : "Install CD:").platinumText(.emphasis)
                     VStack(alignment: .leading, spacing: 6) {
                         HStack(spacing: 8) {
                             PlatinumIcon("cd", size: 16, dimmed: isoURL == nil)
@@ -90,7 +136,7 @@ struct NewMacDialog: View {
             Spacer(minLength: 0)
             if working {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Copying \(isoURL?.lastPathComponent ?? "the CD image")…").platinumText(.small)
+                    Text("Preparing \(isoURL?.lastPathComponent ?? "the CD image")…").platinumText(.small)
                     PlatinumProgressBar(value: nil)
                 }
             } else if let errorMessage {
@@ -98,6 +144,11 @@ struct NewMacDialog: View {
                     PlatinumIcon("stop", size: 16)
                     Text(errorMessage).platinumText(.small).fixedSize(horizontal: false, vertical: true)
                 }
+            } else if family == .pippin {
+                Text(isoURL == nil
+                     ? "Without a disc, Pippin boots to its animated Insert CD screen. Insert a disc later from Media."
+                     : "Raw .bin/.cue images are converted to ISO automatically; Save Flash (128 KB) persists saves.")
+                    .platinumText(.detail)
             } else {
                 Text(isoURL == nil
                      ? "Without a CD the Mac starts with a blank disk. Insert a CD later from Media."
@@ -139,14 +190,35 @@ struct NewMacDialog: View {
         )
     }
 
+    private func choosePippinROM() {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.allowedContentTypes = ["rom", "bin"].compactMap { UTType(filenameExtension: $0) }
+        panel.message = "Choose a 4 MB Apple / Bandai Pippin Kinka boot ROM"
+        panel.prompt = "Choose"
+        if panel.runModal() == .OK, let url = panel.url {
+            do {
+                _ = try PippinMachine.validateROM(at: url)
+                errorMessage = nil
+                pippinROMURL = url
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
     private func chooseISO() {
         let panel = NSOpenPanel()
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
         var types: [UTType] = [.diskImage]
-        for ext in ["iso", "toast", "cdr"] { if let t = UTType(filenameExtension: ext) { types.append(t) } }
+        let exts = family == .pippin ? ["iso", "bin", "cue", "toast", "cdr"] : ["iso", "toast", "cdr"]
+        for ext in exts { if let t = UTType(filenameExtension: ext) { types.append(t) } }
         panel.allowedContentTypes = types
-        panel.message = "Choose a Mac OS CD image (.iso, .toast or .cdr)"
+        panel.message = family == .pippin
+            ? "Choose a Pippin disc image (.iso, .bin, .cue, .toast or .cdr)"
+            : "Choose a Mac OS CD image (.iso, .toast or .cdr)"
         panel.prompt = "Choose"
         if panel.runModal() == .OK { isoURL = panel.url }
     }
@@ -173,37 +245,52 @@ struct NewMacDialog: View {
             return
         }
         let preset = ResolutionPreset.recommended
+        let dims = family == .pippin ? pippinVideoOut.dimensions : (preset.width, preset.height)
         let config = VMConfig(
             name: trimmed,
             machineFamily: family,
             ramMB: ramMB,
             diskSizeGB: diskSizeGB,
-            width: preset.width,
-            height: preset.height,
+            width: dims.0,
+            height: dims.1,
             depth: ColorDepth.thousands.rawValue,
             useEnhancedFramebuffer: family.supportsEnhancedFramebuffer,
             cdImagePath: isoURL?.path,
             bootFromCD: isoURL != nil,
-            networking: true,
+            networking: family != .pippin,
             sound: family.supportsSound,
             useG4CPU: family == .powerMacG4,
+            pippinVideoOut: family == .pippin ? pippinVideoOut : nil,
+            flashImageName: family == .pippin ? "flash.img" : nil,
+            pippinROMPath: family == .pippin ? pippinROMURL?.path : nil,
             bundleURL: store.uniqueBundleURL(in: saveFolder, name: trimmed)
         )
-        guard let source = isoURL, copyISO else {
+        let needsRawConvert = family == .pippin && isoURL.map {
+            let ext = $0.pathExtension.lowercased()
+            return ext == "bin" || ext == "cue" || PippinMachine.isRaw2352CDImage(at: $0)
+        } == true
+        guard let source = isoURL, (copyISO || needsRawConvert) else {
             finish(config)
             return
         }
         working = true
         closeGuard.canClose = false
-        let destination = VMStore.uniqueFileURL(in: AppPaths.mediaDir, suggestedName: source.lastPathComponent)
+        let targetName = needsRawConvert
+            ? "\(source.deletingPathExtension().lastPathComponent).iso"
+            : source.lastPathComponent
+        let destination = VMStore.uniqueFileURL(in: AppPaths.mediaDir, suggestedName: targetName)
         Task {
             let failure: String? = await Task.detached(priority: .userInitiated) {
                 do {
-                    try FileManager.default.copyItem(at: source, to: destination)
+                    if needsRawConvert {
+                        try PippinMachine.convertRawBinToISO(from: source, to: destination)
+                    } else {
+                        try FileManager.default.copyItem(at: source, to: destination)
+                    }
                     return nil
                 } catch {
                     try? FileManager.default.removeItem(at: destination)
-                    return "The CD image could not be copied. \(error.localizedDescription)"
+                    return "The CD image could not be prepared. \(error.localizedDescription)"
                 }
             }.value
             if let failure {

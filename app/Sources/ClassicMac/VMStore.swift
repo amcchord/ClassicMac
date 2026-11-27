@@ -211,6 +211,14 @@ final class VMStore: ObservableObject {
 
     nonisolated private static func createImages(for config: VMConfig) -> String? {
         let fm = FileManager.default
+        if config.machineFamily == .pippin {
+            do {
+                try PippinMachine.ensurePersistenceImages(for: config)
+                return nil
+            } catch {
+                return "The Pippin's flash storage could not be created. \(error.localizedDescription)"
+            }
+        }
         let diskResult = QEMUManager.createRawImage(at: config.diskImageURL, sizeArgument: "\(config.diskSizeGB)G")
         if case let .failure(message) = diskResult {
             return "The machine's hard disk could not be created. \(message)"
