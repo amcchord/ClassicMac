@@ -2373,18 +2373,23 @@ void App::showSetup() {
           }
           auto editionRank = [](const QJsonObject &e) {
             const auto fam = e.value("machineFamily").toString("powerMacG4");
+            const auto id = e["id"].toString().toLower();
             const auto text =
-                (e["id"].toString() + " " + e["name"].toString()).toLower();
+                (id + " " + e["name"].toString()).toLower();
+            if (id.startsWith("os922-mega-deluxe"))
+              return 0;
+            if (id.startsWith("os922-superdeluxe"))
+              return 1;
             if (fam == "powerMacOSX" || text.contains("os x") ||
                 text.contains("osx"))
-              return 1;
-            if (text.contains("os 9") || text.contains("os9"))
-              return 0;
-            if (text.contains("os 8") || text.contains("os8"))
-              return 2;
-            if (text.contains("system 7") || text.contains("7."))
               return 3;
-            return 4;
+            if (text.contains("os 9") || text.contains("os9"))
+              return 2;
+            if (text.contains("os 8") || text.contains("os8"))
+              return 4;
+            if (text.contains("system 7") || text.contains("7."))
+              return 5;
+            return 6;
           };
           auto ordered = newest.values();
           std::stable_sort(

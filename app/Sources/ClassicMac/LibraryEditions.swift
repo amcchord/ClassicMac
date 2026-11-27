@@ -57,6 +57,25 @@ struct LibraryEdition {
 
     static let all: [LibraryEdition] = [
         LibraryEdition(
+            familyName: "os922-mega-deluxe",
+            baselineVersion: 6,
+            title: "Mac OS 9.2.2 Mega Deluxe",
+            osLabel: "Mac OS 9.2.2",
+            tagline: "146 classic games, creative apps, and utilities across 8 Launcher tabs",
+            description: "The largest Classic Mac collection: 146 classic games, creative apps, and utilities across 8 Launcher tabs and ACTION GoMac. Ready for the ATI Radeon card, so 3D games run accelerated.",
+            contents: [
+                ("Games & Activities", ["146 classic games, creative apps, and utilities across 8 Launcher tabs"]),
+                ("Utilities & 3D", ["Launcher", "ACTION GoMac", "ATI Radeon 3D drivers"]),
+            ],
+            notes: [
+                "Games and creative activities launch from Launcher and Start → Games in the ACTION GoMac bar.",
+                "Uses the emulated ATI Radeon for accelerated RAVE and OpenGL 3D games, with live window resizing up to 1920 × 1440.",
+                "Original shareware and demo limits remain.",
+            ],
+            graphicsCard: .atiRadeon,
+            order: 0
+        ),
+        LibraryEdition(
             familyName: "os922-superdeluxe",
             baselineVersion: 7,
             title: "Mac OS 9.2.2 SuperDeluxe",
@@ -85,25 +104,6 @@ struct LibraryEdition {
                 "Open the Games Guide on the desktop for controls. Games launch from Start → Games in the GoMac bar at the bottom of the screen.",
                 "A few older games ask for 256 colors; the game launchers switch for you.",
                 "King's Quest VI starts new saved games; saves from other editions do not load.",
-                "Original shareware and demo limits remain.",
-            ],
-            graphicsCard: .atiRadeon,
-            order: 0
-        ),
-        LibraryEdition(
-            familyName: "os922-mega-deluxe",
-            baselineVersion: 6,
-            title: "Mac OS 9.2.2 Mega Deluxe",
-            osLabel: "Mac OS 9.2.2",
-            tagline: "146 classic games, creative apps, and utilities across 8 Launcher tabs",
-            description: "The largest Classic Mac collection: 146 classic games, creative apps, and utilities across 8 Launcher tabs and ACTION GoMac. Ready for the ATI Radeon card, so 3D games run accelerated.",
-            contents: [
-                ("Games & Activities", ["146 classic games, creative apps, and utilities across 8 Launcher tabs"]),
-                ("Utilities & 3D", ["Launcher", "ACTION GoMac", "ATI Radeon 3D drivers"]),
-            ],
-            notes: [
-                "Games and creative activities launch from Launcher and Start → Games in the ACTION GoMac bar.",
-                "Uses the emulated ATI Radeon for accelerated RAVE and OpenGL 3D games, with live window resizing up to 1920 × 1440.",
                 "Original shareware and demo limits remain.",
             ],
             graphicsCard: .atiRadeon,
@@ -201,8 +201,8 @@ struct LibraryEntry: Identifiable, Hashable {
     ]
 
     private static let knownFamilyOrder: [String: Int] = [
-        "os922-superdeluxe": 0,
-        "os922-mega-deluxe": 1,
+        "os922-mega-deluxe": 0,
+        "os922-superdeluxe": 1,
         "os922-deluxe": 2,
         "mac-os-9.2.1-ati-32gb": 3,
         "os922-full": 10,

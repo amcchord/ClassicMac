@@ -60,6 +60,11 @@ QJsonArray newestEditions(const QJsonArray &rows) {
     if (newest[key].isEmpty() || revision > oldRevision)
       newest[key] = entry;
   }
+  const int megaIdx = order.indexOf(QStringLiteral("os922-mega-deluxe"));
+  const int superIdx = order.indexOf(QStringLiteral("os922-superdeluxe"));
+  if (megaIdx > superIdx && superIdx >= 0) {
+    order.move(megaIdx, superIdx);
+  }
   QJsonArray result;
   for (bool available : {true, false})
     for (const auto &key : order)

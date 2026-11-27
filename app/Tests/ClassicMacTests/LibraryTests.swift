@@ -18,11 +18,13 @@ final class LibraryTests: XCTestCase {
             machine("os922-deluxe-v6"),
             machine("mac-os-9.2.1-ati-32gb-v4"),
             machine("os922-superdeluxe-v2"),
+            machine("os922-mega-deluxe-v7"),
             machine("future-edition", name: "A Future Mac"),
         ]
         let current = LibraryEntry.entries(from: machines, includeOlder: false).map(\.id)
-        XCTAssertEqual(current, ["os922-superdeluxe-v2", "os922-deluxe-v6", "mac-os-9.2.1-ati-32gb-v4",
-                                 "copland-d11e4-activities-v3", "future-edition"])
+        XCTAssertEqual(current, ["os922-mega-deluxe-v7", "os922-superdeluxe-v2", "os922-deluxe-v6",
+                                 "mac-os-9.2.1-ati-32gb-v4", "copland-d11e4-activities-v3",
+                                 "future-edition"])
         let all = LibraryEntry.entries(from: machines, includeOlder: true).map(\.id)
         XCTAssertEqual(all.last, "os922-deluxe-v5")
     }
