@@ -1018,7 +1018,9 @@ int selfTest(const QString &fixtures, const QString &output) {
       auto atiPrintCfg = pOnCfg;
       atiPrintCfg["graphicsCard"] = "atiRadeon";
       atiPrintCfg["toolsCDInserted"] = true;
+      atiPrintCfg["tabletInput"] = true;
       atiPrintCfg["sharedFolderPath"] = "/tmp/ShareTest";
+      atiPrintCfg["sharedVolumeName"] = "ShareTest";
       const Model::Machine atiPrintMac{"/fixture/ATIPrint.classic", atiPrintCfg};
       const auto atiPrintArgs = Model::qemuArguments(atiPrintMac, 6000, QStringLiteral("none"), ports);
       require(atiPrintArgs.contains("virtio-tablet-pci,addr=0x13") &&
