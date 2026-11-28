@@ -424,8 +424,225 @@ def pippin_16() -> Grid:
     return g
 
 
+def g5_32() -> Grid:
+    """Power Mac G5: Copland-style 3/4 isometric anodized aluminum cheese-grater tower."""
+    g = Grid(32)
+
+    # Geometry helpers:
+    # Front face spans x = 4..12 (slope down-right: dy = (x - 4) // 2 -> 0..4)
+    # Right side panel spans x = 13..26 (slope up-right: dy = -((x - 13) // 2) -> 0..-6)
+    def fy(x: int) -> int:
+        return 6 + (x - 4) // 2
+
+    def sy(x: int) -> int:
+        return 10 - (x - 13) // 2
+
+    # Soft translucent floor shadow under feet & extending down-right
+    for x in range(7, 29):
+        if x <= 14:
+            y0 = 28 + (x - 7) // 3
+        else:
+            y0 = 28 - (x - 15) // 2
+        g.set(x, min(30, y0), "x")
+        if 11 <= x <= 27:
+            g.set(x, min(30, y0 + 1), "x")
+    g.hline(14, 29, 7, "X")
+    g.hline(23, 26, 5, "x")
+
+    # Recessed top roof deck between front-top and rear-top handle arches
+    for ux in range(6, 13):
+        uy_front = fy(ux) + 1
+        for step in range(1, 7):
+            rx = ux + step * 2 - 1
+            ry = uy_front - step
+            if 7 <= rx <= 24 and 1 <= ry <= 9:
+                g.set(rx, ry, "B" if step < 3 else "D" if step < 6 else "C")
+
+    # Rear-left top ridge outline rising from front-top-left (4,4) to back-top (18,0)
+    for step in range(8):
+        hx = 4 + step * 2
+        hy = 4 - (step // 2)
+        g.set(hx, hy, "K")
+        g.set(hx + 1, hy, "K")
+        if step < 7:
+            g.set(hx + 1, hy + 1, "E")
+
+    # Back-right top handle loop (x=18..26, y=0..3)
+    g.hline(18, 0, 7, "K")
+    g.hline(19, 1, 6, "E")
+    g.set(25, 1, "K")
+    g.set(26, 2, "K")
+    g.hline(20, 2, 4, "7")  # handle shadow band under rear roof arch
+    g.set(24, 2, "C")
+    g.set(25, 2, "K")
+
+    # Isometric side panel (right face, brushed anodized silver aluminum, x = 13..26)
+    for x in range(13, 27):
+        top = sy(x)
+        bot = top + 18
+        for y in range(top, bot + 1):
+            if y == top:
+                g.set(x, y, "K" if x >= 24 else "D")
+            elif y == bot:
+                g.set(x, y, "K")
+            elif x == 26:
+                g.set(x, y, "K")
+            elif x == 13:
+                # Crisp bright silver vertical ridge catching light
+                g.set(x, y, "W" if y < bot - 1 else "B")
+            elif x == 25:
+                g.set(x, y, "8")
+            else:
+                # Diagonal brushed-aluminum sheen from upper-left to lower-right
+                diag = (x - 13) * 1.1 + (y - top) * 0.7
+                if diag < 9:
+                    g.set(x, y, "E")
+                elif diag < 14:
+                    g.set(x, y, "D")
+                elif diag < 20:
+                    g.set(x, y, "C")
+                elif diag < 25:
+                    g.set(x, y, "B")
+                else:
+                    g.set(x, y, "A")
+    # Crisp side bevels + recessed handle-arch grooves at top & bottom of side panel
+    for x in range(14, 26):
+        top = sy(x)
+        bot = top + 18
+        g.set(x, top + 1, "F" if x < 21 else "D")
+        g.set(x, bot - 1, "8")
+        if 15 <= x <= 24:
+            g.set(x, top + 2, "B")
+            g.set(x, bot - 3, "B")
+
+    # Front top-right corner connection cleanly closed
+    g.hline(12, 7, 3, "D")
+    g.hline(12, 6, 3, "K")
+    # Back bottom sled foot loop under rear corner (x=21..26)
+    for x in range(21, 27):
+        by = sy(x) + 18
+        g.set(x, by, "B" if 22 <= x <= 25 else "K")
+        g.set(x, by + 1, "7" if 22 <= x <= 25 else "K")
+        g.set(x, by + 2, "K")
+    g.hline(22, sy(24) + 19, 3, "5")  # cutout gap in rear foot
+
+    # Subtle metallic emblem / latch detail centered on brushed side door
+    g.set(19, 14, "9")
+    g.set(20, 14, "A")
+    g.set(19, 15, "8")
+    g.set(20, 15, "9")
+    g.set(21, 15, "D")
+    g.set(19, 16, "8")
+    g.set(20, 16, "A")
+    g.set(20, 13, "D")
+
+    # Front face (left face sloping down-right, x = 4..12)
+    for x in range(4, 13):
+        top = fy(x) - 2  # includes top front handle arch
+        bot = fy(x) + 20  # includes bottom front sled foot
+        for y in range(top, bot + 1):
+            if x == 4 or x == 12 or y == top or y == bot:
+                g.set(x, y, "K")
+            elif y == top + 1:
+                g.set(x, y, "W" if x < 11 else "D")
+            elif y == top + 2:
+                # Front handle gap cutout between legs (x=6..10)
+                g.set(x, y, "5" if 6 <= x <= 10 else "C")
+            elif y == top + 3:
+                g.set(x, y, "W" if x < 10 else "D")
+            elif y >= bot - 2:
+                # Bottom front sled foot + cutout gap
+                if y == bot - 2:
+                    g.set(x, y, "B" if x > 5 else "D")
+                else:
+                    g.set(x, y, "5" if 6 <= x <= 10 else "9")
+            else:
+                # Interior front face: SuperDrive optical door + perforated cheese-grater mesh
+                rel_y = y - (top + 4)
+                if 0 <= rel_y <= 2:
+                    if rel_y == 0:
+                        g.set(x, y, "D")
+                    elif rel_y == 1 and 6 <= x <= 10:
+                        g.set(x, y, "E")
+                    elif rel_y == 2 and 6 <= x <= 10:
+                        g.set(x, y, "6")
+                    else:
+                        g.set(x, y, "C")
+                elif x == 5:
+                    g.set(x, y, "E")
+                elif x == 11:
+                    g.set(x, y, "A")
+                elif rel_y == 10 and x == 10:
+                    g.set(x, y, "W")  # glowing power pip
+                elif rel_y == 11 and x == 10:
+                    g.set(x, y, "L")
+                elif rel_y == 12 and x == 10:
+                    g.set(x, y, "4")  # front I/O slit
+                else:
+                    if (x % 2 == 0) and (rel_y % 2 == 0) and 6 <= x <= 10 and 4 <= rel_y <= 12:
+                        g.set(x, y, "5")
+                    else:
+                        g.set(x, y, "C" if rel_y < 9 else "B")
+
+    return g
+
+
+def g5_16() -> Grid:
+    """16x16 Copland-style isometric Power Mac G5 cheese-grater icon."""
+    g = Grid(16)
+    # Shadow
+    for x in range(5, 15):
+        g.set(x, 14 if x < 10 else 13, "x")
+    # Roof highlight + smooth rear ridge outline
+    g.hline(4, 1, 4, "K")
+    g.hline(8, 0, 5, "K")
+    for dx in range(4):
+        g.hline(4 + dx * 2, 2 - (dx // 2), 3, "E")
+    g.set(12, 1, "6")
+    # Right side brushed aluminum panel (x=7..13)
+    for x in range(7, 14):
+        top = 4 - (x - 7) // 2
+        bot = top + 9
+        for y in range(top, bot + 1):
+            if x == 13 or y == top or y == bot:
+                g.set(x, y, "K")
+            elif x == 7:
+                g.set(x, y, "W")
+            else:
+                d = (x - 7) + (y - top)
+                g.set(x, y, "E" if d < 5 else "D" if d < 8 else "C" if d < 11 else "B")
+    # Rear bottom foot
+    g.rect(11, 11, 3, 2, "K")
+    g.set(12, 11, "9")
+    # Subtle side emblem
+    g.set(10, 6, "9")
+    g.set(10, 7, "A")
+    # Front perforated face (x=2..6)
+    for x in range(2, 7):
+        top = 2 + (x - 2) // 2
+        bot = top + 10
+        for y in range(top, bot + 1):
+            if x == 2 or x == 6 or y == top or y == bot:
+                g.set(x, y, "K")
+            elif y == top + 1:
+                g.set(x, y, "5" if 3 <= x <= 5 else "D")  # top handle gap
+            elif y == top + 2:
+                g.set(x, y, "E")
+            elif y == top + 3 and 3 <= x <= 5:
+                g.set(x, y, "6")  # optical slit
+            elif y >= bot - 1:
+                g.set(x, y, "5" if 3 <= x <= 5 else "B")  # bottom foot gap
+            elif x in (3, 5) and ((y - top) % 2 == 1):
+                g.set(x, y, "5")  # cheese grater perforations
+            else:
+                g.set(x, y, "D" if x == 3 else "C")
+    g.set(5, 9, "L")  # subtle power LED
+    return g
+
+
 ICONS = [
     ("powermac_g4", g4_32, g4_16, "Power Mac G4 (Graphite) tower"),
+    ("powermac_g5", g5_32, g5_16, "Power Mac G5 (cheese grater) tower"),
     ("quadra_800", quadra_32, quadra_16, "Macintosh Quadra 800 mini tower"),
     ("powermac_7500", pm7500_32, pm7500_16, "Power Macintosh 7500 desktop with monitor"),
     ("apple_pippin", pippin_32, pippin_16, "Apple / Bandai Pippin @World console and AppleJack controller"),
@@ -442,6 +659,9 @@ def main() -> None:
         "",
     ]
     for name, big, small, description in ICONS:
+        if name == "powermac_g5":
+            # Built by the dedicated g5_32/g5_16 helpers above; keep any manually appended entries avoided.
+            pass
         for grid in (big(), small()):
             out.append(f"# {description}")
             out.append(f"icon {name} {grid.size}")
