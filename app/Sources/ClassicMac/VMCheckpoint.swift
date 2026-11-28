@@ -215,12 +215,21 @@ enum VMCheckpointStore {
         guard !list(in: bundleURL).contains(where: { $0.kind == .freshInstall }) else { return }
         let pramURL = bundleURL.appendingPathComponent("pram.img")
         let nvramURL = bundleURL.appendingPathComponent("nvram.img")
+        let configURL = bundleURL.appendingPathComponent("config.json")
+        let configFamily = (try? Data(contentsOf: configURL)).flatMap {
+            try? JSONDecoder().decode(VMConfig.self, from: $0)
+        }?.machineFamily
+        let validateOSXNVRAM: Bool = if let configFamily {
+            configFamily == .powerMacOSX
+        } else {
+            fm.fileExists(atPath: nvramURL.path)
+        }
         _ = try? create(
             in: bundleURL,
             diskURL: diskURL,
             primaryFileName: "disk.img",
             pramURL: fm.fileExists(atPath: pramURL.path) ? pramURL : nil,
-            isOSX: fm.fileExists(atPath: nvramURL.path),
+            isOSX: validateOSXNVRAM,
             label: "Fresh install",
             kind: .freshInstall
         )

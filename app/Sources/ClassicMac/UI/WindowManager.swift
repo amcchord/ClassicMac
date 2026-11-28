@@ -307,7 +307,7 @@ final class WindowManager {
         let manager = QEMUManager.shared
         let vm = VMStore.shared.vms.first { $0.id == id }
         let name = vm.map { "\u{201C}\($0.name)\u{201D}" } ?? "this Mac"
-        if vm?.machineFamily == .powerMacOSX {
+        if vm?.machineFamily.isOSXFamily == true {
             shutDownAlert?.close()
             shutDownAlert = alert(.caution, "Shut down \(name)?",
                 informative: "Mac OS X shuts down cleanly from the Apple menu so its disk stays healthy. Force Stop turns it off immediately and unsaved work may be lost.",

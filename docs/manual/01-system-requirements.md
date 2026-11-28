@@ -1,6 +1,6 @@
 # Chapter 1: System Requirements & Supported Platforms
 
-ClassicMac 5.0.1 runs genuine Motorola 68040, PowerPC, Apple / Bandai Pippin, and early PowerPC Mac OS X environments inside a self-contained desktop application styled in Apple's Mac OS 8/9 Platinum appearance. Every desktop build bundles its own emulation engines, firmware, guest drivers, and the `ClassicMacTools.iso` guest-additions image—no Homebrew installation, external QEMU setup, or guest-side setup is required for standard machines.
+ClassicMac 5.1.0 runs genuine Motorola 68040, PowerPC, 64-bit PowerPC 970FX (Power Mac G5), Apple / Bandai Pippin, and PowerPC Mac OS X environments inside a self-contained desktop application styled in Apple's Mac OS 8/9 Platinum appearance. Every desktop build bundles its own emulation engines, firmware, guest drivers, and the `ClassicMacTools.iso` guest-additions image—no Homebrew installation, external QEMU setup, or guest-side setup is required for standard machines.
 
 <p align="center">
   <img src="../screenshots/manual/about-410.png" width="760" alt="About ClassicMac window showing QEMU 11.0.2, QEMU 10.0.13, emulated ATI Radeon, OpenBIOS, and classicvirtio credits">
@@ -14,9 +14,9 @@ ClassicMac ships native applications for **macOS**, **Windows**, and **Linux**, 
 
 | Host Platform | Release Artifact | Minimum OS / Runtime | Frontend Stack | Signing & Packaging | Platform-Specific Capabilities & Limits |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **macOS** | `ClassicMac-5.0.1.dmg`, `ClassicMac-5.0.1.zip` | Apple Silicon (`M1` or later, `arm64`), **macOS 15+** | Native SwiftUI + `PlatinumKit` + AppKit | Developer ID signed, notarized, and stapled | Full feature set: `-display classicmac`, Pippin key/gamepad mapping (`GameController`), optional loopback Browser Display (`noVNC`), `classicvirtio` folder sharing, auto-provisioned OS 9 printing, APFS `F_PUNCHHOLE` & `clonefile` checkpoints, and experimental Copland D11E4 |
-| **Windows** | `ClassicMac-5.0.1-windows-x64.exe` | **Windows 11 x64** (`_WIN32_WINNT=0x0A00`) | Compiled C++17 + Qt 6.4+ (`Widgets`, `Network`, `Concurrent`) | Unsigned single portable EXE (self-extracting via `$LOCALAPPDATA`) | Direct Qt RFB display with Per-Monitor V2 DPI whole-pixel zoom, ATI Radeon 3D via WGL, Pippin (`-M pippin`), NTFS sparse virtual disks, virtual printing (LPD/IPP/JetDirect -> WinSpool or PDF). No `virtio-9p` folder sharing or Copland |
-| **Linux** | `ClassicMac-5.0.1-linux-x64.AppImage` | **x86-64**, `glibc 2.39+` (Ubuntu 24.04+ / Debian 13+), X11 or Wayland | Compiled C++17 + Qt 6.4+ (`Widgets`, `Network`, `Concurrent`) | Portable AppImage (`--appimage-extract-and-run` without FUSE) | Direct Qt RFB display, ATI Radeon 3D via EGL/GLES (`libEGL.so.1` / `libGLESv2.so.2`), Pippin (`-M pippin`), `virtio-9p` folder sharing, `FICLONE` / `--reflink` checkpoints, virtual printing (CUPS `lp` / PDF). No Copland |
+| **macOS** | `ClassicMac-5.1.0.dmg`, `ClassicMac-5.1.0.zip` | Apple Silicon (`M1` or later, `arm64`), **macOS 15+** | Native SwiftUI + `PlatinumKit` + AppKit | Developer ID signed, notarized, and stapled | Full feature set: `-display classicmac`, Pippin key/gamepad mapping (`GameController`), optional loopback Browser Display (`noVNC`), `classicvirtio` folder sharing, auto-provisioned OS 9 printing, APFS `F_PUNCHHOLE` & `clonefile` checkpoints, Power Mac G5 (`qemu-system-ppc64`), and experimental Copland D11E4 |
+| **Windows** | `ClassicMac-5.1.0-windows-x64.exe` | **Windows 11 x64** (`_WIN32_WINNT=0x0A00`) | Compiled C++17 + Qt 6.4+ (`Widgets`, `Network`, `Concurrent`) | Unsigned single portable EXE (self-extracting via `$LOCALAPPDATA`) | Direct Qt RFB display with Per-Monitor V2 DPI whole-pixel zoom, ATI Radeon 3D via WGL, Pippin (`-M pippin`), Power Mac G5 (`qemu-system-ppc64`), NTFS sparse virtual disks, virtual printing (LPD/IPP/JetDirect -> WinSpool or PDF). No `virtio-9p` folder sharing or Copland |
+| **Linux** | `ClassicMac-5.1.0-linux-x64.AppImage` | **x86-64**, `glibc 2.39+` (Ubuntu 24.04+ / Debian 13+), X11 or Wayland | Compiled C++17 + Qt 6.4+ (`Widgets`, `Network`, `Concurrent`) | Portable AppImage (`--appimage-extract-and-run` without FUSE) | Direct Qt RFB display, ATI Radeon 3D via EGL/GLES (`libEGL.so.1` / `libGLESv2.so.2`), Pippin (`-M pippin`), Power Mac G5 (`qemu-system-ppc64`), `virtio-9p` folder sharing, `FICLONE` / `--reflink` checkpoints, virtual printing (CUPS `lp` / PDF). No Copland |
 | **iPadOS (Beta)** | TestFlight / Xcode (`ios/README.md`) | **iPadOS 14+** (iPad-only; `PlatinumKit` targets iOS 18) | SwiftUI + UTM SE frameworks | Unsigned archive or TestFlight IPA via `upload-ipad-testflight.sh` | Runs `m68k` and `ppc` engines using QEMU's threaded-code interpreter (no JIT). Uses upstream UTM display hardware: no `nubus-qfb` or emulated ATI Radeon 3D |
 
 <p align="center">
@@ -45,13 +45,14 @@ flowchart LR
     subgraph Guests["Emulated Machine Families"]
         Q800["Quadra 800 (68040, System 7.1 - Mac OS 8.1)"]
         PMG4["Power Mac G4 (G3 / G4, Mac OS 8.5 - 9.2.2)"]
-        OSX["Power Mac G4 - OS X (G4 7400, Mac OS X 10.4.11)"]
+        OSX["Power Mac G4 - OS X (G4 7400, Mac OS X 10.2 - 10.4.11)"]
+        PMG5["Power Mac G5 (970FX, Mac OS X 10.3 - 10.4.11)"]
         PIP["Apple / Bandai Pippin (PowerPC 603, Pippin OS)"]
         COP["Power Mac 7500 (PowerPC 601, Copland D11E4)"]
     end
 
     subgraph Extras["Host-Dependent Features"]
-        ATI["ATI Radeon R100 3D (OpenGL 4.1 / WGL / EGL)"]
+        ATI["ATI Radeon R100 / 9800 3D (OpenGL 4.1 / WGL / EGL)"]
         SH["Host Folder Sharing (virtio-9p)"]
         BR["Browser Display (127.0.0.1 noVNC)"]
     end
@@ -59,6 +60,7 @@ flowchart LR
     MAC --> Q800
     MAC --> PMG4
     MAC --> OSX
+    MAC --> PMG5
     MAC --> PIP
     MAC --> COP
     MAC --> ATI
@@ -68,6 +70,7 @@ flowchart LR
     LIN --> Q800
     LIN --> PMG4
     LIN --> OSX
+    LIN --> PMG5
     LIN --> PIP
     LIN --> ATI
     LIN --> SH
@@ -75,6 +78,7 @@ flowchart LR
     WIN --> Q800
     WIN --> PMG4
     WIN --> OSX
+    WIN --> PMG5
     WIN --> PIP
     WIN --> ATI
 
@@ -113,26 +117,27 @@ Each machine family enforces specific hardware bounds in `VMConfig.swift` and `n
 | **Macintosh Quadra 800** (`quadra800`) | System 7.1 – Mac OS 8.1 | Motorola 68040 | `64`, **`128`**, `256`, `512`, `1000` MB (native clamp `16–1000` MB) | `1`, **`2`**, `4`, `8`, `16`, `32`, `64`, `120` GB | **Enhanced (`nubus-qfb`)**: `512×384` to `3840×2160` (`8`/`16`/`24`-bit). **Built-in (`macfb`)**: `640×480`, `800×600`, `1152×870` (256 colors at `1152×870`) |
 | **Power Mac G4** (`powerMacG4`) | Mac OS 8.5 – 9.2.2 | PowerPC `7400` (G4, default) or `g3` (required for Mac OS 8.5–8.6) | `128`, `256`, **`512`**, `768`, `896` MB *(capped at `896` MB; Mac OS 9 sound/stability breaks at >= 1 GB)* | `2`, `4`, `8`, `16`, **`32`**, `64`, `120` GB | **Standard (`-vga std`)**: `512×384` to `3840×2160` (width multiple of `8`; `15`-bit Thousands or `32`-bit Millions, plus `1/2/4/8`-bpp). **ATI Radeon (`ati-vga`)**: `640×480` to `1920×1440` (width multiple of `8`, max pixel clock `162 MHz`) |
 | **Power Mac G4 — Mac OS X** (`powerMacOSX`) | PowerPC Mac OS X (10.2–10.4.11 Tiger) | PowerPC `7400` (G4) | `256`, `512`, `768`, **`1024`**, `1536`, `2048` MB *(capped by host RAM during Library import)* | `2`, `4`, `8`, `16`, **`32`**, `64`, `120` GB | **Standard (`-vga std`)**: `512×384` to `3840×2160` (width multiple of `8`), locked to `32`-bit Millions (`64 MB` VRAM) |
+| **Power Mac G5** (`powerMacG5`) | PowerPC Mac OS X (10.3–10.4.11 Tiger) | PowerPC `970fx` (G5, `1–16` vCPUs, default `2`; Mac OS X 10.3 uses at most `2` CPUs) | `512`, `1024`, **`2048`**, `4096`, `8192`, `16384` MB | `2`, `4`, `8`, `16`, **`32`**, `64`, `120` GB | **Standard (`-vga std`)**: `512×384` to `3840×2160` (`64 MB` VRAM, `32`-bit Millions). **ATI Radeon 9800 / 7000** *(requires user-supplied Mac ROM)* |
 | **Power Mac 7500** (`powerMac7500`, macOS-only) | Copland D11E4 (experimental) | PowerPC 601 | **`32` MB** (fixed) | **`1` GB** (fixed) | Fixed **`640×480`**, `8`-bit (`256` colors) |
 
 ---
 
 ## Emulated Hardware Matrix
 
-ClassicMac uses four specialized emulation backends depending on the selected `MachineFamily`:
+ClassicMac uses five specialized emulation backends depending on the selected `MachineFamily` (`pippin` shares `qemu-system-ppc`):
 
-| Subsystem | Quadra 800 (`quadra800`) | Power Mac G4 (`powerMacG4`) | Power Mac G4 — OS X (`powerMacOSX`) | Power Mac 7500 (`powerMac7500`) |
-| :--- | :--- | :--- | :--- | :--- |
-| **Engine & Machine** | `qemu-system-m68k` (QEMU 11.0.2), `-M q800` | `qemu-system-ppc` (QEMU 11.0.2), `-M mac99,via=cuda` | Dedicated `qemu-system-ppc` / `qemu-system-ppc-osx` (QEMU 10.0.13), `-M mac99,via=pmu,usb=off` | `dingusppc`, `-m pm7500` (macOS only) |
-| **Graphics Hardware** | `nubus-qfb` (Enhanced Video, default) or `macfb` (Built-in) | **Standard**: `-vga std` (`64 MB`, live host resize) · **3D**: `ati-vga,id=ati0,model=r100` (`ATY,Rage6p`, `32 MB` VRAM) | `-vga std` (`64 MB` VRAM, `VGA.romfile=` with widescreen OpenBIOS + `qemu_vga.ndrv`) | Built-in Power Mac 7500 video (`640×480`, 256 colors) |
-| **Sound Device** | Apple Sound Chip (`asc`, patched with `qfb/asc-silence.patch` to silence idle buzz) | `screamer` (AWACS 44.1 kHz audio) | `screamer` (`screamer.osx-codec=on`, `screamer.dma-lead-us=0` on hard-disk boot) | Silent DMA audio pull (`384` frames/ms, no host audio output) |
-| **Networking** | Onboard SONIC (`dp83932`) via QEMU SLIRP `user` networking | Onboard `sungem` (default) or `rtl8139` (legacy 8.5/8.6 VirtIO profile) | Onboard `sungem` via QEMU SLIRP `user` networking | Unavailable |
-| **Storage & Media** | `scsi-hd` (`IBM OEM DFMSS4F`) ID `0`; `scsi-cd` ID `3` (user CD) & ID `4` (Tools CD); `virtio-blk-device` removable floppy | MacIO IDE hard disk & optical (`cd0`/`tools0`), or `virtio-blk-pci` (`useVirtioDisk`); Tools mounted as read-only `virtio-blk-pci` | MacIO IDE ATA hard disk (`index=0`) & IDE CD-ROM (`index=2`) | `disk.img` via `--hdd_img` (no removable media) |
-| **Input & Sharing** | ADB keyboard/mouse; `virtio-tablet-device` & `virtio-9p-device` on `nubus-virtio-mmio` | ADB + `usb-mouse` (for InputSprocket games); `virtio-tablet-pci` & `virtio-9p-pci` via `ndrvloader` | `pci-ohci` USB (`usb-kbd` + `usb-tablet` or `usb-mouse`) | Caps Lock boot hold gesture; `Ctrl+G` mouse capture (no sharing) |
-| **Startup Memory** | `pram.img` (`if=mtd`, patched at `0x78..0x7B` for `DefStartRec`) | OpenBIOS NVRAM / RTAS services | 16 KiB dual-bank Core99 flash `nvram.img` (`macio-nvram.osx-flash=on`) | `nvram.bin` (`8,209` bytes) + `copland-rtc.bin` |
+| Subsystem | Quadra 800 (`quadra800`) | Power Mac G4 (`powerMacG4`) | Power Mac G4 — OS X (`powerMacOSX`) | Power Mac G5 (`powerMacG5`) | Power Mac 7500 (`powerMac7500`) |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Engine & Machine** | `qemu-system-m68k` (QEMU 11.0.2), `-M q800` | `qemu-system-ppc` (QEMU 11.0.2), `-M mac99,via=cuda` | Dedicated `qemu-system-ppc` / `qemu-system-ppc-osx` (QEMU 10.0.13), `-M mac99,via=pmu,usb=off` | Dedicated `qemu-system-ppc64` (`cat7/qemu` 11.1.50), `-M mac99,via=pmu -cpu 970fx` (`PowerMac7,3`) | `dingusppc`, `-m pm7500` (macOS only) |
+| **Graphics Hardware** | `nubus-qfb` (Enhanced Video, default) or `macfb` (Built-in) | **Standard**: `-vga std` (`64 MB`, live host resize) · **3D**: `ati-vga,id=ati0,model=r100` (`ATY,Rage6p`, `32 MB` VRAM) | `-vga std` (`64 MB` VRAM, `VGA.romfile=` with widescreen OpenBIOS + `qemu_vga.ndrv`) | `-vga std` (`64 MB` VRAM, `qemu_vga.ndrv`), or optional **ATI Radeon 9800** (`ati-radeon9800`, `gl=fast\|on\|off`) / **Radeon 7000** (`ati-vga,model=rv100,agp=on`) with user Mac ROM | Built-in Power Mac 7500 video (`640×480`, 256 colors) |
+| **Sound Device** | Apple Sound Chip (`asc`, patched with `qfb/asc-silence.patch` to silence idle buzz) | `screamer` (AWACS 44.1 kHz audio) | `screamer` (`screamer.osx-codec=on`, `screamer.dma-lead-us=0` on hard-disk boot) | K2 I2S with TAS3004 codec (`-global macio-newworld.audiodev=snd0`) | Silent DMA audio pull (`384` frames/ms, no host audio output) |
+| **Networking** | Onboard SONIC (`dp83932`) via QEMU SLIRP `user` networking | Onboard `sungem` (default) or `rtl8139` (legacy 8.5/8.6 VirtIO profile) | Onboard `sungem` via QEMU SLIRP `user` networking | Onboard K2 GMAC (`sungem`) via QEMU SLIRP `user` networking | Unavailable |
+| **Storage & Media** | `scsi-hd` (`IBM OEM DFMSS4F`) ID `0`; `scsi-cd` ID `3` (user CD) & ID `4` (Tools CD); `virtio-blk-device` removable floppy | MacIO IDE hard disk & optical (`cd0`/`tools0`), or `virtio-blk-pci` (`useVirtioDisk`); Tools mounted as read-only `virtio-blk-pci` | MacIO IDE ATA hard disk (`index=0`) & IDE CD-ROM (`index=2`) | K2 SATA (`ide-hd,bus=sata.0`) hard disk & K2 ATA-100 (`if=ide,index=0`) optical drive | `disk.img` via `--hdd_img` (no removable media) |
+| **Input & Sharing** | ADB keyboard/mouse; `virtio-tablet-device` & `virtio-9p-device` on `nubus-virtio-mmio` | ADB + `usb-mouse` (for InputSprocket games); `virtio-tablet-pci` & `virtio-9p-pci` via `ndrvloader` | `pci-ohci` USB (`usb-kbd` + `usb-tablet` or `usb-mouse`) | K2 OHCI USB + NEC uPD720101 EHCI (`usb-tablet` optional); PCI-X `virtio-9p-pci` (`macos_compat=on`) for `osx9p` sharing | Caps Lock boot hold gesture; `Ctrl+G` mouse capture (no sharing) |
+| **Startup Memory** | `pram.img` (`if=mtd`, patched at `0x78..0x7B` for `DefStartRec`) | OpenBIOS NVRAM / RTAS services | 16 KiB dual-bank Core99 flash `nvram.img` (`macio-nvram.osx-flash=on`) | 16 KiB Core99 flash `nvram.img` (`if=mtd,index=0`, auto-formatted from `0xFF`) | `nvram.bin` (`8,209` bytes) + `copland-rtc.bin` |
 
 > [!NOTE]
-> **Windows & Folder Sharing:** The Windows QEMU build does not support `virtio-9p` host folder sharing. On macOS and Linux, host folder sharing works on both Quadra 800 and classic Power Mac G4 machines (while booted from their hard disk, not an installer CD).
+> **Windows & Folder Sharing:** The Windows QEMU build does not support `virtio-9p` host folder sharing. On macOS and Linux, host folder sharing works on Quadra 800, classic Power Mac G4, and Power Mac G5 (`macos_compat=on` for the `osx9p` guest extension) while booted from the hard disk.
 
 ---
 
@@ -145,6 +150,7 @@ ClassicMac verifies that all required firmware files exist before launching an e
 | **Quadra 800** | `Quadra800.rom`, `qemu/pc-bios/mac_qfb.rom`, `declrom`, `pram-seed.img` | 1 MiB Apple Quadra 800 ROM; `nubus-qfb` declaration ROM; `classicvirtio` NuBus card firmware for floppy, tablet, and 9p sharing; pre-booted PRAM seed so new VMs never hang on zeroed PRAM |
 | **Power Mac G4 (Classic)** | `qemu/pc-bios/openbios-ppc`, `qemu/pc-bios/vgabios-stdvga.bin`, `qemu/pc-bios/qemu_vga.ndrv`, `ndrvloader` | Screamer- & ATI-aware OpenBIOS firmware (`ATY,Rage6p` node + black boot console); VGA option ROM; live-resizing ClassicMac `qemu_vga.ndrv` Mac OS video driver; `classicvirtio` PPC NDRV loader injected at `0x4000000` (`boot-command=init-program go`) |
 | **Power Mac G4 — Mac OS X** | `qemu-osx/openbios-ppc-osx`, `qemu-osx/macosx-flash-seed.img`, `qemu-osx/qemu_vga.ndrv` | Dedicated OpenBIOS for Core99 Mac OS X (`10.2–10.4.11`); 16 KiB dual-bank flash seed template; widescreen EDID `qemu_vga.ndrv` |
+| **Power Mac G5** | `qemu-g5/openbios-ppc64-g5`, `qemu-g5/vgabios-stdvga.bin`, `qemu-g5/qemu_vga.ndrv` | `cat7/openbios` `G5-openbios` OpenBIOS exposing U3/K2/`PowerMac7,3` 64-bit G5 device tree; VGA option ROM and `qemu_vga.ndrv` display driver |
 | **Power Mac 7500 (Copland)** | `bootrom.bin` (`4 MiB`), `nvram.bin` (`8,209 B`) | Matched ROM and NVRAM travel inside each downloaded Copland `.classic` package (SHA-256 verified at launch by `CoplandMachine`) |
 | **Guest Additions** | `ClassicMacTools.iso` | Read-only HFS guest tools volume containing StuffIt Expander, Disk Copy, USB Overdrive, Transmit, Lido, patched HD SC Setup, and **ClassicMac Display** (for manual ATI resolution switching) |
 

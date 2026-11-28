@@ -17,10 +17,12 @@ qint64 requiredDiskBytes(const QJsonObject &entry, const QString &targetDir);
 bool supportsSparse(const QString &dir);
 Model::Machine install(QJsonObject entry, const QString &parent,
                        const QString &name, std::atomic_bool &cancel,
-                       const Progress &progress);
+                       const Progress &progress,
+                       const QString &targetFamily = {});
 QString install(const QJsonObject &entry, const QString &name,
                 std::atomic_bool &cancel, Progress progress,
-                const QString &destinationDir = {});
+                const QString &destinationDir = {},
+                const QString &targetFamily = {});
 QString downloadPippinROM(std::atomic_bool &cancel, const Progress &progress);
 QString displayTitle(const QJsonObject &entry);
 QString cleanSummary(const QJsonObject &entry);

@@ -17,6 +17,7 @@ struct NewMacDialog: View {
     @State private var family: MachineFamily
     @State private var name: String
     @State private var ramMB: Int
+    @State private var cpuCount: Int = PowerMacG5Machine.defaultCPUs
     @State private var diskSizeGB: Int
     @State private var pippinVideoOut: PippinVideoOut = .ntsc
     @State private var pippinROMURL: URL?
@@ -32,6 +33,7 @@ struct NewMacDialog: View {
         case "pippin": .pippin
         case "quadra800": .quadra800
         case "powerMacOSX": .powerMacOSX
+        case "powerMacG5": .powerMacG5
         default: .powerMacG4
         }
         _family = State(initialValue: initialFamily)
@@ -70,6 +72,7 @@ struct NewMacDialog: View {
                     PlatinumPopUp(selection: familyBinding, options: [
                         (MachineFamily.powerMacG4, "Power Mac G4 — Mac OS 8.5 to 9.2.2"),
                         (MachineFamily.powerMacOSX, "Power Mac G4 — Mac OS X"),
+                        (MachineFamily.powerMacG5, "Power Mac G5 — Mac OS X 10.3.9 to 10.5"),
                         (MachineFamily.quadra800, "Quadra 800 — System 7.1 to Mac OS 8.1"),
                         (MachineFamily.pippin, "Apple / Bandai Pippin — Pippin OS"),
                     ], width: 300)
@@ -81,7 +84,7 @@ struct NewMacDialog: View {
                 GridRow {
                     Text("Memory:").platinumText(.emphasis)
                     HStack(spacing: 16) {
-                        PlatinumPopUp(selection: $ramMB, options: family.ramPresets.map { ($0, "\($0) MB") }, width: 104)
+                        PlatinumPopUp(selection: $ramMB, options: family.ramPresets.map { ($0, Self.shortRAMLabel($0)) }, width: 104)
                         if family == .pippin {
                             Text("Video:").platinumText(.emphasis)
                             PlatinumPopUp(selection: $pippinVideoOut,
@@ -90,6 +93,19 @@ struct NewMacDialog: View {
                             Text("Hard disk:").platinumText(.emphasis)
                             PlatinumPopUp(selection: $diskSizeGB,
                                           options: family.diskSizePresets.map { ($0, "\($0) GB") }, width: 90)
+                        }
+                    }
+                }
+                if family == .powerMacG5 {
+                    GridRow {
+                        Text("Processors:").platinumText(.emphasis)
+                        HStack(spacing: 10) {
+                            PlatinumPopUp(
+                                selection: $cpuCount,
+                                options: PowerMacG5Machine.cpuPresets.map { ($0, $0 == 1 ? "1 CPU" : "\($0) CPUs") },
+                                width: 104
+                            )
+                            Text("PowerPC 970FX").platinumText(.detail)
                         }
                     }
                 }
@@ -184,6 +200,13 @@ struct NewMacDialog: View {
         }
     }
 
+    private static func shortRAMLabel(_ mb: Int) -> String {
+        if mb >= 1024 && mb % 1024 == 0 {
+            return "\(mb / 1024) GB"
+        }
+        return "\(mb) MB"
+    }
+
     private var familyBinding: Binding<MachineFamily> {
         Binding(
             get: { family },
@@ -192,6 +215,7 @@ struct NewMacDialog: View {
                 family = newFamily
                 ramMB = newFamily.defaultRAMMB
                 diskSizeGB = newFamily.defaultDiskSizeGB
+                cpuCount = PowerMacG5Machine.defaultCPUs
             }
         )
     }
@@ -269,6 +293,7 @@ struct NewMacDialog: View {
             pippinVideoOut: family == .pippin ? pippinVideoOut : nil,
             flashImageName: family == .pippin ? "flash.img" : nil,
             pippinROMPath: family == .pippin ? pippinROMURL?.path : nil,
+            cpuCount: family == .powerMacG5 ? cpuCount : nil,
             bundleURL: store.uniqueBundleURL(in: saveFolder, name: trimmed)
         )
         let needsRawConvert = family == .pippin && isoURL.map {

@@ -10,7 +10,7 @@ import sys
 
 root = Path(__file__).resolve().parents[2]
 build, out = map(Path, sys.argv[1:3])
-for stale in ('bin', 'lib', 'Browser', 'Licenses', 'qemu', 'qemu-osx', 'Iconfactory'):
+for stale in ('bin', 'lib', 'Browser', 'Licenses', 'qemu', 'qemu-osx', 'qemu-g5', 'Iconfactory'):
     shutil.rmtree(out / stale, ignore_errors=True)
 bin_dir = out / 'bin'
 lib_dir = out / 'lib'
@@ -39,8 +39,10 @@ def stage_libs(file):
 
 
 osx = root / 'vendor/qemu-osx'
+g5 = root / 'vendor/qemu-g5'
 engines = {name: build / name for name in ['qemu-system-m68k', 'qemu-system-ppc', 'qemu-img']}
 engines['qemu-system-ppc-osx'] = osx / 'build/qemu-system-ppc'
+engines['qemu-system-ppc64'] = g5 / 'build/qemu-system-ppc64'
 for name, source in engines.items():
     target = bin_dir / name
     shutil.copyfile(source, target)
@@ -50,6 +52,8 @@ for name, source in engines.items():
 
 shutil.copytree(root / 'osx/firmware', out / 'qemu-osx', dirs_exist_ok=True)
 shutil.copytree(osx / 'pc-bios/keymaps', out / 'qemu-osx/keymaps', dirs_exist_ok=True)
+shutil.copytree(root / 'g5/firmware', out / 'qemu-g5', dirs_exist_ok=True)
+shutil.copytree(g5 / 'pc-bios/keymaps', out / 'qemu-g5/keymaps', dirs_exist_ok=True)
 for path in lib_dir.iterdir():
     subprocess.check_call(['patchelf', '--set-rpath', '$ORIGIN', str(path)])
 

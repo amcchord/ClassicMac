@@ -53,6 +53,8 @@ Video hardware and resizing rules differ by machine family:
 | **Power Mac G4 (`Standard`)** | QEMU `-vga std` + `qemu_vga.ndrv` (64 MB VRAM) | Thousands, Millions (plus 1/2/4/8-bit inside guest **Monitors**) | `512 × 384` to `3840 × 2160`; resizes live via `VGA.host-resize=on` |
 | **Power Mac G4 (`ATI Radeon`)** | Emulated ATI Radeon R100 (`ati-vga,model=r100`, 32 MB VRAM) | 256 Colors, Thousands, Millions (inside guest **Monitors**) | `640 × 480` to `1920 × 1440` (within 162 MHz EDID clock); resizes live via `classicmac-display-control` |
 | **Power Mac G4 (Mac OS X)** | QEMU `-vga std` (64 MB VRAM, `VGA.romfile=`) | Millions (`32`-bit fixed) | `512 × 384` to `3840 × 2160` at startup; fixed desktop size (does not live-resize) |
+| **Power Mac G5 (`Standard`)** | QEMU `-vga std` (`64 MB` VRAM, `qemu_vga.ndrv`) | Millions (`32`-bit fixed) | `512 × 384` to `3840 × 2160` at startup; fixed desktop size (does not live-resize) |
+| **Power Mac G5 (`ATI Radeon 9800 / 7000`)** | `ati-radeon9800` (`gl=fast\|on\|off`) or `ati-vga,model=rv100,agp=on` (`pci.0,addr=0x10`, user Mac ROM required) | Millions (`32`-bit fixed) | Native Radeon 9800/7000 Mac FCode ROM resolution & 3D OpenGL/Metal acceleration (`gl`) |
 | **Apple / Bandai Pippin** | Apple Taos framebuffer (`-M pippin,video-out=ntsc\|pal\|vga`) with dirty-scanline tracking | Thousands (`16`-bit fixed) | `640 × 480` (NTSC / VGA) or `640 × 512` (PAL); fixed console size |
 | **Power Mac 7500 (Copland)** | DingusPPC built-in video | 256 Colors (`8`-bit fixed) | Fixed `640 × 480`; use `Control-+` and `Control-−` to scale window |
 
@@ -85,6 +87,8 @@ Power Mac G4 machines can switch their **Graphics card:** setting from **Standar
 <p align="center">
   <img src="../screenshots/manual/guest-os9-mega-deluxe.png" width="760" alt="Mac OS 9.2.2 Mega Deluxe running with ATI Radeon 3D acceleration active on Apple M5 Max">
 </p>
+
+On **Power Mac G5** (`powerMacG5`), **Graphics card:** also offers **ATI Radeon 9800 (3D acceleration)** (`atiRadeon9800`) with configurable host GL mode (**Fast**, **Compatibility**, **Software / Off** -> `g5GraphicsGLMode`) and **ATI Radeon 7000** (`atiRadeon7000`). Both G5 ATI cards require providing your own Mac card FCode ROM image (`g5GraphicsROMPath`) in **Get Info → Display** (`bootFromCD` does not override G5 ATI).
 
 ### How the Emulated ATI Radeon R100 Works
 
@@ -187,6 +191,7 @@ Audio hardware emulation is toggled per machine via **Play the Mac's sound** (`"
 | :--- | :--- | :--- | :--- |
 | **Power Mac G4** | **Screamer (AWACS)** (`mac99,audiodev=snd0`) | 44.1 kHz stereo PCM. Keep guest RAM at **896 MB or less**—1 GB+ breaks Mac OS 9 Screamer audio. | macOS: `coreaudio` (`out.buffer-length=50000`) / Win: `dsound` / Linux: `pa` (fallback `alsa`) |
 | **Power Mac G4 (Mac OS X)** | **Screamer (AWACS)** (`screamer.osx-codec=on`, `screamer.dma-lead-us=0` on disk boots) | 44.1 kHz stereo PCM tuned for OS X Jaguar/Panther/Tiger audio drivers. | Same as Power Mac G4 |
+| **Power Mac G5** | **K2 I2S (TAS3004 codec)** (`-global macio-newworld.audiodev=snd0`) | 44.1 kHz stereo PCM routed through K2 KeyLargo/Shasta I2S on `mac99,via=pmu`. | Same as Power Mac G4 |
 | **Quadra 800** | **Apple Sound Chip (ASC)** (`q800,audiodev=snd0`) | 22 kHz audio. Patched (`asc-silence.patch`) to feed digital silence when idle, eliminating background hum/buzz, with a 50 ms output buffer to prevent underrun crackle. | Same as Power Mac G4 |
 | **Power Mac 7500 (Copland)** | DingusPPC audio | Experimental Copland profile (`sound` toggle is hidden/disabled). | Managed by `dingusppc` |
 

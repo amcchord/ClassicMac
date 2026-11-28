@@ -283,7 +283,7 @@ static Entry createImpl(const Model::Machine &machine, const QString &label,
   const QString method = copyFileCoW(
       diskPath, dstDisk, requireSpaceForFallback, diskAlloc + 256LL * 1048576);
 
-  if (machine.family() == QLatin1String("powerMacOSX") || isPippin) {
+  if (Model::isOSXFamily(machine.family()) || isPippin) {
     const QString nvramPath =
         QFileInfo(machine.folder).canonicalFilePath() + QStringLiteral("/nvram.img");
     if (QFileInfo(nvramPath).isFile() && !QFileInfo(nvramPath).isSymLink())
@@ -413,7 +413,7 @@ void restore(const Model::Machine &machine, const QString &checkpointId) {
 
   copyFileCoW(cpDisk, tmpDisk);
   bool hasNvramRestore = false;
-  if ((machine.family() == QLatin1String("powerMacOSX") || isPippin) &&
+  if ((Model::isOSXFamily(machine.family()) || isPippin) &&
       QFileInfo(cpNvram).isFile()) {
     copyFileCoW(cpNvram, tmpNvram);
     hasNvramRestore = true;

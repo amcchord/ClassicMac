@@ -226,6 +226,7 @@ struct FirstMacSetupView: View {
             }), options: [
                 (MachineFamily.powerMacG4, "Power Mac G4 — Mac OS 8.5 to 9.2.2"),
                 (MachineFamily.powerMacOSX, "Power Mac G4 — Mac OS X"),
+                (MachineFamily.powerMacG5, "Power Mac G5 — Mac OS X 10.3.9 to 10.5"),
                 (MachineFamily.quadra800, "Quadra 800 — System 7.1 to Mac OS 8.1"),
                 (MachineFamily.pippin, "Apple / Bandai Pippin — Pippin OS"),
             ], width: 360)
@@ -272,7 +273,7 @@ struct FirstMacSetupView: View {
             if readyFromInstaller {
                 let targetFamily = created?.machineFamily ?? family
                 Text("Start the installer, then follow these steps inside Mac OS:").platinumText(.body)
-                Text(targetFamily == .powerMacOSX
+                Text(targetFamily.isOSXFamily
                      ? "1. In the installer, open Disk Utility and format the blank disk with Apple Partition Map and Mac OS Extended.\n2. Install Mac OS X on that disk.\n3. If the installer opens again, shut down, choose the hard disk as the startup disk in ClassicMac, and start your Mac."
                      : targetFamily == .powerMacG4
                      ? "1. Open Utilities → Drive Setup on the CD and initialize the blank hard disk.\n2. Open Installer. In Options…, turn off Update Apple Hard Disk Drivers, then install Mac OS.\n3. Restart when installation finishes. Your Mac will start from its hard disk."
@@ -402,6 +403,7 @@ struct FirstMacSetupView: View {
                     sound: family.supportsSound, useG4CPU: family == .powerMacG4,
                     pippinVideoOut: family == .pippin ? .ntsc : nil,
                     flashImageName: family == .pippin ? "flash.img" : nil,
+                    cpuCount: family == .powerMacG5 ? PowerMacG5Machine.defaultCPUs : nil,
                     bundleURL: VMStore.shared.uniqueBundleURL(in: directory, name: trimmed))
                 if let vm = VMStore.shared.createVM(config) {
                     created = vm

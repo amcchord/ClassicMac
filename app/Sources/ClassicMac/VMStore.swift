@@ -246,6 +246,13 @@ final class VMStore: ObservableObject {
                 }
             }
         }
+        if config.machineFamily == .powerMacG5 && !fm.fileExists(atPath: config.nvramImageURL.path) {
+            do {
+                try Data(repeating: 0xFF, count: OSXNVRAM.byteCount).write(to: config.nvramImageURL, options: .atomic)
+            } catch {
+                return "The Power Mac G5 startup memory could not be created. \(error.localizedDescription)"
+            }
+        }
         return nil
     }
 

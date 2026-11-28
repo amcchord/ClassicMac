@@ -15,9 +15,11 @@ cd "$QEMU_DIR/build-windows"
   --extra-cflags='-O2 -ffp-contract=off' --extra-ldflags='-lgdi32 -luser32'
 ninja -j 3 qemu-system-m68k.exe qemu-system-ppc.exe qemu-img.exe
 PYTHON_BIN=python3 bash "$ROOT_DIR/scripts/build-osx-qemu.sh"
+PYTHON_BIN=python3 bash "$ROOT_DIR/scripts/build-g5-qemu.sh"
 python3 "$ROOT_DIR/desktop/scripts/stage-runtime.py" "$PWD" "$ROOT_DIR/output/desktop/runtime"
 "$ROOT_DIR/output/desktop/runtime/bin/qemu-system-ppc.exe" -device ati-vga,help | grep x-gl-renderer
 "$ROOT_DIR/output/desktop/runtime/bin/qemu-system-ppc.exe" -M help | grep -q '^pippin '
+"$ROOT_DIR/output/desktop/runtime/bin/qemu-system-ppc64.exe" -device ati-radeon9800,help | grep -q 'gl='
 "$ROOT_DIR/output/desktop/runtime/bin/qemu-system-m68k.exe" -device nubus-qfb,help | grep width
 VNC_HELP="$("$ROOT_DIR/output/desktop/runtime/bin/qemu-system-ppc.exe" -vnc help 2>&1 || true)"
 grep -q "vnc options" <<< "$VNC_HELP"

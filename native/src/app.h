@@ -54,7 +54,8 @@ private:
   void settingsSaved(QJsonObject);
   QJsonArray loadCatalog();
   Model::Machine install(QJsonObject, const QString &name,
-                         const QString &destination = {});
+                         const QString &destination = {},
+                         const QString &targetFamily = {});
   void showAbout();
   void showUpdateDialog(const Updater::ReleaseInfo &info, bool manual);
   void installUpdate(const Updater::ReleaseInfo &info);

@@ -134,12 +134,16 @@ flowchart TD
 
 ### 4. Mac OS X Tiger Shutdown Modal or Hung Guest
 
-- Unlike classic Mac OS (which responds directly to the ADB power key), Power Mac OS X (`powerMacOSX`) is shut down cleanly by `OSXShutdownController` (macOS) / `Engine::shutdown` (Qt), which sends `ctrl-f2`, `down`, `end`, `up`, `ret`, visually verifies the Apple menu and confirmation dialog via frame differencing, and presses `ret`.
+- Unlike classic Mac OS (which responds directly to the ADB power key), Power Mac OS X (`powerMacOSX` and `powerMacG5`) is shut down cleanly by `OSXShutdownController` (macOS) / `Engine::shutdown` (Qt), which sends `ctrl-f2`, `down`, `end`, `up`, `ret`, visually verifies the Apple menu and confirmation dialog via frame differencing, and presses `ret`.
 - If a modal dialog, screensaver, custom menu modifier, or non-standard layout blocks visual detection, ClassicMac shows *"Couldn't Shut Down ... Automatically"*. Open the guest window and choose **Apple -> Shut Down…** manually, or choose **Shut Down -> Force Stop** if the guest is genuinely frozen. (Force Stop marks `.session-state.json` `clean: false` and triggers a `Pre-recovery backup` before the next start if checkpoints exist.)
+- **Power Mac G5 specific notes:**
+  - **Mac OS X 10.3 Panther CPU limit:** 10.3.x SMP hangs with more than 2 virtual CPUs; keep **CPUs** at `1` or `2` (`cpuCount <= 2`) when booting Panther on a G5.
+  - **ATI Radeon 9800 / 7000 ROM:** Unlike Power Mac G4 R100 (which boots ROMless via OpenBIOS), G5 Radeon 9800 and 7000 require supplying a Mac FCode card ROM path in **Get Info -> Display** (`g5GraphicsROMPath`). Without a ROM path, preflight blocks launch so the guest will not start to a blank screen.
+  - **G5 memory >= 2 GB:** `qemu-system-ppc64` automatically maps RAM above `2 GB` at `4 GB` matching real U3 G5 hardware, and initializes blank `0xFF` `nvram.img` on first boot (no strict G4 `OSXNVRAM` validation required).
 
 ### 5. Shared Folder Missing Files or Corrupted Classic Mac Apps
 
-- **Platform & mode limits:** Host folder sharing (`sharedFolderPath`) is supported on **Quadra 800** and **Power Mac G4** on **macOS and Linux** (not Windows hosts, not `powerMacOSX`, not `powerMac7500`, and automatically disabled while **Boot from CD** is active).
+- **Platform & mode limits:** Host folder sharing (`sharedFolderPath`) is supported on **Quadra 800**, **Power Mac G4**, and **Power Mac G5** (`virtio-9p-pci` in PCI-X slot with `macos_compat=on` for `osx9p`) on **macOS and Linux** (not Windows hosts, not `powerMacOSX`, not `powerMac7500`, and automatically disabled while **Boot from CD** is active).
 - **Corrupted classic apps or missing icons:** QEMU exposes shared folders via Virtio 9p (`virtio-9p`) without native HFS+ resource forks or Finder Type/Creator codes. Copy `.sit`, `.hqx`, `.bin` (MacBinary), or `.img`/`.dsk` disk images through the shared folder and unpack them inside the guest using **StuffIt Expander** or **Disk Copy** from **ClassicMac Tools**.
 - **Volume name truncation:** ClassicMac strips `:` and `,` from the folder name and truncates the guest volume name to 27 characters (`sharedVolumeName`).
 

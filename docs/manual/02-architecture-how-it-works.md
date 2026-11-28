@@ -12,8 +12,8 @@ ClassicMac separates the **native desktop interface** from the **emulated hardwa
 
 ClassicMac uses two native host frontends sharing the exact same Apple Platinum pixel tables, BDF/TrueType bitmap fonts, Icon Services artwork, `.classic` bundle schema, and QEMU patch stack:
 
-- **macOS (`app/`)**: A native **Swift / SwiftUI / AppKit** application using `PlatinumKit` for pixel-exact Platinum chrome, `CDisplaySocket` for the `-display classicmac` shared-memory stream socket, and `CMachineArchive` (`sparse_tar.c`) for GNU sparse 1.0 extraction. Each machine family launches from its own helper bundle inside `ClassicMac.app/Contents/Helpers/` (`Quadra 800.app`, `Power Mac G4.app`, `Power Mac G4 for OS X.app`, and `Power Mac 7500.app`) so running Macs get dedicated Dock names and icons.
-- **Windows & Linux (`native/`)**: A compiled **C++17 / Qt 6 Widgets** application (`classicmac`)—with zero Electron, Chromium, or Node runtime—communicating with `qemu-system-m68k`, `qemu-system-ppc`, and `qemu-system-ppc-osx` over `stdio` QMP pipes and an authenticated loopback RFB/VNC socket.
+- **macOS (`app/`)**: A native **Swift / SwiftUI / AppKit** application using `PlatinumKit` for pixel-exact Platinum chrome, `CDisplaySocket` for the `-display classicmac` shared-memory stream socket, and `CMachineArchive` (`sparse_tar.c`) for GNU sparse 1.0 extraction. Each machine family launches from its own helper bundle inside `ClassicMac.app/Contents/Helpers/` (`Quadra 800.app`, `Power Mac G4.app`, `Power Mac G4 for OS X.app`, `Power Mac G5.app`, and `Power Mac 7500.app`) so running Macs get dedicated Dock names and icons.
+- **Windows & Linux (`native/`)**: A compiled **C++17 / Qt 6 Widgets** application (`classicmac`)—with zero Electron, Chromium, or Node runtime—communicating with `qemu-system-m68k`, `qemu-system-ppc`, `qemu-system-ppc-osx`, and `qemu-system-ppc64` over `stdio` QMP pipes and an authenticated loopback RFB/VNC socket.
 
 ```mermaid
 flowchart LR
@@ -24,6 +24,7 @@ flowchart LR
         M68K["qemu-system-m68k (QEMU 11.0.2 -M q800)"]
         PPC["qemu-system-ppc (QEMU 11.0.2 -M mac99, Std VGA or ATI R100)"]
         OSX["qemu-system-ppc-osx (QEMU 10.0.13 -M mac99, Core99 PMU)"]
+        G5["qemu-system-ppc64 (QEMU 11.1.50 -M mac99,via=pmu -cpu 970fx)"]
         COP["dingusppc (Power Mac 7500 Copland, macOS only)"]
     end
 
@@ -106,7 +107,7 @@ flowchart TD
 | `disk.img` | All disk-based Macs | Raw sparse disk image (`preallocation=off`). Directly mountable via `hdiutil` on macOS and compatible with classic Mac OS Apple Hard Disk drivers (omitted on `pippin`) |
 | `flash.img` | Apple / Bandai Pippin | 128 KiB (`131,072` bytes) raw Save Flash initialized to `0xFF` (`if=pflash`), persisting Pippin Navigator settings and game saves |
 | `pram.img` | Quadra 800 / Pippin | 256/512-byte parameter RAM (`pram-seed.img` on Quadra; 256 B CUDA PRAM on `if=mtd,index=1` on Pippin) |
-| `nvram.img` | Power Mac G4 — OS X / Pippin | 16 KiB Core99 dual-bank flash NVRAM (`macosx-flash-seed.img`) on OS X, or 8 KiB (`8,192` bytes, `if=mtd,index=0`) on Pippin |
+| `nvram.img` | Power Mac G4 — OS X / G5 / Pippin | 16 KiB Core99 dual-bank flash NVRAM (`macosx-flash-seed.img` on G4 OS X; blank `0xFF` flash auto-formatted on first boot on G5), or 8 KiB (`8,192` bytes, `if=mtd,index=0`) on Pippin |
 | `bootrom.bin`, `nvram.bin`, `copland-rtc.bin` | Copland D11E4 | Matched 4 MiB Power Mac 7500 ROM, 8,209-byte NVRAM (`DINGUSPPCNVRAM`), and persistent RTC checkpoint preventing date-rewind assertions |
 | `preview.png` | All machines | Last useful screen capture saved on shutdown (`MachinePreviewQuality.isUseful` filters blank/neutral boot frames) |
 | `.session-state.json` | All machines | Records `clean`, `lastExitReason`, `lastStartedAt`, `lastStoppedAt`, and `recoveryPrompted` so crashes can trigger an automatic `Pre-recovery backup` checkpoint |

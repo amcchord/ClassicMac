@@ -229,7 +229,7 @@ struct LibraryEntry: Identifiable, Hashable {
         if let edition { return edition.osLabel }
         let version = machine.osVersion
         guard version.first?.isNumber == true else { return version }
-        if machine.family == .powerMacOSX { return "Mac OS X \(version)" }
+        if machine.family.isOSXFamily { return "Mac OS X \(version)" }
         if version.hasPrefix("7.") { return "System \(version)" }
         return "Mac OS \(version)"
     }
@@ -238,7 +238,7 @@ struct LibraryEntry: Identifiable, Hashable {
         if machine.family == .powerMac7500 || osLabel.localizedCaseInsensitiveContains("Copland") {
             return .copland
         }
-        if machine.family == .powerMacOSX || osLabel.hasPrefix("Mac OS X") {
+        if machine.family.isOSXFamily || osLabel.hasPrefix("Mac OS X") {
             return .macOSX
         }
         if osLabel.hasPrefix("System 7") || machine.osVersion.hasPrefix("7.") {
@@ -248,6 +248,11 @@ struct LibraryEntry: Identifiable, Hashable {
             return .macOS8
         }
         return .macOS9
+    }
+
+    var supportsPowerMacG5: Bool {
+        machine.family == .powerMacG5 ||
+            (machine.family == .powerMacOSX && PowerMacG5Machine.supportsG5(osVersion: machine.osVersion))
     }
 
     private var usesEditionCopy: Bool {

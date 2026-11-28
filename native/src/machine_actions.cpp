@@ -601,7 +601,7 @@ void App::showPowerActions(Engine *engine) {
   auto status = label(powerState(target), &dialog, "small", true);
   status->setObjectName("machinePowerStatus");
   layout->addWidget(status);
-  bool osx = target->machine.family() == "powerMacOSX";
+  bool osx = Model::isOSXFamily(target->machine.family());
   auto guidance = label(osx
       ? "Shut Down asks Mac OS X to close its applications safely. Save your "
         "work and answer any dialogs on the Mac's screen, or use the Apple "

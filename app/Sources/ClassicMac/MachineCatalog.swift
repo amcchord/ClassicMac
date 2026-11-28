@@ -27,7 +27,7 @@ struct MachineCatalog: Codable {
     static let retroBootURL = URL(string: "https://mcchord.net/retroboot-downloads/catalog.json")!
     static let maximumCatalogBytes: Int64 = 1_048_576
     static var currentAppVersion: String {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "5.0.1"
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "5.1.0"
     }
 
     let schemaVersion: Int
@@ -99,7 +99,7 @@ struct DownloadableMachine: Codable, Identifiable, Hashable {
     private var archiveFirmware: (bytes: Int64, files: Int64) {
         switch family {
         case .powerMacG4, .pippin: return (0, 0)
-        case .powerMacOSX: return (16_384, 1)
+        case .powerMacOSX, .powerMacG5: return (16_384, 1)
         case .powerMac7500: return (4_202_513, 2)
         case .quadra800: return (1_049_088, 2)
         }

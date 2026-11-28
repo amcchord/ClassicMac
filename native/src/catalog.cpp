@@ -187,7 +187,7 @@ QJsonArray parse(const QByteArray &data) {
       fail("Invalid installed size.");
     auto family = m.value("machineFamily").toString("powerMacG4");
     if (!QStringList{"powerMacG4", "quadra800", "powerMac7500", "powerMacOSX",
-                     "pippin"}
+                     "powerMacG5", "pippin"}
              .contains(family))
       fail("Unknown Library Mac model.");
     const auto installed = m["installedBytes"].toDouble();
@@ -758,7 +758,7 @@ void extract(const QString &archive, const QString &folder,
     const auto family = m["machineFamily"].toString();
     if (family == "quadra800")
       allowed << "Quadra800.rom" << "pram.img";
-    if (family == "powerMacOSX")
+    if (Model::isOSXFamily(family))
       allowed << "nvram.img";
     if ((h[156] != 0 && h[156] != '0') || !allowed.contains(name) || seen.contains(name))
       fail("Unsafe machine archive member.");
@@ -855,13 +855,22 @@ QString cleanSummary(const QJsonObject &entry) {
 }
 Model::Machine install(QJsonObject entry, const QString &parent,
                        const QString &name, std::atomic_bool &cancel,
-                       const Progress &progress) {
+                       const Progress &progress,
+                       const QString &targetFamily) {
   const auto m = resolvedArchiveEntry(entry);
   if (!Model::supportedVersion(m["minimumAppVersion"].toString()))
     fail("Update ClassicMac to install this edition.");
   auto family = m.value("machineFamily").toString("powerMacG4");
-  if (!QStringList{"powerMacG4", "quadra800", "powerMacOSX"}.contains(family))
+  if (!QStringList{"powerMacG4", "quadra800", "powerMacOSX", "powerMacG5"}
+           .contains(family))
     fail("This edition needs the macOS Copland engine.");
+  const QString effectiveFamily =
+      targetFamily.isEmpty() ? family : targetFamily;
+  const bool convertingToG5 =
+      family == "powerMacOSX" && effectiveFamily == "powerMacG5" &&
+      Model::supportsG5OS(m["osVersion"].toString());
+  if (effectiveFamily != family && !convertingToG5)
+    fail("This edition does not support the selected Mac model.");
   const QString dest = parent.isEmpty() ? Model::documents() : parent;
   if (!QDir().mkpath(dest))
     fail("Cannot create the machine destination.");
@@ -911,13 +920,23 @@ Model::Machine install(QJsonObject entry, const QString &parent,
             "05ad753fb594e656cf078023ec189e09e2a7655a780de993b75b8c51ed6b09ca")
       fail("The Quadra ROM failed its integrity check.");
   }
-  auto c = Model::freshConfig(machineName, family);
+  if (effectiveFamily == "powerMacG5") {
+    QFile nv(folder + "/nvram.img");
+    if (!nv.open(QFile::WriteOnly | QFile::Truncate) ||
+        nv.write(QByteArray(16384, char(0xff))) != 16384)
+      fail("Could not prepare Power Mac G5 startup memory.");
+  }
+  auto c = Model::freshConfig(machineName, effectiveFamily);
   for (auto key : {"ramMB", "width", "height", "depth", "networking", "sound",
                    "useG4CPU", "useVirtioDisk", "tabletInput",
                    "classicInputHelpers", "useEnhancedFramebuffer",
                    "graphicsCard"})
     if (source.contains(key))
       c[key] = source[key];
+  if (effectiveFamily == "powerMacG5") {
+    c["ramMB"] = std::max(c["ramMB"].toInt(), 2048);
+    c["cpuCount"] = 2;
+  }
   c["diskSizeGB"] =
       int((QFileInfo(folder + "/disk.img").size() + 1073741823) / 1073741824);
   c["toolsCDInserted"] =
@@ -939,23 +958,27 @@ Model::Machine install(QJsonObject entry, const QString &parent,
       recommended.insert(it.key(), it.value());
   }
   if (!recommended.isEmpty()) {
-    const bool quad = family == "quadra800";
-    const bool osx = family == "powerMacOSX";
-    const int minRam = quad ? 16 : osx ? 256 : 32;
-    int maxRam = quad ? 1000 : osx ? 2048 : 896;
+    const bool quad = effectiveFamily == "quadra800";
+    const bool g5 = effectiveFamily == "powerMacG5";
+    const bool osx = effectiveFamily == "powerMacOSX";
+    const bool anyOsx = osx || g5;
+    const int minRam = quad ? 16 : g5 ? 512 : osx ? 256 : 32;
+    int maxRam = quad ? 1000 : g5 ? 16384 : osx ? 2048 : 896;
     const qint64 hostMB = hostMemoryMB();
     if (hostMB > 0)
       maxRam = std::min(maxRam, int(std::max<qint64>(minRam, hostMB / 2)));
     const QJsonValue ramVal =
-        (osx && recommended.contains("osx_ram_mb"))
+        (anyOsx && recommended.contains("osx_ram_mb"))
             ? recommended.value("osx_ram_mb")
             : recommended.value("ram_mb");
     if (ramVal.isDouble()) {
       const double d = ramVal.toDouble();
-      if (d > 0 && d == qint64(d))
-        c["ramMB"] = std::clamp(int(d), minRam, maxRam);
+      if (d > 0 && d == qint64(d)) {
+        const int targetMin = g5 ? std::min(2048, maxRam) : minRam;
+        c["ramMB"] = std::clamp(int(d), targetMin, maxRam);
+      }
     }
-    if (family == "powerMacG4" && recommended.value("cpu").isString()) {
+    if (effectiveFamily == "powerMacG4" && recommended.value("cpu").isString()) {
       const QString cpu = recommended.value("cpu").toString().trimmed().toLower();
       if (cpu == "g3")
         c["useG4CPU"] = false;
@@ -979,10 +1002,11 @@ Model::Machine install(QJsonObject entry, const QString &parent,
 }
 QString install(const QJsonObject &entry, const QString &name,
                 std::atomic_bool &cancel, Progress progress,
-                const QString &destinationDir) {
+                const QString &destinationDir,
+                const QString &targetFamily) {
   const QString dest =
       destinationDir.isEmpty() ? Model::documents() : destinationDir;
-  return install(entry, dest, name, cancel, progress).folder;
+  return install(entry, dest, name, cancel, progress, targetFamily).folder;
 }
 QString downloadPippinROM(std::atomic_bool &cancel, const Progress &progress) {
   static constexpr qint64 kRomBytes = 4194304;

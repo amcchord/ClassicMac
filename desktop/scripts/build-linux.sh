@@ -12,5 +12,7 @@ cd "$ROOT_DIR/vendor/qemu/build-linux"
   --disable-debug-info --extra-cflags='-O2 -ffp-contract=off'
 ninja -j "${CLASSICMAC_BUILD_JOBS:-4}" qemu-system-m68k qemu-system-ppc qemu-img
 PYTHON_BIN=python3 bash "$ROOT_DIR/scripts/build-osx-qemu.sh"
+PYTHON_BIN=python3 bash "$ROOT_DIR/scripts/build-g5-qemu.sh"
 python3 "$ROOT_DIR/desktop/scripts/stage-linux.py" "$PWD" "$ROOT_DIR/output/desktop/runtime"
 "$ROOT_DIR/output/desktop/runtime/bin/qemu-system-ppc" -M help | grep -q '^pippin '
+"$ROOT_DIR/output/desktop/runtime/bin/qemu-system-ppc64" -device ati-radeon9800,help | grep -q 'gl='

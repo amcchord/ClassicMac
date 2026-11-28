@@ -18,7 +18,7 @@ flowchart TD
     Q1 -->|"System 7.1 to Mac OS 8.1 (68k)"| Q800["Select Quadra 800 (68040, Default 128 MB RAM, 2 GB Disk)"]
     Q1 -->|"Mac OS 8.5 or 8.6 (PowerPC)"| PM86["Select Power Mac G4 (mac99) + Turn Off G4 CPU in Get Info"]
     Q1 -->|"Mac OS 9.0 to 9.2.2 (PowerPC)"| PM9["Select Power Mac G4 (mac99, Default 512 MB RAM, 32 GB Disk, G4 CPU On)"]
-    Q1 -->|"Mac OS X 10.2 to 10.4 (PowerPC)"| PMX["Select Power Mac G4 - Mac OS X (QEMU 10, Default 1024 MB RAM, 32 GB Disk)"]
+    Q1 -->|"Mac OS X 10.2 to 10.4 (PowerPC)"| PMX["Select Power Mac G4 - OS X (1024 MB) or Power Mac G5 (970FX, 2048 MB)"]
     Q1 -->|"Apple / Bandai Pippin OS & Games"| PIP["Select Apple / Bandai Pippin (PowerPC 603, 13 MB RAM, 128 KB Save Flash, Kinka ROM)"]
     Q1 -->|"Copland D11E4"| COP["Download from Mac OS Library (macOS Power Mac 7500 Only)"]
 
@@ -38,9 +38,10 @@ flowchart TD
 
 Open **File → New Mac…** (`Command-N` / `Ctrl+N`) or click **New Mac…** in the Home window:
 
-1. **Model:** Choose one of four hardware profiles:
+1. **Model:** Choose one of five hardware profiles:
    - **Power Mac G4 — Mac OS 8.5 to 9.2.2** (`powerMacG4`): OpenBIOS `mac99` PowerPC machine. No Apple ROM file is required.
-   - **Power Mac G4 — Mac OS X** (`powerMacOSX`): Dedicated QEMU 10.0.13 `mac99,via=pmu` machine with Core99 `16 KiB` flash NVRAM (`nvram.img`).
+   - **Power Mac G4 — Mac OS X** (`powerMacOSX`): Dedicated QEMU 10.0.13 `mac99,via=pmu` machine (`10.2–10.4.11`) with Core99 `16 KiB` flash NVRAM (`nvram.img`).
+   - **Power Mac G5 — Mac OS X 10.3 to 10.4** (`powerMacG5`): 64-bit `PowerMac7,3` (`qemu-system-ppc64`, PowerPC `970fx` with `1–16` CPUs, `512 MB–16 GB` RAM, K2 SATA/ATA-100, and optional ATI Radeon 9800/7000 with a user-supplied Mac ROM).
    - **Quadra 800 — System 7.1 to Mac OS 8.1** (`quadra800`): Motorola `68040` machine using ClassicMac's bundled Quadra 800 ROM and a per-machine `pram.img`.
    - **Apple / Bandai Pippin — Pippin OS** (`pippin`): `qemu-system-ppc -M pippin` PowerPC `603` console (`5–16 MB` RAM, default `13 MB`; `128 KB` Save Flash `flash.img`, `8 KB` `nvram.img`, and `256 B` `pram.img`; requires a user-supplied 4 MB Kinka boot ROM such as Kinka 1.3). Accepts `.iso`, `.toast`, `.cdr`, `.img`, and raw 2352-byte `.bin`/`.cue` Pippin discs (auto-converted to `.iso`).
 2. **Name:** Enter up to 100 characters. ClassicMac creates `<Name>.classic` (appending a number if a bundle with that name already exists).
@@ -48,6 +49,7 @@ Open **File → New Mac…** (`Command-N` / `Ctrl+N`) or click **New Mac…** in
    - **Quadra 800:** RAM presets `64`, `128` (default), `256`, `512`, `1000 MB`; disk presets `1`, `2` (default), `4`, `8`, `16`, `32`, `64`, `120 GB`.
    - **Power Mac G4:** RAM presets `128`, `256`, `512` (default), `768`, `896 MB`; disk presets `2`, `4`, `8`, `16`, `32` (default), `64`, `120 GB`. *(Mac OS 9 tops out at `896 MB` because Mac OS 9 sound and stability break under emulation with `1 GB` or more.)*
    - **Power Mac G4 — Mac OS X:** RAM presets `256`, `512`, `768`, `1024` (default), `1536`, `2048 MB`; disk presets `2`–`120 GB` (`32 GB` default).
+   - **Power Mac G5:** RAM presets `512`, `1024`, `2048` (default), `4096`, `8192`, `16384 MB`; CPU count `1–16` (`2` default; cap at `2` CPUs for 10.3 Panther); disk presets `2`–`120 GB` (`32 GB` default).
    - *(On Windows/Linux, **New Mac** lets you pick Model, Name, Hard disk capacity, and Install CD; adjust Memory afterward in **Get Info…**.)*
 4. **Install CD (optional):** Click **Choose…** to attach an uncompressed `.iso`, `.toast`, `.cdr`, or `.img` installer disc image.
    - On macOS, **Copy the CD image into ClassicMac** (checked by default) copies the image into `~/Library/Application Support/ClassicMac/Media/` so moving or deleting your original download won't break the VM. Uncheck it if you prefer to reference the image in place.
@@ -111,22 +113,22 @@ When you create a Mac with an installer CD, `bootFromCD` starts enabled (`Start 
    - Install Apple's **ATI drivers** (ATI Driver Update 1.9.5 / ATI Radeon software) and **ClassicMac Display** (from the Tools volume) inside Mac OS 9 so the desktop switches out of `640 × 480`.
    - Shut down the Mac, open **Get Info… → Display**, select **ATI Radeon (3D acceleration)**, and click **OK**.
 
-### 3. Mac OS X 10.2–10.4 Tiger on Power Mac G4 — Mac OS X
+### 3. Mac OS X 10.2–10.4 Tiger on Power Mac G4 or Power Mac G5
 
-ClassicMac runs PowerPC Mac OS X (`10.2` Jaguar, `10.3` Panther, `10.4` Tiger) on a dedicated **QEMU 10.0.13** engine (`mac99,via=pmu`, `7400` G4 CPU, persistent `16 KiB` Core99 flash `nvram.img`, `-vga std` with `64 MB` VRAM, `sungem` Ethernet, and Screamer audio).
+ClassicMac runs PowerPC Mac OS X either on **Power Mac G4 — Mac OS X** (`10.2` Jaguar, `10.3` Panther, `10.4` Tiger on **QEMU 10.0.13** `mac99,via=pmu` with `7400` G4 CPU) or on **Power Mac G5** (`10.3` Panther and `10.4` Tiger on **QEMU 11.1.50** `qemu-system-ppc64` with `970fx` SMP, K2 SATA/ATA-100, and optional ATI Radeon 9800/7000). Both use persistent `16 KiB` flash `nvram.img`, `-vga std` (`64 MB` VRAM by default), and `sungem` Ethernet.
 
-1. **Create the Machine:** Choose **Power Mac G4 — Mac OS X** in **New Mac…**, set **Memory** to `1024 MB` (or `2048 MB` for Tiger Deluxe workloads if your host has 4 GB+ RAM), **Hard disk** to `32 GB`, and attach your PowerPC Mac OS X installation disc image (`.iso`, `.cdr`, or `.toast`).
+1. **Create the Machine:** Choose **Power Mac G4 — Mac OS X** (`1024 MB` default) or **Power Mac G5** (`2048 MB` default, `2` CPUs default; keep `<= 2` CPUs for 10.3 Panther) in **New Mac…**, set **Hard disk** to `32 GB`, and attach your PowerPC Mac OS X installation disc image (`.iso`, `.cdr`, or `.toast`).
 2. **Partition & Format in Disk Utility:**
    - Start up into the Mac OS X Installer.
    - From the **Utilities** menu (or **Installer** menu on 10.2/10.3), open **Disk Utility**.
-   - Select the blank virtual ATA hard disk, choose **Erase** (or **Partition** with **Apple Partition Map**), and format as **Mac OS Extended (Journaled)** (or **Mac OS Extended** on Jaguar).
+   - Select the blank virtual hard disk, choose **Erase** (or **Partition** with **Apple Partition Map**), and format as **Mac OS Extended (Journaled)** (or **Mac OS Extended** on Jaguar).
 3. **Install & Handle Multi-Disc / First Reboot:**
    - Run the installer onto your formatted volume.
    - If the installer restarts back into the installation CD (or asks for Disc 2), shut down, open **Media…**, switch **Start up from:** to **Hard disk** (or eject/swap the disc), and start up again.
 4. **Clean Shutdown:** Inside Mac OS X, always choose **Apple menu → Shut Down** (or confirm **Shut Down** in ClassicMac's dialog, which triggers Mac OS X shutdown cleanly; **Force Stop** is available only as an emergency fallback if the guest freezes).
 
 > [!NOTE]
-> On `powerMacOSX`, ClassicMac uses the standard widescreen VGA framebuffer (`-vga std`) at 32-bit color, and host **Shared Folders**, **Floppy Disk**, **ClassicMac Tools CD**, and **Classic input helpers** are disabled because Mac OS X has native USB mouse, two-button/scroll support, and UNIX networking.
+> On `powerMacOSX` and `powerMacG5`, ClassicMac uses the standard widescreen VGA framebuffer (`-vga std`) at 32-bit color by default, and **Floppy Disk**, **ClassicMac Tools CD**, and **Classic input helpers** are disabled because Mac OS X has native USB mouse, two-button/scroll support, and UNIX networking. Host **Shared Folders** are disabled on `powerMacOSX`; on `powerMacG5`, setting a Shared Folder attaches a PCI-X `virtio-9p-pci` (`macos_compat=on`) device for the `osx9p` guest extension.
 
 ### 4. Copland D11E4 Developer Preview (`powerMac7500`)
 
@@ -140,7 +142,7 @@ During startup, the engine holds `Caps Lock` for `500 ms` (until your first real
 
 ### 5. Apple / Bandai Pippin Console (Pippin OS & Games)
 
-ClassicMac 5.0.1 emulates the PowerPC 603 **Apple / Bandai Pippin** (`qemu-system-ppc -M pippin`) directly inside QEMU with Apple Taos 16-bit graphics (`ntsc`, `pal`, `vga`), AppleJack trackball/gamepad ADB input, Save Flash storage (`128 KB` `flash.img`), `8 KB` NVRAM (`nvram.img`), `256 B` PRAM (`pram.img`), and genuine Sony/Apple SCSI CD-ROM timing.
+ClassicMac 5.1.0 emulates the PowerPC 603 **Apple / Bandai Pippin** (`qemu-system-ppc -M pippin`) directly inside QEMU with Apple Taos 16-bit graphics (`ntsc`, `pal`, `vga`), AppleJack trackball/gamepad ADB input, Save Flash storage (`128 KB` `flash.img`), `8 KB` NVRAM (`nvram.img`), `256 B` PRAM (`pram.img`), and genuine Sony/Apple SCSI CD-ROM timing.
 
 <p align="center">
   <img src="../screenshots/manual/pippin-new-mac-dialog.png" width="500" alt="New Mac dialog configured for Apple / Bandai Pippin with NTSC video output and Boot ROM selected">
@@ -160,7 +162,7 @@ ClassicMac 5.0.1 emulates the PowerPC 603 **Apple / Bandai Pippin** (`qemu-syste
 3. **Start & Swap Discs:** Pippin discs self-boot directly from the CD-ROM; without a disc inserted, the console displays its animated *Insert CD* prompt. You can eject or swap Pippin discs live in **Media…**.
 
 <p align="center">
-  <img src="../screenshots/manual/guest-pippin-navigator.png" width="680" alt="Pippin Navigator 1.1 booted inside ClassicMac 5.0.1's Platinum window">
+  <img src="../screenshots/manual/guest-pippin-navigator.png" width="680" alt="Pippin Navigator 1.1 booted inside ClassicMac 5.1.0's Platinum window">
 </p>
 
 ---

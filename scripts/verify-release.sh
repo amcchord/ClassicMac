@@ -83,6 +83,8 @@ QUADRA_QEMU="$QUADRA_HELPER/Contents/MacOS/qemu-system-m68k"
 QUADRA_QEMU_IMG="$QUADRA_HELPER/Contents/MacOS/qemu-img"
 OSX_HELPER="$APP/Contents/Helpers/Power Mac G4 for OS X.app"
 OSX_QEMU="$OSX_HELPER/Contents/MacOS/qemu-system-ppc"
+G5_HELPER="$APP/Contents/Helpers/Power Mac G5.app"
+G5_QEMU="$G5_HELPER/Contents/MacOS/qemu-system-ppc64"
 COPLAND_HELPER="$APP/Contents/Helpers/Power Mac 7500.app"
 COPLAND_ENGINE="$COPLAND_HELPER/Contents/MacOS/dingusppc"
 PPC_NDRV="$APP/Contents/Resources/qemu/pc-bios/qemu_vga.ndrv"
@@ -169,6 +171,10 @@ if [ "$VERSION_MAJOR" -gt 4 ] || { [ "$VERSION_MAJOR" -eq 4 ] && [ "$VERSION_MIN
   [ -e "$OSX_HELPER/Contents/Info.plist" ] || die "Required OS X helper Info.plist is missing: $OSX_HELPER"
   HELPER_BUNDLES+=("$OSX_HELPER")
 fi
+if [ "$VERSION_MAJOR" -ge 5 ]; then
+  [ -e "$G5_HELPER/Contents/Info.plist" ] || die "Required Power Mac G5 helper Info.plist is missing: $G5_HELPER"
+  HELPER_BUNDLES+=("$G5_HELPER")
+fi
 
 for helper in "${HELPER_BUNDLES[@]}"; do
   HELPER_VERSION="$(plutil -extract CFBundleShortVersionString raw "$helper/Contents/Info.plist")"
@@ -201,7 +207,29 @@ if [ "$IS_47_OR_NEWER" -eq 1 ]; then
     --firmware "$OSX_FIRMWARE" --seed-file "$OSX_FIRMWARE/macosx-flash-seed.img"
 fi
 
-log "Verifying Developer ID signatures and hardened runtime across app and all 4 helpers"
+if [ "$VERSION_MAJOR" -ge 5 ]; then
+  log "Checking the Power Mac G5 engine and OpenBIOS firmware"
+  G5_FIRMWARE="$APP/Contents/Resources/qemu-g5"
+  [ -x "$G5_QEMU" ] || die "Power Mac G5 engine is missing"
+  [ -s "$G5_FIRMWARE/keymaps/en-us" ] || die "Power Mac G5 keymaps are missing"
+  for fw in openbios-ppc64-g5 vgabios-stdvga.bin qemu_vga.ndrv; do
+    [ -s "$G5_FIRMWARE/$fw" ] || die "Bundled Power Mac G5 firmware is missing or empty: $fw"
+    if [ "$SKIP_REPO_FRESHNESS" != "1" ]; then
+      cmp -s "$G5_FIRMWARE/$fw" "$ROOT_DIR/g5/firmware/$fw" || die "Bundled Power Mac G5 firmware differs: $fw"
+    fi
+  done
+  G5_DISPLAY_HELP="$("$G5_QEMU" -display help 2>&1 || true)"
+  printf '%s\n' "$G5_DISPLAY_HELP" | grep -qx 'classicmac' || \
+    die "Bundled Power Mac G5 QEMU lacks -display classicmac"
+  printf '%s\n' "$G5_DISPLAY_HELP" | grep -qx 'cocoa' || \
+    die "Bundled Power Mac G5 QEMU lacks -display cocoa"
+  "$G5_QEMU" -device ati-radeon9800,help 2>&1 | grep -q 'gl=' || \
+    die "Bundled Power Mac G5 QEMU lacks ati-radeon9800.gl"
+  "$G5_QEMU" -device usb-tablet,help 2>&1 | grep -q 'axis-inset' || \
+    die "Bundled Power Mac G5 QEMU lacks usb-tablet.axis-inset"
+fi
+
+log "Verifying Developer ID signatures and hardened runtime across app and all helpers"
 codesign --verify --deep --strict --verbose=2 "$APP"
 SIGNED_ITEMS=("$APP" "$MAIN_BIN" "$QUADRA_QEMU_IMG" "${HELPER_BUNDLES[@]}")
 for signed_item in "${SIGNED_ITEMS[@]}"; do
@@ -225,6 +253,9 @@ log "Verifying arm64 binaries, display cards, and RetroBoot engine properties"
 ARM64_BINS=("$MAIN_BIN" "$PPC_QEMU" "$QUADRA_QEMU" "$QUADRA_QEMU_IMG" "$COPLAND_ENGINE")
 if [ "$IS_47_OR_NEWER" -eq 1 ]; then
   ARM64_BINS+=("$OSX_QEMU")
+fi
+if [ "$VERSION_MAJOR" -ge 5 ]; then
+  ARM64_BINS+=("$G5_QEMU")
 fi
 for bin in "${ARM64_BINS[@]}"; do
   file "$bin" | grep -q 'arm64' || die "$(basename "$bin") is not arm64: $bin"

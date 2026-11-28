@@ -148,6 +148,7 @@ final class MachineDownloadModel: ObservableObject {
     }
 
     func install(_ machine: DownloadableMachine, name: String, directory: URL,
+                 targetFamily: MachineFamily? = nil,
                  onInstall: @escaping (URL) -> Void) {
         guard !isBusy else { return }
         errorMessage = nil
@@ -218,6 +219,7 @@ final class MachineDownloadModel: ObservableObject {
                 let destination = try await Task.detached(priority: .utility) {
                     try MachineTemplateInstaller.installVerifiedArchive(
                         file, machine: machine, name: name, in: directory,
+                        targetFamily: targetFamily,
                         cancelled: { cancellation.isCancelled },
                         progress: { installReporter.report($0) }
                     )

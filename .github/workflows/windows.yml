@@ -23,7 +23,7 @@ jobs:
           path: |
             output/desktop/runtime
             output/desktop/ClassicMac-Windows-QEMU-source.tar.gz
-          key: windows-engine-${{ hashFiles('ati/*.c', 'ati/*.h', '**/*.patch','osx/**','scripts/build-osx-qemu.sh', 'qfb/*.c', 'qfb/*.h', 'qfb/*.rom', 'screamer/*', 'ppcvid/qemu_vga.ndrv', 'shared/*', 'pippin/*', 'display/*', 'scripts/build-qemu.sh', 'desktop/ati_gl_windows.inc', 'desktop/scripts/build-engine.sh', 'desktop/scripts/stage-runtime.py', 'desktop/scripts/prepare-windows-gl.py', 'native/scripts/package_common.py', '.github/workflows/windows.yml') }}
+          key: windows-engine-${{ hashFiles('ati/*.c', 'ati/*.h', '**/*.patch','osx/**','g5/**','scripts/build-osx-qemu.sh','scripts/build-g5-qemu.sh', 'qfb/*.c', 'qfb/*.h', 'qfb/*.rom', 'screamer/*', 'ppcvid/qemu_vga.ndrv', 'shared/*', 'pippin/*', 'display/*', 'scripts/build-qemu.sh', 'desktop/ati_gl_windows.inc', 'desktop/scripts/build-engine.sh', 'desktop/scripts/stage-runtime.py', 'desktop/scripts/prepare-windows-gl.py', 'native/scripts/package_common.py', '.github/workflows/windows.yml') }}
       - uses: msys2/setup-msys2@v2
         with:
           msystem: UCRT64
@@ -47,7 +47,7 @@ jobs:
         run: |
           QEMU_REPO=https://github.com/qemu/qemu.git desktop/scripts/build-engine.sh
           python3 ati/tests/test_qemu_ati.py --gl-optional output/desktop/runtime/bin/qemu-system-ppc.exe output/desktop/runtime/qemu/pc-bios
-          tar --exclude=.git --exclude=build --exclude=build-windows -czf output/desktop/ClassicMac-Windows-QEMU-source.tar.gz -C vendor qemu qemu-osx
+          tar --exclude=.git --exclude=build --exclude=build-windows -czf output/desktop/ClassicMac-Windows-QEMU-source.tar.gz -C vendor qemu qemu-osx qemu-g5
       - name: Include the qualified Tools CD
         if: steps.engine-cache.outputs.cache-hit != 'true'
         env:

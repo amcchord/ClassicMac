@@ -22,8 +22,8 @@ QEMU emulator as a whole is licensed under the GNU General Public License,
 version 2. Individual source and firmware files may carry compatible licenses,
 as described by QEMU's `LICENSE` file and their source headers.
 
-The exact corresponding source is reproducible from the ClassicMac 5.0.1
-source at <https://github.com/amcchord/ClassicMac/tree/v5.0.1>. The repository's
+The exact corresponding source is reproducible from the ClassicMac 5.1.0
+source at <https://github.com/amcchord/ClassicMac/tree/v5.1.0>. The repository's
 `scripts/build-qemu.sh` retrieves the pinned upstream QEMU 11.0.2 source and
 applies every ClassicMac modification stored in the repository.
 
@@ -226,9 +226,19 @@ and pako notices above.
 
 ### PowerPC Mac OS X engine
 
-ClassicMac includes QEMU 10.0.13 for Mac OS X, under the same QEMU licenses
-described above. The corresponding QEMU 10 engine source is included in
+ClassicMac includes QEMU 10.0.13 for Power Mac G4 Mac OS X, under the same QEMU
+licenses described above. The corresponding QEMU 10 engine source is included in
 the platform QEMU source archives. The RetroBoot patch, Windows adapter,
 OpenBIOS source pins/patches and VGA driver build provenance are in
 `osx/` in the matching ClassicMac source. The OS X OpenBIOS firmware is
 GPL-2.0-or-later, with upstream notices retained in its source.
+
+### Power Mac G5 engine
+
+ClassicMac includes an isolated build of QEMU 11.1.50 (`qemu-system-ppc64`) from
+`cat7/qemu` (`G5-openbios` branch, commit `8aae3e171ea1873104bd81bc438fe0c623c15780`,
+GPL-2.0-or-later) together with `g5/classicmac-display-g5.patch` and OpenBIOS from
+`cat7/openbios` (`G5-openbios` branch, commit `de698b8e0edc03800dfe454dc369cc4d67a97866`,
+GPL-2.0-or-later). Build recipes, provenance, and firmware checksums are in
+`g5/README.md`, `scripts/build-g5-qemu.sh`, and `scripts/build-g5-openbios.sh`,
+and the corresponding engine source accompanies releases.

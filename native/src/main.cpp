@@ -70,7 +70,7 @@ int main(int argc, char **argv) {
                        }
                        for (auto *e : window.engines.values())
                          if (e && e->running && !e->stoppingRequested() &&
-                             e->machine.family() != "powerMacOSX") {
+                             !Model::isOSXFamily(e->machine.family())) {
                            try {
                              e->shutdown();
                            } catch (...) {

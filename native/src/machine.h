@@ -47,6 +47,8 @@ QStringList qemuArguments(const Machine &m, int vncPort,
 QStringList argumentsFor(const Machine &, int port, bool silent = false);
 bool supportedVersion(const QString &);
 bool makeSparse(QFile &);
+bool isOSXFamily(const QString &family);
+bool supportsG5OS(const QString &osVersion);
 bool validateOsxNvram(const QByteArray &data, QString *errorOut = nullptr);
 QString osxRtcBase(const QString &nvramPath, qint64 nowUtcSeconds = -1);
 } // namespace Model

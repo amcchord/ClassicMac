@@ -13,7 +13,7 @@ sys.path.insert(0, str(root / 'native/scripts'))
 from package_common import copy_msys2_licenses
 
 build, out = map(Path, sys.argv[1:3])
-for stale in ('bin', 'Browser', 'Licenses', 'qemu', 'qemu-osx', 'Iconfactory'):
+for stale in ('bin', 'Browser', 'Licenses', 'qemu', 'qemu-osx', 'qemu-g5', 'Iconfactory'):
     shutil.rmtree(out / stale, ignore_errors=True)
 binary = out / 'bin'
 binary.mkdir(parents=True, exist_ok=True)
@@ -45,8 +45,12 @@ for name in ('qemu-system-m68k.exe', 'qemu-system-ppc.exe', 'qemu-img.exe'):
     stage(build / name)
 osx = root / 'vendor/qemu-osx'
 stage(osx / 'build/qemu-system-ppc.exe', 'qemu-system-ppc-osx.exe')
+g5 = root / 'vendor/qemu-g5'
+stage(g5 / 'build/qemu-system-ppc64.exe', 'qemu-system-ppc64.exe')
 shutil.copytree(root / 'osx/firmware', out / 'qemu-osx', dirs_exist_ok=True)
 shutil.copytree(osx / 'pc-bios/keymaps', out / 'qemu-osx/keymaps', dirs_exist_ok=True)
+shutil.copytree(root / 'g5/firmware', out / 'qemu-g5', dirs_exist_ok=True)
+shutil.copytree(g5 / 'pc-bios/keymaps', out / 'qemu-g5/keymaps', dirs_exist_ok=True)
 firmware = out / 'qemu/pc-bios'
 firmware.mkdir(parents=True, exist_ok=True)
 for name in ('mac_qfb.rom', 'openbios-ppc', 'vgabios-stdvga.bin', 'qemu_vga.ndrv'):

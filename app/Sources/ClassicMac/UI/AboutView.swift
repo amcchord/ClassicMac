@@ -5,7 +5,7 @@ import PlatinumKit
 /// About ClassicMac, as a Platinum window.
 struct AboutView: View {
     private var version: String {
-        let short = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "5.0.1"
+        let short = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "5.1.0"
         let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
         return build.map { $0 == short ? "Version \(short)" : "Version \(short) (\($0))" } ?? "Version \(short)"
     }
@@ -20,14 +20,14 @@ struct AboutView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("ClassicMac").platinumText(.large)
                     Text(version).platinumText(.emphasis)
-                    Text("The whole classic Mac OS era, from System 7 through Mac OS 9, Mac OS X Tiger, Apple Pippin, and Copland, on this computer.")
+                    Text("The whole classic Mac OS era, from System 7 through Mac OS 9, Mac OS X Panther & Tiger (Power Mac G4 and G5), Apple Pippin, and Copland, on this computer.")
                         .platinumText(.body)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
             PlatinumSeparator()
             VStack(alignment: .leading, spacing: 3) {
-                credit("Emulation", "QEMU 11.0.2 (classic Mac OS) and QEMU 10.0.13 (Mac OS X Tiger)")
+                credit("Emulation", "QEMU 11.0.2 (classic Mac OS), QEMU 10.0.13 (G4 OS X), and QEMU 11.1.50 G5 (Power Mac G5)")
                 credit("Graphics", "Emulated ATI Radeon from RetroBoot, using Mac OS 9's own ATI drivers")
                 credit("Firmware", "OpenBIOS; Copland on DingusPPC")
                 credit("Sharing", "classicvirtio by Elliot Nunn")

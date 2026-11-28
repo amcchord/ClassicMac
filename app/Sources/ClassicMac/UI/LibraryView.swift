@@ -12,6 +12,7 @@ struct LibraryView: View {
     @State private var categoryFilter: LibraryOSCategory = .all
     @State private var name = ""
     @State private var saveFolder = AppPaths.defaultLibraryDir
+    @State private var targetOSXFamily: MachineFamily = .powerMacOSX
     @State private var supportsSparse = false
     @State private var progress: PlatinumWindow?
 
@@ -100,7 +101,10 @@ struct LibraryView: View {
             if !hasOlder && showOlder { showOlder = false }
         }
         .onChange(of: selected?.id, initial: true) { _, _ in
-            if let selected { name = selected.title }
+            if let selected {
+                name = selected.title
+                targetOSXFamily = selected.machine.family
+            }
         }
         .onChange(of: model.phase) { _, phase in phaseChanged(phase) }
         .onChange(of: model.errorMessage) { _, message in
@@ -203,27 +207,46 @@ struct LibraryView: View {
         let compatible = entry.map { (try? $0.machine.checkCompatibility()) != nil } ?? false
         let validName = (try? MachineTemplateInstaller.normalizedName(name)) != nil
         let actionTitle = completed ? "Create Mac" : partial ? "Resume" : "Download"
-        return HStack(spacing: 8) {
-            Text("Name:").platinumText(.emphasis)
-            PlatinumTextField(text: $name)
-                .frame(minWidth: 110, maxWidth: 200)
-            Text("Save in:").platinumText(.emphasis)
-            PlatinumIcon("folder", size: 16)
-            Text(saveFolder.lastPathComponent)
-                .platinumText(.body)
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .help(saveFolder.path)
-                .frame(minWidth: 40, maxWidth: 96, alignment: .leading)
-            PlatinumButton("Choose…", action: chooseFolder)
-            Spacer(minLength: 0)
-            if (partial || completed), let entry {
-                PlatinumButton("Discard") { model.discardDownload(entry.machine) }
+        return VStack(alignment: .leading, spacing: 6) {
+            if let entry, entry.supportsPowerMacG5 && entry.machine.family == .powerMacOSX {
+                HStack(spacing: 8) {
+                    Text("Model:").platinumText(.emphasis)
+                    PlatinumPopUp(
+                        selection: $targetOSXFamily,
+                        options: [
+                            (MachineFamily.powerMacOSX, "Power Mac G4"),
+                            (MachineFamily.powerMacG5, "Power Mac G5 (970FX)"),
+                        ],
+                        width: 190
+                    )
+                    Text("Choose G5 for 64-bit 970FX, multi-CPU, and SATA disk support.")
+                        .platinumText(.detail)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
             }
-            PlatinumButton(actionTitle, role: .default, minWidth: 84) {
-                if let entry { download(entry) }
+            HStack(spacing: 8) {
+                Text("Name:").platinumText(.emphasis)
+                PlatinumTextField(text: $name)
+                    .frame(minWidth: 110, maxWidth: 200)
+                Text("Save in:").platinumText(.emphasis)
+                PlatinumIcon("folder", size: 16)
+                Text(saveFolder.lastPathComponent)
+                    .platinumText(.body)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .help(saveFolder.path)
+                    .frame(minWidth: 40, maxWidth: 96, alignment: .leading)
+                PlatinumButton("Choose…", action: chooseFolder)
+                Spacer(minLength: 0)
+                if (partial || completed), let entry {
+                    PlatinumButton("Discard") { model.discardDownload(entry.machine) }
+                }
+                PlatinumButton(actionTitle, role: .default, minWidth: 84) {
+                    if let entry { download(entry) }
+                }
+                .disabled(entry == nil || model.isBusy || !validName || !compatible)
             }
-            .disabled(entry == nil || model.isBusy || !validName || !compatible)
         }
         .padding(.trailing, 16)
         .disabled(model.isBusy)
@@ -244,11 +267,14 @@ struct LibraryView: View {
     private func download(_ entry: LibraryEntry) {
         let title = entry.title
         let card = entry.graphicsCard
+        let requestedFamily: MachineFamily? = (entry.supportsPowerMacG5 && entry.machine.family == .powerMacOSX)
+            ? targetOSXFamily
+            : nil
         progress = WindowManager.shared.presentDialog(title: "Downloading", size: DownloadProgressView.size,
                                                       parent: WindowManager.shared.libraryWindowRef) { _ in
             DownloadProgressView(model: model, title: title)
         }
-        model.install(entry.machine, name: name, directory: saveFolder) { url in
+        model.install(entry.machine, name: name, directory: saveFolder, targetFamily: requestedFamily) { url in
             installed(url, title: title, card: card)
         }
     }
@@ -413,7 +439,7 @@ private struct LibraryDetail: View {
         if entry.machine.diskCapacityBytes != nil {
             notes.append("The virtual disk grows on your computer only as you add files.")
         }
-        if entry.machine.family == .powerMacOSX {
+        if entry.machine.family.isOSXFamily {
             notes.append("Choose Shut Down or Restart from the Apple menu inside Mac OS X when you are done.")
         } else if entry.graphicsCard == .atiRadeon {
             notes.append("Uses the emulated ATI Radeon for accelerated 3D and live window resizing up to 1920 × 1440.")

@@ -389,7 +389,7 @@ enum PippinROMDownloader {
             onProgress(.connecting)
             let delegate = HTTPSRedirectDelegate()
             var request = URLRequest(url: url)
-            request.setValue("ClassicMac/5.0.1", forHTTPHeaderField: "User-Agent")
+            request.setValue("ClassicMac/5.1.0", forHTTPHeaderField: "User-Agent")
 
             let tempURL = destDir.appendingPathComponent(".pippin.rom.part.\(UUID().uuidString)")
             defer { try? fm.removeItem(at: tempURL) }

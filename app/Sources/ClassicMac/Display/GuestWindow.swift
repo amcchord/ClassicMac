@@ -202,7 +202,7 @@ final class GuestWindows: ObservableObject {
         switch config.machineFamily {
         case .powerMacG4: return true
         case .quadra800: return config.useEnhancedFramebuffer
-        case .powerMacOSX, .powerMac7500, .pippin: return false
+        case .powerMacOSX, .powerMacG5, .powerMac7500, .pippin: return false
         }
     }
 

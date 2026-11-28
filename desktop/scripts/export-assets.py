@@ -52,7 +52,7 @@ for name in ('powermac_g4', 'quadra_800', 'powermac_7500'):
             for i in range(count): pixels[i*4:i*4+4] = bytes((*palette[colors[i]], 255 if masks[i//8] & (128 >> (i%8)) else 0))
         (out / f'{name}-{size}.png').write_bytes(png(pixels, size))
 
-# Export ClassicMac's custom MIT Pippin machine icon from platinum/icons/machines.icons.
+# Export ClassicMac's custom MIT machine icons from platinum/icons/machines.icons.
 icon_palette = {}
 for line in (root / 'platinum/icons/palette.txt').read_text().splitlines():
     line = line.strip()
@@ -71,14 +71,15 @@ lines = (root / 'platinum/icons/machines.icons').read_text().splitlines()
 i = 0
 while i < len(lines):
     parts = lines[i].split()
-    if len(parts) == 3 and parts[0] == 'icon' and parts[1] == 'apple_pippin':
+    if len(parts) == 3 and parts[0] == 'icon' and parts[1] in ('apple_pippin', 'powermac_g5'):
+        icon_name = parts[1]
         sz = int(parts[2])
         rows = lines[i + 1:i + 1 + sz]
         pixels = bytearray()
         for row in rows:
             for ch in row[:sz]:
                 pixels.extend(icon_palette[ch])
-        (out / f'apple_pippin-{sz}.png').write_bytes(png(bytes(pixels), sz))
+        (out / f'{icon_name}-{sz}.png').write_bytes(png(bytes(pixels), sz))
         i += 1 + sz
     else:
         i += 1

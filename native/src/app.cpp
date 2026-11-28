@@ -46,6 +46,7 @@ static void performAction(const std::function<void()> &action) {
 static QString iconName(const QString &f) {
   return f == "quadra800"      ? "quadra_800"
          : f == "powerMac7500" ? "powermac_7500"
+         : f == "powerMacG5"   ? "powermac_g5"
          : f == "pippin"       ? "apple_pippin"
                                : "powermac_g4";
 }
@@ -53,6 +54,7 @@ static QString modelName(const QString &f) {
   return f == "quadra800"      ? "Quadra 800"
          : f == "powerMac7500" ? "Power Mac 7500"
          : f == "powerMacOSX"  ? "Power Mac G4 — Mac OS X"
+         : f == "powerMacG5"   ? "Power Mac G5 — Mac OS X"
          : f == "pippin"       ? "Apple / Bandai Pippin"
                                : "Power Mac G4";
 }
@@ -502,13 +504,22 @@ void App::render() {
   QString detail;
   if (m) {
     auto c = m->config;
-    detail = "Model:     " + modelName(m->family()) +
-             "\nMemory:    " + QString::number(c["ramMB"].toInt()) +
-             " MB\nHard disk:  " + QString::number(c["diskSizeGB"].toInt()) +
-             " GB\nScreen:     " + QString::number(c["width"].toInt()) + " × " +
-             QString::number(c["height"].toInt()) + "\nGraphics:  " +
-             (c["graphicsCard"].toString() == "atiRadeon" ? "ATI Radeon"
-                                                          : "Standard");
+    const QString card = c["graphicsCard"].toString();
+    const QString cardLabel =
+        card == "atiRadeon"       ? "ATI Radeon"
+        : card == "atiRadeon9800" ? "ATI Radeon 9800"
+        : card == "atiRadeon7000" ? "ATI Radeon 7000"
+                                  : "Standard";
+    detail = "Model:     " + modelName(m->family());
+    if (m->family() == "powerMacG5") {
+      detail += "\nProcessors: " + QString::number(c["cpuCount"].toInt(2)) +
+                " × PowerPC 970FX";
+    }
+    detail += "\nMemory:    " + QString::number(c["ramMB"].toInt()) +
+              " MB\nHard disk:  " + QString::number(c["diskSizeGB"].toInt()) +
+              " GB\nScreen:     " + QString::number(c["width"].toInt()) + " × " +
+              QString::number(c["height"].toInt()) + "\nGraphics:  " +
+              cardLabel;
     if (Model::supportsHostSharing() && m->family() != "powerMacOSX" &&
         m->family() != "powerMac7500") {
       const auto shared = c["sharedFolderPath"].toString();
@@ -581,7 +592,7 @@ void App::showAbout() {
   int row = 0;
   for (const auto &item : QList<QPair<QString, QString>>{
            {"Emulation:",
-            "QEMU 11 (Power Mac & Quadra) and QEMU 10 (Mac OS X); Copland requires the macOS edition."},
+            "QEMU 11 (Power Mac & Quadra), QEMU 10 (G4 Mac OS X), and QEMU 11.1 G5 (Power Mac G5); Copland requires the macOS edition."},
            {"Graphics:",
             "ATI Radeon graphics and Platinum appearance shared with RetroBoot."},
            {"Firmware:", "OpenBIOS; classicvirtio host folder sharing."},
@@ -1470,7 +1481,9 @@ void App::showEditor(bool create) {
   form->setVerticalSpacing(10);
   auto c = create ? Model::freshConfig("Mac OS 9") : m->config;
   const QString fam = !create ? m->family() : QString();
-  const bool osx = !create && fam == "powerMacOSX";
+  const bool osx = !create && Model::isOSXFamily(fam);
+  const bool g5 = !create && fam == "powerMacG5";
+  const bool osxOnly = !create && fam == "powerMacOSX";
   const bool ppc = !create && fam == "powerMacG4";
   const bool quadra = !create && fam == "quadra800";
   const bool copland = !create && fam == "powerMac7500";
@@ -1481,6 +1494,7 @@ void App::showEditor(bool create) {
   form->addWidget(name, 0, 1);
   auto family = new PCombo(&d);
   auto capacity = new PCombo(&d);
+  auto cpuCombo = new PCombo(&d);
   auto ram = new PEdit(QString::number(c["ramMB"].toInt()), &d);
   ram->setAccessibleName("Memory in megabytes");
   auto resolution = new PCombo(&d);
@@ -1501,10 +1515,12 @@ void App::showEditor(bool create) {
   customBox->hide();
   auto depth = new PCombo(&d);
   auto graphics = new PCombo(&d);
+  auto glMode = new PCombo(&d);
+  QString g5RomPath = c["g5GraphicsROMPath"].toString();
   QString cdPath;
   QString sharedPath = c["sharedFolderPath"].toString();
-  const int minRam = quadra ? 16 : osx ? 256 : 32;
-  const int maxRam = quadra ? 1000 : osx ? 2048 : 896;
+  const int minRam = quadra ? 16 : g5 ? 512 : osx ? 256 : 32;
+  const int maxRam = quadra ? 1000 : g5 ? 16384 : osx ? 2048 : 896;
 
   auto populateResolutions = [&](bool enhanced, int curW, int curH) {
     QSignalBlocker block(resolution);
@@ -1557,12 +1573,15 @@ void App::showEditor(bool create) {
   QString lastAutoName = c["name"].toString();
   bool nameEdited = false;
   if (create) {
+    cpuCombo->hide();
+    glMode->hide();
     ram->hide();
     resolution->hide();
     depth->hide();
     graphics->hide();
     family->addItem("Power Mac G4", "powerMacG4");
     family->addItem("Power Mac G4 — Mac OS X", "powerMacOSX");
+    family->addItem("Power Mac G5 — Mac OS X 10.3.9–10.5", "powerMacG5");
     family->addItem("Quadra 800", "quadra800");
     for (int n : {1, 2, 4, 8, 16, 32, 64, 120})
       capacity->addItem(QString::number(n) + " GB", n);
@@ -1617,6 +1636,7 @@ void App::showEditor(bool create) {
                 capacity->setCurrentIndex(idx);
               const QString defName = newFam == "quadra800"    ? "Quadra 800"
                                       : newFam == "powerMacOSX" ? "Mac OS X"
+                                      : newFam == "powerMacG5"  ? "Power Mac G5"
                                                                 : "Mac OS 9";
               if (!nameEdited || name->text().trimmed().isEmpty()) {
                 lastAutoName = defName;
@@ -1645,21 +1665,104 @@ void App::showEditor(bool create) {
     const bool enhanced = c["useEnhancedFramebuffer"].toBool();
     populateResolutions(enhanced, c["width"].toInt(), c["height"].toInt());
     graphics->setAccessibleName("Graphics card");
-    graphics->addItem("Standard", "standard");
-    graphics->addItem("ATI Radeon (3D acceleration)", "atiRadeon");
-    graphics->setCurrentIndex(graphics->findData(c["graphicsCard"].toString()));
-    graphics->setEnabled(ppc);
-    if (osx) {
+    if (g5) {
+      graphics->addItem("Standard (64 MB VGA)", "standard");
+      graphics->addItem("ATI Radeon 9800 (AGP)", "atiRadeon9800");
+      graphics->addItem("ATI Radeon 7000 (AGP)", "atiRadeon7000");
+    } else {
+      graphics->addItem("Standard", "standard");
+      graphics->addItem("ATI Radeon (3D acceleration)", "atiRadeon");
+    }
+    graphics->setCurrentIndex(
+        std::max(0, graphics->findData(c["graphicsCard"].toString())));
+    graphics->setEnabled(ppc || g5);
+    int nextRow = 3;
+    if (g5) {
+      for (int n : {1, 2, 4, 8, 16})
+        cpuCombo->addItem(n == 1 ? "1 CPU" : QString("%1 CPUs").arg(n), n);
+      cpuCombo->setCurrentIndex(
+          std::max(0, cpuCombo->findData(c["cpuCount"].toInt(2))));
+      form->addWidget(label("Processors:", &d), nextRow, 0);
+      form->addWidget(cpuCombo, nextRow++, 1);
+      depth->hide();
+      form->addWidget(label("Graphics:", &d), nextRow, 0);
+      form->addWidget(graphics, nextRow++, 1);
+      auto romRow = new QHBoxLayout;
+      romRow->setSpacing(6);
+      auto romLabel = label("", &d, "small", true);
+      auto clearRom = button("Clear", nullptr, &d);
+      auto syncRom = [&] {
+        const auto romName = QFileInfo(g5RomPath).fileName();
+        romLabel->setText(g5RomPath.isEmpty()
+                              ? "None chosen (required for Radeon)"
+                              : (romName.isEmpty()
+                                     ? QDir::toNativeSeparators(g5RomPath)
+                                     : romName));
+        romLabel->setToolTip(QDir::toNativeSeparators(g5RomPath));
+        clearRom->setEnabled(!g5RomPath.isEmpty());
+      };
+      connect(clearRom, &PButton::clicked, &d, [&] {
+        g5RomPath.clear();
+        syncRom();
+      });
+      auto chooseRom = button(
+          "Choose…",
+          [&] {
+            auto path = QFileDialog::getOpenFileName(
+                &d, "Choose Apple Mac FCode Card ROM", {},
+                "ROM images (*.rom *.bin *);;All files (*)");
+            if (!path.isEmpty()) {
+              g5RomPath = path;
+              syncRom();
+            }
+          },
+          &d);
+      syncRom();
+      romRow->addWidget(chooseRom);
+      romRow->addWidget(clearRom);
+      romRow->addWidget(romLabel, 1);
+      auto romCaption = label("Card ROM:", &d);
+      form->addWidget(romCaption, nextRow, 0);
+      form->addLayout(romRow, nextRow++, 1);
+
+      glMode->addItem("Fast (Host GPU)", "fast");
+      glMode->addItem("Exact (Host OpenGL)", "on");
+      glMode->addItem("Software", "off");
+      glMode->setCurrentIndex(
+          std::max(0, glMode->findData(c["g5GraphicsGLMode"].toString("fast"))));
+      auto glCaption = label("3D acceleration:", &d);
+      form->addWidget(glCaption, nextRow, 0);
+      form->addWidget(glMode, nextRow++, 1);
+
+      auto syncG5Graphics = [=] {
+        const QString card = graphics->currentData().toString();
+        const bool isCard = card == "atiRadeon9800" || card == "atiRadeon7000";
+        const bool is9800 = card == "atiRadeon9800";
+        romCaption->setVisible(isCard);
+        romLabel->setVisible(isCard);
+        chooseRom->setVisible(isCard);
+        clearRom->setVisible(isCard);
+        glCaption->setVisible(is9800);
+        glMode->setVisible(is9800);
+      };
+      syncG5Graphics();
+      connect(graphics, qOverload<int>(&QComboBox::currentIndexChanged), &d,
+              [=](int) { syncG5Graphics(); });
+    } else if (osxOnly) {
+      cpuCombo->hide();
       depth->hide();
       graphics->hide();
+      glMode->hide();
     } else {
+      cpuCombo->hide();
+      glMode->hide();
       populateDepths(enhanced, c["width"].toInt(), c["depth"].toInt());
-      form->addWidget(label("Colors:", &d), 3, 0);
-      form->addWidget(depth, 3, 1);
-      form->addWidget(label("Graphics:", &d), 4, 0);
-      form->addWidget(graphics, 4, 1);
+      form->addWidget(label("Colors:", &d), nextRow, 0);
+      form->addWidget(depth, nextRow++, 1);
+      form->addWidget(label("Graphics:", &d), nextRow, 0);
+      form->addWidget(graphics, nextRow++, 1);
     }
-    if (Model::supportsHostSharing() && !osx && !copland) {
+    if (Model::supportsHostSharing() && !osxOnly && !copland) {
       auto shareRow = new QHBoxLayout;
       shareRow->setSpacing(6);
       auto shareLabel = label("", &d, "small", true);
@@ -1695,8 +1798,8 @@ void App::showEditor(bool create) {
       shareRow->addWidget(chooseShare);
       shareRow->addWidget(turnOffShare);
       shareRow->addWidget(shareLabel, 1);
-      form->addWidget(label("Sharing:", &d), osx ? 3 : 5, 0);
-      form->addLayout(shareRow, osx ? 3 : 5, 1);
+      form->addWidget(label("Sharing:", &d), nextRow, 0);
+      form->addLayout(shareRow, nextRow++, 1);
     }
   }
   v->addLayout(form);
@@ -1961,6 +2064,18 @@ void App::showEditor(bool create) {
                           next["depth"] = depth->currentData().toInt();
                         next["graphicsCard"] =
                             graphics->currentData().toString();
+                        if (g5) {
+                          next["cpuCount"] = cpuCombo->currentData().toInt();
+                          if (g5RomPath.isEmpty())
+                            next.remove("g5GraphicsROMPath");
+                          else
+                            next["g5GraphicsROMPath"] = g5RomPath;
+                          if (next["graphicsCard"] == "atiRadeon9800")
+                            next["g5GraphicsGLMode"] =
+                                glMode->currentData().toString();
+                          else
+                            next.remove("g5GraphicsGLMode");
+                        }
                         for (auto it = checks.begin(); it != checks.end(); ++it)
                           next[it.key()] = it.value()->isChecked();
                         if (printerCombo && !copland) {
@@ -1985,7 +2100,7 @@ void App::showEditor(bool create) {
                             next["mouseDPI"] = dpiVal;
                           }
                         }
-                        if (Model::supportsHostSharing() && !osx && !copland) {
+                        if (Model::supportsHostSharing() && !osxOnly && !copland) {
                           if (sharedPath.isEmpty())
                             next.remove("sharedFolderPath");
                           else {
@@ -2013,7 +2128,8 @@ void App::showMedia(QWidget *parent) {
     return;
   }
   const QString family = m->family();
-  const bool osx = family == "powerMacOSX";
+  const bool osx = Model::isOSXFamily(family);
+  const bool osxOnly = family == "powerMacOSX";
   const bool copland = family == "powerMac7500";
   const bool quadra = family == "quadra800";
   PDialog d("Media", {540, 460}, parent ? parent : this);
@@ -2070,7 +2186,7 @@ void App::showMedia(QWidget *parent) {
     if (key == "floppyImagePath" && family != "quadra800")
       continue;
     if (key == "sharedFolderPath" &&
-        (!Model::supportsHostSharing() || osx || copland))
+        (!Model::supportsHostSharing() || osxOnly || copland))
       continue;
     QString title = key == "cdImagePath"       ? "CD image"
                     : key == "floppyImagePath" ? "Floppy image"
@@ -2387,6 +2503,7 @@ void App::showSetup() {
   auto model = new PCombo(pages[2]);
   model->addItem("Power Mac G4", "powerMacG4");
   model->addItem("Power Mac G4 — Mac OS X", "powerMacOSX");
+  model->addItem("Power Mac G5 — Mac OS X 10.3.9–10.5", "powerMacG5");
   model->addItem("Quadra 800", "quadra800");
   auto summary = label("", pages[2], "regular", true);
   auto name = new PEdit("Mac OS 9", pages[2]);
@@ -2457,6 +2574,7 @@ void App::showSetup() {
             const auto fam = model->currentData().toString();
             const QString defName = fam == "quadra800"    ? "Quadra 800"
                                     : fam == "powerMacOSX" ? "Mac OS X"
+                                    : fam == "powerMacG5"  ? "Power Mac G5"
                                                            : "Mac OS 9";
             if (!nameEdited || name->text().trimmed().isEmpty()) {
               lastAutoName = defName;
@@ -2555,6 +2673,7 @@ void App::showSetup() {
           const auto fam = model->currentData().toString();
           const QString defName = fam == "quadra800"    ? "Quadra 800"
                                   : fam == "powerMacOSX" ? "Mac OS X"
+                                  : fam == "powerMacG5"  ? "Power Mac G5"
                                                          : "Mac OS 9";
           if (!nameEdited || name->text().trimmed().isEmpty()) {
             lastAutoName = defName;
@@ -2580,7 +2699,7 @@ void App::showSetup() {
               },
               false);
           registerMachine(m);
-          if (newFamily == "powerMacOSX") {
+          if (Model::isOSXFamily(newFamily)) {
             help->setText(
                 "Start the installer. Inside Mac OS X Installer, open "
                 "Utilities → Disk Utility, erase the blank hard disk as "

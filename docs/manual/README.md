@@ -1,6 +1,6 @@
-# ClassicMac 5.0 User Manual
+# ClassicMac 5.1 User Manual
 
-Welcome to the complete **ClassicMac User Manual** for **ClassicMac 5.0**. ClassicMac runs genuine 68k Macintosh (Quadra 800), PowerPC Macintosh (Power Mac G3 / G4 with optional ATI 3D OpenGL acceleration and Copland D11E4), Apple / Bandai Pippin consoles (`-M pippin`), and early PowerPC Mac OS X (10.4.11 Tiger) machines inside a classic Apple Platinum interface across **macOS**, **Windows**, **Linux**, and **iPadOS (beta)**.
+Welcome to the complete **ClassicMac User Manual** for **ClassicMac 5.1**. ClassicMac runs genuine 68k Macintosh (Quadra 800), PowerPC Macintosh (Power Mac G3 / G4 with optional ATI 3D OpenGL acceleration and Copland D11E4), Apple / Bandai Pippin consoles (`-M pippin`), and PowerPC Mac OS X on **Power Mac G4** (`10.2–10.4.11`) and **Power Mac G5** (`PowerMac7,3`, `970FX`, `10.3–10.4.11`) inside a classic Apple Platinum interface across **macOS**, **Windows**, **Linux**, and **iPadOS (beta)**.
 
 <p align="center">
   <img src="../screenshots/manual/main-home-410.png" width="400" alt="ClassicMac 4.10.0 Platinum Home window showing installed classic Macs and screen preview">
@@ -14,7 +14,7 @@ flowchart LR
     U["User & Host OS (macOS / Windows / Linux / iPadOS)"] --> UI["Platinum Host UI (SwiftUI or Qt6)"]
     UI --> CFG["Bundle Manager (.classic config, PRAM/NVRAM, CoW Checkpoints)"]
     UI --> CAT["Mac OS Library (HTTPS Range Downloads & Sparse Extract)"]
-    UI --> ENG["QEMU Orchestrator (m68k / ppc / ppc-ati / ppc-copland)"]
+    UI --> ENG["QEMU Orchestrator (m68k / ppc / ppc-osx / ppc64-g5 / copland)"]
     ENG --> DISP["Host Window, OpenGL 3D, or Browser Display (noVNC)"]
     ENG --> MEDIA["Hot-Swap Media, Tools CD & Virtio 9p Shared Folder"]
     ENG --> NET["SLIRP Networking & Virtual Print Server (515 / 631 / 9100 -> PDF or Printer)"]

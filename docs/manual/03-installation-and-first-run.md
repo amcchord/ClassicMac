@@ -8,13 +8,13 @@ ClassicMac installs as a single self-contained bundle or executable on **macOS**
 
 ### macOS (Apple Silicon, macOS 15+)
 
-1. Download **`ClassicMac-5.0.1.dmg`** (or `ClassicMac-5.0.1.zip`) from the [ClassicMac Releases](https://github.com/amcchord/ClassicMac/releases/latest) page.
+1. Download **`ClassicMac-5.1.0.dmg`** (or `ClassicMac-5.1.0.zip`) from the [ClassicMac Releases](https://github.com/amcchord/ClassicMac/releases/latest) page.
 2. Open the disk image and drag **ClassicMac.app** into your **Applications** folder.
 3. Launch **ClassicMac**. Official releases are **Developer ID signed, notarized, and stapled**, so Gatekeeper verifies the app offline without warnings.
 
 ### Windows (Windows 11 x64)
 
-1. Download **`ClassicMac-5.0.1-windows-x64.exe`**.
+1. Download **`ClassicMac-5.1.0-windows-x64.exe`**.
 2. Double-click the executable to launch ClassicMac directly—no separate installer or system-wide setup is required.
    - The portable executable caches its extracted runtime inside `%LOCALAPPDATA%` and waits for the native Qt6 app to exit.
    - To inspect or replace dynamic libraries (such as Qt6 or OpenSSL DLLs), pass `--extract="C:\path\to\folder"` from a terminal and run `classicmac.exe` from that directory.
@@ -22,15 +22,15 @@ ClassicMac installs as a single self-contained bundle or executable on **macOS**
 
 ### Linux (x86-64, `glibc 2.39+`)
 
-1. Download **`ClassicMac-5.0.1-linux-x64.AppImage`**.
+1. Download **`ClassicMac-5.1.0-linux-x64.AppImage`**.
 2. Mark the AppImage executable and launch it:
 
 ```bash
-chmod +x ClassicMac-5.0.1-linux-x64.AppImage
-./ClassicMac-5.0.1-linux-x64.AppImage
+chmod +x ClassicMac-5.1.0-linux-x64.AppImage
+./ClassicMac-5.1.0-linux-x64.AppImage
 ```
 
-- If FUSE is unavailable on your distribution or container, run `./ClassicMac-5.0.1-linux-x64.AppImage --appimage-extract-and-run` (or `--appimage-extract` and run `squashfs-root/AppRun`).
+- If FUSE is unavailable on your distribution or container, run `./ClassicMac-5.1.0-linux-x64.AppImage --appimage-extract-and-run` (or `--appimage-extract` and run `squashfs-root/AppRun`).
 
 ### Building from Source
 
@@ -40,6 +40,7 @@ Requires Xcode Command Line Tools and Homebrew (`dylibbundler` and build tools):
 ```bash
 ./scripts/build-qemu.sh         # QEMU 11.0.2 (qemu-system-m68k, qemu-system-ppc, qemu-img)
 ./scripts/build-osx-qemu.sh     # QEMU 10.0.13 (PowerPC Mac OS X Tiger engine)
+./scripts/build-g5-qemu.sh      # QEMU 11.1.50 (Power Mac G5 qemu-system-ppc64 engine)
 ./scripts/build-copland.sh      # DingusPPC (Copland D11E4 engine)
 ./scripts/build-guest-cd.sh     # ClassicMacTools.iso guest additions
 ./scripts/bundle-qemu.sh        # Builds app/ via SwiftPM & assembles dist/ClassicMac.app

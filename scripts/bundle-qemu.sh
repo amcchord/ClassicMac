@@ -123,6 +123,9 @@ PPC_APP="$HELPERS_DIR/Power Mac G4.app"
 OSX_APP="$HELPERS_DIR/Power Mac G4 for OS X.app"
 OSX_ENGINE="$VENDOR_DIR/qemu-osx/build/qemu-system-ppc"
 OSX_FIRMWARE="$ROOT_DIR/osx/firmware"
+G5_APP="$HELPERS_DIR/Power Mac G5.app"
+G5_ENGINE="$VENDOR_DIR/qemu-g5/build/qemu-system-ppc64"
+G5_FIRMWARE="$ROOT_DIR/g5/firmware"
 COPLAND_APP="$HELPERS_DIR/Power Mac 7500.app"
 COPLAND_BIN="$VENDOR_DIR/dingusppc/build/bin/dingusppc.app/Contents/MacOS/dingusppc"
 
@@ -130,6 +133,11 @@ COPLAND_BIN="$VENDOR_DIR/dingusppc/build/bin/dingusppc.app/Contents/MacOS/dingus
 # 0. Preconditions
 # ---------------------------------------------------------------------------
 [ -x "$OSX_ENGINE" ] || die "Mac OS X engine missing. Run scripts/build-osx-qemu.sh first."
+[ -x "$G5_ENGINE" ] || die "Power Mac G5 engine missing. Run scripts/build-g5-qemu.sh first."
+for g5_fw in openbios-ppc64-g5 vgabios-stdvga.bin qemu_vga.ndrv; do
+  [ -f "$G5_FIRMWARE/$g5_fw" ] || die "g5/firmware/$g5_fw not found."
+done
+[ -d "$VENDOR_DIR/qemu-g5/pc-bios/keymaps" ] || die "G5 QEMU keymaps not found. Run scripts/build-g5-qemu.sh first."
 [ -x "$COPLAND_BIN" ] || die "Copland engine missing. Run scripts/build-copland.sh first."
 [ -x "$QEMU_BUILD_DIR/qemu-system-m68k" ] || die "qemu-system-m68k not found. Run scripts/build-qemu.sh first."
 [ -x "$QEMU_BUILD_DIR/qemu-system-ppc" ] || die "qemu-system-ppc not found. Run scripts/build-qemu.sh first."
@@ -189,6 +197,15 @@ for file in openbios-ppc-osx macosx-flash-seed.img qemu_vga.ndrv; do
   cp "$OSX_FIRMWARE/$file" "$RES_DIR/qemu-osx/"
 done
 ditto --norsrc "$VENDOR_DIR/qemu-osx/pc-bios/keymaps" "$RES_DIR/qemu-osx/keymaps"
+
+mkdir -p "$G5_APP/Contents/MacOS" "$G5_APP/Contents/Frameworks" "$G5_APP/Contents/Resources"
+cp "$G5_ENGINE" "$G5_APP/Contents/MacOS/qemu-system-ppc64"
+cp "$ROOT_DIR/Resources/MachineIcon.icns" "$G5_APP/Contents/Resources/MachineIcon.icns"
+mkdir -p "$RES_DIR/qemu-g5"
+for file in openbios-ppc64-g5 vgabios-stdvga.bin qemu_vga.ndrv; do
+  cp "$G5_FIRMWARE/$file" "$RES_DIR/qemu-g5/"
+done
+ditto --norsrc "$VENDOR_DIR/qemu-g5/pc-bios/keymaps" "$RES_DIR/qemu-g5/keymaps"
 
 mkdir -p "$COPLAND_APP/Contents/MacOS" "$COPLAND_APP/Contents/Resources" "$COPLAND_APP/Contents/Frameworks"
 cp "$COPLAND_BIN" "$COPLAND_APP/Contents/MacOS/dingusppc"
@@ -458,6 +475,7 @@ PLIST
 write_helper_plist "$QUADRA_APP" "Quadra 800" "com.classicmac.machine.quadra800" "qemu-system-m68k"
 write_helper_plist "$PPC_APP" "Power Mac G4" "com.classicmac.machine.powermacg4" "qemu-system-ppc"
 write_helper_plist "$OSX_APP" "Power Mac G4 for OS X" "com.classicmac.machine.powermacosx" "qemu-system-ppc"
+write_helper_plist "$G5_APP" "Power Mac G5" "com.classicmac.machine.powermacg5" "qemu-system-ppc64"
 write_helper_plist "$COPLAND_APP" "Power Mac 7500" "com.classicmac.machine.powermac7500" "dingusppc"
 
 # ---------------------------------------------------------------------------
@@ -481,6 +499,12 @@ for helper in "$PPC_APP" "$OSX_APP"; do
     -s "$(brew --prefix)/lib"
 done
 
+dylibbundler -of -b \
+  -x "$G5_APP/Contents/MacOS/qemu-system-ppc64" \
+  -d "$G5_APP/Contents/Frameworks" \
+  -p "@executable_path/../Frameworks" \
+  -s "$(brew --prefix)/lib"
+
 # dylibbundler rewrites every pre-existing LC_RPATH to the same value, which
 # leaves duplicate LC_RPATH entries that modern dyld refuses to load. Collapse
 # them down to a single @executable_path/../Frameworks rpath.
@@ -502,12 +526,13 @@ dedupe_rpaths "$QUADRA_APP/Contents/MacOS/qemu-system-m68k"
 dedupe_rpaths "$QUADRA_APP/Contents/MacOS/qemu-img"
 dedupe_rpaths "$PPC_APP/Contents/MacOS/qemu-system-ppc"
 dedupe_rpaths "$OSX_APP/Contents/MacOS/qemu-system-ppc"
+dedupe_rpaths "$G5_APP/Contents/MacOS/qemu-system-ppc64"
 
 # A newer host's Homebrew libraries may require a newer OS than ClassicMac.
 # Replace them with verified, same-version official Sequoia bottles instead
 # of changing Mach-O minimum-version headers or dropping macOS 15 support.
 log "Staging verified macOS 15 runtime libraries"
-for helper in "$QUADRA_APP" "$PPC_APP" "$OSX_APP"; do
+for helper in "$QUADRA_APP" "$PPC_APP" "$OSX_APP" "$G5_APP"; do
   python3 "$ROOT_DIR/scripts/bundle-release-libraries.py" \
     --frameworks "$helper/Contents/Frameworks" \
     --cache "$ROOT_DIR/vendor/release-libraries"
@@ -594,7 +619,7 @@ else
   log "Code signing (identity: $SIGN_IDENTITY)"
 fi
 
-find "$QUADRA_APP/Contents/Frameworks" "$PPC_APP/Contents/Frameworks" "$OSX_APP/Contents/Frameworks" -name '*.dylib' -print0 | while IFS= read -r -d '' lib; do
+find "$QUADRA_APP/Contents/Frameworks" "$PPC_APP/Contents/Frameworks" "$OSX_APP/Contents/Frameworks" "$G5_APP/Contents/Frameworks" -name '*.dylib' -print0 | while IFS= read -r -d '' lib; do
   codesign --force --sign "$SIGN_IDENTITY" "$TIMESTAMP_FLAG" "$lib"
 done
 
@@ -619,6 +644,8 @@ codesign --force --sign "$SIGN_IDENTITY" "$TIMESTAMP_FLAG" \
 
 codesign --force --sign "$SIGN_IDENTITY" "$TIMESTAMP_FLAG" \
   --options runtime --entitlements "$ENTITLEMENTS" "$OSX_APP"
+codesign --force --sign "$SIGN_IDENTITY" "$TIMESTAMP_FLAG" \
+  --options runtime --entitlements "$ENTITLEMENTS" "$G5_APP"
 codesign --force --sign "$SIGN_IDENTITY" "$TIMESTAMP_FLAG" --options runtime "$COPLAND_APP"
 codesign --force --sign "$SIGN_IDENTITY" "$TIMESTAMP_FLAG" --options runtime "$MACOS_DIR/ClassicMac"
 

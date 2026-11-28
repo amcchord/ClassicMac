@@ -7,13 +7,13 @@
 <p align="center">
   <strong>The classic Mac OS era on macOS, Windows and Linux.</strong><br>
   A self-contained desktop app that emulates a Motorola 68040 Quadra 800, PowerPC Power Mac G4<br>
-  (Mac OS 8/9 and Mac OS X Tiger), Apple / Bandai Pippin, and experimental Power Mac 7500 (Copland on macOS) with the Apple Platinum appearance.
+  (Mac OS 8/9 and Mac OS X), 64-bit Power Mac G5 (Mac OS X 10.3–10.4.11), Apple / Bandai Pippin, and experimental Power Mac 7500 (Copland on macOS) with the Apple Platinum appearance.
 </p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-black" alt="Platform">
   <img src="https://img.shields.io/badge/guests-System%207.1%20–%20Mac%20OS%20X%20Tiger-blueviolet" alt="Guest OS range">
-  <img src="https://img.shields.io/badge/QEMU-11.0.2%20%7C%2010.0.13-orange" alt="QEMU">
+  <img src="https://img.shields.io/badge/QEMU-11.0.2%20%7C%2010.0.13%20%7C%2011.1.50%20G5-orange" alt="QEMU">
   <img src="https://img.shields.io/badge/UI-Apple%20Platinum-lightgrey" alt="Apple Platinum interface">
   <img src="https://img.shields.io/badge/3D-ATI%20Radeon%20(emulated)-c00" alt="Emulated ATI Radeon 3D">
 </p>
@@ -21,7 +21,7 @@
 ---
 
 <p align="center">
-  <img src="docs/screenshots/platinum/running-ati.png" width="720" alt="ClassicMac 5.0.1 in the Apple Platinum appearance, with Mac OS 9.2.2 Mega Deluxe running on the emulated ATI Radeon">
+  <img src="docs/screenshots/platinum/running-ati.png" width="720" alt="ClassicMac 5.1.0 in the Apple Platinum appearance, with Mac OS 9.2.2 Mega Deluxe running on the emulated ATI Radeon">
 </p>
 
 <p align="center">
@@ -29,15 +29,15 @@
   <img src="docs/screenshots/powermacg4-macos92.png" width="410" alt="Mac OS 9.2.2 Mega Deluxe on the emulated Power Mac G4">
 </p>
 
-## Download ClassicMac 5.0.1
+## Download ClassicMac 5.1.0
 
 | System | Download | Requirements |
 | --- | --- | --- |
-| Windows | [Portable EXE](https://github.com/amcchord/ClassicMac/releases/download/v5.0.1/ClassicMac-5.0.1-windows-x64.exe) | Windows 11 x64; unsigned. |
-| macOS | [DMG](https://github.com/amcchord/ClassicMac/releases/download/v5.0.1/ClassicMac-5.0.1.dmg) · [ZIP](https://github.com/amcchord/ClassicMac/releases/download/v5.0.1/ClassicMac-5.0.1.zip) | Apple Silicon, macOS 15+; signed and notarized. |
-| Linux | [AppImage](https://github.com/amcchord/ClassicMac/releases/download/v5.0.1/ClassicMac-5.0.1-linux-x64.AppImage) | x64, glibc 2.39+ and a desktop. |
+| Windows | [Portable EXE](https://github.com/amcchord/ClassicMac/releases/download/v5.1.0/ClassicMac-5.1.0-windows-x64.exe) | Windows 11 x64; unsigned. |
+| macOS | [DMG](https://github.com/amcchord/ClassicMac/releases/download/v5.1.0/ClassicMac-5.1.0.dmg) · [ZIP](https://github.com/amcchord/ClassicMac/releases/download/v5.1.0/ClassicMac-5.1.0.zip) | Apple Silicon, macOS 15+; signed and notarized. |
+| Linux | [AppImage](https://github.com/amcchord/ClassicMac/releases/download/v5.1.0/ClassicMac-5.1.0-linux-x64.AppImage) | x64, glibc 2.39+ and a desktop. |
 
-[Release notes, checksums and engine sources](https://github.com/amcchord/ClassicMac/releases/tag/v5.0.1).
+[Release notes, checksums and engine sources](https://github.com/amcchord/ClassicMac/releases/tag/v5.1.0).
 Windows runs directly. Drag the Mac app to Applications. On Linux, mark the
 AppImage executable; use `--appimage-extract-and-run` if FUSE is unavailable.
 
@@ -50,12 +50,25 @@ ClassicMac is a sister project to **[RetroBoot](https://github.com/amcchord/Retr
 
 ## User Manual & Complete Documentation
 
-See the full **[ClassicMac 5.0 User Manual](docs/manual/README.md)** (12 chapters with architecture diagrams, configuration schemas, and screenshots):
+See the full **[ClassicMac 5.1 User Manual](docs/manual/README.md)** (12 chapters with architecture diagrams, configuration schemas, and screenshots):
 
 - **Getting started & requirements:** [System Requirements](docs/manual/01-system-requirements.md) · [Architecture & How It Works](docs/manual/02-architecture-how-it-works.md) · [Installation & First Run](docs/manual/03-installation-and-first-run.md)
 - **Operating systems:** [Mac OS Library & Editions](docs/manual/04-mac-os-library-and-editions.md) · [Creating Custom Macs & Manual OS Installs](docs/manual/05-installing-your-own-mac-os.md) · [Everyday Use & Input](docs/manual/06-everyday-use-and-input.md)
 - **Devices & I/O:** [Display, 3D Graphics & Sound](docs/manual/07-display-3d-graphics-and-sound.md) · [Media Drawer, Tools CD & Shared Folders](docs/manual/08-media-tools-and-sharing.md) · [Networking & Virtual Printing](docs/manual/09-networking-and-virtual-printing.md)
 - **Hosting & reference:** [Creating & Serving Custom Images](docs/manual/10-creating-and-serving-images.md) · [Checkpoints, Updates & Troubleshooting](docs/manual/11-checkpoints-updates-and-troubleshooting.md) · [Configuration, Bundles & Env Reference](docs/manual/12-configuration-and-cli-reference.md)
+
+## New in ClassicMac 5.1
+
+- **Power Mac G5 (`PowerMac7,3`, PowerPC `970FX`) support across macOS, Windows, and Linux:** Runs Mac OS X `10.3.9 Panther` and `10.4.11 Tiger` on an isolated QEMU `11.1.50` (`qemu-system-ppc64`, `cat7/qemu` `G5-openbios`) engine and `cat7/openbios` firmware with `1–16` vCPUs, `512 MB–16 GB` RAM, K2 SATA/ATA-100 storage, K2 I2S TAS3004 audio, Core99 `16 KiB` flash NVRAM, optional user-ROM ATI Radeon 9800 3D / Radeon 7000 graphics, and PCI-X `virtio-9p-pci` (`macos_compat=on`) folder sharing.
+- **Library Model Chooser, Settings & Custom Platinum Artwork:** Pick **Power Mac G4** or **Power Mac G5** when installing Mac OS X 10.3/10.4 Library editions (or switch models later in **Get Info → General Information**), configure CPU count and G5 ATI card/ROM/GL modes in **Get Info**, and view dedicated `16 × 16` / `32 × 32` Platinum Power Mac G5 icons across macOS and Qt.
+
+## Download ClassicMac 5.0.1 (previous)
+
+| System | Download | Requirements |
+| --- | --- | --- |
+| Windows | [Portable EXE](https://github.com/amcchord/ClassicMac/releases/download/v5.0.1/ClassicMac-5.0.1-windows-x64.exe) | Windows 11 x64; unsigned. |
+| macOS | [DMG](https://github.com/amcchord/ClassicMac/releases/download/v5.0.1/ClassicMac-5.0.1.dmg) · [ZIP](https://github.com/amcchord/ClassicMac/releases/download/v5.0.1/ClassicMac-5.0.1.zip) | Apple Silicon, macOS 15+; signed and notarized. |
+| Linux | [AppImage](https://github.com/amcchord/ClassicMac/releases/download/v5.0.1/ClassicMac-5.0.1-linux-x64.AppImage) | x64, glibc 2.39+ and a desktop. |
 
 ## New in ClassicMac 5.0.1
 
@@ -356,16 +369,16 @@ See the [desktop build and platform support guide](desktop/README.md).
   and lets you add more collections from your own copies.
 
 <p align="center">
-  <img src="docs/screenshots/platinum/guest-window.png" width="720" alt="Mac OS 9.2.2 Mega Deluxe in ClassicMac 5.0.1's Platinum window with the toolbar along the bottom">
+  <img src="docs/screenshots/platinum/guest-window.png" width="720" alt="Mac OS 9.2.2 Mega Deluxe in ClassicMac 5.1.0's Platinum window with the toolbar along the bottom">
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/platinum/main-window.png" width="410" alt="ClassicMac 5.0.1 Home window with Apple Platinum chrome">
-  <img src="docs/screenshots/manual/guest-osx-tiger.png" width="410" alt="Mac OS X 10.4.11 Tiger running inside ClassicMac 5.0.1">
+  <img src="docs/screenshots/platinum/main-window.png" width="410" alt="ClassicMac 5.1.0 Home window with Apple Platinum chrome">
+  <img src="docs/screenshots/manual/guest-osx-tiger.png" width="410" alt="Mac OS X 10.4.11 Tiger running inside ClassicMac 5.1.0">
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/pippin-super-marathon.png" width="410" alt="Super Marathon running on the emulated Apple / Bandai Pippin in ClassicMac 5.0.1">
+  <img src="docs/screenshots/pippin-super-marathon.png" width="410" alt="Super Marathon running on the emulated Apple / Bandai Pippin in ClassicMac 5.1.0">
   <img src="docs/screenshots/manual/pippin-get-info-controls.png" width="410" alt="Pippin Get Info Controls pane for keyboard and game controller mapping">
 </p>
 
@@ -453,7 +466,8 @@ ClassicMac wraps custom QEMU builds (and DingusPPC for Copland on macOS) in a na
 | --- | --- | --- | --- |
 | **Macintosh Quadra 800** | Motorola 68040 (QEMU 11) | System 7.1 – Mac OS 8.1 | Enhanced paravirtualized framebuffer (`nubus-qfb`), writable removable floppy images, any resolution up to 3840×2160, all QuickDraw depths incl. Thousands |
 | **Power Mac G4** | PowerPC `mac99` (QEMU 11) | Mac OS 8.5 – 9.2.2 | OpenBIOS firmware, screamer (AWACS) sound, live resizing `qemu_vga.ndrv`, emulated ATI Radeon 3D acceleration |
-| **Power Mac G4 — Mac OS X** | PowerPC `mac99` (QEMU 10) | Mac OS X 10.4 Tiger | Dedicated OS X engine, persistent Core99 flash startup memory, native USB input, widescreen standard VGA |
+| **Power Mac G4 — Mac OS X** | PowerPC `mac99` (QEMU 10) | Mac OS X 10.2 – 10.4.11 Tiger | Dedicated OS X engine, persistent Core99 flash startup memory, native USB input, widescreen standard VGA |
+| **Power Mac G5** | PowerPC `970fx` (`PowerMac7,3`, QEMU 11.1.50) | Mac OS X 10.3 – 10.4.11 Tiger | 64-bit SMP (`1–16` vCPUs), `512 MB–16 GB` RAM, K2 SATA/ATA-100 & I2S audio, optional Radeon 9800 3D / 7000 with user ROM, PCI-X `virtio-9p` |
 | **Power Mac 7500** *(macOS only, experimental)* | PowerPC 601 (DingusPPC) | Copland D11E4 | Dedicated experimental engine for Apple's unfinished Mac OS 8 rewrite |
 
 Everything is bundled into a single self-contained download (`ClassicMac.app` on macOS, portable EXE on Windows, AppImage on Linux): the QEMU system emulators, firmware, guest video drivers, folder-sharing drivers (macOS/Linux), and a guest-additions Tools CD. No Homebrew or separate dependencies to hunt down, and nothing required inside the guest.
@@ -572,6 +586,7 @@ Requirements:
 #    qemu-system-ppc, and checks the host OpenGL path) and the Copland engine
 ./scripts/build-qemu.sh
 ./scripts/build-osx-qemu.sh
+./scripts/build-g5-qemu.sh
 ./scripts/build-copland.sh
 
 # 2. Build the guest-additions Tools CD (cached downloads, hfsutils/unar),
@@ -639,6 +654,7 @@ ClassicMac/
   virtio/                   # QEMU removable VirtIO block device patch
   screamer/                 # screamer (AWACS) PPC audio device + OpenBIOS + timing patches
   osx/                      # dedicated QEMU 10.0.13 engine, firmware and tests for PowerPC Mac OS X
+  g5/                       # dedicated QEMU 11.1.50 (cat7/G5-openbios) engine, firmware and docs for Power Mac G5
   copland/                  # DingusPPC patches, silent audio backend and tests (macOS-only Copland)
   cpu/                      # PowerPC CPU/TCG fast-path patches (MMU contexts, FPU, branch cache)
   startup/                  # startup race fixes (Cuda shift interrupt, IDE SRST/PIO status drain, ATAPI)

@@ -1,6 +1,6 @@
 # ClassicMac Repository Agent Guide
 
-ClassicMac (`VERSION`: `5.0.1`) runs classic 68k Macintosh (Quadra 800), PowerPC Macintosh (Power Mac G3/G4 with optional ATI 3D OpenGL acceleration and Copland D11E4), Apple / Bandai Pippin (`-M pippin`), and early PowerPC Mac OS X (10.4.11 Tiger) inside a classic Apple Platinum desktop interface.
+ClassicMac (`VERSION`: `5.1.0`) runs classic 68k Macintosh (Quadra 800), PowerPC Macintosh (Power Mac G3/G4 with optional ATI 3D OpenGL acceleration and Copland D11E4), Apple / Bandai Pippin (`-M pippin`), PowerPC Mac OS X on Power Mac G4 (10.2–10.4.11 Tiger), and 64-bit Power Mac G5 (`PowerMac7,3`, PowerPC 970FX, Mac OS X 10.3–10.4.11) inside a classic Apple Platinum desktop interface.
 
 ## Repository Architecture
 
@@ -10,7 +10,7 @@ ClassicMac (`VERSION`: `5.0.1`) runs classic 68k Macintosh (Quadra 800), PowerPC
 - `ati/` — ATI Rage 128 Pro & Radeon 7500/9200 (`qemu-system-ppc-ati`) FCode ROMs, OpenGL pass-through, and QEMU integration.
 - `pippin/` — Native QEMU Apple / Bandai Pippin (`-M pippin`) device models (`taos`, `grandcentral`, `mac_mesh`, `adb-applejack`, Save Flash / NVRAM) and Apple SCSI CD-ROM quirk patches applied to `qemu-system-ppc`.
 - `browser/` & `display/` — Optional loopback HTTP + WebSocket noVNC Browser Display (`BrowserDisplayServer`) and enhanced framebuffer notes.
-- `copland/` & `osx/` — Dedicated Copland D11E4 QEMU support (`qemu-system-ppc-copland`) and PowerPC Mac OS X (Tiger) NVRAM / shutdown / VirtIO docs.
+- `copland/`, `osx/`, & `g5/` — Dedicated Copland D11E4 (`qemu-system-ppc-copland`), PowerPC Mac OS X G4 (`qemu-system-ppc-osx`), and Power Mac G5 (`qemu-system-ppc64`) engines, firmware, and patches.
 - `guestcd/` — Source manifest (`manifest.tsv`) and builder assets for `ClassicMac Tools.iso`.
 - `scripts/` — Template preparation (`prepare-os9-template.py`) and GNU sparse 1.0 archive packaging (`package-machine-template.py`).
 - `docs/manual/` — Full ClassicMac User Manual (`README.md`, `01`–`12`, `MAINTENANCE.md`, `scripts/check_docs.py`, `scripts/capture_manual_shots.py`).
@@ -19,7 +19,7 @@ ClassicMac (`VERSION`: `5.0.1`) runs classic 68k Macintosh (Quadra 800), PowerPC
 
 Every code, UI, schema, catalog, or subsystem change MUST keep the User Manual and README accurate:
 
-1. **Consult the impact matrix first:** Check [`docs/manual/MAINTENANCE.md`](docs/manual/MAINTENANCE.md) whenever modifying Swift sources in `app/`, C++ sources in `native/`, `scripts/`, `ati/`, `browser/`, `copland/`, `osx/`, or `guestcd/`.
+1. **Consult the impact matrix first:** Check [`docs/manual/MAINTENANCE.md`](docs/manual/MAINTENANCE.md) whenever modifying Swift sources in `app/`, C++ sources in `native/`, `scripts/`, `ati/`, `browser/`, `copland/`, `osx/`, `g5/`, or `guestcd/`.
 2. **Update matching chapters:**
    - Any new, renamed, or changed `config.json` key (`app/Sources/ClassicMac/VMConfig.swift` `CodingKeys` or `native/src/machine.cpp`), `template.json` field, or `CLASSICMAC_*` environment variable MUST be documented in [`docs/manual/12-configuration-and-cli-reference.md`](docs/manual/12-configuration-and-cli-reference.md) and its relevant feature chapter.
    - UI changes (First-Run wizard, Home window, Library, New Mac, Get Info panes, Media drawer, Checkpoints, Paste Text, Software Update, Icon Packs) require updating the corresponding chapter and refreshing screenshots via `docs/manual/scripts/capture_manual_shots.py`.

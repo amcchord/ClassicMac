@@ -2026,7 +2026,7 @@ void qualify(App *app, const QString &recipe) {
 
 void qualifyOSX(const QString &folder) {
   auto machine = Model::readMachine(folder);
-  require(machine.family() == "powerMacOSX", "Expected a disposable OS X test Mac.");
+  require(Model::isOSXFamily(machine.family()), "Expected a disposable OS X test Mac.");
   Engine engine(machine);
   engine.start();
   auto pump = [](int ms) {

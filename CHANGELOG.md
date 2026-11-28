@@ -1,5 +1,16 @@
 # Changelog
 
+## 5.1.0 — Power Mac G5 Support (2026-11-28)
+
+### Added
+
+- **Power Mac G5 (`PowerMac7,3`, PowerPC 970FX) emulation across macOS, Windows, and Linux:**
+  - Adds an isolated QEMU `11.1.50` engine (`qemu-system-ppc64`) derived from `cat7/qemu` (`G5-openbios`) with `g5/classicmac-display-g5.patch` (`-display classicmac` shared-memory Platinum window integration on macOS and Linux) and OpenBIOS (`cat7/openbios` `G5-openbios`, `g5/firmware/openbios-ppc64-g5`).
+  - Emulates Apple U3/K2 `PowerMac7,3` hardware (`-M mac99,via=pmu -cpu 970fx`): `1–16` virtual CPUs (default `2`), `512 MB–16 GB` RAM (default `2048 MB`), K2 SATA (`bus=sata.0`) hard disk, K2 ATA-100 (`if=ide`) optical drive, K2 I2S TAS3004 audio, K2 GMAC (`sungem`), Core99 `16 KiB` dual-bank flash `nvram.img`, K2 OHCI + NEC uPD720101 EHCI USB input (`usb-tablet` with optional `,axis-inset=75`), and PCI-X `virtio-9p-pci` (`macos_compat=on`) for `osx9p` guest folder sharing on macOS and Linux.
+  - Supports **Standard** VGA (`-vga std`, `64 MB` VRAM) and optional **ATI Radeon 9800 (3D acceleration)** (`ati-radeon9800` with configurable `gl=fast|on|off` mode) or **ATI Radeon 7000** (`ati-vga,model=rv100,agp=on`) with a user-supplied Mac FCode card ROM.
+  - Adds **Power Mac G5** creation and settings in **New Mac…**, **Get Info…** (CPU count, G4/G5 model switching, Radeon 9800/7000 + ROM + GL mode, PCI-X sharing note), and **Library** (**Model: Power Mac G4** / **Power Mac G5** chooser for Mac OS X 10.3 Panther and 10.4 Tiger editions), plus custom Platinum `powermac_g5` (`16 × 16` / `32 × 32`) icons across macOS and native Qt builds.
+  - Adds `PowerMacG5Tests` in SwiftPM (`app/Tests/ClassicMacTests/PowerMacG5Tests.swift`), three `powerMacG5` cases in `native/tests/argument-golden.json`, and updated documentation across `README.md`, `g5/README.md`, `THIRD_PARTY_NOTICES.md`, and the User Manual.
+
 ## 5.0.1 — Automated Pippin Boot ROM Download & Copyright Notice (2026-11-27)
 
 ### Added

@@ -506,6 +506,7 @@ void Engine::start() {
 
   auto executable = family == "quadra800"    ? "qemu-system-m68k"
                     : family == "powerMacOSX" ? "qemu-system-ppc-osx"
+                    : family == "powerMacG5"  ? "qemu-system-ppc64"
                                               : "qemu-system-ppc";
   const QString binPath = Model::binary(executable);
   if (!QFileInfo(binPath).isExecutable())
@@ -557,6 +558,34 @@ void Engine::start() {
     QString nvErr;
     if (!Model::validateOsxNvram(nvFile.readAll(), &nvErr))
       fail(nvErr);
+  } else if (family == "powerMacG5") {
+    requireRuntimeFile("qemu-g5/openbios-ppc64-g5");
+    requireRuntimeFile("qemu-g5/vgabios-stdvga.bin");
+    requireRuntimeFile("qemu-g5/qemu_vga.ndrv");
+    const auto flash = machine.folder + "/nvram.img";
+    if (!QFileInfo::exists(flash)) {
+      QFile f(flash);
+      if (!f.open(QFile::WriteOnly | QFile::NewOnly) ||
+          f.write(QByteArray(16384, char(0xff))) != 16384)
+        fail("Cannot prepare Power Mac G5 startup memory.");
+    }
+    const QString checkedFlash = Model::machineFile(machine.folder, "nvram.img");
+    QFile nvFile(checkedFlash);
+    if (!nvFile.open(QFile::ReadOnly) || nvFile.size() != 16384)
+      fail("Power Mac G5 startup memory must be a 16 KB file named nvram.img.");
+    const QString card =
+        cdBoot ? QStringLiteral("standard")
+               : machine.config["graphicsCard"].toString();
+    if (card == "atiRadeon9800" || card == "atiRadeon7000") {
+      const QString romPath = machine.config["g5GraphicsROMPath"].toString();
+      const QFileInfo romInfo(romPath);
+      if (romPath.isEmpty() || romInfo.isSymLink() || !romInfo.isFile() ||
+          !romInfo.isReadable() || romInfo.size() <= 0 ||
+          romInfo.size() > 1048576) {
+        fail("The selected ATI Radeon card requires a valid Apple Mac FCode "
+             "card ROM file (up to 1 MB) configured in Get Info.");
+      }
+    }
   } else if (family == "pippin") {
     const QString romPath = Model::resolvePippinROM(machine);
     const QFileInfo romInfo(romPath);
@@ -856,7 +885,7 @@ bool Engine::detectOsxConfirmationDialog(int width, int height,
 void Engine::shutdown(bool restart) {
   if (forced)
     return;
-  if (machine.family() == QLatin1String("powerMacOSX")) {
+  if (Model::isOSXFamily(machine.family())) {
     if (!running || process.state() != QProcess::Running || osxShuttingDown)
       return;
     bootHandoffTimer.stop();

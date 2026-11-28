@@ -33,6 +33,7 @@ enum AppPaths {
         case .quadra800: return "Quadra 800"
         case .powerMacG4, .pippin: return "Power Mac G4"
         case .powerMacOSX: return "Power Mac G4 for OS X"
+        case .powerMacG5: return "Power Mac G5"
         case .powerMac7500: return "Power Mac 7500"
         }
     }
@@ -68,6 +69,9 @@ enum AppPaths {
         case .powerMacOSX:
             return helperBinary(app: helperAppName(for: family), binary: "qemu-system-ppc") ??
                 developmentRepoRoot.appendingPathComponent("vendor/qemu-osx/build/qemu-system-ppc")
+        case .powerMacG5:
+            return helperBinary(app: helperAppName(for: family), binary: "qemu-system-ppc64") ??
+                developmentRepoRoot.appendingPathComponent("vendor/qemu-g5/build/qemu-system-ppc64")
         case .powerMac7500:
             return helperBinary(app: "Power Mac 7500", binary: "dingusppc") ??
                 developmentRepoRoot.appendingPathComponent("vendor/dingusppc/build/bin/dingusppc.app/Contents/MacOS/dingusppc")
@@ -99,6 +103,14 @@ enum AppPaths {
             return bundled
         }
         return developmentRepoRoot.appendingPathComponent("osx/firmware")
+    }
+
+    static var g5FirmwareDir: URL {
+        let bundled = resourcesDir.appendingPathComponent("qemu-g5")
+        if FileManager.default.fileExists(atPath: bundled.path) {
+            return bundled
+        }
+        return developmentRepoRoot.appendingPathComponent("g5/firmware")
     }
 
     static var quadraROM: URL {
@@ -296,6 +308,7 @@ enum AppPaths {
 
     private static let displayProbeLock = NSLock()
     private static var cachedOSXDisplayProbe: (path: String, supported: Bool)?
+    private static var cachedG5DisplayProbe: (path: String, supported: Bool)?
 
     static var osxSupportsClassicMacDisplay: Bool {
         let binary = qemuBinary(for: .powerMacOSX)
@@ -310,6 +323,24 @@ enum AppPaths {
         displayProbeLock.lock()
         if FileManager.default.isExecutableFile(atPath: binary.path) {
             cachedOSXDisplayProbe = (binary.path, supported)
+        }
+        displayProbeLock.unlock()
+        return supported
+    }
+
+    static var g5SupportsClassicMacDisplay: Bool {
+        let binary = qemuBinary(for: .powerMacG5)
+        displayProbeLock.lock()
+        if let cached = cachedG5DisplayProbe, cached.path == binary.path {
+            displayProbeLock.unlock()
+            return cached.supported
+        }
+        displayProbeLock.unlock()
+
+        let supported = probeClassicMacDisplay(binary: binary)
+        displayProbeLock.lock()
+        if FileManager.default.isExecutableFile(atPath: binary.path) {
+            cachedG5DisplayProbe = (binary.path, supported)
         }
         displayProbeLock.unlock()
         return supported
@@ -362,6 +393,10 @@ enum AppPaths {
         case .powerMacOSX:
             return ["openbios-ppc-osx", "macosx-flash-seed.img", "qemu_vga.ndrv"].map {
                 osxFirmwareDir.appendingPathComponent($0)
+            }
+        case .powerMacG5:
+            return ["openbios-ppc64-g5", "vgabios-stdvga.bin", "qemu_vga.ndrv"].map {
+                g5FirmwareDir.appendingPathComponent($0)
             }
         case .powerMacG4:
             return [

@@ -19,6 +19,7 @@ QString familyName(const QJsonObject &entry) {
   return family == "quadra800"    ? "Quadra 800"
        : family == "powerMac7500" ? "Power Mac 7500"
        : family == "powerMacOSX"  ? "Power Mac G4 — Mac OS X"
+       : family == "powerMacG5"   ? "Power Mac G5 — Mac OS X"
        : family == "pippin"       ? "Apple / Bandai Pippin"
                                   : "Power Mac G4";
 }
@@ -90,6 +91,7 @@ public:
     const auto family = entry.value("machineFamily").toString("powerMacG4");
     const auto icon = family == "quadra800"    ? "quadra_800"
                     : family == "powerMac7500" ? "powermac_7500"
+                    : family == "powerMacG5"   ? "powermac_g5"
                     : family == "pippin"       ? "apple_pippin"
                                                : "powermac_g4";
     QPainter(&p.image).drawImage(7, 11,
@@ -287,7 +289,8 @@ QJsonArray App::loadCatalog() {
 }
 
 Model::Machine App::install(QJsonObject entry, const QString &name,
-                            const QString &destination) {
+                            const QString &destination,
+                            const QString &targetFamily) {
   const auto target = destination.isEmpty() ? Model::documents() : destination;
   auto owner = QApplication::activeWindow();
   const auto title = name.isEmpty() ? Library::displayTitle(entry) : name;
@@ -297,7 +300,8 @@ Model::Machine App::install(QJsonObject entry, const QString &name,
   auto machine = libraryTask<Model::Machine>(
       owner ? owner : this, cachedComplete ? "Create Mac" : "Download Mac", title,
       [=](std::atomic_bool &cancel, Library::Progress progress) {
-        return Library::install(entry, target, name, cancel, progress);
+        return Library::install(entry, target, name, cancel, progress,
+                                targetFamily);
       },
       true, cachedComplete);
   registerMachine(machine);
@@ -390,6 +394,15 @@ void App::showLibrary() {
   auto name = new PEdit({}, content);
   name->setObjectName("libraryMachineName");
   name->setAccessibleName("Name your new Mac");
+  auto modelRow = new QHBoxLayout;
+  modelRow->setSpacing(8);
+  auto modelCaption = label("Model:", content, "small");
+  auto modelChoice = new PCombo(content);
+  modelChoice->setObjectName("libraryModelChoice");
+  modelChoice->addItem("Power Mac G4", "powerMacOSX");
+  modelChoice->addItem("Power Mac G5 (970FX)", "powerMacG5");
+  modelRow->addWidget(modelCaption);
+  modelRow->addWidget(modelChoice, 1);
   auto saveRow = new QHBoxLayout;
   saveRow->setSpacing(8);
   auto saveCaption = label("Save in:", content, "small");
@@ -411,6 +424,7 @@ void App::showLibrary() {
   detail->addWidget(availability);
   detail->addWidget(nameCaption);
   detail->addWidget(name);
+  detail->addLayout(modelRow);
   detail->addLayout(saveRow);
   detail->addWidget(diskHint);
   detail->addStretch();
@@ -470,6 +484,12 @@ void App::showLibrary() {
     const bool available = exists && compatible(entry);
     name->setVisible(available);
     nameCaption->setVisible(available);
+    const bool allowG5Choice =
+        available &&
+        entry.value("machineFamily").toString() == QLatin1String("powerMacOSX") &&
+        Model::supportsG5OS(entry["osVersion"].toString());
+    modelCaption->setVisible(allowG5Choice);
+    modelChoice->setVisible(allowG5Choice);
     saveCaption->setVisible(available);
     saveLocation->setVisible(available);
     chooseFolder->setVisible(available);
@@ -497,8 +517,10 @@ void App::showLibrary() {
                    "\nFree space needed: " + bytesText(requiredFree));
     cachedSavedBytes = Library::cachedBytes(entry);
     const auto archiveSize = qint64(entry["archiveBytes"].toDouble());
-    if (detailID != entry["id"].toString())
+    if (detailID != entry["id"].toString()) {
       name->setText(display);
+      modelChoice->setCurrentIndex(0);
+    }
     detailID = entry["id"].toString();
     updateActionButtons();
     availability->setText(
@@ -612,7 +634,11 @@ void App::showLibrary() {
             return;
           }
       }
-      const auto machine = install(entry, machineName, saveFolder);
+      const QString chosenModel =
+          (modelChoice->isVisible() ? modelChoice->currentData().toString()
+                                    : QString());
+      const auto machine =
+          install(entry, machineName, saveFolder, chosenModel);
       readyMachineID = machine.id();
       readyEditionID = entry["id"].toString();
       readyName = machine.name();

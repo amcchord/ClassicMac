@@ -8,6 +8,7 @@ extension MachineFamily {
         switch self {
         case .quadra800: return "quadra_800"
         case .powerMacG4, .powerMacOSX: return "powermac_g4"
+        case .powerMacG5: return "powermac_g5"
         case .powerMac7500: return "powermac_7500"
         case .pippin: return "apple_pippin"
         }
@@ -32,7 +33,7 @@ private enum TemplateOSCache {
         let trimmed = version.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return family.osSupportLabel }
         guard trimmed.first?.isNumber == true else { return trimmed }
-        if family == .powerMacOSX || trimmed.hasPrefix("10.") { return "Mac OS X \(trimmed)" }
+        if family.isOSXFamily || trimmed.hasPrefix("10.") { return "Mac OS X \(trimmed)" }
         if trimmed.hasPrefix("7.") { return "System \(trimmed)" }
         return "Mac OS \(trimmed)"
     }
@@ -284,8 +285,11 @@ struct MachinePanel: View {
             HStack(alignment: .top, spacing: 12) {
                 Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 3) {
                     infoRow("Model:", vm.machineFamily.hardwareLabel)
+                    if vm.machineFamily == .powerMacG5 {
+                        infoRow("Processors:", "\(vm.effectiveCPUCount) × PowerPC 970FX")
+                    }
                     infoRow("Mac OS:", osText)
-                    infoRow("Memory:", "\(vm.ramMB) MB")
+                    infoRow("Memory:", ramText)
                     if vm.machineFamily == .pippin {
                         infoRow("Save Flash:", "128 KB")
                         infoRow("Video:", vm.effectivePippinVideoOut.label)
@@ -293,7 +297,7 @@ struct MachinePanel: View {
                         infoRow("Hard disk:", diskText)
                         infoRow("Screen:", screenText)
                     }
-                    if vm.machineFamily == .powerMacG4 {
+                    if vm.machineFamily == .powerMacG4 || vm.machineFamily == .powerMacG5 {
                         infoRow("Graphics:", graphicsText)
                     }
                     if vm.machineFamily != .pippin {
@@ -346,8 +350,24 @@ struct MachinePanel: View {
         return "\(vm.width) × \(vm.height), \(depth)"
     }
 
+    private var ramText: String {
+        if vm.ramMB >= 1024 && vm.ramMB % 1024 == 0 {
+            return "\(vm.ramMB / 1024) GB (\(vm.ramMB) MB)"
+        }
+        return "\(vm.ramMB) MB"
+    }
+
     private var graphicsText: String {
         let card = QEMUManager.effectiveGraphicsCard(for: vm)
+        if vm.machineFamily == .powerMacG5 {
+            if vm.graphicsCard.isG5Card && card == .standard {
+                return "Standard while starting from a CD"
+            }
+            if card == .atiRadeon9800 {
+                return "ATI Radeon 9800 (\(vm.effectiveG5GLMode.label))"
+            }
+            return card.longLabel
+        }
         guard running, card == .atiRadeon else {
             if vm.graphicsCard == .atiRadeon && card == .standard {
                 return "Standard while starting from a CD"

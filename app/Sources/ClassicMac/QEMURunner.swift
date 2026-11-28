@@ -135,9 +135,9 @@ final class QEMUManager: ObservableObject {
 
     private func isOSX(_ id: UUID) -> Bool {
         if let family = runningFamilies[id] {
-            return family == .powerMacOSX
+            return family.isOSXFamily
         }
-        return VMStore.shared.vms.first(where: { $0.id == id })?.machineFamily == .powerMacOSX
+        return VMStore.shared.vms.first(where: { $0.id == id })?.machineFamily.isOSXFamily == true
     }
 
     static func monitorSocketURL(for id: UUID) -> URL {
@@ -1057,6 +1057,40 @@ final class QEMUManager: ObservableObject {
             } catch {
                 return AppError(title, error.localizedDescription)
             }
+        } else if config.machineFamily == .powerMacG5 {
+            let flash = config.nvramImageURL
+            if !fm.fileExists(atPath: flash.path) {
+                do {
+                    try Data(repeating: 0xFF, count: OSXNVRAM.byteCount).write(to: flash, options: .atomic)
+                } catch {
+                    return AppError(title, "The Power Mac G5 startup memory could not be created.")
+                }
+            }
+            let values = try? flash.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey])
+            guard values?.isRegularFile == true, values?.isSymbolicLink == false, values?.fileSize == OSXNVRAM.byteCount else {
+                return AppError(title, "The Power Mac G5 startup memory must be a 16 KB file named nvram.img.")
+            }
+            let activeCard = effectiveGraphicsCard(for: config)
+            if activeCard.isG5Card {
+                guard let romPath = config.g5GraphicsROMPath, !romPath.isEmpty else {
+                    return AppError(
+                        title,
+                        "\(activeCard.label) requires an Apple Mac FCode card ROM. Choose a ROM file in Get Info → Display or switch to Standard graphics."
+                    )
+                }
+                let romURL = URL(fileURLWithPath: romPath)
+                let romValues = try? romURL.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey])
+                guard romValues?.isRegularFile == true,
+                      romValues?.isSymbolicLink == false,
+                      let size = romValues?.fileSize,
+                      (1...1_048_576).contains(size),
+                      fm.isReadableFile(atPath: romURL.path) else {
+                    return AppError(
+                        title,
+                        "The selected \(activeCard.label) ROM file could not be read or has an invalid size. Choose it again in Get Info → Display."
+                    )
+                }
+            }
         }
 
         if config.machineFamily.usesPRAMImage && !fm.fileExists(atPath: config.pramImageURL.path) {
@@ -1151,6 +1185,8 @@ final class QEMUManager: ObservableObject {
             return buildPowerMacArguments(for: config, display: display, printerPorts: printerPorts)
         case .powerMacOSX:
             return buildOSXArguments(for: config, display: display, printerPorts: printerPorts)
+        case .powerMacG5:
+            return buildG5Arguments(for: config, display: display, printerPorts: printerPorts)
         case .powerMac7500:
             return CoplandMachine.arguments(for: config)
         case .pippin:
@@ -1218,6 +1254,91 @@ final class QEMUManager: ObservableObject {
         return args + displayArguments(for: config, browser: display)
     }
 
+    private static func buildG5Arguments(
+        for config: VMConfig,
+        display: BrowserDisplayEndpoint,
+        printerPorts: PrinterForwardPorts? = nil
+    ) -> [String] {
+        let firmware = AppPaths.g5FirmwareDir
+        let name = qemuEscape(config.name)
+        let disk = qemuEscape(config.diskImageURL.path)
+        let flashURL = config.nvramImageURL
+        let flash = qemuEscape(flashURL.path)
+        let rtcBase = OSXNVRAM.rtcBase(at: flashURL)
+        let width = config.width / 8 * 8
+        let height = config.height
+        let bootCD = config.bootFromCD && config.cdImagePath?.isEmpty == false
+        var cd = "if=ide,index=0,media=cdrom,id=cd0,readonly=on"
+        if let path = config.cdImagePath, !path.isEmpty {
+            cd += ",file=\(qemuEscape(path)),format=raw"
+        }
+        let osVersion = VMTemplateMetadata.load(from: config.folder)?.osVersion
+        let isLeopard = osVersion?.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("10.5") == true
+
+        var args = [
+            "-L", firmware.path,
+            "-bios", firmware.appendingPathComponent("openbios-ppc64-g5").path,
+            "-name", name,
+            "-accel", "tcg,tb-size=512",
+            "-M", "mac99,via=pmu",
+            "-cpu", "970fx",
+            "-smp", String(config.effectiveCPUCount),
+            "-m", String(config.ramMB),
+            "-audiodev", config.sound ? "coreaudio,id=snd0,out.buffer-length=50000" : "none,id=snd0",
+            "-global", "macio-newworld.audiodev=snd0",
+            "-rtc", rtcBase,
+            "-drive", "if=mtd,index=0,file=\(flash),format=raw",
+            "-drive", "file=\(disk),format=raw,if=none,id=sata0",
+            "-device", "ide-hd,bus=sata.0,drive=sata0",
+            "-drive", cd,
+            "-boot", bootCD ? "d" : "c",
+        ]
+
+        switch effectiveGraphicsCard(for: config) {
+        case .atiRadeon9800:
+            if let romPath = config.g5GraphicsROMPath, !romPath.isEmpty {
+                args += [
+                    "-vga", "none",
+                    "-device", "ati-radeon9800,bus=pci.0,addr=0x10,gl=\(config.effectiveG5GLMode.rawValue),romfile=\(qemuEscape(romPath))",
+                ]
+            } else {
+                args += ["-vga", "std", "-global", "VGA.vgamem_mb=64", "-g", "\(width)x\(height)x32"]
+            }
+        case .atiRadeon7000:
+            if let romPath = config.g5GraphicsROMPath, !romPath.isEmpty {
+                args += [
+                    "-vga", "none",
+                    "-device", "ati-vga,model=rv100,bus=pci.0,addr=0x10,agp=on,romfile=\(qemuEscape(romPath))",
+                ]
+            } else {
+                args += ["-vga", "std", "-global", "VGA.vgamem_mb=64", "-g", "\(width)x\(height)x32"]
+            }
+        case .standard, .atiRadeon:
+            // Standard VGA on G5 uses pc-bios vgabios-stdvga.bin + qemu_vga.ndrv;
+            // passing -global VGA.romfile= causes Mac OS X 10.3.9 to panic.
+            args += ["-vga", "std", "-global", "VGA.vgamem_mb=64", "-g", "\(width)x\(height)x32"]
+        }
+
+        args += ["-prom-env", "output-device=ttya"]
+        if config.tabletInput {
+            args += ["-device", isLeopard ? "usb-tablet,axis-inset=75" : "usb-tablet"]
+        }
+        if config.hasSharedFolder && !bootCD, let sharedPath = config.sharedFolderPath {
+            args += [
+                "-fsdev", "local,id=hostshare,path=\(qemuEscape(sharedPath)),security_model=none,macos_compat=on",
+                "-device", "virtio-9p-pci,bus=pcix1,addr=0x2,fsdev=hostshare,mount_tag=\(qemuEscape(config.sharedVolumeName))",
+            ]
+        }
+        args += [
+            "-nic", nicArgument(model: "sungem", networking: config.networking, printerPorts: printerPorts),
+            "-serial", "none",
+            "-action", "reboot=shutdown",
+            "-monitor", "unix:\(qemuEscape(monitorSocketURL(for: config.id).path)),server=on,wait=off",
+            "-qmp", "unix:\(qemuEscape(qmpSocketURL(for: config.id).path)),server=on,wait=off",
+        ]
+        return args + displayArguments(for: config, browser: display)
+    }
+
     private static func displayArguments(
         for config: VMConfig,
         browser display: BrowserDisplayEndpoint
@@ -1230,7 +1351,7 @@ final class QEMUManager: ObservableObject {
             // QEMU hands over the framebuffer and takes input on this socket.
             return ["-display", "classicmac,socket=\(qemuEscape(GuestDisplaySession.socketPath(for: config.id)))"]
         }
-        if config.machineFamily == .powerMacOSX {
+        if config.machineFamily.isOSXFamily {
             return ["-display", "cocoa,swap-opt-cmd=off"]
         }
         return [
@@ -1248,6 +1369,9 @@ final class QEMUManager: ObservableObject {
         }
         if config.machineFamily == .powerMacOSX {
             return AppPaths.osxSupportsClassicMacDisplay
+        }
+        if config.machineFamily == .powerMacG5 {
+            return AppPaths.g5SupportsClassicMacDisplay
         }
         return true
     }
@@ -1286,7 +1410,15 @@ final class QEMUManager: ObservableObject {
     /// standard card, as RetroBoot does: the CD route is qualified there.
     static func effectiveGraphicsCard(for config: VMConfig) -> GraphicsCard {
         let bootingFromUserCD = config.bootFromCD && config.cdImagePath?.isEmpty == false
-        return config.machineFamily == .powerMacG4 && !bootingFromUserCD ? config.graphicsCard : .standard
+        guard !bootingFromUserCD else { return .standard }
+        switch config.machineFamily {
+        case .powerMacG4:
+            return config.graphicsCard == .atiRadeon ? .atiRadeon : .standard
+        case .powerMacG5:
+            return config.graphicsCard.isG5Card ? config.graphicsCard : .standard
+        case .quadra800, .powerMacOSX, .powerMac7500, .pippin:
+            return .standard
+        }
     }
 
     // The Power Mac's display card and its boot framebuffer.
@@ -1347,6 +1479,8 @@ final class QEMUManager: ObservableObject {
             args += ["-prom-env", "retroboot-display=\(size.width)x\(size.height)"]
             // ATI's driver starts every session at 640 x 480.
             args += ["-g", "\(ATIDisplay.startupSize.width)x\(ATIDisplay.startupSize.height)x32"]
+        case .atiRadeon9800, .atiRadeon7000:
+            break
         }
         return args
     }

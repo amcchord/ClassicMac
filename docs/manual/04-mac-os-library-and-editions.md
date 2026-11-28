@@ -84,7 +84,7 @@ As a result, a clean **Mac OS 9.2.1** download with a `32 GB` logical startup di
 
 ## Complete Guide to Available Editions
 
-The sections below list the downloadable editions served by ClassicMac 5.0.1's dual catalogs, grouped by OS category. Download sizes reflect the active `thinArchive` when provided.
+The sections below list the downloadable editions served by ClassicMac 5.1.0's dual catalogs, grouped by OS category. Download sizes reflect the active `thinArchive` when provided.
 
 ### System 7 (Quadra 800 · Motorola 68040)
 
@@ -135,9 +135,9 @@ All Mac OS 9 editions use a `32 GB` sparse virtual disk on the **Power Mac G4** 
 > [!TIP]
 > In **Deluxe**, **SuperDeluxe**, and **Mega Deluxe**, a few older 2D games require 256 colors. Deluxe/SuperDeluxe game launchers switch color depth automatically when needed; in Deluxe, switch **Monitors** to 256 colors before launching *Prince of Persia*. Original shareware and demo limits in included classic titles remain intact.
 
-### Mac OS X (Power Mac G4 · QEMU 10 Engine)
+### Mac OS X (Power Mac G4 or Power Mac G5)
 
-PowerPC Mac OS X editions run on ClassicMac's dedicated **QEMU 10.0.13** `mac99,via=pmu` profile with OpenBIOS, persistent `16 KiB` Core99 flash (`nvram.img`), Screamer audio, Sungem Ethernet, and `-vga std` widescreen display support.
+PowerPC Mac OS X editions support both the **Power Mac G4** (`powerMacOSX`, **QEMU 10.0.13** `mac99,via=pmu` with OpenBIOS, `16 KiB` Core99 flash `nvram.img`, Screamer audio, Sungem Ethernet, and `-vga std`) and the **Power Mac G5** (`powerMacG5`, **QEMU 11.1.50** `qemu-system-ppc64` with PowerPC `970fx` SMP, K2 SATA/ATA-100, up to `16 GB` RAM, and optional user-ROM Radeon 9800/7000). For **10.3 Panther** and **10.4 Tiger** editions, choose **Model: Power Mac G4** or **Power Mac G5** right in the Library before installing (or switch models later in **Get Info → General Information**; Mac OS X 10.3 uses at most `2` virtual CPUs on G5).
 
 <p align="center">
   <img src="../screenshots/manual/guest-osx-tiger.png" width="760" alt="Mac OS X 10.4.11 Tiger running inside ClassicMac 4.10.0">

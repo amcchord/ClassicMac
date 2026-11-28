@@ -24,7 +24,8 @@ Every Mac in your sidebar displays a status light on its icon and a status line 
 
 ClassicMac handles **Shut Down…** differently per OS family so your virtual hard disk stays clean:
 - **System 7, Mac OS 8 & Mac OS 9:** Sends the ADB `power` key followed by `Return` `750 ms` later, triggering classic Mac OS's native Shut Down dialog and flushing HFS/HFS+ caches. If the Mac freezes and does not exit within `15 seconds`, ClassicMac forces the emulator off.
-- **Mac OS X (PowerPC):** Offers **Shut Down**, **Force Stop**, and **Cancel** (use **Apple menu → Shut Down** inside Mac OS X whenever possible so the journaled filesystem stays healthy; **Force Stop** powers off immediately if OS X hangs).
+- **On Power Mac G5 (`powerMacG5`):** `usb-tablet` uses optional `,axis-inset=75` (detected on `qemu-system-ppc64`), with K2 OHCI + NEC uPD720101 EHCI controllers. Turning off **Seamless mouse** switches to captured relative USB mouse motion (`Control-Option` on macOS, `Escape` / `Ctrl+Alt` on Windows/Linux).
+- **Mac OS X (PowerPC):** Offers **Shut Down**, **Force Stop**, and **Cancel** (`OSXShutdownController` drives **Apple menu → Shut Down**; **Force Stop** powers off immediately if OS X hangs). Use **Apple menu → Shut Down** inside Mac OS X whenever possible so the journaled filesystem stays healthy.
 - **Copland D11E4:** Choose **Spaz → Shut Down** inside Copland for a graceful exit. ClassicMac's confirmed **Shut Down** command powers off the Copland helper immediately.
 
 When you quit ClassicMac while one or more Macs are running, ClassicMac asks to shut them all down safely first (with a `15-second` timeout per machine on macOS, or **Shut Down All** / **Force Stop All…** on Windows/Linux).

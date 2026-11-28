@@ -172,10 +172,73 @@ struct SettingsDialog: View {
             }
         }
         coerceDepth()
+        if config.machineFamily != original.machineFamily {
+            do {
+                if config.machineFamily == .powerMacG5 {
+                    try Data(repeating: 0xFF, count: OSXNVRAM.byteCount).write(to: config.nvramImageURL, options: .atomic)
+                } else if config.machineFamily == .powerMacOSX {
+                    let seed = try Data(contentsOf: AppPaths.osxFirmwareDir.appendingPathComponent("macosx-flash-seed.img"))
+                    try seed.write(to: config.nvramImageURL, options: .atomic)
+                }
+            } catch {
+                errorMessage = "Could not reset startup memory for the selected model. \(error.localizedDescription)"
+                NSSound.beep()
+                return
+            }
+        }
         if config != original {
             if !VMStore.shared.save(config) { return }
         }
         handle.close()
+    }
+
+    private var canSwitchOSXHardware: Bool {
+        guard original.machineFamily.isOSXFamily else { return false }
+        let osVersion = VMTemplateMetadata.load(from: config.folder)?.osVersion
+        return PowerMacG5Machine.supportsG5(osVersion: osVersion)
+    }
+
+    private var osxModelBinding: Binding<MachineFamily> {
+        Binding(
+            get: { config.machineFamily },
+            set: { newFamily in
+                guard newFamily != config.machineFamily, newFamily.isOSXFamily else { return }
+                config.machineFamily = newFamily
+                config.graphicsCard = .standard
+                if newFamily == .powerMacG5 {
+                    config.ramMB = PowerMacG5Machine.clampedRAM(max(config.ramMB, PowerMacG5Machine.defaultRAMMB))
+                    config.cpuCount = PowerMacG5Machine.defaultCPUs
+                } else {
+                    config.ramMB = min(max(config.ramMB, 256), 2048)
+                    config.cpuCount = nil
+                    config.g5GraphicsROMPath = nil
+                    config.g5GraphicsGLMode = nil
+                    config.sharedFolderPath = nil
+                }
+                coerceDepth()
+            }
+        )
+    }
+
+    private var cpuCountBinding: Binding<Int> {
+        Binding(
+            get: { config.effectiveCPUCount },
+            set: { config.cpuCount = PowerMacG5Machine.clampedCPUs($0) }
+        )
+    }
+
+    private var g5GLModeBinding: Binding<G5GraphicsGLMode> {
+        Binding(
+            get: { config.effectiveG5GLMode },
+            set: { config.g5GraphicsGLMode = $0 }
+        )
+    }
+
+    private static func shortRAMLabel(_ mb: Int) -> String {
+        if mb >= 1024 && mb % 1024 == 0 {
+            return "\(mb / 1024) GB"
+        }
+        return "\(mb) MB"
     }
 
     // MARK: General
@@ -186,13 +249,22 @@ struct SettingsDialog: View {
                 Text("Name:").platinumText(.emphasis).frame(width: 82, alignment: .trailing)
                 PlatinumTextField(text: $config.name, width: 280)
             }
+            if canSwitchOSXHardware {
+                HStack(spacing: 10) {
+                    Text("Model:").platinumText(.emphasis).frame(width: 82, alignment: .trailing)
+                    PlatinumPopUp(selection: osxModelBinding, options: [
+                        (MachineFamily.powerMacOSX, "Power Mac G4 (OS X)"),
+                        (MachineFamily.powerMacG5, "Power Mac G5 (970FX)"),
+                    ], width: 220)
+                }
+            }
             HStack(spacing: 10) {
                 Text("Memory:").platinumText(.emphasis).frame(width: 82, alignment: .trailing)
                 if copland {
                     Text("32 MB, the tested Copland configuration").platinumText(.body)
                 } else {
                     PlatinumPopUp(selection: $config.ramMB,
-                                  options: memoryChoices.map { ($0, "\($0) MB") }, width: 110)
+                                  options: memoryChoices.map { ($0, Self.shortRAMLabel($0)) }, width: 110)
                     if pippin {
                         Text("Save Flash:").platinumText(.emphasis).padding(.leading, 12)
                         Text("128 KB").platinumText(.body)
@@ -200,6 +272,17 @@ struct SettingsDialog: View {
                         Text("Hard disk:").platinumText(.emphasis).padding(.leading, 12)
                         Text("\(config.diskSizeGB) GB").platinumText(.body)
                     }
+                }
+            }
+            if config.machineFamily == .powerMacG5 {
+                HStack(spacing: 10) {
+                    Text("Processors:").platinumText(.emphasis).frame(width: 82, alignment: .trailing)
+                    PlatinumPopUp(
+                        selection: cpuCountBinding,
+                        options: PowerMacG5Machine.cpuPresets.map { ($0, $0 == 1 ? "1 CPU" : "\($0) CPUs") },
+                        width: 110
+                    )
+                    Text("Mac OS X 10.3 uses at most 2 CPUs.").platinumText(.detail)
                 }
             }
             if pippin {
@@ -243,7 +326,7 @@ struct SettingsDialog: View {
                     if config.machineFamily == .powerMacG4 {
                         PlatinumCheckbox("PowerPC G4 processor (off for Mac OS 8.5–8.6)", isOn: $config.useG4CPU)
                     }
-                    if config.machineFamily != .powerMacOSX {
+                    if !config.machineFamily.isOSXFamily {
                         PlatinumCheckbox("Right-click and scroll wheel in classic apps", isOn: $config.classicInputHelpers)
                     }
                     PlatinumCheckbox("Seamless mouse: move in and out freely", isOn: $config.tabletInput)
@@ -254,7 +337,7 @@ struct SettingsDialog: View {
                         Text("Auto (1000) or 100–100000").platinumText(.detail)
                     }
                     .disabled(!config.legacyMouseTracking)
-                    if config.machineFamily == .powerMacOSX {
+                    if config.machineFamily.isOSXFamily {
                         Text("Turn off the seamless mouse to use a relative USB mouse.")
                             .platinumText(.detail)
                     } else {
@@ -341,10 +424,54 @@ struct SettingsDialog: View {
                                 .frame(width: 300, alignment: .leading)
                         }
                     }
+                } else if config.machineFamily == .powerMacG5 {
+                    GridRow(alignment: .top) {
+                        Text("Graphics card:").platinumText(.emphasis).gridColumnAlignment(.trailing)
+                        VStack(alignment: .leading, spacing: 4) {
+                            PlatinumPopUp(selection: graphicsCard, options: [
+                                (GraphicsCard.standard, "Standard (64 MB VGA)"),
+                                (GraphicsCard.atiRadeon9800, "ATI Radeon 9800 (AGP)"),
+                                (GraphicsCard.atiRadeon7000, "ATI Radeon 7000 (AGP)"),
+                            ], width: 250)
+                            Text(cardExplanation).platinumText(.detail)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .frame(width: 300, alignment: .leading)
+                        }
+                    }
+                    if config.graphicsCard.isG5Card {
+                        GridRow {
+                            Text("Card ROM:").platinumText(.emphasis).gridColumnAlignment(.trailing)
+                            HStack(spacing: 6) {
+                                Text(config.g5GraphicsROMPath.map { URL(fileURLWithPath: $0).lastPathComponent } ?? "None chosen")
+                                    .platinumText(config.g5GraphicsROMPath == nil ? .detail : .body)
+                                    .lineLimit(1).truncationMode(.middle)
+                                    .frame(maxWidth: 165, alignment: .leading)
+                                    .help(config.g5GraphicsROMPath ?? "")
+                                PlatinumButton("Choose…", minWidth: 70, action: chooseG5ROM)
+                                if config.g5GraphicsROMPath != nil {
+                                    PlatinumButton("Clear", minWidth: 52) {
+                                        config.g5GraphicsROMPath = nil
+                                    }
+                                }
+                            }
+                        }
+                        if config.graphicsCard == .atiRadeon9800 {
+                            GridRow {
+                                Text("3D acceleration:").platinumText(.emphasis).gridColumnAlignment(.trailing)
+                                PlatinumPopUp(
+                                    selection: g5GLModeBinding,
+                                    options: G5GraphicsGLMode.allCases.map { ($0, $0.label) },
+                                    width: 190
+                                )
+                            }
+                        }
+                    }
                 }
-                GridRow {
-                    Text("Screen size:").platinumText(.emphasis).gridColumnAlignment(.trailing)
-                    sizeControl
+                if !config.graphicsCard.isG5Card {
+                    GridRow {
+                        Text("Screen size:").platinumText(.emphasis).gridColumnAlignment(.trailing)
+                        sizeControl
+                    }
                 }
                 if config.graphicsCard == .standard && config.customResolution {
                     GridRow {
@@ -361,7 +488,7 @@ struct SettingsDialog: View {
                         }
                     }
                 }
-                if config.graphicsCard == .standard && config.machineFamily != .powerMacOSX {
+                if config.graphicsCard == .standard && !config.machineFamily.isOSXFamily {
                     GridRow {
                         Text("Colors:").platinumText(.emphasis)
                         PlatinumPopUp(selection: $config.depth, options: depthChoices.map { ($0.rawValue, $0.label) },
@@ -385,9 +512,27 @@ struct SettingsDialog: View {
     private var cardExplanation: String {
         switch config.graphicsCard {
         case .standard:
-            return "Any screen size, following the window as you resize it, with Thousands or Millions of colors."
+            return config.machineFamily == .powerMacG5
+                ? "Works immediately out of the box with all supported Mac OS X releases up to 3840 × 2160. CD starts also use the Standard card."
+                : "Any screen size, following the window as you resize it, with Thousands or Millions of colors."
         case .atiRadeon:
             return "An emulated Radeon that uses Mac OS 9's own ATI drivers, so 3D games are drawn by this computer's GPU. Needs ATI's software in Mac OS, as in the Library's Deluxe Macs; without it the Mac starts at 640 × 480. Resizing the window changes the Mac’s resolution, up to 1920 × 1440. CD starts use the Standard card."
+        case .atiRadeon9800:
+            return "AGP ATI Radeon 9800 Pro for Quartz Extreme and OpenGL in Mac OS X 10.3.9–10.5. Requires your own Apple Mac FCode card ROM file."
+        case .atiRadeon7000:
+            return "AGP ATI Radeon 7000 / VE (RV100) for Mac OS X. Requires your own Apple Mac FCode card ROM file."
+        }
+    }
+
+    private func chooseG5ROM() {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.message = "Choose an Apple Mac FCode ROM file for this Radeon card"
+        panel.prompt = "Choose"
+        if panel.runModal() == .OK, let url = panel.url {
+            config.g5GraphicsROMPath = url.path
+            errorMessage = nil
         }
     }
 
@@ -400,6 +545,10 @@ struct SettingsDialog: View {
                     let size = ATIDisplay.size(fitting: config.width, height: config.height)
                     config.width = size.width
                     config.height = size.height
+                    config.customResolution = false
+                } else if card == .atiRadeon9800 && config.g5GraphicsGLMode == nil {
+                    config.g5GraphicsGLMode = .fast
+                } else if card.isG5Card {
                     config.customResolution = false
                 }
                 coerceDepth()
@@ -496,6 +645,7 @@ struct SettingsDialog: View {
     }
 
     private var depthChoices: [ColorDepth] {
+        if config.machineFamily.isOSXFamily { return [.millions] }
         if config.machineFamily == .powerMacG4 { return [.thousands, .millions] }
         if config.useEnhancedFramebuffer || config.width < 1152 { return ColorDepth.allCases }
         return [.greys256]
@@ -752,6 +902,11 @@ struct SettingsDialog: View {
                          (config.bootFromCD && config.cdImagePath?.isEmpty == false
                           ? " Sharing is off while the Mac starts up from a CD." : ""))
                         .platinumText(.detail)
+                }
+                if config.machineFamily == .powerMacG5 {
+                    Text("Exposed over PCI-X (virtio-9p). Mac OS X guests require the osx9p VirtIO 9P kernel extension installed to mount shared folders.")
+                        .platinumText(.detail)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
         }

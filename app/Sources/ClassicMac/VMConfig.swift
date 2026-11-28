@@ -10,6 +10,8 @@ enum MachineFamily: String, Codable, CaseIterable, Identifiable {
     case powerMacG4
     // PowerPC Mac OS X uses a dedicated QEMU 10 engine and PMU hardware.
     case powerMacOSX
+    // PowerPC 970FX Power Mac G5 (qemu-system-ppc64 -M mac99,via=pmu -cpu 970fx).
+    case powerMacG5
     // Copland D11E4 on the DingusPPC Power Mac 7500 engine.
     case powerMac7500
     // Apple / Bandai Pippin console (qemu-system-ppc -M pippin).
@@ -17,10 +19,13 @@ enum MachineFamily: String, Codable, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
+    var isOSXFamily: Bool { self == .powerMacOSX || self == .powerMacG5 }
+
     var label: String {
         switch self {
         case .quadra800: return "Quadra 800"
         case .powerMacG4, .powerMacOSX: return "Power Mac G4"
+        case .powerMacG5: return "Power Mac G5"
         case .powerMac7500: return "Power Mac 7500"
         case .pippin: return "Apple Pippin"
         }
@@ -30,6 +35,7 @@ enum MachineFamily: String, Codable, CaseIterable, Identifiable {
         switch self {
         case .quadra800: return "Motorola 68040"
         case .powerMacG4, .powerMacOSX: return "PowerPC G4"
+        case .powerMacG5: return "PowerPC 970FX (G5)"
         case .powerMac7500: return "PowerPC 601"
         case .pippin: return "PowerPC 603"
         }
@@ -39,6 +45,7 @@ enum MachineFamily: String, Codable, CaseIterable, Identifiable {
         switch self {
         case .quadra800: return "Macintosh Quadra 800 - Motorola 68040"
         case .powerMacG4, .powerMacOSX: return "Power Mac G4 - PowerPC"
+        case .powerMacG5: return "Power Mac G5 - PowerPC 970FX"
         case .powerMac7500: return "Power Mac 7500 - PowerPC 601"
         case .pippin: return "Apple / Bandai Pippin - PowerPC 603"
         }
@@ -49,6 +56,7 @@ enum MachineFamily: String, Codable, CaseIterable, Identifiable {
         case .quadra800: return "System 7.1 - Mac OS 8.1"
         case .powerMacG4: return "Mac OS 8.5 - 9.2.2"
         case .powerMacOSX: return "Mac OS X (PowerPC)"
+        case .powerMacG5: return "Mac OS X 10.3.9 - 10.5 (PowerPC)"
         case .powerMac7500: return "Copland D11E4 (experimental)"
         case .pippin: return "Pippin OS"
         }
@@ -59,6 +67,7 @@ enum MachineFamily: String, Codable, CaseIterable, Identifiable {
         case .quadra800: return "Mac OS 8.1"
         case .powerMacG4: return "Mac OS 9.2"
         case .powerMacOSX: return "Mac OS X"
+        case .powerMacG5: return "Power Mac G5"
         case .powerMac7500: return "Copland D11E4"
         case .pippin: return "Apple Pippin"
         }
@@ -71,6 +80,7 @@ enum MachineFamily: String, Codable, CaseIterable, Identifiable {
         case .quadra800: return [64, 128, 256, 512, 1000]
         case .powerMacG4: return [128, 256, 512, 768, 896]
         case .powerMacOSX: return [256, 512, 768, 1024, 1536, 2048]
+        case .powerMacG5: return [512, 1024, 2048, 4096, 8192, 16384]
         case .powerMac7500: return [32]
         case .pippin: return PippinMachine.ramPresets
         }
@@ -81,6 +91,7 @@ enum MachineFamily: String, Codable, CaseIterable, Identifiable {
         case .quadra800: return 128
         case .powerMacG4: return 512
         case .powerMacOSX: return 1024
+        case .powerMacG5: return PowerMacG5Machine.defaultRAMMB
         case .powerMac7500: return 32
         case .pippin: return PippinMachine.defaultRAMMB
         }
@@ -89,7 +100,7 @@ enum MachineFamily: String, Codable, CaseIterable, Identifiable {
     var diskSizePresets: [Int] {
         switch self {
         case .quadra800: return [1, 2, 4, 8, 16, 32, 64, 120]
-        case .powerMacG4, .powerMacOSX: return [2, 4, 8, 16, 32, 64, 120]
+        case .powerMacG4, .powerMacOSX, .powerMacG5: return [2, 4, 8, 16, 32, 64, 120]
         case .powerMac7500: return [1]
         case .pippin: return [0]
         }
@@ -98,23 +109,21 @@ enum MachineFamily: String, Codable, CaseIterable, Identifiable {
     var defaultDiskSizeGB: Int {
         switch self {
         case .quadra800: return 2
-        case .powerMacG4, .powerMacOSX: return 32
+        case .powerMacG4, .powerMacOSX, .powerMacG5: return 32
         case .powerMac7500: return 1
         case .pippin: return 0
         }
     }
 
-    // The qfb enhanced framebuffer is a Quadra/NuBus feature; the mac99
-    // display is the std VGA framebuffer driven by the bundled qemu_vga.ndrv,
-    // which supports custom boot resolutions (via -g). The browser display
-    // scales that framebuffer without changing the guest mode. Host folder
-    // sharing works on both: the Quadra through the classicvirtio NuBus
-    // transport and the Power Mac through virtio-9p-pci plus the classicvirtio
-    // ndrvloader.
-    // Sound works on both: the Quadra has the Apple Sound Chip and the Power
-    // Mac the screamer (AWACS) port.
+    static func ramLabel(_ mb: Int) -> String {
+        if mb >= 1024 && mb % 1024 == 0 {
+            return "\(mb / 1024) GB (\(mb) MB)"
+        }
+        return "\(mb) MB"
+    }
+
     var supportsEnhancedFramebuffer: Bool { self == .quadra800 }
-    var supportsSharedFolder: Bool { self == .quadra800 || self == .powerMacG4 }
+    var supportsSharedFolder: Bool { self == .quadra800 || self == .powerMacG4 || self == .powerMacG5 }
     var supportsSound: Bool { self != .powerMac7500 }
     var supportsPrinting: Bool { self != .powerMac7500 && self != .pippin }
     var supportsCustomResolution: Bool { self != .powerMac7500 && self != .pippin }
@@ -123,15 +132,67 @@ enum MachineFamily: String, Codable, CaseIterable, Identifiable {
     var usesPRAMImage: Bool { self == .quadra800 }
 }
 
+enum PowerMacG5Machine {
+    static let minRAMMB = 512
+    static let maxRAMMB = 16_384
+    static let defaultRAMMB = 2048
+    static let minCPUs = 1
+    static let maxCPUs = 16
+    static let defaultCPUs = 2
+    static let cpuPresets = [1, 2, 4, 8, 16]
+
+    static func clampedCPUs(_ value: Int) -> Int {
+        min(max(value, minCPUs), maxCPUs)
+    }
+
+    static func clampedRAM(_ value: Int) -> Int {
+        min(max(value, minRAMMB), maxRAMMB)
+    }
+
+    static func supportsG5(osVersion: String?) -> Bool {
+        guard let raw = osVersion?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else {
+            return true
+        }
+        if raw.hasPrefix("10.0") || raw.hasPrefix("10.1") || raw.hasPrefix("10.2") {
+            return false
+        }
+        if raw.hasPrefix("10.3") {
+            let parts = raw.split(separator: ".").compactMap { Int($0) }
+            if parts.count >= 3 { return parts[2] >= 4 }
+            return false
+        }
+        return raw.hasPrefix("10.4") || raw.hasPrefix("10.5")
+    }
+}
+
+enum G5GraphicsGLMode: String, Codable, CaseIterable, Identifiable {
+    case fast
+    case on
+    case off
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .fast: return "Fast (Host GPU)"
+        case .on: return "Exact (Host OpenGL)"
+        case .off: return "Software"
+        }
+    }
+}
+
 // The Power Mac's display card. Standard is ClassicMac's VGA framebuffer with
 // its bundled Mac OS driver: any size, live window resizing, every depth from
 // Black & White to Millions. ATI Radeon is an emulated R100 (PCI 1002:5144,
 // "ATY,Rage6p") that runs Mac OS 9's own ATI drivers, so QuickDraw 3D RAVE
 // and OpenGL games are accelerated by this Mac's GPU without any custom guest
-// driver. Ported from RetroBoot (D018/D023).
+// driver. Power Mac G5 also supports AGP ATI Radeon 9800 and Radeon 7000
+// when paired with a user-supplied card ROM.
 enum GraphicsCard: String, Codable, CaseIterable, Identifiable {
     case standard
     case atiRadeon
+    case atiRadeon9800
+    case atiRadeon7000
 
     var id: String { rawValue }
 
@@ -139,6 +200,8 @@ enum GraphicsCard: String, Codable, CaseIterable, Identifiable {
         switch self {
         case .standard: return "Standard"
         case .atiRadeon: return "ATI Radeon"
+        case .atiRadeon9800: return "ATI Radeon 9800"
+        case .atiRadeon7000: return "ATI Radeon 7000"
         }
     }
 
@@ -146,7 +209,13 @@ enum GraphicsCard: String, Codable, CaseIterable, Identifiable {
         switch self {
         case .standard: return "Standard (any size)"
         case .atiRadeon: return "ATI Radeon (3D acceleration)"
+        case .atiRadeon9800: return "ATI Radeon 9800 (Quartz Extreme & OpenGL)"
+        case .atiRadeon7000: return "ATI Radeon 7000 (AGP)"
         }
+    }
+
+    var isG5Card: Bool {
+        self == .atiRadeon9800 || self == .atiRadeon7000
     }
 }
 
@@ -314,6 +383,11 @@ struct VMConfig: Codable, Identifiable, Hashable {
     var pippinROMPath: String?
     var pippinControls: PippinControlConfig?
 
+    // Power Mac G5 options. Optional so existing bundles omit them.
+    var cpuCount: Int?
+    var g5GraphicsROMPath: String?
+    var g5GraphicsGLMode: G5GraphicsGLMode?
+
     // The .classic package on disk that holds this VM. Runtime only: it is the
     // file's location, not part of the persisted config, so it is excluded from
     // Codable (see CodingKeys) and set when the VM is loaded, created, or opened.
@@ -329,6 +403,7 @@ struct VMConfig: Codable, Identifiable, Hashable {
         case classicInputHelpers, legacyMouseTracking, mouseDPI, tabletInput, toolsCDInserted
         case toolsDeliveryVersion
         case pippinVideoOut, flashImageName, pippinROMPath, pippinControls
+        case cpuCount, g5GraphicsROMPath, g5GraphicsGLMode
     }
 
     init(id: UUID = UUID(),
@@ -363,6 +438,9 @@ struct VMConfig: Codable, Identifiable, Hashable {
          flashImageName: String? = nil,
          pippinROMPath: String? = nil,
          pippinControls: PippinControlConfig? = nil,
+         cpuCount: Int? = nil,
+         g5GraphicsROMPath: String? = nil,
+         g5GraphicsGLMode: G5GraphicsGLMode? = nil,
          bundleURL: URL? = nil) {
         self.id = id
         self.name = name
@@ -399,6 +477,9 @@ struct VMConfig: Codable, Identifiable, Hashable {
         self.flashImageName = flashImageName
         self.pippinROMPath = pippinROMPath
         self.pippinControls = pippinControls
+        self.cpuCount = cpuCount
+        self.g5GraphicsROMPath = g5GraphicsROMPath
+        self.g5GraphicsGLMode = g5GraphicsGLMode
         self.bundleURL = bundleURL
         sanitize()
     }
@@ -428,7 +509,7 @@ struct VMConfig: Codable, Identifiable, Hashable {
     static func formattedOSLabel(_ rawVersion: String, family: MachineFamily) -> String {
         let v = rawVersion.trimmingCharacters(in: .whitespacesAndNewlines)
         guard v.first?.isNumber == true else { return rawVersion }
-        if family == .powerMacOSX || v.hasPrefix("10.") { return "Mac OS X \(v)" }
+        if family.isOSXFamily || v.hasPrefix("10.") { return "Mac OS X \(v)" }
         if v.hasPrefix("7.") { return "System \(v)" }
         if v.hasPrefix("8.") || v.hasPrefix("9.") { return "Mac OS \(v)" }
         return rawVersion
@@ -496,6 +577,9 @@ struct VMConfig: Codable, Identifiable, Hashable {
         flashImageName = try c.decodeIfPresent(String.self, forKey: .flashImageName)
         pippinROMPath = try c.decodeIfPresent(String.self, forKey: .pippinROMPath)
         pippinControls = try? c.decodeIfPresent(PippinControlConfig.self, forKey: .pippinControls)
+        cpuCount = try c.decodeIfPresent(Int.self, forKey: .cpuCount)
+        g5GraphicsROMPath = try c.decodeIfPresent(String.self, forKey: .g5GraphicsROMPath)
+        g5GraphicsGLMode = try? c.decodeIfPresent(G5GraphicsGLMode.self, forKey: .g5GraphicsGLMode)
         sanitize()
     }
 
@@ -513,6 +597,15 @@ struct VMConfig: Codable, Identifiable, Hashable {
                 ramMB = 896
             }
             useEnhancedFramebuffer = false
+            if graphicsCard.isG5Card {
+                graphicsCard = .standard
+            }
+        } else if machineFamily == .powerMacG5 {
+            useG4CPU = false
+            useVirtioDisk = false
+            if graphicsCard == .atiRadeon {
+                graphicsCard = .standard
+            }
         } else {
             useG4CPU = false
             useVirtioDisk = false
@@ -572,6 +665,29 @@ struct VMConfig: Codable, Identifiable, Hashable {
             useEnhancedFramebuffer = false
             toolsCDInserted = false
             classicInputHelpers = false
+        }
+        if machineFamily == .powerMacG5 {
+            ramMB = PowerMacG5Machine.clampedRAM(ramMB)
+            cpuCount = PowerMacG5Machine.clampedCPUs(cpuCount ?? PowerMacG5Machine.defaultCPUs)
+            depth = ColorDepth.millions.rawValue
+            useEnhancedFramebuffer = false
+            toolsCDInserted = false
+            classicInputHelpers = false
+            if let trimmedROM = g5GraphicsROMPath?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !trimmedROM.isEmpty {
+                g5GraphicsROMPath = trimmedROM
+            } else {
+                g5GraphicsROMPath = nil
+            }
+            if graphicsCard == .atiRadeon9800 {
+                g5GraphicsGLMode = g5GraphicsGLMode ?? .fast
+            } else {
+                g5GraphicsGLMode = nil
+            }
+        } else {
+            cpuCount = nil
+            g5GraphicsROMPath = nil
+            g5GraphicsGLMode = nil
         }
         if machineFamily == .powerMac7500 {
             ramMB = 32
@@ -665,6 +781,14 @@ struct VMConfig: Codable, Identifiable, Hashable {
     var nvramImageURL: URL { folder.appendingPathComponent("nvram.img") }
     var effectivePippinVideoOut: PippinVideoOut { pippinVideoOut ?? .ntsc }
     var effectivePippinControls: PippinControlConfig { pippinControls ?? .defaultConfig }
+    var effectiveCPUCount: Int {
+        machineFamily == .powerMacG5
+            ? PowerMacG5Machine.clampedCPUs(cpuCount ?? PowerMacG5Machine.defaultCPUs)
+            : 1
+    }
+    var effectiveG5GLMode: G5GraphicsGLMode {
+        g5GraphicsGLMode ?? .fast
+    }
     var configURL: URL { folder.appendingPathComponent("config.json") }
     // The machine's last captured screen, saved when it shuts down.
     var previewURL: URL { folder.appendingPathComponent("preview.png") }

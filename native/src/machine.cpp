@@ -81,6 +81,29 @@ static int integer(QJsonObject &c, const QString &key, int fallback, int low,
     fail("Unsupported " + key + " setting.");
   return int(d);
 }
+bool isOSXFamily(const QString &family) {
+  return family == QLatin1String("powerMacOSX") ||
+         family == QLatin1String("powerMacG5");
+}
+bool supportsG5OS(const QString &osVersion) {
+  const QString raw = osVersion.trimmed();
+  if (raw.isEmpty())
+    return true;
+  if (raw.startsWith("10.0") || raw.startsWith("10.1") ||
+      raw.startsWith("10.2"))
+    return false;
+  if (raw.startsWith("10.3")) {
+    const auto parts = raw.split('.');
+    if (parts.size() >= 3) {
+      bool ok = false;
+      const int patch = parts[2].toInt(&ok);
+      if (ok)
+        return patch >= 4;
+    }
+    return false;
+  }
+  return raw.startsWith("10.4") || raw.startsWith("10.5");
+}
 QJsonObject validate(QJsonObject c) {
   if (!QRegularExpression("^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
                           QRegularExpression::CaseInsensitiveOption)
@@ -95,7 +118,7 @@ QJsonObject validate(QJsonObject c) {
                              : QStringLiteral("powerMacG4");
   auto family = c["machineFamily"].toString();
   if (!QStringList{"powerMacG4", "quadra800", "powerMac7500", "powerMacOSX",
-                   "pippin"}
+                   "powerMacG5", "pippin"}
            .contains(family))
     fail("Unknown Mac model.");
   auto name = c["name"].toString().trimmed();
@@ -104,20 +127,29 @@ QJsonObject validate(QJsonObject c) {
     fail("Give your Mac a name of up to 100 characters.");
   c["name"] = name;
   bool quad = family == "quadra800", copland = family == "powerMac7500";
-  bool osx = family == "powerMacOSX", pippin = family == "pippin";
+  bool osx = family == "powerMacOSX", g5 = family == "powerMacG5",
+       anyOsx = osx || g5, pippin = family == "pippin";
   const int defaultRam = quad      ? 128
                          : copland ? 32
+                         : g5      ? 2048
                          : osx     ? 1024
                          : pippin  ? 13
                                    : 512;
-  const int minRam = quad ? 16 : osx ? 256 : pippin ? 5 : 32;
+  const int minRam = quad ? 16 : g5 ? 512 : osx ? 256 : pippin ? 5 : 32;
   const int maxRam = quad      ? 1000
                      : copland ? 32
+                     : g5      ? 16384
                      : osx     ? 2048
                      : pippin  ? 16
                                : 896;
   int ram = integer(c, "ramMB", defaultRam, 5, 65536);
   c["ramMB"] = std::clamp(ram, minRam, maxRam);
+  if (g5) {
+    int cpus = integer(c, "cpuCount", 2, 1, 64);
+    c["cpuCount"] = std::clamp(cpus, 1, 16);
+  } else {
+    c.remove("cpuCount");
+  }
   int width = integer(c, "width", 1024, 480, 3840);
   int height = integer(c, "height", 768, 384, 2160);
   int depth = integer(c, "depth", 16, 1, 32);
@@ -150,11 +182,45 @@ QJsonObject validate(QJsonObject c) {
   }
   if (!c.contains("graphicsCard") || c["graphicsCard"].isNull())
     c["graphicsCard"] = "standard";
-  if (!QStringList{"standard", "atiRadeon"}.contains(
-          c["graphicsCard"].toString()))
+  if (!QStringList{"standard", "atiRadeon", "atiRadeon9800", "atiRadeon7000"}
+           .contains(c["graphicsCard"].toString()))
     fail("Unknown graphics card.");
-  if (family != "powerMacG4")
+  if (family == "powerMacG4") {
+    if (c["graphicsCard"].toString() != "atiRadeon")
+      c["graphicsCard"] = "standard";
+  } else if (g5) {
+    if (!QStringList{"atiRadeon9800", "atiRadeon7000"}.contains(
+            c["graphicsCard"].toString()))
+      c["graphicsCard"] = "standard";
+  } else {
     c["graphicsCard"] = "standard";
+  }
+  if (g5) {
+    if (c.contains("g5GraphicsROMPath") && !c["g5GraphicsROMPath"].isNull()) {
+      if (!c["g5GraphicsROMPath"].isString() ||
+          c["g5GraphicsROMPath"].toString().contains(QChar(0)))
+        fail("Invalid g5GraphicsROMPath option.");
+      const QString trimmedRom = c["g5GraphicsROMPath"].toString().trimmed();
+      if (trimmedRom.isEmpty())
+        c.remove("g5GraphicsROMPath");
+      else
+        c["g5GraphicsROMPath"] = trimmedRom;
+    }
+    if (c["graphicsCard"].toString() == "atiRadeon9800") {
+      QString glMode = c.contains("g5GraphicsGLMode") &&
+                               c["g5GraphicsGLMode"].isString()
+                           ? c["g5GraphicsGLMode"].toString()
+                           : QStringLiteral("fast");
+      if (!QStringList{"off", "on", "fast"}.contains(glMode))
+        glMode = QStringLiteral("fast");
+      c["g5GraphicsGLMode"] = glMode;
+    } else {
+      c.remove("g5GraphicsGLMode");
+    }
+  } else {
+    c.remove("g5GraphicsROMPath");
+    c.remove("g5GraphicsGLMode");
+  }
   for (auto key : {"sound", "networking", "tabletInput", "classicInputHelpers",
                    "useG4CPU", "useEnhancedFramebuffer", "bootFromCD",
                    "bootFromFloppy", "toolsCDInserted", "useVirtioDisk",
@@ -222,8 +288,7 @@ QJsonObject validate(QJsonObject c) {
     }
     c["depth"] = depth;
   }
-  if (osx) {
-    c["graphicsCard"] = "standard";
+  if (anyOsx) {
     c["depth"] = 32;
     c["classicInputHelpers"] = false;
     c["toolsCDInserted"] = false;
@@ -246,10 +311,10 @@ QJsonObject validate(QJsonObject c) {
     if (c.contains(key) && !c[key].isNull() &&
         (!c[key].isString() || c[key].toString().contains(QChar(0))))
       fail("Invalid media path.");
-  if (osx || pippin) {
+  if (osx || pippin)
     c.remove("sharedFolderPath");
+  if (anyOsx || pippin)
     c.remove("floppyImagePath");
-  }
   if (pippin) {
     c["bootFromCD"] = !c["cdImagePath"].toString().trimmed().isEmpty();
   }
@@ -341,8 +406,9 @@ QString binary(const QString &name) {
 Machine createMachine(QString name, QString family, int size,
                       const QString &parent, const QString &cd) {
   const bool pippin = family == "pippin";
-  if (!QStringList{"powerMacG4", "quadra800", "powerMacOSX", "pippin"}.contains(
-          family) ||
+  if (!QStringList{"powerMacG4", "quadra800", "powerMacOSX", "powerMacG5",
+                   "pippin"}
+           .contains(family) ||
       (!pippin && !QList<int>{1, 2, 4, 8, 16, 32, 64, 120}.contains(size)))
     fail("Choose a supported Mac model and disk capacity.");
   auto c = freshConfig(name, family);
@@ -375,6 +441,13 @@ Machine createMachine(QString name, QString family, int size,
         !disk.resize(qint64(size) * 1073741824))
       fail("Could not create a sparse hard disk.");
     disk.close();
+  }
+  if (family == "powerMacG5") {
+    QFile nvram(folder + "/nvram.img");
+    if (!nvram.open(QFile::WriteOnly | QFile::NewOnly) ||
+        nvram.write(QByteArray(16384, char(0xff))) != 16384)
+      fail("Could not prepare Power Mac G5 startup memory.");
+    nvram.close();
   }
   if (family == "quadra800") {
     const QString pram = folder + "/pram.img";
@@ -596,6 +669,14 @@ QString osxRtcBase(const QString &nvramPath, qint64 nowUtcSeconds) {
          instant.toString(QStringLiteral("yyyy-MM-dd'T'HH:mm:ss"));
 }
 
+static QString g5RtcBase(const QString &nvramPath) {
+  try {
+    return osxRtcBase(nvramPath);
+  } catch (...) {
+    return QStringLiteral("base=utc");
+  }
+}
+
 QStringList qemuArguments(const Machine &m, int port,
                           const QString &audioOverride,
                           const PrintPorts &printPorts) {
@@ -631,6 +712,7 @@ QStringList qemuArguments(const Machine &m, int port,
     audio = audioOverride;
   }
   bool ppc = m.family() == "powerMacG4",
+       g5 = m.family() == "powerMacG5",
        cdBoot = b("bootFromCD") && !s("cdImagePath").isEmpty(),
        legacy = ppc && b("useVirtioDisk"),
        compatCD = cdBoot && (!b("useG4CPU") || legacy),
@@ -640,7 +722,7 @@ QStringList qemuArguments(const Machine &m, int port,
        needsNdrvLoader =
            ppc && (tools || b("tabletInput") || ati || legacy || compatCD || sharing);
   const QString nicModel =
-      (m.family() == "powerMacOSX" || ppc)
+      (isOSXFamily(m.family()) || ppc)
           ? (legacy ? QStringLiteral("rtl8139") : QStringLiteral("sungem"))
           : QStringLiteral("dp83932");
   auto buildNicArg = [&]() -> QString {
@@ -666,7 +748,9 @@ QStringList qemuArguments(const Machine &m, int port,
     return nic;
   };
   QStringList a = {"-L",
-                   r + (m.family() == "powerMacOSX" ? "/qemu-osx" : "/qemu/pc-bios"),
+                   r + (g5                          ? "/qemu-g5"
+                        : m.family() == "powerMacOSX" ? "/qemu-osx"
+                                                      : "/qemu/pc-bios"),
                    "-name",
                    opt(m.name()),
                    "-m",
@@ -754,6 +838,72 @@ QStringList qemuArguments(const Machine &m, int port,
       << "-device" << (b("tabletInput") ? "usb-tablet,bus=osx-usb.0"
                                        : "usb-mouse,bus=osx-usb.0")
       << "-nic" << buildNicArg();
+    return a;
+  }
+  if (g5) {
+    const auto width = c["width"].toInt() / 8 * 8;
+    const auto height = c["height"].toInt();
+    const auto flash = opt(m.folder + "/nvram.img");
+    QString cd = "if=ide,index=0,media=cdrom,id=cd0,readonly=on";
+    if (!s("cdImagePath").isEmpty())
+      cd += ",file=" + opt(s("cdImagePath")) + ",format=raw";
+    QString osVersion;
+    const QString tplPath = m.folder + "/template-info.json";
+    if (QFileInfo::exists(tplPath)) {
+      try {
+        osVersion = readJSON(tplPath).value("osVersion").toString();
+      } catch (...) {
+      }
+    }
+    const bool isLeopard =
+        osVersion.trimmed().startsWith(QStringLiteral("10.5"));
+    a << "-accel" << "tcg,tb-size=512"
+      << "-M" << "mac99,via=pmu"
+      << "-cpu" << "970fx"
+      << "-smp" << QString::number(c["cpuCount"].toInt(2))
+      << "-bios" << r + "/qemu-g5/openbios-ppc64-g5"
+      << "-global" << "macio-newworld.audiodev=snd0"
+      << "-rtc" << g5RtcBase(m.folder + "/nvram.img")
+      << "-drive" << "if=mtd,index=0,file=" + flash + ",format=raw"
+      << "-drive" << "file=" + disk + ",format=raw,if=none,id=sata0"
+      << "-device" << "ide-hd,bus=sata.0,drive=sata0"
+      << "-drive" << cd
+      << "-boot" << (cdBoot ? "d" : "c");
+    const QString card =
+        cdBoot ? QStringLiteral("standard") : s("graphicsCard");
+    const QString romPath = s("g5GraphicsROMPath");
+    if (card == "atiRadeon9800" && !romPath.isEmpty()) {
+      a << "-vga" << "none" << "-device"
+        << QString("ati-radeon9800,bus=pci.0,addr=0x10,gl=%1,romfile=%2")
+               .arg(c["g5GraphicsGLMode"].toString(QStringLiteral("fast")),
+                    opt(romPath));
+    } else if (card == "atiRadeon7000" && !romPath.isEmpty()) {
+      a << "-vga" << "none" << "-device"
+        << QString("ati-vga,model=rv100,bus=pci.0,addr=0x10,agp=on,romfile=%1")
+               .arg(opt(romPath));
+    } else {
+      a << "-vga" << "std" << "-global" << "VGA.vgamem_mb=64"
+        << "-g" << QString("%1x%2x32").arg(width).arg(height);
+    }
+    a << "-prom-env" << "output-device=ttya";
+    if (b("tabletInput"))
+      a << "-device" << (isLeopard ? "usb-tablet,axis-inset=75" : "usb-tablet");
+    if (sharing) {
+      QString tag = c.value("sharedVolumeName").toString("Shared Files");
+      if (tag.contains(QRegularExpression("[\\x00-\\x1f]")))
+        fail("Invalid shared volume name.");
+      tag.remove(':');
+      tag = tag.trimmed().left(27).trimmed();
+      if (tag.isEmpty())
+        tag = "Shared Files";
+      a << "-fsdev"
+        << "local,id=hostshare,path=" + opt(s("sharedFolderPath")) +
+               ",security_model=none,macos_compat=on"
+        << "-device"
+        << "virtio-9p-pci,bus=pcix1,addr=0x2,fsdev=hostshare,mount_tag=" +
+               opt(tag);
+    }
+    a << "-nic" << buildNicArg();
     return a;
   }
   if (ppc) {

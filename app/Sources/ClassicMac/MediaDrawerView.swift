@@ -55,7 +55,7 @@ struct MediaDrawerView: View {
                 }
                 status
                 PlatinumGroupBox("CD") { drive(.disc, icon: "cd") }
-                if config.machineFamily != .powerMacOSX && config.machineFamily != .pippin {
+                if !config.machineFamily.isOSXFamily && config.machineFamily != .pippin {
                     PlatinumGroupBox("ClassicMac Tools") {
                         VStack(alignment: .leading, spacing: 6) {
                             drive(.tools, icon: "cd")
@@ -132,7 +132,7 @@ struct MediaDrawerView: View {
 
     private var visibleRecents: [RecentMedia] {
         recents.items.filter {
-            if config.machineFamily == .powerMacOSX || config.machineFamily == .pippin { return $0.device == .disc }
+            if config.machineFamily.isOSXFamily || config.machineFamily == .pippin { return $0.device == .disc }
             return $0.device != .floppy || config.machineFamily.supportsFloppyDisk
         }
     }
@@ -190,8 +190,8 @@ struct MediaDrawerView: View {
         let savedPath = device.path(in: config)
         let runningDrive = snapshot?[device]
         let runningPath = runningDrive?.inserted == true ? runningDrive?.path : nil
-        let checking = isRunning && snapshot == nil && config.machineFamily != .powerMacOSX && config.machineFamily != .pippin
-        let displayedPath = isRunning && config.machineFamily != .powerMacOSX && config.machineFamily != .pippin ? runningPath : savedPath
+        let checking = isRunning && snapshot == nil && !config.machineFamily.isOSXFamily && config.machineFamily != .pippin
+        let displayedPath = isRunning && !config.machineFamily.isOSXFamily && config.machineFamily != .pippin ? runningPath : savedPath
         let available = displayedPath.map { FileManager.default.isReadableFile(atPath: $0) } ?? true
         let liveBlocked = live && (isPaused || snapshot == nil)
         HStack(alignment: .center, spacing: 10) {
@@ -202,7 +202,7 @@ struct MediaDrawerView: View {
                     .platinumText(displayedPath == nil ? .disabled : .emphasis)
                     .lineLimit(1).truncationMode(.middle)
                     .help(displayedPath ?? "")
-                if isRunning && (config.machineFamily == .powerMacG4 || config.machineFamily == .powerMacOSX || config.machineFamily == .pippin || (live && runningPath != savedPath && snapshot != nil)) {
+                if isRunning && (config.machineFamily == .powerMacG4 || config.machineFamily.isOSXFamily || config.machineFamily == .pippin || (live && runningPath != savedPath && snapshot != nil)) {
                     Text("Next startup: \(savedPath.map { URL(fileURLWithPath: $0).lastPathComponent } ?? "nothing")")
                         .platinumText(.detail).lineLimit(1).truncationMode(.middle)
                 }

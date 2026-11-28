@@ -98,9 +98,17 @@ enum MachineTemplateInstaller {
     // the final package becomes visible only after all checks and rewrites pass.
     static func installVerifiedArchive(_ archive: URL, machine: DownloadableMachine,
                                        name: String, in directory: URL,
+                                       targetFamily: MachineFamily? = nil,
                                        cancelled: () -> Bool = { false },
                                        progress: (Int64) -> Void = { _ in }) throws -> URL {
         try machine.validate()
+        let effectiveFamily = targetFamily ?? machine.family
+        let convertingOSXToG5 = machine.family == .powerMacOSX &&
+            effectiveFamily == .powerMacG5 &&
+            PowerMacG5Machine.supportsG5(osVersion: machine.osVersion)
+        guard effectiveFamily == machine.family || convertingOSXToG5 else {
+            throw MachineDownloadError.unsafeArchive("This machine does not support the selected Mac model.")
+        }
         let name = try normalizedName(name)
         let fm = FileManager.default
         let directory = directory.resolvingSymlinksInPath()
@@ -116,7 +124,7 @@ enum MachineTemplateInstaller {
         try extract(archive, into: staging, expectedBytes: machine.installedBytes,
                     expectedDiskBytes: machine.diskCapacityBytes, maximumStorageBytes: plan.sparseWriteLimit,
                     copland: machine.family == .powerMac7500, quadra: machine.family == .quadra800,
-                    osx: machine.family == .powerMacOSX,
+                    osx: machine.family.isOSXFamily,
                     cancelled: cancelled, progress: progress)
         if cancelled() { throw CancellationError() }
 
@@ -146,6 +154,14 @@ enum MachineTemplateInstaller {
                 }
             }
         }
+        if effectiveFamily == .powerMacG5 {
+            // Fresh blank 16 KB flash NVRAM for OpenBIOS core99 initialization
+            // so G4 boot-device paths do not linger on G5.
+            try Data(repeating: 0xFF, count: OSXNVRAM.byteCount).write(
+                to: staging.appendingPathComponent("nvram.img"),
+                options: .atomic
+            )
+        }
         // Build a new config from supported hardware fields. Template paths,
         // IDs, mounted discs, browser mode and future unknown fields cannot be
         // carried into a new user's machine.
@@ -154,7 +170,8 @@ enum MachineTemplateInstaller {
         }
         let diskSizeGB = max(1, Int((Int64(diskBytes) + 1_073_741_823) / 1_073_741_824))
         var fresh = VMConfig(
-            name: name, machineFamily: source.machineFamily, ramMB: source.ramMB,
+            name: name, machineFamily: effectiveFamily,
+            ramMB: effectiveFamily == .powerMacG5 ? max(source.ramMB, PowerMacG5Machine.defaultRAMMB) : source.ramMB,
             diskSizeGB: diskSizeGB, width: source.width, height: source.height,
             depth: source.depth, useEnhancedFramebuffer: false,
             customResolution: source.customResolution, useBrowserDisplay: false,
@@ -162,7 +179,8 @@ enum MachineTemplateInstaller {
             networking: source.networking, sound: source.sound,
             useG4CPU: source.useG4CPU, useVirtioDisk: source.useVirtioDisk,
             graphicsCard: source.graphicsCard, tabletInput: source.tabletInput,
-            classicInputHelpers: source.classicInputHelpers
+            classicInputHelpers: source.classicInputHelpers,
+            cpuCount: effectiveFamily == .powerMacG5 ? PowerMacG5Machine.defaultCPUs : nil
         )
         if let recommended {
             applyRecommendedSettings(recommended, to: &fresh)
@@ -228,6 +246,19 @@ enum MachineTemplateInstaller {
                 }
                 config.ramMB = min(max(requested, 256), min(2048, hostCap))
             }
+        case .powerMacG5:
+            let requested = settings.osx_ram_mb ?? settings.ram_mb ?? PowerMacG5Machine.defaultRAMMB
+            let hostCap: Int
+            if physicalMemory >= 16 * 1_073_741_824 {
+                hostCap = 4096
+            } else if physicalMemory >= 8 * 1_073_741_824 {
+                hostCap = 2048
+            } else if physicalMemory >= 4 * 1_073_741_824 {
+                hostCap = 1024
+            } else {
+                hostCap = 512
+            }
+            config.ramMB = PowerMacG5Machine.clampedRAM(min(max(requested, PowerMacG5Machine.defaultRAMMB), hostCap))
         case .powerMacG4:
             if let requested = settings.ram_mb {
                 let minRAM = MachineFamily.powerMacG4.ramPresets.min() ?? 128
