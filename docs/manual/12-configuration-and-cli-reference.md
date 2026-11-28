@@ -146,6 +146,7 @@ All `CLASSICMAC_*` variables recognized by the application, emulators, and build
 | Variable | Platform / Component | Purpose |
 | :--- | :--- | :--- |
 | `CLASSICMAC_DISABLE_UPDATE_CHECK=1` | macOS, Windows, Linux | Disables automatic 24-hour GitHub Releases update checks. |
+| `CLASSICMAC_PIPPIN_ROM_URL` | macOS, Windows, Linux (`PippinROMDownloader` / `catalog.cpp`) | Overrides the default Archive.org HTTPS mirrors used when downloading the 4 MB Pippin Kinka 1.3 boot ROM to `ROMs/pippin.rom` (must use `https://` and match Kinka 1.3's SHA-256 digest). |
 | `CLASSICMAC_ATI_3D=off` | QEMU (`ati-vga`) | Diagnostic toggle: disables host OpenGL/Metal 3D acceleration while keeping ATI 2D display modes. |
 | `CLASSICMAC_PORTABLE_EXE` | Windows (`updater.cpp`) | Absolute path to the running portable `.exe` enabling in-place self-updates. |
 | `CLASSICMAC_RESOURCES` | macOS (`swift run` dev) | Overrides `AppPaths.resourcesDir` when running unbundled from source. |

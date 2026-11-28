@@ -233,7 +233,8 @@ static void request(const QUrl &initial, const QByteArray &range,
                     qint64 maximum, std::atomic_bool &cancel,
                     const std::function<void(QNetworkReply *)> &headers,
                     const std::function<void(QByteArray)> &chunk,
-                    int totalTimeoutMs = 0) {
+                    int totalTimeoutMs = 0,
+                    bool allowArchiveOrgRedirect = false) {
   QNetworkAccessManager manager;
   QUrl u = initial;
   QElapsedTimer totalTimer;
@@ -325,8 +326,13 @@ static void request(const QUrl &initial, const QByteArray &range,
       fail(failure);
     if (redirecting) {
       auto target = secureURL(u.resolved(next).toString());
-      if (target.host() != initial.host() ||
-          target.port(443) != initial.port(443))
+      const bool sameHost = target.host() == initial.host() &&
+                            target.port(443) == initial.port(443);
+      const bool archiveHost =
+          allowArchiveOrgRedirect && target.port(443) == 443 &&
+          (target.host() == QLatin1String("archive.org") ||
+           target.host().endsWith(QLatin1String(".archive.org")));
+      if (!sameHost && !archiveHost)
         fail("The download redirected to another site.");
       u = target;
       continue;
@@ -977,5 +983,94 @@ QString install(const QJsonObject &entry, const QString &name,
   const QString dest =
       destinationDir.isEmpty() ? Model::documents() : destinationDir;
   return install(entry, dest, name, cancel, progress).folder;
+}
+QString downloadPippinROM(std::atomic_bool &cancel, const Progress &progress) {
+  static constexpr qint64 kRomBytes = 4194304;
+  static const QByteArray kExpectedSha256 =
+      "4e13dbbc5d9cc3e2169e52257a876bc60788fba262b7462347b3e7340b527365";
+  QStringList urls;
+  const QString overrideUrl =
+      qEnvironmentVariable("CLASSICMAC_PIPPIN_ROM_URL").trimmed();
+  if (!overrideUrl.isEmpty()) {
+    secureURL(overrideUrl);
+    urls << overrideUrl;
+  } else {
+    urls << QStringLiteral(
+                "https://archive.org/download/mame-0.221-roms-merged/"
+                "pippin.zip/"
+                "bandai%20pippin%2C19960920%20-%20kinka%201.3%2C-%203e6b3ee4-"
+                "a52528e9ce8c.rom")
+         << QStringLiteral(
+                "https://archive.org/download/mame-0.205-roms-merged/"
+                "pippin.zip/"
+                "bandai%20pippin%2C19960920%20-%20kinka%201.3%2C-%203e6b3ee4-"
+                "a52528e9ce8c.rom");
+  }
+
+  const QString destPath = Model::pippinROMPath();
+  const QString dirPath = QFileInfo(destPath).path();
+  if (!QDir().mkpath(dirPath))
+    fail("Could not create the ClassicMac ROMs folder.");
+
+  QString lastError = QStringLiteral("Could not reach archive.org.");
+  for (const QString &rawUrl : urls) {
+    checkCancel(cancel);
+    const QString partPath =
+        dirPath + "/.pippin.rom.part." +
+        QUuid::createUuid().toString(QUuid::WithoutBraces);
+    auto removePart = qScopeGuard([&] { QFile::remove(partPath); });
+    QFile out(partPath);
+    if (!out.open(QFile::WriteOnly | QFile::Truncate))
+      fail("Could not create the temporary Pippin ROM file.");
+
+    QCryptographicHash hasher(QCryptographicHash::Sha256);
+    qint64 received = 0;
+    try {
+      if (progress)
+        progress("Connecting to archive.org", 0, kRomBytes);
+      request(
+          secureURL(rawUrl), {}, kRomBytes, cancel,
+          [&](QNetworkReply *reply) {
+            const int status =
+                reply->attribute(QNetworkRequest::HttpStatusCodeAttribute)
+                    .toInt();
+            if (status != 200)
+              fail(QString("Server returned HTTP %1.").arg(status));
+          },
+          [&](QByteArray chunk) {
+            if (received + chunk.size() > kRomBytes)
+              fail("Downloaded ROM exceeded 4 MB.");
+            if (out.write(chunk) != chunk.size())
+              fail("Failed writing the Pippin ROM file.");
+            hasher.addData(chunk);
+            received += chunk.size();
+            if (progress)
+              progress("Downloading Pippin Kinka 1.3", received, kRomBytes);
+          },
+          180000, true);
+      out.close();
+      checkCancel(cancel);
+      if (received != kRomBytes)
+        fail(QString("Incomplete ROM download (%1 of %2 bytes).")
+                 .arg(received)
+                 .arg(kRomBytes));
+      if (progress)
+        progress("Verifying SHA-256 checksum", kRomBytes, kRomBytes);
+      if (hasher.result().toHex() != kExpectedSha256)
+        fail("Downloaded ROM failed SHA-256 checksum verification.");
+      if (QFile::exists(destPath) && !QFile::remove(destPath))
+        fail("Could not replace existing pippin.rom.");
+      if (!QFile::rename(partPath, destPath))
+        fail("Could not save pippin.rom.");
+      removePart.dismiss();
+      return destPath;
+    } catch (const std::exception &e) {
+      out.close();
+      lastError = QString::fromUtf8(e.what());
+      if (cancel)
+        throw;
+    }
+  }
+  fail("Could not download Pippin Kinka 1.3 ROM: " + lastError);
 }
 } // namespace Library

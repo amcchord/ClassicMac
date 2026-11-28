@@ -37,14 +37,17 @@ enum PippinError: LocalizedError {
     case missingROM
     case invalidROM(String)
     case invalidDiscImage(String)
+    case downloadFailed(String)
 
     var errorDescription: String? {
         switch self {
         case .missingROM:
-            return "Pippin requires a 4 MB Kinka boot ROM. Choose the ROM file in Get Info, or place pippin.rom inside this machine bundle or ClassicMac's ROMs folder."
+            return "Pippin requires a 4 MB Kinka boot ROM. Choose the ROM file in Get Info, download it from the Internet Archive, or place pippin.rom in ClassicMac's ROMs folder."
         case .invalidROM(let reason):
             return reason
         case .invalidDiscImage(let reason):
+            return reason
+        case .downloadFailed(let reason):
             return reason
         }
     }
@@ -63,9 +66,19 @@ enum PippinMachine {
     static let maxRAMMB = 16
     static let ramPresets = [5, 6, 8, 13, 16]
 
+    static let kinka13SHA256 = "4e13dbbc5d9cc3e2169e52257a876bc60788fba262b7462347b3e7340b527365"
+    static let kinka13SHA1 = "8e512af6e34dd823f3defec77d43ecbff1ecad54"
+
+    static let archiveOrgROMURLs: [URL] = [
+        URL(string: "https://archive.org/download/mame-0.221-roms-merged/pippin.zip/bandai%20pippin%2C19960920%20-%20kinka%201.3%2C-%203e6b3ee4-a52528e9ce8c.rom")!,
+        URL(string: "https://archive.org/download/mame-0.205-roms-merged/pippin.zip/bandai%20pippin%2C19960920%20-%20kinka%201.3%2C-%203e6b3ee4-a52528e9ce8c.rom")!,
+    ]
+
     /// Known Kinka boot ROM SHA-1 digests -> human-readable identification.
     static let knownROMSHA1: [String: String] = [
         "8e512af6e34dd823f3defec77d43ecbff1ecad54": "Pippin Kinka 1.3 (4 MB)",
+        "6478ee9e8d5cfe3b00f699f7072482210e00c5cc": "Pippin Kinka 1.0 (4 MB)",
+        "eb8739cab1807c6c7c51acc7f4a3afc1f9c6ddbb": "Pippin Kinka Dev (4 MB)",
     ]
 
     static let scsiCDDeviceSpec =
@@ -83,6 +96,10 @@ enum PippinMachine {
 
     static func romSHA1(data: Data) -> String {
         Insecure.SHA1.hash(data: data).map { String(format: "%02x", $0) }.joined()
+    }
+
+    static func romSHA256(data: Data) -> String {
+        SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }
 
     /// Validates a 4 MiB Pippin boot ROM and returns a display label.
@@ -288,5 +305,177 @@ enum PippinMachine {
         }
         args += ["-device", scsiCDDeviceSpec]
         return args
+    }
+}
+
+/// Downloads and cryptographically verifies the Apple / Bandai Pippin Kinka 1.3 boot ROM
+/// from the Internet Archive (or an explicit `CLASSICMAC_PIPPIN_ROM_URL` HTTPS override).
+enum PippinROMDownloader {
+    enum DownloadPhase: Equatable, Sendable {
+        case connecting
+        case downloading(received: Int64, total: Int64)
+        case verifying
+    }
+
+    private final class HTTPSRedirectDelegate: NSObject, URLSessionTaskDelegate {
+        func urlSession(
+            _ session: URLSession,
+            task: URLSessionTask,
+            willPerformHTTPRedirection response: HTTPURLResponse,
+            newRequest request: URLRequest,
+            completionHandler: @escaping (URLRequest?) -> Void
+        ) {
+            guard request.url?.scheme?.lowercased() == "https" else {
+                completionHandler(nil)
+                return
+            }
+            completionHandler(request)
+        }
+    }
+
+    static func resolvedMirrors() -> [URL] {
+        if let raw = ProcessInfo.processInfo.environment["CLASSICMAC_PIPPIN_ROM_URL"]?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+           !raw.isEmpty,
+           let url = URL(string: raw),
+           url.scheme?.lowercased() == "https",
+           url.host != nil {
+            return [url]
+        }
+        return PippinMachine.archiveOrgROMURLs
+    }
+
+    @discardableResult
+    static func downloadKinka13(
+        to destination: URL = AppPaths.pippinROM,
+        mirrors: [URL]? = nil,
+        expectedSHA256: String = PippinMachine.kinka13SHA256,
+        session: URLSession? = nil,
+        onProgress: @escaping @Sendable (DownloadPhase) -> Void = { _ in }
+    ) async throws -> URL {
+        let targets = mirrors ?? resolvedMirrors()
+        guard !targets.isEmpty else {
+            throw PippinError.downloadFailed("No Pippin boot ROM download URL is configured.")
+        }
+
+        let ownedSession: URLSession?
+        let activeSession: URLSession
+        if let session {
+            ownedSession = nil
+            activeSession = session
+        } else {
+            let config = URLSessionConfiguration.ephemeral
+            config.timeoutIntervalForRequest = 30
+            config.timeoutIntervalForResource = 180
+            let created = URLSession(configuration: config)
+            ownedSession = created
+            activeSession = created
+        }
+        defer { ownedSession?.invalidateAndCancel() }
+
+        let expectedDigest = expectedSHA256.lowercased()
+        let fm = FileManager.default
+        let destDir = destination.deletingLastPathComponent()
+        try fm.createDirectory(at: destDir, withIntermediateDirectories: true)
+
+        var lastError = "Could not reach archive.org."
+        for url in targets {
+            try Task.checkCancellation()
+            guard url.scheme?.lowercased() == "https", url.host != nil else {
+                lastError = "Pippin ROM downloads require an HTTPS URL."
+                continue
+            }
+
+            onProgress(.connecting)
+            let delegate = HTTPSRedirectDelegate()
+            var request = URLRequest(url: url)
+            request.setValue("ClassicMac/5.0.1", forHTTPHeaderField: "User-Agent")
+
+            let tempURL = destDir.appendingPathComponent(".pippin.rom.part.\(UUID().uuidString)")
+            defer { try? fm.removeItem(at: tempURL) }
+
+            do {
+                let (bytes, response) = try await activeSession.bytes(for: request, delegate: delegate)
+                guard let http = response as? HTTPURLResponse else {
+                    lastError = "Unexpected server response from \(url.host ?? "archive.org")."
+                    continue
+                }
+                guard http.statusCode == 200 else {
+                    lastError = "The server returned HTTP \(http.statusCode)."
+                    continue
+                }
+                let expectedLength = Int64(PippinMachine.romByteCount)
+                if http.expectedContentLength > 0 && http.expectedContentLength != expectedLength {
+                    lastError = "Unexpected ROM size (\(http.expectedContentLength) bytes)."
+                    continue
+                }
+
+                _ = fm.createFile(atPath: tempURL.path, contents: nil)
+                let handle = try FileHandle(forWritingTo: tempURL)
+                var handleClosed = false
+                defer { if !handleClosed { try? handle.close() } }
+
+                var hasher = SHA256()
+                var buffer = [UInt8]()
+                buffer.reserveCapacity(65_536)
+                var received: Int64 = 0
+                var lastReported: Int64 = 0
+                onProgress(.downloading(received: 0, total: expectedLength))
+
+                for try await byte in bytes {
+                    try Task.checkCancellation()
+                    received += 1
+                    if received > expectedLength {
+                        throw PippinError.downloadFailed("Downloaded file exceeded 4 MB (\(PippinMachine.romByteCount) bytes).")
+                    }
+                    buffer.append(byte)
+                    if buffer.count >= 65_536 {
+                        let chunk = Data(buffer)
+                        buffer.removeAll(keepingCapacity: true)
+                        hasher.update(data: chunk)
+                        try handle.write(contentsOf: chunk)
+                        if received - lastReported >= 65_536 {
+                            lastReported = received
+                            onProgress(.downloading(received: received, total: expectedLength))
+                        }
+                    }
+                }
+                if !buffer.isEmpty {
+                    let chunk = Data(buffer)
+                    hasher.update(data: chunk)
+                    try handle.write(contentsOf: chunk)
+                }
+
+                try handle.close()
+                handleClosed = true
+
+                guard received == expectedLength else {
+                    lastError = "Incomplete ROM download (\(received) of \(expectedLength) bytes)."
+                    continue
+                }
+
+                onProgress(.verifying)
+                let digest = hasher.finalize().map { String(format: "%02x", $0) }.joined()
+                guard digest == expectedDigest else {
+                    lastError = "Downloaded ROM failed SHA-256 verification."
+                    continue
+                }
+
+                if fm.fileExists(atPath: destination.path) {
+                    _ = try fm.replaceItemAt(destination, withItemAt: tempURL)
+                } else {
+                    try fm.moveItem(at: tempURL, to: destination)
+                }
+                return destination
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch let error as PippinError {
+                lastError = error.localizedDescription
+            } catch {
+                lastError = error.localizedDescription
+            }
+        }
+
+        throw PippinError.downloadFailed("Could not download Pippin Kinka 1.3 ROM: \(lastError)")
     }
 }

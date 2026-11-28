@@ -1,5 +1,15 @@
 # Changelog
 
+## 5.0.1 — Automated Pippin Boot ROM Download & Copyright Notice (2026-11-27)
+
+### Added
+
+- **Automated Archive.org Pippin Kinka 1.3 Boot ROM downloader:**
+  - Adds `PippinROMDownloader` (`app/`) and `Library::downloadPippinROM()` (`native/`) fetching the verified 4 MB **Pippin Kinka 1.3** boot ROM directly from the Internet Archive (`archive.org`) with HTTPS redirect enforcement, exact `4,194,304`-byte size enforcement, SHA-256 verification (`4e13dbbc5d9cc3e2169e52257a876bc60788fba262b7462347b3e7340b527365`), atomic installation into `ROMs/pippin.rom`, and `CLASSICMAC_PIPPIN_ROM_URL` override support without bundling firmware inside ClassicMac.
+  - Adds a **Download Pippin Boot ROM** dialog (`PippinROMDownloadDialog.swift` on macOS, matching Platinum dialog in `native/src/app.cpp` on Windows/Linux) presenting an explicit **Copyright & Software License Notice** and requiring user acknowledgment before downloading.
+  - Prompts automatically when launching a Pippin machine without a configured ROM (offering **Download ROM** or **Choose File…**), and adds **Download…** buttons next to **Boot ROM** in macOS **New Mac…** and **Get Info… → General Information**.
+  - Adds Kinka 1.0 and Kinka Dev labels to `PippinMachine.knownROMSHA1` for local ROM recognition.
+
 ## 5.0.0 — Apple / Bandai Pippin Emulation, Controller Mapping & Performance (2026-11-27)
 
 ### Added

@@ -140,13 +140,17 @@ During startup, the engine holds `Caps Lock` for `500 ms` (until your first real
 
 ### 5. Apple / Bandai Pippin Console (Pippin OS & Games)
 
-ClassicMac 5.0.0 emulates the PowerPC 603 **Apple / Bandai Pippin** (`qemu-system-ppc -M pippin`) directly inside QEMU with Apple Taos 16-bit graphics (`ntsc`, `pal`, `vga`), AppleJack trackball/gamepad ADB input, Save Flash storage (`128 KB` `flash.img`), `8 KB` NVRAM (`nvram.img`), `256 B` PRAM (`pram.img`), and genuine Sony/Apple SCSI CD-ROM timing.
+ClassicMac 5.0.1 emulates the PowerPC 603 **Apple / Bandai Pippin** (`qemu-system-ppc -M pippin`) directly inside QEMU with Apple Taos 16-bit graphics (`ntsc`, `pal`, `vga`), AppleJack trackball/gamepad ADB input, Save Flash storage (`128 KB` `flash.img`), `8 KB` NVRAM (`nvram.img`), `256 B` PRAM (`pram.img`), and genuine Sony/Apple SCSI CD-ROM timing.
 
 <p align="center">
   <img src="../screenshots/manual/pippin-new-mac-dialog.png" width="500" alt="New Mac dialog configured for Apple / Bandai Pippin with NTSC video output and Boot ROM selected">
 </p>
 
-1. **Supply a Pippin Boot ROM:** Select **Apple / Bandai Pippin — Pippin OS** in **New Mac…** and click **Choose…** next to **Boot ROM** to pick a valid 4 MB Pippin ROM image (such as *Kinka 1.3*), or place it at `~/Library/Application Support/ClassicMac/ROMs/pippin.rom` so ClassicMac finds it automatically.
+1. **Supply or Download a Pippin Boot ROM:** Select **Apple / Bandai Pippin — Pippin OS** in **New Mac…** and either click **Choose…** next to **Boot ROM** to pick an existing 4 MB Pippin ROM (or place it at `~/Library/Application Support/ClassicMac/ROMs/pippin.rom` / `AppData\Roaming\ClassicMac\ROMs\pippin.rom`), or click **Download…** (or simply click **Start Up** when no ROM is configured) to review the **Copyright & Software License Notice** and automatically download & SHA-256 verify **Pippin Kinka 1.3** (`4 MB`) from the Internet Archive (`archive.org`).
+
+<p align="center">
+  <img src="../screenshots/manual/pippin-rom-download.png" width="500" alt="Download Pippin Boot ROM dialog showing Copyright and Software License Notice checkbox before fetching Kinka 1.3 from Archive.org">
+</p>
 2. **Choose Video Output & Media:** Select **NTSC** (`640 × 480`), **PAL** (`640 × 512`), or **VGA** (`640 × 480`), optionally adjust **Memory** (`5–16 MB`, `13 MB` default) and **Save Flash** (`128 KB`) in **Get Info… → General Information**, and attach a Pippin disc image (`.iso`, `.toast`, `.cdr`, `.img`, or raw 2352-byte `.bin`/`.cue`).
 
 <p align="center">
@@ -156,7 +160,7 @@ ClassicMac 5.0.0 emulates the PowerPC 603 **Apple / Bandai Pippin** (`qemu-syste
 3. **Start & Swap Discs:** Pippin discs self-boot directly from the CD-ROM; without a disc inserted, the console displays its animated *Insert CD* prompt. You can eject or swap Pippin discs live in **Media…**.
 
 <p align="center">
-  <img src="../screenshots/manual/guest-pippin-navigator.png" width="680" alt="Pippin Navigator 1.1 booted inside ClassicMac 5.0.0's Platinum window">
+  <img src="../screenshots/manual/guest-pippin-navigator.png" width="680" alt="Pippin Navigator 1.1 booted inside ClassicMac 5.0.1's Platinum window">
 </p>
 
 ---

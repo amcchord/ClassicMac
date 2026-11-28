@@ -5,7 +5,7 @@ ClassicMac integrates native **Apple / Bandai Pippin** support directly inside `
 ## Hardware Architecture
 
 - **CPU:** PowerPC 603 @ 66 MHz (`CONFIG_PPC603` + `qemu-pippin-ppc603-rfi.patch`).
-- **Memory & ROM:** Configurable 5–16 MiB RAM (default 13 MiB: 5 MiB base + 8 MiB expansion, passed as `-m 13`), paired with a 4 MiB Pippin Kinka boot ROM (`-bios <rom>`, e.g. Kinka 1.3 SHA-1 `8e512af6e34dd823f3defec77d43ecbff1ecad54`).
+- **Memory & ROM:** Configurable 5–16 MiB RAM (default 13 MiB: 5 MiB base + 8 MiB expansion, passed as `-m 13`), paired with a 4 MiB Pippin Kinka boot ROM (`-bios <rom>`, e.g. Kinka 1.3 SHA-1 `8e512af6e34dd823f3defec77d43ecbff1ecad54`). ClassicMac does not bundle Pippin firmware, and optionally downloads & SHA-256-verifies Kinka 1.3 from Archive.org into `ROMs/pippin.rom` after explicit user acknowledgment of the Copyright & Software License Notice.
 - **Bridge / IO Controller:** Aspen + GrandCentral MacIO controller (`hw_misc_macio_grandcentral.c`), CUDA VIA + 256 B PRAM (`qemu-pippin-cuda.patch`), Screamer/AWACS 44.1 kHz stereo audio (`audiodev=snd0`), and PCI/MMIO machine assembly (`hw_ppc_mac_pippin.c`).
 - **Graphics (`taos`):** Apple Taos framebuffer & VBL interrupt controller (`hw_display_pippin_taos.c`) with NTSC (`640 × 480`), PAL (`640 × 512`), or VGA (`640 × 480`) output selected via `-M pippin,video-out=<ntsc|pal|vga>`, `DIRTY_MEMORY_VGA` scanline tracking, RGB555/8-bit LUT fast paths, and I2C clock/encoder hooks (`0x29` Athens, `0x44` Bt856, `0x45` TDA7433).
 - **Storage & Persistence:**

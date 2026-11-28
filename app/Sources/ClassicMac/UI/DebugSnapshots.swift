@@ -106,6 +106,7 @@ enum DebugSnapshots {
         case "library": manager.showLibrary()
         case "about": manager.showAbout()
         case "newmac": manager.presentNewMac()
+        case "pippinrom": manager.presentPippinROMDownload(machineName: "Apple Pippin") { _ in }
         case "icons": manager.presentIconPacks()
         case "guestwindow":
             // The screen window alone, for a stand-in emulator to connect to.

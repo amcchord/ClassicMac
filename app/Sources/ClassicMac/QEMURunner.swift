@@ -95,6 +95,7 @@ final class QEMUManager: ObservableObject {
     @Published private(set) var atiRenderers: [UUID: String] = [:]
     @Published var lastError: AppError?
     @Published private(set) var pendingStopID: UUID?
+    @Published var pendingMissingPippinROMVM: VMConfig?
 
     private var coplandControls: [UUID: Pipe] = [:]
     private var processes: [UUID: Process] = [:]
@@ -174,6 +175,10 @@ final class QEMUManager: ObservableObject {
                 "Couldn't Start \u{201C}\(config.name)\u{201D}",
                 "This copy of ClassicMac is missing its emulation engine. Reinstall ClassicMac to fix this. (Developers: run scripts/build-qemu.sh, then scripts/bundle-qemu.sh.)"
             )
+            return
+        }
+        if config.machineFamily == .pippin && PippinMachine.resolveROMURL(for: config) == nil {
+            pendingMissingPippinROMVM = config
             return
         }
         if let preflightError = QEMUManager.preflight(config) {

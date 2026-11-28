@@ -687,19 +687,9 @@ QStringList qemuArguments(const Machine &m, int port,
   if (m.family() == "pippin") {
     const QString videoOut =
         c["pippinVideoOut"].toString(QStringLiteral("ntsc"));
-    QString romPath = s("pippinROMPath");
-    if (romPath.isEmpty()) {
-      for (const QString &candidate :
-           {m.folder + "/pippin.rom", m.folder + "/kinka13.rom",
-            r + "/pippin.rom"}) {
-        if (QFileInfo::exists(candidate)) {
-          romPath = candidate;
-          break;
-        }
-      }
-      if (romPath.isEmpty())
-        romPath = m.folder + "/pippin.rom";
-    }
+    QString romPath = resolvePippinROM(m);
+    if (romPath.isEmpty())
+      romPath = m.folder + "/pippin.rom";
     const QString nvramPath = opt(m.folder + "/nvram.img");
     const QString pramPath = opt(m.folder + "/pram.img");
     a << "-accel" << "tcg,tb-size=512"
@@ -947,5 +937,20 @@ QStringList qemuArguments(const Machine &m, int port,
 }
 QStringList argumentsFor(const Machine &m, int port, bool silent) {
   return qemuArguments(m, port, silent ? QStringLiteral("none") : QString());
+}
+QString pippinROMPath() { return dataDirectory() + "/ROMs/pippin.rom"; }
+QString resolvePippinROM(const Machine &m) {
+  const QString explicitPath =
+      m.config["pippinROMPath"].toString().trimmed();
+  if (!explicitPath.isEmpty() && QFileInfo(explicitPath).isFile())
+    return explicitPath;
+  const QString r = runtime();
+  for (const QString &candidate :
+       {m.folder + "/pippin.rom", m.folder + "/kinka13.rom",
+        m.folder + "/bootrom.bin", pippinROMPath(), r + "/pippin.rom"}) {
+    if (QFileInfo(candidate).isFile())
+      return candidate;
+  }
+  return {};
 }
 } // namespace Model

@@ -558,6 +558,10 @@ void Engine::start() {
     if (!Model::validateOsxNvram(nvFile.readAll(), &nvErr))
       fail(nvErr);
   } else if (family == "pippin") {
+    const QString romPath = Model::resolvePippinROM(machine);
+    const QFileInfo romInfo(romPath);
+    if (romPath.isEmpty() || !romInfo.isFile() || romInfo.size() != 4194304)
+      fail("Pippin requires a 4 MB Kinka boot ROM. Choose Download ROM or place pippin.rom inside ClassicMac's ROMs folder.");
     const QString flash = machine.folder + "/" +
                           Model::localName(machine.config["flashImageName"],
                                            QStringLiteral("flash.img"));

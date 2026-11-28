@@ -41,6 +41,12 @@ final class WindowManager {
         manager.$lastError.compactMap { $0 }.receive(on: RunLoop.main)
             .sink { [weak self] error in self?.presentError(error) { manager.lastError = nil } }
             .store(in: &subscriptions)
+        manager.$pendingMissingPippinROMVM.compactMap { $0 }.receive(on: RunLoop.main)
+            .sink { [weak self] vm in
+                manager.pendingMissingPippinROMVM = nil
+                self?.promptForMissingPippinROM(vm)
+            }
+            .store(in: &subscriptions)
         manager.$pendingStopID.receive(on: RunLoop.main)
             .sink { [weak self] id in
                 if let id, manager.pendingStopID == id {
@@ -180,6 +186,56 @@ final class WindowManager {
         showMain()
         presentDialog(title: "New Mac", size: NewMacDialog.size) { handle in
             NewMacDialog(handle: handle)
+        }
+    }
+
+    func presentPippinROMDownload(
+        machineName: String? = nil,
+        parent: PlatinumWindow? = nil,
+        onChooseLocal: (() -> Void)? = nil,
+        onInstalled: @escaping (URL) -> Void
+    ) {
+        if parent == nil { showMain() }
+        presentDialog(title: "Download Pippin Boot ROM", size: PippinROMDownloadDialog.size, parent: parent) { handle in
+            PippinROMDownloadDialog(
+                machineName: machineName,
+                handle: handle,
+                onChooseLocal: onChooseLocal,
+                onInstalled: onInstalled
+            )
+        }
+    }
+
+    private func promptForMissingPippinROM(_ vm: VMConfig) {
+        showMain()
+        presentPippinROMDownload(
+            machineName: vm.name,
+            parent: mainWindow,
+            onChooseLocal: { [weak self] in
+                self?.chooseLocalPippinROM(for: vm)
+            },
+            onInstalled: { _ in
+                let latest = VMStore.shared.vms.first(where: { $0.id == vm.id }) ?? vm
+                QEMUManager.shared.start(latest)
+            }
+        )
+    }
+
+    private func chooseLocalPippinROM(for vm: VMConfig) {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.message = "Choose a 4 MB Apple / Bandai Pippin Kinka boot ROM"
+        panel.prompt = "Choose"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            _ = try PippinMachine.validateROM(at: url)
+            var updated = VMStore.shared.vms.first(where: { $0.id == vm.id }) ?? vm
+            updated.pippinROMPath = url.path
+            _ = VMStore.shared.save(updated)
+            QEMUManager.shared.start(updated)
+        } catch {
+            presentError(AppError("Invalid Pippin Boot ROM", error.localizedDescription)) {}
         }
     }
 

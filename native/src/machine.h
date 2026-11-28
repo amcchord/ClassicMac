@@ -27,6 +27,8 @@ QString uniqueFolder(const QString &parent, const QString &name);
 Machine createMachine(QString name, QString family, int size,
                       const QString &parent, const QString &cd = {});
 QString binary(const QString &name);
+QString pippinROMPath();
+QString resolvePippinROM(const Machine &m);
 bool supportsHostSharing();
 QString sanitizedName(const QString &raw);
 QProcessEnvironment hostEnvironment();

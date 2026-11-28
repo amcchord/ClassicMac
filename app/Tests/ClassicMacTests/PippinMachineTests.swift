@@ -307,4 +307,181 @@ final class PippinMachineTests: XCTestCase {
     func testDisplaySessionSendsGamepadMessage() throws {
         XCTAssertEqual(DisplayMessage.gamepad.rawValue, 23)
     }
+
+    func testKnownPippinROMSHA1Labels() throws {
+        XCTAssertEqual(PippinMachine.knownROMSHA1[PippinMachine.kinka13SHA1], "Pippin Kinka 1.3 (4 MB)")
+        XCTAssertEqual(PippinMachine.knownROMSHA1["6478ee9e8d5cfe3b00f699f7072482210e00c5cc"], "Pippin Kinka 1.0 (4 MB)")
+        XCTAssertEqual(PippinMachine.knownROMSHA1["eb8739cab1807c6c7c51acc7f4a3afc1f9c6ddbb"], "Pippin Kinka Dev (4 MB)")
+        XCTAssertEqual(PippinMachine.archiveOrgROMURLs.count, 2)
+        for url in PippinMachine.archiveOrgROMURLs {
+            XCTAssertEqual(url.scheme, "https")
+            XCTAssertEqual(url.host, "archive.org")
+        }
+    }
+
+    func testDownloadKinka13SuccessWithStubAndProgress() async throws {
+        let fm = FileManager.default
+        let tmp = fm.temporaryDirectory.appendingPathComponent("pippin-dl-\(UUID().uuidString)", isDirectory: true)
+        defer { try? fm.removeItem(at: tmp) }
+        try fm.createDirectory(at: tmp, withIntermediateDirectories: true)
+
+        let payload = Data(repeating: 0x5A, count: PippinMachine.romByteCount)
+        let sha256 = PippinMachine.romSHA256(data: payload)
+        let url = URL(string: "https://archive.example.org/pippin-kinka13.rom")!
+        let session = StubURLProtocol.session(responses: [
+            url: .ok(data: payload),
+        ])
+
+        final class PhaseRecorder: @unchecked Sendable {
+            private let lock = NSLock()
+            var phases: [PippinROMDownloader.DownloadPhase] = []
+            func record(_ phase: PippinROMDownloader.DownloadPhase) {
+                lock.lock()
+                phases.append(phase)
+                lock.unlock()
+            }
+        }
+        let recorder = PhaseRecorder()
+        let dest = tmp.appendingPathComponent("ROMs/pippin.rom")
+
+        let installed = try await PippinROMDownloader.downloadKinka13(
+            to: dest,
+            mirrors: [url],
+            expectedSHA256: sha256,
+            session: session
+        ) { phase in
+            recorder.record(phase)
+        }
+
+        XCTAssertEqual(installed, dest)
+        XCTAssertEqual(try Data(contentsOf: dest), payload)
+        XCTAssertEqual(recorder.phases.first, .connecting)
+        XCTAssertTrue(recorder.phases.contains(.verifying))
+    }
+
+    func testDownloadKinka13FallsBackToSecondMirror() async throws {
+        let fm = FileManager.default
+        let tmp = fm.temporaryDirectory.appendingPathComponent("pippin-fallback-\(UUID().uuidString)", isDirectory: true)
+        defer { try? fm.removeItem(at: tmp) }
+        try fm.createDirectory(at: tmp, withIntermediateDirectories: true)
+
+        let payload = Data(repeating: 0x3C, count: PippinMachine.romByteCount)
+        let sha256 = PippinMachine.romSHA256(data: payload)
+        let badURL = URL(string: "https://archive.example.org/mirror1.rom")!
+        let goodURL = URL(string: "https://archive.example.org/mirror2.rom")!
+        let session = StubURLProtocol.session(responses: [
+            badURL: .status(503),
+            goodURL: .ok(data: payload),
+        ])
+
+        let dest = tmp.appendingPathComponent("pippin.rom")
+        let installed = try await PippinROMDownloader.downloadKinka13(
+            to: dest,
+            mirrors: [badURL, goodURL],
+            expectedSHA256: sha256,
+            session: session
+        )
+        XCTAssertEqual(installed, dest)
+        XCTAssertEqual(try Data(contentsOf: dest), payload)
+    }
+
+    func testDownloadKinka13RejectsChecksumSizeStatusAndInsecureURL() async throws {
+        let fm = FileManager.default
+        let tmp = fm.temporaryDirectory.appendingPathComponent("pippin-reject-\(UUID().uuidString)", isDirectory: true)
+        defer { try? fm.removeItem(at: tmp) }
+        try fm.createDirectory(at: tmp, withIntermediateDirectories: true)
+
+        let full = Data(repeating: 0x7E, count: PippinMachine.romByteCount)
+        let wrongDigest = String(repeating: "0", count: 64)
+        let badDigestURL = URL(string: "https://archive.example.org/bad-digest.rom")!
+        let shortURL = URL(string: "https://archive.example.org/short.rom")!
+        let missingURL = URL(string: "https://archive.example.org/404.rom")!
+        let httpURL = URL(string: "http://archive.example.org/insecure.rom")!
+
+        let session = StubURLProtocol.session(responses: [
+            badDigestURL: .ok(data: full),
+            shortURL: .ok(data: Data(repeating: 0x7E, count: 2048)),
+            missingURL: .status(404),
+        ])
+
+        for url in [badDigestURL, shortURL, missingURL, httpURL] {
+            let dest = tmp.appendingPathComponent("\(UUID().uuidString).rom")
+            do {
+                _ = try await PippinROMDownloader.downloadKinka13(
+                    to: dest,
+                    mirrors: [url],
+                    expectedSHA256: wrongDigest,
+                    session: session
+                )
+                XCTFail("Expected downloadKinka13 to reject \(url)")
+            } catch {
+                XCTAssertFalse(fm.fileExists(atPath: dest.path))
+                let dirFiles = try fm.contentsOfDirectory(atPath: tmp.path)
+                XCTAssertTrue(dirFiles.allSatisfy { !$0.contains(".part.") })
+            }
+        }
+    }
+}
+
+private final class StubURLProtocol: URLProtocol {
+    enum StubResponse {
+        case ok(data: Data)
+        case status(Int)
+    }
+
+    private static let lock = NSLock()
+    nonisolated(unsafe) private static var registeredResponses: [URL: StubResponse] = [:]
+
+    static func session(responses: [URL: StubResponse]) -> URLSession {
+        lock.lock()
+        registeredResponses.merge(responses) { _, new in new }
+        lock.unlock()
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [StubURLProtocol.self]
+        return URLSession(configuration: config)
+    }
+
+    override class func canInit(with request: URLRequest) -> Bool {
+        true
+    }
+
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest {
+        request
+    }
+
+    override func startLoading() {
+        guard let url = request.url else {
+            client?.urlProtocol(self, didFailWithError: URLError(.badURL))
+            return
+        }
+        Self.lock.lock()
+        let stub = Self.registeredResponses[url]
+        Self.lock.unlock()
+
+        switch stub {
+        case .ok(let data):
+            let response = HTTPURLResponse(
+                url: url,
+                statusCode: 200,
+                httpVersion: "HTTP/1.1",
+                headerFields: ["Content-Length": String(data.count)]
+            )!
+            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+            client?.urlProtocol(self, didLoad: data)
+            client?.urlProtocolDidFinishLoading(self)
+        case .status(let code):
+            let response = HTTPURLResponse(
+                url: url,
+                statusCode: code,
+                httpVersion: "HTTP/1.1",
+                headerFields: [:]
+            )!
+            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+            client?.urlProtocolDidFinishLoading(self)
+        case nil:
+            client?.urlProtocol(self, didFailWithError: URLError(.fileDoesNotExist))
+        }
+    }
+
+    override func stopLoading() {}
 }

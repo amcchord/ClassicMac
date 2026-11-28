@@ -21,7 +21,7 @@
 ---
 
 <p align="center">
-  <img src="docs/screenshots/platinum/running-ati.png" width="720" alt="ClassicMac 5.0.0 in the Apple Platinum appearance, with Mac OS 9.2.2 Mega Deluxe running on the emulated ATI Radeon">
+  <img src="docs/screenshots/platinum/running-ati.png" width="720" alt="ClassicMac 5.0.1 in the Apple Platinum appearance, with Mac OS 9.2.2 Mega Deluxe running on the emulated ATI Radeon">
 </p>
 
 <p align="center">
@@ -29,15 +29,15 @@
   <img src="docs/screenshots/powermacg4-macos92.png" width="410" alt="Mac OS 9.2.2 Mega Deluxe on the emulated Power Mac G4">
 </p>
 
-## Download ClassicMac 5.0
+## Download ClassicMac 5.0.1
 
 | System | Download | Requirements |
 | --- | --- | --- |
-| Windows | [Portable EXE](https://github.com/amcchord/ClassicMac/releases/download/v5.0.0/ClassicMac-5.0.0-windows-x64.exe) | Windows 11 x64; unsigned. |
-| macOS | [DMG](https://github.com/amcchord/ClassicMac/releases/download/v5.0.0/ClassicMac-5.0.0.dmg) · [ZIP](https://github.com/amcchord/ClassicMac/releases/download/v5.0.0/ClassicMac-5.0.0.zip) | Apple Silicon, macOS 15+; signed and notarized. |
-| Linux | [AppImage](https://github.com/amcchord/ClassicMac/releases/download/v5.0.0/ClassicMac-5.0.0-linux-x64.AppImage) | x64, glibc 2.39+ and a desktop. |
+| Windows | [Portable EXE](https://github.com/amcchord/ClassicMac/releases/download/v5.0.1/ClassicMac-5.0.1-windows-x64.exe) | Windows 11 x64; unsigned. |
+| macOS | [DMG](https://github.com/amcchord/ClassicMac/releases/download/v5.0.1/ClassicMac-5.0.1.dmg) · [ZIP](https://github.com/amcchord/ClassicMac/releases/download/v5.0.1/ClassicMac-5.0.1.zip) | Apple Silicon, macOS 15+; signed and notarized. |
+| Linux | [AppImage](https://github.com/amcchord/ClassicMac/releases/download/v5.0.1/ClassicMac-5.0.1-linux-x64.AppImage) | x64, glibc 2.39+ and a desktop. |
 
-[Release notes, checksums and engine sources](https://github.com/amcchord/ClassicMac/releases/tag/v5.0.0).
+[Release notes, checksums and engine sources](https://github.com/amcchord/ClassicMac/releases/tag/v5.0.1).
 Windows runs directly. Drag the Mac app to Applications. On Linux, mark the
 AppImage executable; use `--appimage-extract-and-run` if FUSE is unavailable.
 
@@ -56,6 +56,18 @@ See the full **[ClassicMac 5.0 User Manual](docs/manual/README.md)** (12 chapter
 - **Operating systems:** [Mac OS Library & Editions](docs/manual/04-mac-os-library-and-editions.md) · [Creating Custom Macs & Manual OS Installs](docs/manual/05-installing-your-own-mac-os.md) · [Everyday Use & Input](docs/manual/06-everyday-use-and-input.md)
 - **Devices & I/O:** [Display, 3D Graphics & Sound](docs/manual/07-display-3d-graphics-and-sound.md) · [Media Drawer, Tools CD & Shared Folders](docs/manual/08-media-tools-and-sharing.md) · [Networking & Virtual Printing](docs/manual/09-networking-and-virtual-printing.md)
 - **Hosting & reference:** [Creating & Serving Custom Images](docs/manual/10-creating-and-serving-images.md) · [Checkpoints, Updates & Troubleshooting](docs/manual/11-checkpoints-updates-and-troubleshooting.md) · [Configuration, Bundles & Env Reference](docs/manual/12-configuration-and-cli-reference.md)
+
+## New in ClassicMac 5.0.1
+
+- **Automated Archive.org Pippin Boot ROM download with copyright notice:** Instead of bundling firmware or hunting for files manually, clicking **Download…** (or starting a Pippin console with no ROM configured) presents an explicit **Copyright & Software License Notice** dialog and, once acknowledged, downloads and SHA-256-verifies the 4 MB **Pippin Kinka 1.3** boot ROM directly from the Internet Archive across macOS, Windows, and Linux.
+
+## Download ClassicMac 5.0.0 (previous)
+
+| System | Download | Requirements |
+| --- | --- | --- |
+| Windows | [Portable EXE](https://github.com/amcchord/ClassicMac/releases/download/v5.0.0/ClassicMac-5.0.0-windows-x64.exe) | Windows 11 x64; unsigned. |
+| macOS | [DMG](https://github.com/amcchord/ClassicMac/releases/download/v5.0.0/ClassicMac-5.0.0.dmg) · [ZIP](https://github.com/amcchord/ClassicMac/releases/download/v5.0.0/ClassicMac-5.0.0.zip) | Apple Silicon, macOS 15+; signed and notarized. |
+| Linux | [AppImage](https://github.com/amcchord/ClassicMac/releases/download/v5.0.0/ClassicMac-5.0.0-linux-x64.AppImage) | x64, glibc 2.39+ and a desktop. |
 
 ## New in ClassicMac 5.0
 
@@ -344,16 +356,16 @@ See the [desktop build and platform support guide](desktop/README.md).
   and lets you add more collections from your own copies.
 
 <p align="center">
-  <img src="docs/screenshots/platinum/guest-window.png" width="720" alt="Mac OS 9.2.2 Mega Deluxe in ClassicMac 5.0.0's Platinum window with the toolbar along the bottom">
+  <img src="docs/screenshots/platinum/guest-window.png" width="720" alt="Mac OS 9.2.2 Mega Deluxe in ClassicMac 5.0.1's Platinum window with the toolbar along the bottom">
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/platinum/main-window.png" width="410" alt="ClassicMac 5.0.0 Home window with Apple Platinum chrome">
-  <img src="docs/screenshots/manual/guest-osx-tiger.png" width="410" alt="Mac OS X 10.4.11 Tiger running inside ClassicMac 5.0.0">
+  <img src="docs/screenshots/platinum/main-window.png" width="410" alt="ClassicMac 5.0.1 Home window with Apple Platinum chrome">
+  <img src="docs/screenshots/manual/guest-osx-tiger.png" width="410" alt="Mac OS X 10.4.11 Tiger running inside ClassicMac 5.0.1">
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/pippin-super-marathon.png" width="410" alt="Super Marathon running on the emulated Apple / Bandai Pippin in ClassicMac 5.0.0">
+  <img src="docs/screenshots/pippin-super-marathon.png" width="410" alt="Super Marathon running on the emulated Apple / Bandai Pippin in ClassicMac 5.0.1">
   <img src="docs/screenshots/manual/pippin-get-info-controls.png" width="410" alt="Pippin Get Info Controls pane for keyboard and game controller mapping">
 </p>
 

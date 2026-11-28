@@ -556,6 +556,8 @@ def main() -> int:
             pip_bundles.append(seed_pippin_bundle("Pippin Navigator", "33333333-3333-4333-8333-000000000002", args.pippin_nav_iso))
         write_json(sup_dir / "library.json", [str(b) for b in pip_bundles])
 
+        run_tour(args.app, "pippinrom,wait:1,shot:promdl", raw_dir / "tp-romdl")
+        shutil.copy2(find_shot(raw_dir / "tp-romdl", "promdl", "Download Pippin Boot ROM"), out / "pippin-rom-download.png")
         run_tour(args.app, "newmac,wait:1,shot:pnew", raw_dir / "tp-newmac", extra_env={"CLASSICMAC_UI_NEWMAC_FAMILY": "pippin"})
         shutil.copy2(find_shot(raw_dir / "tp-newmac", "pnew", "New Mac"), out / "pippin-new-mac-dialog.png")
         run_tour(args.app, "select:0,settings,wait:1,shot:pgen", raw_dir / "tp-gen", extra_env={"CLASSICMAC_UI_SETTINGS_PANE": "general"})

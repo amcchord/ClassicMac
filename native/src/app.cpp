@@ -1223,6 +1223,141 @@ void App::startSelected() {
     w->activateWindow();
     return;
   }
+  if (m->family() == "pippin" && Model::resolvePippinROM(*m).isEmpty()) {
+    PDialog d("Download Pippin Boot ROM", {520, 360}, this);
+    auto v = dialogLayout(&d);
+    v->addWidget(label(
+        QString("“%1” needs a 4 MB Pippin Kinka boot ROM before it can start.")
+            .arg(m->name()),
+        &d, "regular", true));
+    auto noticeGroup = new PGroup("Copyright & Software License Notice", &d);
+    auto noticeBox = new QVBoxLayout(noticeGroup);
+    noticeBox->setContentsMargins(12, 24, 12, 10);
+    noticeBox->addWidget(label(
+        "The Apple / Bandai Pippin boot ROM (Kinka 1.3, 1996) is copyrighted "
+        "firmware owned by Apple Inc. and Bandai Co., Ltd.\n\n"
+        "ClassicMac does not bundle or redistribute Pippin firmware. Clicking "
+        "Download ROM fetches the 4 MB ROM directly from the Internet Archive "
+        "(archive.org) and verifies its SHA-256 checksum. You are responsible "
+        "for confirming you have the legal right to download and use this ROM.",
+        noticeGroup, "small", true));
+    v->addWidget(noticeGroup);
+    auto ack = new PButton(
+        "I understand the copyright notice and confirm I am responsible for my "
+        "right to use this ROM.",
+        &d);
+    ack->toggleButton = true;
+    ack->setCheckable(true);
+    v->addWidget(ack);
+    auto status = label({}, &d, "small", true);
+    status->hide();
+    v->addWidget(status);
+    auto bar = new PProgress(&d);
+    bar->hide();
+    v->addWidget(bar);
+    v->addStretch();
+
+    bool ready = false;
+    bool busy = false;
+    std::atomic_bool cancel = false;
+    QFutureWatcher<QString> watcher;
+    auto chooseBtn = button("Choose File…", nullptr, &d);
+    auto cancelBtn = button("Cancel", nullptr, &d);
+    auto dlBtn = button("Download ROM", nullptr, &d, true);
+    dlBtn->setEnabled(false);
+
+    auto updateButtons = [&] {
+      ack->setEnabled(!busy);
+      chooseBtn->setEnabled(!busy);
+      dlBtn->setEnabled(!busy && ack->isChecked());
+    };
+    connect(ack, &PButton::toggled, &d, [&](bool) { updateButtons(); });
+    connect(chooseBtn, &PButton::clicked, &d, [&] {
+      const QString path = QFileDialog::getOpenFileName(
+          &d, "Choose a 4 MB Pippin Kinka Boot ROM", {},
+          "Pippin ROMs (*.rom *.bin);;All files (*)");
+      if (path.isEmpty())
+        return;
+      const QFileInfo info(path);
+      if (!info.isFile() || info.size() != 4194304) {
+        status->setText("Pippin boot ROMs must be exactly 4 MB (4,194,304 bytes).");
+        status->show();
+        return;
+      }
+      auto updated = m->config;
+      updated["pippinROMPath"] = path;
+      Model::writeJSON(m->folder + "/config.json", updated);
+      m->config = updated;
+      ready = true;
+      d.done();
+    });
+    connect(cancelBtn, &PButton::clicked, &d, [&] {
+      if (busy) {
+        cancel = true;
+      } else {
+        d.done();
+      }
+    });
+    connect(dlBtn, &PButton::clicked, &d, [&] {
+      if (busy || !ack->isChecked())
+        return;
+      busy = true;
+      cancel = false;
+      updateButtons();
+      status->setText("Connecting to archive.org…");
+      status->show();
+      bar->setValue(-1);
+      bar->show();
+      auto progress = [&](QString phase, qint64 complete, qint64 total) {
+        QMetaObject::invokeMethod(
+            &d,
+            [=] {
+              if (total > 0 && phase.startsWith("Downloading")) {
+                status->setText(
+                    QString("%1… (%2%)").arg(phase).arg(complete * 100 / total));
+                bar->setValue(double(complete) / total);
+              } else {
+                status->setText(phase + "…");
+                bar->setValue(-1);
+              }
+            },
+            Qt::QueuedConnection);
+      };
+      watcher.setFuture(QtConcurrent::run([&cancel, progress]() -> QString {
+        try {
+          Library::downloadPippinROM(cancel, progress);
+          return {};
+        } catch (const std::exception &e) {
+          return QString::fromUtf8(e.what());
+        } catch (...) {
+          return QStringLiteral("Download failed.");
+        }
+      }));
+    });
+    connect(&watcher, &QFutureWatcher<QString>::finished, &d, [&] {
+      busy = false;
+      const QString err = watcher.result();
+      if (err.isEmpty()) {
+        ready = true;
+        d.done();
+      } else {
+        bar->hide();
+        status->setText(err);
+        status->show();
+        updateButtons();
+      }
+    });
+    d.canClose = [&] {
+      if (!busy)
+        return true;
+      cancel = true;
+      return false;
+    };
+    buttonRow(v, {chooseBtn, cancelBtn, dlBtn});
+    d.exec();
+    if (!ready)
+      return;
+  }
   auto id = m->id();
   e = new Engine(*m, this);
   engines[id] = e;

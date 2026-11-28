@@ -21,6 +21,7 @@ Model::Machine install(QJsonObject entry, const QString &parent,
 QString install(const QJsonObject &entry, const QString &name,
                 std::atomic_bool &cancel, Progress progress,
                 const QString &destinationDir = {});
+QString downloadPippinROM(std::atomic_bool &cancel, const Progress &progress);
 QString displayTitle(const QJsonObject &entry);
 QString cleanSummary(const QJsonObject &entry);
 void extract(const QString &archive, const QString &folder,

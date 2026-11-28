@@ -96,13 +96,19 @@ struct NewMacDialog: View {
                 if family == .pippin {
                     GridRow {
                         Text("Boot ROM:").platinumText(.emphasis)
-                        HStack(spacing: 8) {
+                        HStack(spacing: 6) {
                             PlatinumIcon("wrench", size: 16, dimmed: pippinROMFound == nil)
                             Text(pippinROMFound?.lastPathComponent ?? "None chosen (pippin.rom)")
                                 .platinumText(pippinROMFound == nil ? .detail : .body)
                                 .lineLimit(1).truncationMode(.middle)
-                                .frame(maxWidth: 200, alignment: .leading)
-                            PlatinumButton("Choose…", action: choosePippinROM)
+                                .frame(maxWidth: 136, alignment: .leading)
+                            PlatinumButton("Choose…", minWidth: 74, action: choosePippinROM)
+                            PlatinumButton("Download…", minWidth: 82) {
+                                WindowManager.shared.presentPippinROMDownload(parent: handle.window) { url in
+                                    errorMessage = nil
+                                    pippinROMURL = url
+                                }
+                            }
                         }
                     }
                 }

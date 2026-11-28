@@ -27,6 +27,7 @@ struct SettingsDialog: View {
     @State private var printingStatusMessage: String?
     @State private var printingStatusIsError = false
     @State private var isPrintingTestPage = false
+    @State private var romRefreshToken = 0
     @ObservedObject private var manager = QEMUManager.shared
 
     init(original: VMConfig, handle: DialogHandle, initialPane: Pane? = nil) {
@@ -205,21 +206,33 @@ struct SettingsDialog: View {
                 VStack(alignment: .leading, spacing: 9) {
                     PlatinumCheckbox("Play the Pippin's sound", isOn: $config.sound)
                         .padding(.leading, 92)
-                    HStack(spacing: 10) {
+                    HStack(spacing: 6) {
+                        let _ = romRefreshToken
                         Text("Boot ROM:").platinumText(.emphasis).frame(width: 82, alignment: .trailing)
                         let resolved = PippinMachine.resolveROMURL(for: config)
                         Text(resolved?.lastPathComponent ?? "Not configured (pippin.rom)")
                             .platinumText(resolved == nil ? .detail : .body)
                             .lineLimit(1).truncationMode(.middle)
-                            .frame(maxWidth: 230, alignment: .leading)
-                        PlatinumButton("Choose…", action: choosePippinROM)
+                            .frame(maxWidth: 146, alignment: .leading)
+                        PlatinumButton("Choose…", minWidth: 70, action: choosePippinROM)
+                        PlatinumButton("Download…", minWidth: 82) {
+                            WindowManager.shared.presentPippinROMDownload(machineName: config.name, parent: handle.window) { _ in
+                                errorMessage = nil
+                                config.pippinROMPath = nil
+                                romRefreshToken += 1
+                            }
+                        }
                         if config.pippinROMPath?.isEmpty == false {
-                            PlatinumButton("Clear") { config.pippinROMPath = nil }
+                            PlatinumButton("Clear", minWidth: 52) {
+                                config.pippinROMPath = nil
+                                romRefreshToken += 1
+                            }
                         }
                     }
                     if let romURL = PippinMachine.resolveROMURL(for: config),
                        let label = try? PippinMachine.validateROM(at: romURL) {
                         Text(label).platinumText(.detail).padding(.leading, 92)
+                            .id(romRefreshToken)
                     }
                 }
                 .padding(.top, 4)
